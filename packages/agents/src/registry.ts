@@ -1,20 +1,20 @@
-import { SiteBuilder } from './site-builder/index.js';
-import { ContentEngine } from './content-engine/index.js';
-import { TrackingSetup } from './tracking-setup/index.js';
-import { NicheHunter } from './niche-hunter/index.js';
-import { DomainProcurer } from './domain-procurer/index.js';
-import { SeoOperator } from './seo-operator/index.js';
-import { BacklinkBuilder } from './backlink-builder/index.js';
-import { TenantProspector } from './tenant-prospector/index.js';
-import { OutreachAgent } from './outreach-agent/index.js';
-import { TrialManager } from './trial-manager/index.js';
-import { CloserAgent } from './closer-agent/index.js';
-import { BillingDunning } from './billing-dunning/index.js';
-import { ChurnRecovery } from './churn-recovery/index.js';
-import { PortfolioAnalyst } from './portfolio-analyst/index.js';
-import { ComplianceGuard } from './compliance-guard/index.js';
-import { Operator } from './operator/index.js';
-import type { BaseAgent } from './base.js';
+import { SiteBuilder } from './site-builder/index';
+import { ContentEngine } from './content-engine/index';
+import { TrackingSetup } from './tracking-setup/index';
+import { NicheHunter } from './niche-hunter/index';
+import { DomainProcurer } from './domain-procurer/index';
+import { SeoOperator } from './seo-operator/index';
+import { BacklinkBuilder } from './backlink-builder/index';
+import { TenantProspector } from './tenant-prospector/index';
+import { OutreachAgent } from './outreach-agent/index';
+import { TrialManager } from './trial-manager/index';
+import { CloserAgent } from './closer-agent/index';
+import { BillingDunning } from './billing-dunning/index';
+import { ChurnRecovery } from './churn-recovery/index';
+import { PortfolioAnalyst } from './portfolio-analyst/index';
+import { ComplianceGuard } from './compliance-guard/index';
+import { Operator } from './operator/index';
+import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseAgent } from '../base.js';
+import { BaseAgent } from '../base';
 import { NotImplementedError } from '@leadlandlord/shared/errors';
 
 export const TenantProspectorInput = z.object({

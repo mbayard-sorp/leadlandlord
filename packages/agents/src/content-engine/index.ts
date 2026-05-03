@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { BaseAgent, type AgentContext } from '../base.js';
-import { ContentEngineInput, ContentEngineOutput } from './schema.js';
+import { BaseAgent, type AgentContext } from '../base';
+import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { ContentBundle } from '@leadlandlord/shared/types';
 
@@ -138,4 +138,4 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export { ContentEngineInput, ContentEngineOutput } from './schema.js';
+export { ContentEngineInput, ContentEngineOutput } from './schema';

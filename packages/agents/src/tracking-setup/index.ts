@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseAgent, type AgentContext } from '../base.js';
+import { BaseAgent, type AgentContext } from '../base';
 import { TrackingNumber } from '@leadlandlord/shared/types';
 import { provisionNumber } from '@leadlandlord/integrations/callrail';
 

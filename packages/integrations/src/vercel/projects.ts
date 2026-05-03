@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { vercelFetch } from './client.js';
-import type { VercelProject } from './types.js';
+import { vercelFetch } from './client';
+import type { VercelProject } from './types';
 
 const ProjectSchema = z.object({
   id: z.string(),

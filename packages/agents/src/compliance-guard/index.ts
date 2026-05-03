@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseAgent, type AgentContext } from '../base.js';
+import { BaseAgent, type AgentContext } from '../base';
 
 export const ComplianceGuardInput = z.object({
   scope: z.enum(['outreach_email', 'outreach_sms', 'outreach_voice', 'site_content']),

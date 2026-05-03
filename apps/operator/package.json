@@ -15,6 +15,7 @@
     "@leadlandlord/db": "workspace:*",
     "@leadlandlord/integrations": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
+    "dotenv": "^16.4.7",
     "drizzle-orm": "^0.36.4",
     "next": "^16.0.0",
     "react": "^19.0.0",

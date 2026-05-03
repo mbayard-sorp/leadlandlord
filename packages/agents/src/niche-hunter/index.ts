@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseAgent, type AgentContext } from '../base.js';
+import { BaseAgent, type AgentContext } from '../base';
 import { NotImplementedError } from '@leadlandlord/shared/errors';
 
 export const NicheHunterInput = z.object({

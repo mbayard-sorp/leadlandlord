@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { vercelFetch } from './client.js';
+import { vercelFetch } from './client';
 
 const ProjectSearchResponseSchema = z.object({
   projects: z.array(z.object({ id: z.string(), name: z.string() })),

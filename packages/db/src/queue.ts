@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { getDb } from './client.js';
-import type { AgentEvent } from './schema.js';
+import { getDb } from './client';
+import type { AgentEvent } from './schema';
 
 /**
  * Atomically claim up to `limit` unprocessed agent events.

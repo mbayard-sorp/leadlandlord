@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
-import type { DeployArgs, DeployResult } from './types.js';
+import type { DeployArgs, DeployResult } from './types';
 
 /**
  * Deploy a directory to Vercel.

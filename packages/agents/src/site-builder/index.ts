@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { eq } from 'drizzle-orm';
 import { getDb, sites, agentEvents } from '@leadlandlord/db';
 import { vercel } from '@leadlandlord/integrations';
-import { BaseAgent, type AgentContext } from '../base.js';
-import { ContentEngine } from '../content-engine/index.js';
-import { TrackingSetup } from '../tracking-setup/index.js';
-import { SiteBuilderInput, SiteBuilderOutput } from './schema.js';
-import { materializeSite } from './materialize.js';
+import { BaseAgent, type AgentContext } from '../base';
+import { ContentEngine } from '../content-engine/index';
+import { TrackingSetup } from '../tracking-setup/index';
+import { SiteBuilderInput, SiteBuilderOutput } from './schema';
+import { materializeSite } from './materialize';
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
@@ -177,4 +177,4 @@ function countPages(bundle: { services: unknown[]; service_areas: unknown[]; blo
   return 3 + bundle.services.length + bundle.service_areas.length + bundle.blog_posts.length;
 }
 
-export { SiteBuilderInput, SiteBuilderOutput } from './schema.js';
+export { SiteBuilderInput, SiteBuilderOutput } from './schema';
