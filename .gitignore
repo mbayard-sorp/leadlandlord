@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build
+.next/
+.turbo/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# os
+.DS_Store
+Thumbs.db
+
+# vercel
+.vercel/
+
+# tmp
+tmp/
+.tmp/
+
+# generated tenant-site builds
+.llbuild/
+
+# media
+*.mp3
+*.mp4
+*.mov
+
+# coverage
+coverage/
+.nyc_output/

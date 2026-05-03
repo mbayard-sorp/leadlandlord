@@ -1,0 +1,31 @@
+{
+  "name": "@leadlandlord/agents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./base": "./src/base.ts",
+    "./site-builder": "./src/site-builder/index.ts",
+    "./content-engine": "./src/content-engine/index.ts",
+    "./tracking-setup": "./src/tracking-setup/index.ts",
+    "./registry": "./src/registry.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@leadlandlord/db": "workspace:*",
+    "@leadlandlord/integrations": "workspace:*",
+    "@leadlandlord/shared": "workspace:*",
+    "drizzle-orm": "^0.36.4",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "leadlandlord",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "db:generate": "pnpm --filter @leadlandlord/db generate",
+    "db:migrate": "pnpm --filter @leadlandlord/db migrate",
+    "db:studio": "pnpm --filter @leadlandlord/db studio",
+    "dry-run": "tsx scripts/dry-run.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.0",
+    "tsx": "^4.19.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  }
+}
