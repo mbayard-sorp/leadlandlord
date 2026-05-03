@@ -1,9 +1,15 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { migrate } from 'drizzle-orm/neon-http/migrator';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+
+const __initFilename = fileURLToPath(import.meta.url);
+const __initDirname = dirname(__initFilename);
+const __repoRoot = resolve(__initDirname, '../../..');
+loadEnv({ path: resolve(__repoRoot, '.env.local') });
+loadEnv({ path: resolve(__repoRoot, '.env') });
 
 async function main() {
   const url = process.env.DATABASE_URL;
