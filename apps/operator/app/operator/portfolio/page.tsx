@@ -1,11 +1,20 @@
 import { desc } from 'drizzle-orm';
-import { getDb, sites } from '@leadlandlord/db';
+import { unstable_cache } from 'next/cache';
+import { getDb, sites, type Site } from '@leadlandlord/db';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
+
+const loadPortfolio = unstable_cache(
+  async (): Promise<Site[]> => {
+    const db = getDb();
+    return await db.select().from(sites).orderBy(desc(sites.createdAt)).limit(200);
+  },
+  ['operator-portfolio'],
+  { revalidate: 30, tags: ['portfolio'] },
+);
 
 export default async function PortfolioPage() {
-  const db = getDb();
-  const rows = await db.select().from(sites).orderBy(desc(sites.createdAt)).limit(200);
+  const rows = await loadPortfolio();
 
   return (
     <div className="space-y-6">

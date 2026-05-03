@@ -4,6 +4,12 @@
     {
       "name": "operator",
       "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@leadlandlord/operator", "start"],
+      "port": 3000
+    },
+    {
+      "name": "operator-dev",
+      "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@leadlandlord/operator", "dev"],
       "port": 3000
     },

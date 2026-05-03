@@ -87,6 +87,16 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   bundle.city ??= input.city;
   bundle.state ??= input.state.toUpperCase();
   bundle.business_name ??= input.business_name ?? `${input.city} ${input.niche} Pros`;
+  // Defensive defaults: if the model omits these we still want a valid bundle.
+  if (!['classic', 'modern', 'premium', 'bright'].includes(bundle.variant as string)) {
+    bundle.variant = 'classic';
+  }
+  if (!Array.isArray(bundle.nearby_cities)) {
+    bundle.nearby_cities = [];
+  }
+  if (!Array.isArray(bundle.trust_signals) || bundle.trust_signals.length === 0) {
+    bundle.trust_signals = ['Licensed & insured', 'Free quotes', 'Same-week service'];
+  }
 
   for (const key of ['home', 'about', 'contact'] as const) {
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);

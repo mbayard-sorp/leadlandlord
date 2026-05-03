@@ -11,11 +11,19 @@ const PageSchema = z.object({
   schema_org_jsonld: z.unknown().optional(),
 });
 
+const VariantSchema = z.enum(['classic', 'modern', 'premium', 'bright']);
+export type Variant = z.infer<typeof VariantSchema>;
+
 const BundleSchema = z.object({
   niche: z.string(),
   city: z.string(),
   state: z.string(),
   business_name: z.string(),
+  variant: VariantSchema.default('classic'),
+  hero_image_prompt: z.string().optional(),
+  hero_image_url: z.string().optional(),
+  nearby_cities: z.array(z.string()).default([]),
+  trust_signals: z.array(z.string()).default([]),
   home: PageSchema,
   services: z.array(PageSchema),
   service_areas: z.array(PageSchema),
@@ -26,6 +34,7 @@ const BundleSchema = z.object({
 });
 
 export type Bundle = z.infer<typeof BundleSchema>;
+export type Page = z.infer<typeof PageSchema>;
 
 let cached: Bundle | null = null;
 
@@ -33,7 +42,6 @@ export function loadBundle(): Bundle {
   if (cached) return cached;
   const path = resolve(process.cwd(), 'content.json');
   if (!existsSync(path)) {
-    // Render a placeholder when running the template in isolation.
     cached = placeholder();
     return cached;
   }
@@ -43,11 +51,15 @@ export function loadBundle(): Bundle {
 }
 
 function placeholder(): Bundle {
+  const variant = (process.env.NEXT_PUBLIC_VARIANT as Variant) ?? 'classic';
   return {
     niche: process.env.NEXT_PUBLIC_NICHE ?? 'home services',
     city: process.env.NEXT_PUBLIC_CITY ?? 'Anywhere',
     state: process.env.NEXT_PUBLIC_STATE ?? 'XX',
     business_name: process.env.NEXT_PUBLIC_SITE_NAME ?? 'LeadLandlord Demo',
+    variant,
+    nearby_cities: [],
+    trust_signals: ['Licensed & insured', 'Free quotes', 'Same-week service'],
     home: stub('home', '/', 'Welcome'),
     services: [],
     service_areas: [],
@@ -70,4 +82,11 @@ function stub(kind: string, slug: string, title: string) {
 
 export function trackingNumber(): string {
   return process.env.NEXT_PUBLIC_TRACKING_NUMBER ?? '+1-555-0100';
+}
+
+/**
+ * Build a `tel:` href from the (possibly formatted) tracking number.
+ */
+export function telHref(number: string): string {
+  return `tel:${number.replace(/[^+\d]/g, '')}`;
 }

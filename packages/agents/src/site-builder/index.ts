@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { eq } from 'drizzle-orm';
 import { getDb, sites, agentEvents } from '@leadlandlord/db';
-import { vercel } from '@leadlandlord/integrations';
+import { vercel, imagen } from '@leadlandlord/integrations';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
@@ -87,6 +87,37 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       vercelProjectName: projectName,
     });
     ctx.log.info({ buildDir }, 'site files materialized');
+
+    // 6b. Generate hero image into <buildDir>/public/hero.jpg if we have a
+    //     prompt and the AI Gateway key is configured. Falls back gracefully
+    //     to no-op when the key is missing — variants render their placeholder.
+    if (bundle.hero_image_prompt) {
+      try {
+        const imgRes = await imagen.generateHeroImageInto(
+          buildDir,
+          bundle.hero_image_prompt,
+        );
+        if (imgRes) {
+          ctx.log.info(
+            { path: imgRes.path, size: imgRes.size, model: imgRes.model },
+            'hero image generated',
+          );
+          bundle.hero_image_url = imgRes.publicPath;
+          // Re-write content.json so the build picks up the URL.
+          await materializeSite({
+            buildDir,
+            bundle,
+            trackingNumber: tracking.number,
+            vercelProjectName: projectName,
+          });
+        }
+      } catch (err) {
+        ctx.log.warn(
+          { err: err instanceof Error ? err.message : err },
+          'hero image generation failed — proceeding without it',
+        );
+      }
+    }
 
     // 7. Deploy.
     const deploy = await vercel.deployDirectory({

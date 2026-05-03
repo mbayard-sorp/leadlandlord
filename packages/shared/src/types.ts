@@ -27,11 +27,32 @@ export const Page = z.object({
 });
 export type Page = z.infer<typeof Page>;
 
+/**
+ * Visual variants. Site Builder picks one based on niche category so a
+ * portfolio of 100 sites doesn't all look identical.
+ *
+ *   classic  — trade-classic, navy + safety-orange, slab/condensed, big phone.
+ *              For HVAC, plumbing, electrical, gutter, roofing, etc.
+ *   modern   — clean modern, aqua accent, geometric hero, sans throughout.
+ *              For solar, EV charging, smart-home, water heater, etc.
+ *   premium  — editorial, cream + serif, full-bleed photo, "by appointment".
+ *              For custom landscape, kitchen remodel, pool builders, etc.
+ *   bright   — warm cream + coral, rounded, friendly, "book online".
+ *              For cleaning, junk removal, pest, lawn care, dog walking, etc.
+ */
+export const VariantKind = z.enum(['classic', 'modern', 'premium', 'bright']);
+export type VariantKind = z.infer<typeof VariantKind>;
+
 export const ContentBundle = z.object({
   niche: z.string(),
   city: z.string(),
   state: z.string(),
   business_name: z.string(),
+  variant: VariantKind.default('classic'),
+  hero_image_prompt: z.string().optional(),
+  hero_image_url: z.string().optional(),
+  nearby_cities: z.array(z.string()).default([]),
+  trust_signals: z.array(z.string()).default([]),
   home: Page,
   services: z.array(Page),
   service_areas: z.array(Page),

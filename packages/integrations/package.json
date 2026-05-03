@@ -12,7 +12,8 @@
     "./callrail": "./src/callrail/index.ts",
     "./stripe": "./src/stripe/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
-    "./namecheap": "./src/namecheap/index.ts"
+    "./namecheap": "./src/namecheap/index.ts",
+    "./imagen": "./src/imagen/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

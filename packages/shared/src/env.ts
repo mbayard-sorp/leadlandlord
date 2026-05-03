@@ -25,6 +25,8 @@ const EnvSchema = z.object({
     .transform((v) => Number.parseFloat(v))
     .pipe(z.number().positive()),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-6'),
+  AI_GATEWAY_API_KEY: z.string().optional(),
+  IMAGEN_MODEL: z.string().default('google/imagen-3-fast'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
@@ -61,6 +63,8 @@ export function getEnvLoose() {
     OPERATOR_PUBLIC_URL: process.env.OPERATOR_PUBLIC_URL ?? 'http://localhost:3000',
     DAILY_LLM_BUDGET_USD: Number.parseFloat(process.env.DAILY_LLM_BUDGET_USD ?? '20'),
     ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
+    AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
+    IMAGEN_MODEL: process.env.IMAGEN_MODEL ?? 'google/imagen-3-fast',
     NODE_ENV: process.env.NODE_ENV ?? 'development',
   };
 }

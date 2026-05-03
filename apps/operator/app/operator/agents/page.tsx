@@ -1,34 +1,66 @@
 import { sql, desc } from 'drizzle-orm';
-import { getDb, agentRuns, agentEvents } from '@leadlandlord/db';
+import { unstable_cache } from 'next/cache';
+import { getDb, agentRuns, agentEvents, type AgentRun, type AgentEvent } from '@leadlandlord/db';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
+
+interface DailyAgentStats {
+  agent: string;
+  runs: number;
+  cost: number;
+  tokens_in: number;
+  tokens_out: number;
+}
+
+const loadRecentRuns = unstable_cache(
+  async (): Promise<AgentRun[]> => {
+    const db = getDb();
+    return await db.select().from(agentRuns).orderBy(desc(agentRuns.startedAt)).limit(50);
+  },
+  ['operator-recent-runs'],
+  { revalidate: 30, tags: ['agent-runs'] },
+);
+
+const loadTodayStats = unstable_cache(
+  async (): Promise<DailyAgentStats[]> => {
+    const db = getDb();
+    const result = await db.execute(sql`
+      SELECT agent,
+             COUNT(*)::int AS runs,
+             COALESCE(SUM(cost_usd), 0)::float AS cost,
+             COALESCE(SUM(tokens_in), 0)::int AS tokens_in,
+             COALESCE(SUM(tokens_out), 0)::int AS tokens_out
+        FROM agent_runs
+       WHERE started_at >= CURRENT_DATE
+       GROUP BY agent
+       ORDER BY cost DESC
+    `);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (Array.isArray(result) ? result : (result as any).rows) as DailyAgentStats[];
+  },
+  ['operator-today-stats'],
+  { revalidate: 30, tags: ['agent-runs'] },
+);
+
+const loadApprovalQueue = unstable_cache(
+  async (): Promise<AgentEvent[]> => {
+    const db = getDb();
+    return await db
+      .select()
+      .from(agentEvents)
+      .where(sql`${agentEvents.requiresApproval} = true AND ${agentEvents.processedAt} IS NULL`)
+      .limit(50);
+  },
+  ['operator-approval-queue'],
+  { revalidate: 30, tags: ['approval-queue'] },
+);
 
 export default async function AgentsPage() {
-  const db = getDb();
-  const recentRuns = await db
-    .select()
-    .from(agentRuns)
-    .orderBy(desc(agentRuns.startedAt))
-    .limit(50);
-  const todayByAgent = (await db.execute(sql`
-    SELECT agent,
-           COUNT(*)::int AS runs,
-           COALESCE(SUM(cost_usd), 0)::float AS cost,
-           COALESCE(SUM(tokens_in), 0)::int AS tokens_in,
-           COALESCE(SUM(tokens_out), 0)::int AS tokens_out
-      FROM agent_runs
-     WHERE started_at >= CURRENT_DATE
-     GROUP BY agent
-     ORDER BY cost DESC
-  `)) as unknown as { rows: { agent: string; runs: number; cost: number; tokens_in: number; tokens_out: number }[] };
-
-  const approvalQueue = await db
-    .select()
-    .from(agentEvents)
-    .where(sql`${agentEvents.requiresApproval} = true AND ${agentEvents.processedAt} IS NULL`)
-    .limit(50);
-
-  const aggregateRows = Array.isArray(todayByAgent) ? todayByAgent : todayByAgent.rows ?? [];
+  const [recentRuns, todayByAgent, approvalQueue] = await Promise.all([
+    loadRecentRuns(),
+    loadTodayStats(),
+    loadApprovalQueue(),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -41,7 +73,7 @@ export default async function AgentsPage() {
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">Today</h2>
-        {aggregateRows.length === 0 ? (
+        {todayByAgent.length === 0 ? (
           <p className="text-sm text-slate-500">No runs yet today.</p>
         ) : (
           <div className="rounded-lg border border-slate-800 overflow-hidden">
@@ -55,7 +87,7 @@ export default async function AgentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {aggregateRows.map((r) => (
+                {todayByAgent.map((r) => (
                   <tr key={r.agent}>
                     <td className="px-3 py-2 font-mono">{r.agent}</td>
                     <td className="px-3 py-2">{r.runs}</td>

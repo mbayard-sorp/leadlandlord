@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
-import { getDb, sites, agentRuns, tenants } from '@leadlandlord/db';
+import { unstable_cache } from 'next/cache';
+import { getDb } from '@leadlandlord/db';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
 
 interface Kpi {
   label: string;
@@ -9,35 +10,60 @@ interface Kpi {
   hint?: string;
 }
 
-export default async function OperatorOverview() {
-  const db = getDb();
-  const [siteCount] = await db.execute(sql`SELECT COUNT(*)::int AS c FROM sites`).then(rowsArr);
-  const [warming] = await db
-    .execute(sql`SELECT COUNT(*)::int AS c FROM sites WHERE status = 'warming'`)
-    .then(rowsArr);
-  const [rented] = await db
-    .execute(sql`SELECT COUNT(*)::int AS c FROM sites WHERE status = 'rented'`)
-    .then(rowsArr);
-  const [activeTenants] = await db
-    .execute(sql`SELECT COUNT(*)::int AS c FROM tenants WHERE status = 'active'`)
-    .then(rowsArr);
-  const [todayRuns] = await db
-    .execute(
-      sql`SELECT COUNT(*)::int AS c, COALESCE(SUM(cost_usd), 0)::float AS cost FROM agent_runs WHERE started_at >= CURRENT_DATE`,
-    )
-    .then(rowsArr);
-  const [mrr] = await db
-    .execute(sql`SELECT COALESCE(SUM(mrr_usd), 0)::float AS mrr FROM sites`)
-    .then(rowsArr);
+interface OverviewRow {
+  total_sites: number;
+  warming_sites: number;
+  rented_sites: number;
+  active_tenants: number;
+  total_mrr: number;
+  runs_today: number;
+  cost_today: number;
+}
+
+const loadOverview = unstable_cache(
+  async (): Promise<OverviewRow> => {
+    const db = getDb();
+    const result = await db.execute(sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM sites)                                                    AS total_sites,
+        (SELECT COUNT(*)::int FROM sites WHERE status = 'warming')                           AS warming_sites,
+        (SELECT COUNT(*)::int FROM sites WHERE status = 'rented')                            AS rented_sites,
+        (SELECT COUNT(*)::int FROM tenants WHERE status = 'active')                          AS active_tenants,
+        (SELECT COALESCE(SUM(mrr_usd), 0)::float FROM sites)                                 AS total_mrr,
+        (SELECT COUNT(*)::int FROM agent_runs WHERE started_at >= CURRENT_DATE)              AS runs_today,
+        (SELECT COALESCE(SUM(cost_usd), 0)::float FROM agent_runs WHERE started_at >= CURRENT_DATE) AS cost_today
+    `);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (Array.isArray(result) ? result : (result as any).rows) as OverviewRow[];
+    return rows[0] ?? {
+      total_sites: 0,
+      warming_sites: 0,
+      rented_sites: 0,
+      active_tenants: 0,
+      total_mrr: 0,
+      runs_today: 0,
+      cost_today: 0,
+    };
+  },
+  ['operator-overview'],
+  { revalidate: 30, tags: ['overview'] },
+);
+
+export default async function OverviewPage() {
+  const row = await loadOverview();
 
   const kpis: Kpi[] = [
-    { label: 'Sites', value: siteCount?.c ?? 0, hint: `${warming?.c ?? 0} warming · ${rented?.c ?? 0} rented` },
-    { label: 'Active tenants', value: activeTenants?.c ?? 0 },
-    { label: 'Portfolio MRR', value: `$${Number(mrr?.mrr ?? 0).toFixed(2)}` },
+    {
+      label: 'Sites',
+      value: row.total_sites,
+      hint: `${row.warming_sites} warming · ${row.rented_sites} rented`,
+    },
+    { label: 'Active tenants', value: row.active_tenants },
+    { label: 'Portfolio MRR', value: `$${row.total_mrr.toFixed(2)}` },
     {
       label: 'Agent runs today',
-      value: todayRuns?.c ?? 0,
-      hint: `$${Number(todayRuns?.cost ?? 0).toFixed(2)} LLM spend`,
+      value: row.runs_today,
+      hint: `$${row.cost_today.toFixed(2)} LLM spend`,
     },
   ];
 
@@ -59,16 +85,3 @@ export default async function OperatorOverview() {
     </div>
   );
 }
-
-// Helper because drizzle's neon-http returns either { rows } or array depending on query shape.
-function rowsArr(res: unknown): { c?: number; cost?: number; mrr?: number }[] {
-  if (Array.isArray(res)) return res as { c?: number }[];
-  if (typeof res === 'object' && res !== null && 'rows' in res) {
-    return (res as { rows: { c?: number }[] }).rows;
-  }
-  return [];
-}
-// Suppress unused-import warning for tenants type re-export.
-void tenants;
-void sites;
-void agentRuns;
