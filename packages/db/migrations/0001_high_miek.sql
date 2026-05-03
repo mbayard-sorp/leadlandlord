@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "agent_runs_agent_dedupe_uniq";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "agent_runs_agent_dedupe_uniq" ON "agent_runs" USING btree ("agent","dedupe_key") WHERE "agent_runs"."dedupe_key" IS NOT NULL AND "agent_runs"."status" = 'succeeded';

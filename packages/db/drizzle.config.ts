@@ -4,8 +4,8 @@ import { defineConfig } from 'drizzle-kit';
 
 // Load the repo-root .env.local first (where the user keeps secrets), falling back to .env.
 const repoRoot = resolve(__dirname, '../..');
-loadEnv({ path: resolve(repoRoot, '.env.local') });
-loadEnv({ path: resolve(repoRoot, '.env') });
+loadEnv({ path: resolve(repoRoot, '.env.local'), override: true });
+loadEnv({ path: resolve(repoRoot, '.env'), override: true });
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {

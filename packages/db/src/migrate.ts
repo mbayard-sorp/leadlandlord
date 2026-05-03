@@ -8,8 +8,8 @@ import { dirname, resolve } from 'node:path';
 const __initFilename = fileURLToPath(import.meta.url);
 const __initDirname = dirname(__initFilename);
 const __repoRoot = resolve(__initDirname, '../../..');
-loadEnv({ path: resolve(__repoRoot, '.env.local') });
-loadEnv({ path: resolve(__repoRoot, '.env') });
+loadEnv({ path: resolve(__repoRoot, '.env.local'), override: true });
+loadEnv({ path: resolve(__repoRoot, '.env'), override: true });
 
 async function main() {
   const url = process.env.DATABASE_URL;

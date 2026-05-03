@@ -63,10 +63,53 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
       .map((block) => (block as { type: 'text'; text: string }).text)
       .join('');
 
-    const json = extractJson(text);
-    const parsed = ContentBundle.parse(json);
+    const raw = extractJson(text);
+    const normalized = normalizeBundle(raw, input);
+    const parsed = ContentBundle.parse(normalized);
     return parsed;
   }
+}
+
+/**
+ * Defensive post-processing on the model's JSON before strict Zod validation.
+ *
+ * The model is generally good but not perfect — meta_descriptions sometimes
+ * run a few chars over 160, and `generated_at` is occasionally missing. Rather
+ * than retry the whole content gen for a trivial fix, we patch up here.
+ */
+function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
+  if (raw == null || typeof raw !== 'object') return raw;
+  const bundle = raw as Record<string, unknown>;
+  if (!bundle.generated_at) {
+    bundle.generated_at = new Date().toISOString();
+  }
+  bundle.niche ??= input.niche;
+  bundle.city ??= input.city;
+  bundle.state ??= input.state.toUpperCase();
+  bundle.business_name ??= input.business_name ?? `${input.city} ${input.niche} Pros`;
+
+  for (const key of ['home', 'about', 'contact'] as const) {
+    if (bundle[key]) bundle[key] = trimPage(bundle[key]);
+  }
+  for (const key of ['services', 'service_areas', 'blog_posts'] as const) {
+    const arr = bundle[key];
+    if (Array.isArray(arr)) {
+      bundle[key] = arr.map(trimPage);
+    }
+  }
+  return bundle;
+}
+
+function trimPage(p: unknown): unknown {
+  if (p == null || typeof p !== 'object') return p;
+  const page = p as Record<string, unknown>;
+  if (typeof page.meta_description === 'string' && page.meta_description.length > 160) {
+    page.meta_description = page.meta_description.slice(0, 157).trimEnd() + '…';
+  }
+  if (typeof page.title === 'string' && page.title.length > 70) {
+    page.title = page.title.slice(0, 67).trimEnd() + '…';
+  }
+  return page;
 }
 
 function buildUserPrompt(input: ContentEngineInput): string {

@@ -337,7 +337,7 @@ export const agentRuns = pgTable(
   (t) => ({
     agentDedupeUniq: uniqueIndex('agent_runs_agent_dedupe_uniq')
       .on(t.agent, t.dedupeKey)
-      .where(sql`${t.dedupeKey} IS NOT NULL`),
+      .where(sql`${t.dedupeKey} IS NOT NULL AND ${t.status} = 'succeeded'`),
     agentStartedIdx: index('agent_runs_agent_started_idx').on(t.agent, t.startedAt),
     statusIdx: index('agent_runs_status_idx').on(t.status),
   }),

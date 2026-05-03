@@ -10,9 +10,20 @@
  *   pnpm dry-run --niche "gutter cleaning" --city "Boise" --state "ID"
  *   pnpm dry-run --niche "gutter cleaning" --city "Boise" --state "ID" --full
  */
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { performance } from 'node:perf_hooks';
+
+// Load env BEFORE the package imports below so they see the values at import time.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const __repoRoot = resolve(__dirname, '..');
+loadEnv({ path: resolve(__repoRoot, '.env.local'), override: true });
+loadEnv({ path: resolve(__repoRoot, '.env'), override: true });
+
+// eslint-disable-next-line import/order
 import { sql } from 'drizzle-orm';
 import { getDb, niches } from '@leadlandlord/db';
 import { SiteBuilder } from '@leadlandlord/agents/site-builder';
@@ -57,7 +68,6 @@ function hr(label: string) {
 }
 
 async function ensurePreflight(): Promise<void> {
-  // Force mock telephony so a real number is never provisioned.
   process.env.MOCK_TELEPHONY = 'true';
 
   const required = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'VERCEL_TOKEN'];
@@ -67,7 +77,6 @@ async function ensurePreflight(): Promise<void> {
     process.exit(1);
   }
 
-  // Quick DB connectivity check.
   try {
     const db = getDb();
     await db.execute(sql`SELECT 1`);
