@@ -22,6 +22,13 @@
       "when": 1777874635857,
       "tag": "0002_skinny_wiccan",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777929938790,
+      "tag": "0003_watery_famine",
+      "breakpoints": true
     }
   ]
 }

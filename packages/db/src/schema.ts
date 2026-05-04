@@ -351,6 +351,37 @@ export const invoices = pgTable(
   }),
 );
 
+/**
+ * Global suppression list — TCPA / CAN-SPAM / "STOP" handling. Entries are
+ * shared across the entire portfolio (suppression is per-account, not per-site
+ * under TCPA). Phones are stored E.164 normalized; emails lowercase.
+ */
+export const suppressionList = pgTable(
+  'suppression_list',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** E.164 phone (e.g. +15125550100) or lowercase email. */
+    identifier: text('identifier').notNull(),
+    /** 'phone' | 'email'. */
+    identifierType: text('identifier_type').notNull(),
+    /** Why suppressed: 'sms_stop' | 'voice_dnc' | 'email_unsubscribe' | 'manual' | 'trial_decline' | 'churn'. */
+    reason: text('reason'),
+    /** Site that originated the suppression (informational; suppression itself is global). */
+    sourceSiteId: uuid('source_site_id').references(() => sites.id, { onDelete: 'set null' }),
+    /** Channel that triggered the suppression — 'sms' | 'voice' | 'email' | 'manual'. */
+    channel: text('channel'),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb('metadata'),
+  },
+  (t) => ({
+    identifierUniq: uniqueIndex('suppression_list_identifier_uniq').on(
+      t.identifier,
+      t.identifierType,
+    ),
+    typeIdx: index('suppression_list_type_idx').on(t.identifierType),
+  }),
+);
+
 export const backlinks = pgTable(
   'backlinks',
   {
@@ -453,6 +484,8 @@ export type Call = typeof calls.$inferSelect;
 export type NewCall = typeof calls.$inferInsert;
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
+export type Suppression = typeof suppressionList.$inferSelect;
+export type NewSuppression = typeof suppressionList.$inferInsert;
 export type Backlink = typeof backlinks.$inferSelect;
 export type AgentRun = typeof agentRuns.$inferSelect;
 export type NewAgentRun = typeof agentRuns.$inferInsert;
