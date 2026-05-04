@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { after } from 'next/server';
-import { getDb, calls, type Call } from '@leadlandlord/db';
+import { getDb, calls, sites, type Call } from '@leadlandlord/db';
+import { CallClassifier } from '@leadlandlord/agents/call-classifier';
 import { log } from '@leadlandlord/shared/log';
 import { readTwilioParams, verifyTwilioRequest } from '../../../../../lib/twilio-webhook';
 
@@ -56,19 +57,66 @@ export async function POST(req: Request) {
 
   log.info({ callId: updated.id, callSid }, 'transcript attached');
 
-  // Background classification — runs after the response is sent so Twilio
-  // doesn't time out. The classifier itself is a Phase-2.5 follow-up; for now
-  // we just log the intent.
+  // Run classification in the background so Twilio doesn't time out.
   after(() => classifyCall(updated));
 
   return NextResponse.json({ ok: true });
 }
 
+/**
+ * Classify a call using the CallClassifier agent and persist the result onto
+ * the calls row. Errors are swallowed and logged — a classification failure
+ * shouldn't surface to Twilio (the transcript is already saved, we can retry
+ * classification later via /operator).
+ */
 async function classifyCall(call: Call): Promise<void> {
-  // TODO(phase-2.5): Anthropic call → "won" | "quoted" | "lost" | "spam".
-  // Update calls.classification + calls.estRevenueUsd.
-  log.info(
-    { callId: call.id, transcriptLen: call.transcript?.length ?? 0 },
-    'classification job queued (not yet implemented)',
-  );
+  if (!call.transcript) return;
+  const db = getDb();
+  try {
+    const site = (await db.select().from(sites).where(eq(sites.id, call.siteId)).limit(1))[0];
+    if (!site) {
+      log.warn({ callId: call.id, siteId: call.siteId }, 'classify: site row missing');
+      return;
+    }
+    const classifier = new CallClassifier();
+    const result = await classifier.run(
+      {
+        call_id: call.id,
+        transcript: call.transcript,
+        niche: site.niche,
+        city: site.city,
+        state: site.state,
+        caller_number: call.callerNumber ?? undefined,
+        duration_s: call.durationS ?? undefined,
+      },
+      { siteId: call.siteId },
+    );
+    await db
+      .update(calls)
+      .set({
+        classification: result.classification,
+        estRevenueUsd: result.est_revenue_usd != null ? result.est_revenue_usd.toFixed(2) : null,
+        metadata: {
+          ...(call.metadata as Record<string, unknown> | null),
+          classification_summary: result.summary,
+          classification_confidence: result.confidence,
+          classification_notes: result.notes,
+        },
+      })
+      .where(eq(calls.id, call.id));
+    log.info(
+      {
+        callId: call.id,
+        classification: result.classification,
+        confidence: result.confidence,
+        estRevenueUsd: result.est_revenue_usd,
+      },
+      'call classified',
+    );
+  } catch (err) {
+    log.error(
+      { err: err instanceof Error ? err.message : err, callId: call.id },
+      'classify call failed',
+    );
+  }
 }

@@ -11,6 +11,7 @@
     "./site-builder": "./src/site-builder/index.ts",
     "./content-engine": "./src/content-engine/index.ts",
     "./tracking-setup": "./src/tracking-setup/index.ts",
+    "./call-classifier": "./src/call-classifier/index.ts",
     "./registry": "./src/registry.ts"
   },
   "scripts": {

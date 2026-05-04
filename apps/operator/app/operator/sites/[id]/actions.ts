@@ -1,10 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, sites, calls } from '@leadlandlord/db';
+import { getDb, sites, calls, type Call, type Site } from '@leadlandlord/db';
 import { updateNumber } from '@leadlandlord/integrations/twilio';
+import { CallClassifier } from '@leadlandlord/agents/call-classifier';
 import { log } from '@leadlandlord/shared/log';
 
 const PhoneAssignmentSchema = z.object({
@@ -128,20 +130,83 @@ export async function insertManualCall(formData: FormData): Promise<{ ok: boolea
   const v = parsed.data;
 
   const db = getDb();
-  await db.insert(calls).values({
-    siteId: v.site_id,
-    callerNumber: v.caller_number,
-    direction: 'inbound',
-    startedAt: new Date(),
-    durationS: v.duration_s,
-    classification: v.classification,
-    transcript: v.transcript,
-    metadata: { manual_entry: true },
-  });
+  const inserted = (
+    await db
+      .insert(calls)
+      .values({
+        siteId: v.site_id,
+        callerNumber: v.caller_number,
+        direction: 'inbound',
+        startedAt: new Date(),
+        durationS: v.duration_s,
+        classification: v.classification,
+        transcript: v.transcript,
+        metadata: { manual_entry: true },
+      })
+      .returning()
+  )[0];
+
+  // If the user pasted a transcript and didn't pre-classify the call, run the
+  // LLM classifier in the background — useful for testing the pipeline without
+  // a live Twilio webhook.
+  if (inserted && v.transcript && v.classification === 'unclassified') {
+    const site = (await db.select().from(sites).where(eq(sites.id, v.site_id)).limit(1))[0];
+    if (site) {
+      after(() => classifyManualCall(inserted, site));
+    }
+  }
 
   revalidatePath(`/operator/sites/${v.site_id}`);
   revalidatePath('/operator/calls');
   return { ok: true };
+}
+
+async function classifyManualCall(call: Call, site: Site): Promise<void> {
+  if (!call.transcript) return;
+  try {
+    const classifier = new CallClassifier();
+    const result = await classifier.run(
+      {
+        call_id: call.id,
+        transcript: call.transcript,
+        niche: site.niche,
+        city: site.city,
+        state: site.state,
+        caller_number: call.callerNumber ?? undefined,
+        duration_s: call.durationS ?? undefined,
+      },
+      { siteId: site.id },
+    );
+    const db = getDb();
+    await db
+      .update(calls)
+      .set({
+        classification: result.classification,
+        estRevenueUsd: result.est_revenue_usd != null ? result.est_revenue_usd.toFixed(2) : null,
+        metadata: {
+          ...(call.metadata as Record<string, unknown> | null),
+          classification_summary: result.summary,
+          classification_confidence: result.confidence,
+          classification_notes: result.notes,
+        },
+      })
+      .where(eq(calls.id, call.id));
+    revalidatePath(`/operator/sites/${site.id}`);
+    revalidatePath('/operator/calls');
+    log.info(
+      {
+        callId: call.id,
+        classification: result.classification,
+        confidence: result.confidence,
+      },
+      'manual call classified',
+    );
+  } catch (err) {
+    log.error(
+      { err: err instanceof Error ? err.message : err, callId: call.id },
+      'classify manual call failed',
+    );
+  }
 }
 
 function nullable(v: FormDataEntryValue | null): string | undefined {
