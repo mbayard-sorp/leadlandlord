@@ -33,6 +33,12 @@ const EnvSchema = z.object({
   ELEVENLABS_AGENT_ID: z.string().optional(),
   /** ElevenLabs phone_number_id — created when you import a Twilio number into ElevenLabs. */
   ELEVENLABS_PHONE_NUMBER_ID: z.string().optional(),
+  /** Stripe sandbox/test secret key (sk_test_...). Preferred during development. */
+  STRIPE_SECRET_KEY_TEST: z.string().optional(),
+  /** Stripe live secret key (sk_live_...). Only set when ready for real payments. */
+  STRIPE_SECRET_KEY: z.string().optional(),
+  /** Webhook signing secret for /api/webhooks/stripe. Test mode whsec_test_... */
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
   MOCK_TELEPHONY: z
     .string()
     .optional()
@@ -51,6 +57,29 @@ const EnvSchema = z.object({
 });
 
 export type Env = z.infer<typeof EnvSchema>;
+
+/**
+ * Resolve the active Stripe secret key. Prefers the test/sandbox key when
+ * set so dev doesn't accidentally hit the live API. Returns null when
+ * neither is configured.
+ *
+ * Set `STRIPE_FORCE_LIVE=true` to use the live key even if a test key is
+ * present — useful on prod deploys where both env vars exist.
+ */
+export function stripeSecretKey(): string | null {
+  const test = process.env.STRIPE_SECRET_KEY_TEST;
+  const live = process.env.STRIPE_SECRET_KEY;
+  if (process.env.STRIPE_FORCE_LIVE === 'true' && live) return live;
+  if (test) return test;
+  if (live) return live;
+  return null;
+}
+
+/** True when stripeSecretKey() resolves to a test/sandbox key (sk_test_...). */
+export function stripeIsTestMode(): boolean {
+  const key = stripeSecretKey();
+  return key !== null && key.startsWith('sk_test_');
+}
 
 let cached: Env | null = null;
 
@@ -90,6 +119,9 @@ export function getEnvLoose() {
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     ELEVENLABS_AGENT_ID: process.env.ELEVENLABS_AGENT_ID,
     ELEVENLABS_PHONE_NUMBER_ID: process.env.ELEVENLABS_PHONE_NUMBER_ID,
+    STRIPE_SECRET_KEY_TEST: process.env.STRIPE_SECRET_KEY_TEST,
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
     MOCK_TELEPHONY: process.env.MOCK_TELEPHONY === 'true',
     SENTRY_DSN: process.env.SENTRY_DSN,
     OPERATOR_PUBLIC_URL: process.env.OPERATOR_PUBLIC_URL ?? 'http://localhost:3000',
