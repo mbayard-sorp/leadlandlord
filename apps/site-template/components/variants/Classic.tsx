@@ -157,6 +157,25 @@ export function ClassicHome({ bundle, pageUrl = 'https://example.com' }: Props) 
           </section>
         )}
 
+        {/* Learn more — links to /pages/[slug] */}
+        {bundle.info_pages.length > 0 && (
+          <section className="classic-learn-more" aria-label="Resources">
+            <p className="classic-section-eyebrow">Learn more</p>
+            <h2 className="classic-h2">Local guides & info</h2>
+            <ul className="classic-learn-list">
+              {bundle.info_pages.slice(0, 6).map((p) => (
+                <li key={p.slug}>
+                  <a href={p.slug}>
+                    <span className="classic-learn-title">{p.title}</span>
+                    <span className="classic-learn-arrow">→</span>
+                    <span className="classic-learn-blurb">{p.meta_description}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* contact + form */}
         <section className="classic-contact" id="contact">
           <div className="classic-contact-info">

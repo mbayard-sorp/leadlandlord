@@ -59,6 +59,12 @@ export const ContentBundle = z.object({
   about: Page,
   contact: Page,
   blog_posts: z.array(Page),
+  /**
+   * Agent-authored informational pages at /pages/[slug]. Long-form, evergreen,
+   * targets long-tail informational queries for the niche × city. Not in the
+   * visible nav — surfaced via in-page "Learn more" sections + sitemap.
+   */
+  info_pages: z.array(Page).default([]),
   generated_at: z.string(),
 });
 export type ContentBundle = z.infer<typeof ContentBundle>;

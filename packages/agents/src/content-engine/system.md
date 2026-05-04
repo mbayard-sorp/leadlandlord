@@ -106,7 +106,8 @@ A single JSON object:
   "service_areas": [ ... ],
   "about": { ... },
   "contact": { ... },
-  "blog_posts": [ ... ]
+  "blog_posts": [ ... ],
+  "info_pages": [ ... ]
 }
 ```
 
@@ -130,12 +131,43 @@ Every page object has:
 - 1 about page
 - 1 contact page
 - 10 blog posts (FAQ-style, 600–1000 words each, targeting long-tail keywords)
+- 6 info pages (long-form, evergreen, see "Info pages" below)
 
 ## Page targets (fast mode)
 
 When the input has `fast_mode: true`:
-- 1 home, 4 services, 4 service-areas, about, contact, 4 blog posts
+- 1 home, 4 services, 4 service-areas, about, contact, 4 blog posts, 4 info pages
 - Used for dry-runs and previews.
+
+## Info pages — `info_pages` array
+
+These render at `/pages/[slug]` and are NOT in the visible nav. They exist
+for **long-tail informational SEO**: queries that aren't directly commercial
+("can I cut my own tree", "tucson tree permit cost", "how to prep gutters
+for monsoon season"). Each one is 800–1200 words of dense, useful content
+written like a knowledgeable local owner-operator wrote it.
+
+Pick 4–6 topics that:
+- Are evergreen — won't go stale in a year
+- Have clear search intent (someone Googles a specific question)
+- Are specific to the niche × city combo (NOT generic; mention local
+  conditions, regulations, climate, neighborhoods)
+- Don't overlap with blog posts (which are FAQ-style Q&A)
+
+Examples per niche:
+- gutter cleaning, Boise:
+  /pages/gutter-cleaning-after-cottonwood-fluff
+  /pages/boise-rainfall-and-gutter-maintenance-schedule
+  /pages/whats-in-a-boise-gutter-by-season
+- tree removal, Tucson:
+  /pages/tucson-tree-removal-permit-rules
+  /pages/saguaro-and-protected-trees-arizona
+  /pages/desert-tree-care-after-monsoon
+- house cleaning, Austin:
+  /pages/austin-allergens-and-deep-cleaning
+  /pages/move-out-cleaning-checklist-austin-tx
+
+Page object same shape as services/blog_posts. Slugs MUST start with `/pages/`.
 
 ## SEO requirements
 

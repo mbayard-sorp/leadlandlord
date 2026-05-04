@@ -103,6 +103,9 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   if (!Array.isArray(bundle.trust_signals) || bundle.trust_signals.length === 0) {
     bundle.trust_signals = ['Licensed & insured', 'Free quotes', 'Same-week service'];
   }
+  if (!Array.isArray(bundle.info_pages)) {
+    bundle.info_pages = [];
+  }
 
   for (const key of ['home', 'about', 'contact'] as const) {
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);

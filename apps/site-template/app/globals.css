@@ -5,6 +5,7 @@
 @import '../styles/themes/bright.css';
 @import '../styles/components.css';
 @import '../styles/variants/classic.css';
+@import '../styles/info-page.css';
 
 /* ── Defaults — wrapped in :where() to give them 0 specificity so the
  * [data-theme="..."] rules always win regardless of source order. ── */

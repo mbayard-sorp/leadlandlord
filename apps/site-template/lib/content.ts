@@ -30,6 +30,7 @@ const BundleSchema = z.object({
   about: PageSchema,
   contact: PageSchema,
   blog_posts: z.array(PageSchema),
+  info_pages: z.array(PageSchema).default([]),
   generated_at: z.string(),
 });
 
@@ -66,6 +67,7 @@ function placeholder(): Bundle {
     about: stub('about', '/about', 'About'),
     contact: stub('contact', '/contact', 'Contact'),
     blog_posts: [],
+    info_pages: [],
     generated_at: new Date().toISOString(),
   };
 }

@@ -62,6 +62,7 @@ export async function materializeSite(args: MaterializeArgs): Promise<void> {
     ...args.bundle.services.map((p, i) => writePage(contentDir, p, `service-${i}`)),
     ...args.bundle.service_areas.map((p, i) => writePage(contentDir, p, `service-area-${i}`)),
     ...args.bundle.blog_posts.map((p, i) => writePage(contentDir, p, `blog-${i}`)),
+    ...args.bundle.info_pages.map((p, i) => writePage(contentDir, p, `info-page-${i}`)),
   ]);
 
   // Write env file the build will pick up.
