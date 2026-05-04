@@ -1,4 +1,4 @@
-import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,36 +34,32 @@ export interface MaterializeArgs {
 /**
  * Copy the site-template into `buildDir` and inject the generated content +
  * tracking number + project metadata. Returns nothing — caller deploys from buildDir.
+ *
+ * Always cleans `buildDir` first so re-runs don't pick up stale files from a
+ * previous materialization (e.g. routes that have since been deleted from the
+ * template).
  */
 export async function materializeSite(args: MaterializeArgs): Promise<void> {
   const templateDir = findSiteTemplate();
 
+  // Clean — Node fs.rm with force ignores ENOENT.
+  await rm(args.buildDir, { recursive: true, force: true });
   await mkdir(args.buildDir, { recursive: true });
 
-  // Copy template, excluding node_modules, .next, .turbo.
+  // Copy template, excluding node_modules, .next, .turbo, out.
   await cp(templateDir, args.buildDir, {
     recursive: true,
     filter: (src) => {
-      return !src.includes('/node_modules') && !src.includes('/.next') && !src.includes('/.turbo');
+      return (
+        !src.includes('/node_modules') &&
+        !src.includes('/.next') &&
+        !src.includes('/.turbo') &&
+        !src.includes('/out')
+      );
     },
   });
 
-  // Write content.json — the template reads this at build time to render pages.
-  const contentJsonPath = resolve(args.buildDir, 'content.json');
-  await writeFile(contentJsonPath, JSON.stringify(args.bundle, null, 2));
-
-  // Write each page as MDX so Next.js can statically import + render.
-  const contentDir = resolve(args.buildDir, 'content');
-  await mkdir(contentDir, { recursive: true });
-  await Promise.all([
-    writePage(contentDir, args.bundle.home, 'home'),
-    writePage(contentDir, args.bundle.about, 'about'),
-    writePage(contentDir, args.bundle.contact, 'contact'),
-    ...args.bundle.services.map((p, i) => writePage(contentDir, p, `service-${i}`)),
-    ...args.bundle.service_areas.map((p, i) => writePage(contentDir, p, `service-area-${i}`)),
-    ...args.bundle.blog_posts.map((p, i) => writePage(contentDir, p, `blog-${i}`)),
-    ...args.bundle.info_pages.map((p, i) => writePage(contentDir, p, `info-page-${i}`)),
-  ]);
+  await writeContentBundle(args.buildDir, args.bundle);
 
   // Write env file the build will pick up.
   const envContent = [
@@ -77,6 +73,31 @@ export async function materializeSite(args: MaterializeArgs): Promise<void> {
   ].join('\n');
   await writeFile(resolve(args.buildDir, '.env.production'), envContent);
   await writeFile(resolve(args.buildDir, '.env.local'), envContent);
+}
+
+/**
+ * Re-write only the content bundle (content.json + per-page MDX) into an
+ * already-materialized buildDir. Used after async steps (hero image gen) that
+ * mutate the bundle — avoids re-copying the whole template (and would
+ * otherwise wipe the freshly-generated public/hero.jpg).
+ */
+export async function writeContentBundle(buildDir: string, bundle: ContentBundle): Promise<void> {
+  // Write content.json — the template reads this at build time to render pages.
+  const contentJsonPath = resolve(buildDir, 'content.json');
+  await writeFile(contentJsonPath, JSON.stringify(bundle, null, 2));
+
+  // Write each page as MDX so Next.js can statically import + render.
+  const contentDir = resolve(buildDir, 'content');
+  await mkdir(contentDir, { recursive: true });
+  await Promise.all([
+    writePage(contentDir, bundle.home, 'home'),
+    writePage(contentDir, bundle.about, 'about'),
+    writePage(contentDir, bundle.contact, 'contact'),
+    ...bundle.services.map((p, i) => writePage(contentDir, p, `service-${i}`)),
+    ...bundle.service_areas.map((p, i) => writePage(contentDir, p, `service-area-${i}`)),
+    ...bundle.blog_posts.map((p, i) => writePage(contentDir, p, `blog-${i}`)),
+    ...bundle.info_pages.map((p, i) => writePage(contentDir, p, `info-page-${i}`)),
+  ]);
 }
 
 async function writePage(dir: string, page: Page, fallback: string) {

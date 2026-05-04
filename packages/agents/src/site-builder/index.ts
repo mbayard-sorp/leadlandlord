@@ -7,7 +7,7 @@ import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
-import { materializeSite } from './materialize';
+import { materializeSite, writeContentBundle } from './materialize';
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
@@ -65,18 +65,37 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     });
     ctx.log.info({ projectName }, 'reserved project name');
 
-    // 5. Create the project (idempotent).
+    // 5. Create the project (idempotent), then upsert env vars.
+    //
+    // The env-var bundle is what Vercel CLI bakes into the static export at
+    // build time. We always upsert on every run because:
+    //   - createProject() is no-op on existing projects (and would NOT update
+    //     env vars even if values change), and
+    //   - re-runs need to be able to roll out new env keys (e.g. when
+    //     NEXT_PUBLIC_LEAD_API_URL was added in Phase 2 — without upsert,
+    //     existing sites would never pick it up without manual intervention).
+    const operatorUrl = (process.env.OPERATOR_PUBLIC_URL ?? '').replace(/\/$/, '');
+    const envVars: Record<string, string> = {
+      NEXT_PUBLIC_SITE_NAME: bundle.business_name,
+      NEXT_PUBLIC_NICHE: bundle.niche,
+      NEXT_PUBLIC_CITY: bundle.city,
+      NEXT_PUBLIC_STATE: bundle.state,
+      NEXT_PUBLIC_TRACKING_NUMBER: tracking.number,
+      NEXT_PUBLIC_VARIANT: bundle.variant,
+      NEXT_PUBLIC_SITE_ID: siteId,
+      NEXT_PUBLIC_SITE_SLUG: projectName,
+    };
+    if (operatorUrl) {
+      envVars.NEXT_PUBLIC_LEAD_API_URL = `${operatorUrl}/api/lead`;
+    }
     const project = await vercel.createProject({
       name: projectName,
       framework: 'nextjs',
-      envVars: {
-        NEXT_PUBLIC_SITE_NAME: bundle.business_name,
-        NEXT_PUBLIC_NICHE: bundle.niche,
-        NEXT_PUBLIC_CITY: bundle.city,
-        NEXT_PUBLIC_STATE: bundle.state,
-        NEXT_PUBLIC_TRACKING_NUMBER: tracking.number,
-      },
+      envVars,
     });
+    // Upsert always — covers re-runs where the project already existed.
+    await vercel.setEnvVars(project.id, envVars);
+    ctx.log.info({ keys: Object.keys(envVars).length }, 'env vars upserted on project');
 
     // 6. Materialize site files into a build dir.
     const buildDir = resolve(tmpdir(), `llbuild-${siteId}`);
@@ -103,13 +122,10 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
             'hero image generated',
           );
           bundle.hero_image_url = imgRes.publicPath;
-          // Re-write content.json so the build picks up the URL.
-          await materializeSite({
-            buildDir,
-            bundle,
-            trackingNumber: tracking.number,
-            vercelProjectName: projectName,
-          });
+          // Re-write only content.json + MDX so the build picks up the URL —
+          // re-running the full materialize would clean buildDir and wipe the
+          // hero image we just generated.
+          await writeContentBundle(buildDir, bundle);
         }
       } catch (err) {
         ctx.log.warn(

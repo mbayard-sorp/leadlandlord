@@ -26,18 +26,35 @@ export const dynamic = 'force-dynamic';
  * Returns 200 fast; observability via the lead row's *_status columns.
  */
 
+// Form data from a static-export tenant site can include `null` for missing
+// inputs (FormData.get returns null when the field doesn't exist). We use
+// `.nullish()` which accepts both null and undefined.
+const optionalString = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullish()
+    .transform((v) => (v === null || v === '' ? undefined : v));
+
+const optionalEmail = z
+  .string()
+  .max(160)
+  .nullish()
+  .transform((v) => (v === null || v === '' ? undefined : v))
+  .pipe(z.string().email().optional());
+
 const Body = z.object({
   /** Site slug or UUID — looked up to pin the lead to a site row. */
-  site_id: z.string().min(1).optional(),
-  site_slug: z.string().min(1).optional(),
-  name: z.string().max(120).optional(),
+  site_id: optionalString(64),
+  site_slug: optionalString(120),
+  name: optionalString(120),
   phone: z.string().max(40),
-  email: z.string().email().max(160).optional(),
-  zip: z.string().max(16).optional(),
-  message: z.string().max(2000).optional(),
+  email: optionalEmail,
+  zip: optionalString(16),
+  message: optionalString(2000),
   source: z.string().max(40).default('home'),
   /** Honeypot field — non-empty means a bot. */
-  website: z.string().optional(),
+  website: z.string().nullish(),
 });
 
 export async function OPTIONS() {
