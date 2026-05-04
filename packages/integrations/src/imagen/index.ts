@@ -46,13 +46,40 @@ export interface GenerateImageResult {
 export async function generateHeroImage(args: GenerateImageArgs): Promise<GenerateImageResult | null> {
   const aiGatewayKey = process.env.AI_GATEWAY_API_KEY;
   const googleKey = process.env.GOOGLE_API_KEY;
+  // IMAGEN_PROVIDER=google|ai-gateway forces a specific path. If unset, prefer
+  // Google direct when a key is set (one less hop, simpler debugging).
+  const forced = process.env.IMAGEN_PROVIDER as 'google' | 'ai-gateway' | undefined;
 
-  if (aiGatewayKey) {
-    return generateViaAiGateway(args, aiGatewayKey);
+  const order: Array<'google' | 'ai-gateway'> = forced
+    ? [forced]
+    : ['google', 'ai-gateway'];
+
+  let lastErr: unknown = null;
+  for (const provider of order) {
+    if (provider === 'google' && googleKey) {
+      try {
+        return await generateViaGoogle(args, googleKey);
+      } catch (err) {
+        lastErr = err;
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'google imagen failed — trying next provider',
+        );
+      }
+    }
+    if (provider === 'ai-gateway' && aiGatewayKey) {
+      try {
+        return await generateViaAiGateway(args, aiGatewayKey);
+      } catch (err) {
+        lastErr = err;
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'ai-gateway imagen failed — trying next provider',
+        );
+      }
+    }
   }
-  if (googleKey) {
-    return generateViaGoogle(args, googleKey);
-  }
+  if (lastErr) throw lastErr;
   log.warn('No AI_GATEWAY_API_KEY or GOOGLE_API_KEY set — skipping hero image generation');
   return null;
 }
@@ -61,7 +88,7 @@ async function generateViaAiGateway(
   args: GenerateImageArgs,
   key: string,
 ): Promise<GenerateImageResult> {
-  const model = process.env.IMAGEN_MODEL ?? 'google/imagen-3-fast';
+  const model = process.env.IMAGEN_MODEL ?? 'google/imagen-4.0-fast-generate-001';
   const aspectRatio = args.aspectRatio ?? '16:9';
   const size = sizeForAspect(aspectRatio);
 
@@ -84,6 +111,7 @@ async function generateViaAiGateway(
 
   if (!res.ok) {
     const errBody = await safeBody(res);
+    log.error({ status: res.status, body: errBody, model }, 'ai-gateway error response');
     throw new IntegrationError('ai-gateway', `Image generation failed: ${res.status}`, res.status, errBody);
   }
 
@@ -103,7 +131,7 @@ async function generateViaGoogle(
   args: GenerateImageArgs,
   key: string,
 ): Promise<GenerateImageResult> {
-  const model = process.env.GOOGLE_IMAGEN_MODEL ?? 'imagen-3.0-fast-generate-001';
+  const model = process.env.GOOGLE_IMAGEN_MODEL ?? 'imagen-4.0-fast-generate-001';
   const aspectRatio = args.aspectRatio ?? '16:9';
 
   // Google's Imagen API uses the predict endpoint with instances + parameters.
@@ -127,6 +155,7 @@ async function generateViaGoogle(
 
   if (!res.ok) {
     const errBody = await safeBody(res);
+    log.error({ status: res.status, body: errBody, model }, 'google-imagen error response');
     throw new IntegrationError('google-imagen', `Image generation failed: ${res.status}`, res.status, errBody);
   }
 

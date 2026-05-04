@@ -34,6 +34,7 @@ interface Args {
   city: string;
   state: string;
   full: boolean;
+  force: boolean;
 }
 
 function parseCli(): Args {
@@ -43,11 +44,12 @@ function parseCli(): Args {
       city: { type: 'string' },
       state: { type: 'string' },
       full: { type: 'boolean', default: false },
+      force: { type: 'boolean', default: false },
     },
     allowPositionals: false,
   });
   if (!values.niche || !values.city || !values.state) {
-    console.error('Usage: pnpm dry-run --niche "<niche>" --city "<city>" --state "<XX>" [--full]');
+    console.error('Usage: pnpm dry-run --niche "<niche>" --city "<city>" --state "<XX>" [--full] [--force]');
     process.exit(2);
   }
   if (values.state.length !== 2) {
@@ -59,6 +61,7 @@ function parseCli(): Args {
     city: values.city,
     state: values.state.toUpperCase(),
     full: !!values.full,
+    force: !!values.force,
   };
 }
 
@@ -121,13 +124,16 @@ async function main() {
   hr('Building site');
   const t0 = performance.now();
   const builder = new SiteBuilder();
-  const result = await builder.run({
-    niche: args.niche,
-    city: args.city,
-    state: args.state,
-    niche_id: nicheId,
-    fast_mode: !args.full,
-  });
+  const result = await builder.run(
+    {
+      niche: args.niche,
+      city: args.city,
+      state: args.state,
+      niche_id: nicheId,
+      fast_mode: !args.full,
+    },
+    args.force ? { dedupeKey: `force:${Date.now()}` } : {},
+  );
   const elapsedSec = ((performance.now() - t0) / 1000).toFixed(1);
 
   hr('Done');
