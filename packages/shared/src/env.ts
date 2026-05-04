@@ -31,6 +31,8 @@ const EnvSchema = z.object({
   ELEVENLABS_API_KEY: z.string().optional(),
   /** ElevenLabs Agent ID — created in the ElevenLabs dashboard. */
   ELEVENLABS_AGENT_ID: z.string().optional(),
+  /** ElevenLabs phone_number_id — created when you import a Twilio number into ElevenLabs. */
+  ELEVENLABS_PHONE_NUMBER_ID: z.string().optional(),
   MOCK_TELEPHONY: z
     .string()
     .optional()
@@ -87,6 +89,7 @@ export function getEnvLoose() {
     APOLLO_API_KEY: process.env.APOLLO_API_KEY,
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     ELEVENLABS_AGENT_ID: process.env.ELEVENLABS_AGENT_ID,
+    ELEVENLABS_PHONE_NUMBER_ID: process.env.ELEVENLABS_PHONE_NUMBER_ID,
     MOCK_TELEPHONY: process.env.MOCK_TELEPHONY === 'true',
     SENTRY_DSN: process.env.SENTRY_DSN,
     OPERATOR_PUBLIC_URL: process.env.OPERATOR_PUBLIC_URL ?? 'http://localhost:3000',

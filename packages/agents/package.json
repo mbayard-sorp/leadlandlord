@@ -12,6 +12,9 @@
     "./content-engine": "./src/content-engine/index.ts",
     "./tracking-setup": "./src/tracking-setup/index.ts",
     "./call-classifier": "./src/call-classifier/index.ts",
+    "./tenant-prospector": "./src/tenant-prospector/index.ts",
+    "./compliance-guard": "./src/compliance-guard/index.ts",
+    "./outreach-agent": "./src/outreach-agent/index.ts",
     "./registry": "./src/registry.ts"
   },
   "scripts": {
