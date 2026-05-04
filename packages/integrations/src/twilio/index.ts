@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
@@ -132,24 +133,58 @@ export async function updateNumber(args: UpdateNumberArgs): Promise<void> {
 
 /**
  * Build TwiML for the inbound-call handler:
- * 1. Whisper to the answering party (so they know it's a tracking number)
- * 2. Dial the forwarding number with dual-channel recording
- * 3. POST recording status to /api/webhooks/twilio/recording
+ *   1. Whisper to the answering party (so they know it's a tracking number).
+ *      The whisper is delivered by a self-hosted whisperUrl that returns
+ *      `<Response><Say>{message}</Say></Response>`.
+ *   2. Dial the forwarding number with dual-channel recording.
+ *   3. POST recording status to recordingStatusCallback.
  */
 export function buildForwardingTwiml(opts: {
   forwardingNumber: string;
-  whisperMessage?: string;
+  /** URL that returns TwiML to play to the answering party as a whisper. */
+  whisperUrl?: string;
   recordingStatusCallback?: string;
 }): string {
-  const whisper = opts.whisperMessage ?? 'Call from LeadLandlord';
-  const record = opts.recordingStatusCallback
-    ? ` record="record-from-answer-dual" recordingStatusCallback="${escape(opts.recordingStatusCallback)}"`
+  const recordAttrs = opts.recordingStatusCallback
+    ? ` record="record-from-answer-dual" recordingStatusCallback="${escape(opts.recordingStatusCallback)}" recordingStatusCallbackEvent="completed"`
+    : '';
+  const numberAttrs = opts.whisperUrl ? ` url="${escape(opts.whisperUrl)}"` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial${recordAttrs} answerOnBridge="true">
+    <Number${numberAttrs}>${escape(opts.forwardingNumber)}</Number>
+  </Dial>
+</Response>`;
+}
+
+/** TwiML that plays the whisper message to the answering party. */
+export function buildWhisperTwiml(message: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${escape(message)}</Say>
+</Response>`;
+}
+
+/** TwiML for the case where no forwarding number is configured — go to voicemail. */
+export function buildVoicemailTwiml(opts: {
+  greeting?: string;
+  recordingStatusCallback?: string;
+  transcribeCallback?: string;
+}): string {
+  const greeting =
+    opts.greeting ??
+    'Thanks for calling. Please leave a message after the tone and we will return your call.';
+  const transcribe = opts.transcribeCallback
+    ? ` transcribe="true" transcribeCallback="${escape(opts.transcribeCallback)}"`
+    : '';
+  const recordingCb = opts.recordingStatusCallback
+    ? ` recordingStatusCallback="${escape(opts.recordingStatusCallback)}"`
     : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial${record} answerOnBridge="true">
-    <Number url="https://twimlets.com/message?Message[0]=${encodeURIComponent(whisper)}">${escape(opts.forwardingNumber)}</Number>
-  </Dial>
+  <Say voice="Polly.Joanna">${escape(greeting)}</Say>
+  <Record maxLength="180" playBeep="true"${recordingCb}${transcribe} />
+  <Hangup />
 </Response>`;
 }
 
@@ -193,6 +228,43 @@ export async function sendSms(args: SendSmsArgs): Promise<{ sid: string }> {
 
 function escape(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Verify a Twilio webhook signature.
+ *
+ * Twilio's algorithm:
+ *   1. Take the full request URL (including any query string)
+ *   2. Append POST params sorted alphabetically by key, concatenated as keyN+valueN
+ *   3. HMAC-SHA1 with TWILIO_AUTH_TOKEN
+ *   4. Base64 encode and compare to X-Twilio-Signature header
+ *
+ * Docs: https://www.twilio.com/docs/usage/webhooks/webhooks-security
+ */
+export function verifyWebhookSignature(args: {
+  url: string;
+  params: Record<string, string>;
+  signature: string | null;
+  authToken?: string;
+}): boolean {
+  const token = args.authToken ?? process.env.TWILIO_AUTH_TOKEN;
+  if (!token || !args.signature) return false;
+
+  const sortedKeys = Object.keys(args.params).sort();
+  let data = args.url;
+  for (const key of sortedKeys) {
+    data += key + args.params[key];
+  }
+
+  const expected = createHmac('sha1', token).update(data, 'utf-8').digest('base64');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(args.signature);
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
 
 function mockNumber(args: ProvisionNumberArgs): TrackingNumber {

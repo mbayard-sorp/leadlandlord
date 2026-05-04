@@ -15,6 +15,8 @@ export function proxy(req: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth/') ||
     pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/api/lead') ||
+    pathname.startsWith('/api/webhooks/') ||
     pathname.startsWith('/_next') ||
     pathname === '/favicon.ico'
   ) {

@@ -15,6 +15,13 @@
       "when": 1777837584595,
       "tag": "0001_high_miek",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777874635857,
+      "tag": "0002_skinny_wiccan",
+      "breakpoints": true
     }
   ]
 }

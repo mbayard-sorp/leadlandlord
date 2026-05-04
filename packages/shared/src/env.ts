@@ -15,6 +15,14 @@ const EnvSchema = z.object({
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_NUMBER: z.string().optional(),
+  /** Operator destination number for lead-form SMS notifications. */
+  OPERATOR_PHONE_NUMBER: z.string().optional(),
+  /** Operator destination email for lead-form notifications. */
+  OPERATOR_EMAIL: z.string().email().optional(),
+  /** Verified Resend sender — e.g. "LeadLandlord <leads@yourdomain.com>". */
+  RESEND_FROM_ADDRESS: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  KLAVIYO_PRIVATE_API_KEY: z.string().optional(),
   MOCK_TELEPHONY: z
     .string()
     .optional()
@@ -62,6 +70,11 @@ export function getEnvLoose() {
     TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
     TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
     TWILIO_FROM_NUMBER: process.env.TWILIO_FROM_NUMBER,
+    OPERATOR_PHONE_NUMBER: process.env.OPERATOR_PHONE_NUMBER,
+    OPERATOR_EMAIL: process.env.OPERATOR_EMAIL,
+    RESEND_FROM_ADDRESS: process.env.RESEND_FROM_ADDRESS,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    KLAVIYO_PRIVATE_API_KEY: process.env.KLAVIYO_PRIVATE_API_KEY,
     MOCK_TELEPHONY: process.env.MOCK_TELEPHONY === 'true',
     SENTRY_DSN: process.env.SENTRY_DSN,
     OPERATOR_PUBLIC_URL: process.env.OPERATOR_PUBLIC_URL ?? 'http://localhost:3000',

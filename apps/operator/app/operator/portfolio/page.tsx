@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { desc } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 import { getDb, sites, type Site } from '@leadlandlord/db';
@@ -43,7 +44,14 @@ export default async function PortfolioPage() {
             <tbody className="divide-y divide-slate-800">
               {rows.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-900/40">
-                  <td className="px-3 py-2">{s.niche}</td>
+                  <td className="px-3 py-2">
+                    <Link
+                      href={`/operator/sites/${s.id}`}
+                      className="text-sky-400 hover:text-sky-300"
+                    >
+                      {s.niche}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2 text-slate-400">{s.city}, {s.state}</td>
                   <td className="px-3 py-2">
                     <StatusBadge status={s.status} />

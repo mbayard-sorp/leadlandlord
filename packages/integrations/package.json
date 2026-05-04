@@ -10,6 +10,8 @@
     "./anthropic": "./src/anthropic.ts",
     "./vercel": "./src/vercel/index.ts",
     "./twilio": "./src/twilio/index.ts",
+    "./klaviyo": "./src/klaviyo/index.ts",
+    "./resend": "./src/resend/index.ts",
     "./stripe": "./src/stripe/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
     "./namecheap": "./src/namecheap/index.ts",
