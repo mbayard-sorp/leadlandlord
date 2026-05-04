@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { jsonrepair } from 'jsonrepair';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
@@ -41,10 +42,14 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     // long service catalogs (swimming pool scale removal, fence repair, etc).
     // Sonnet 4.6 supports up to 64K natively. Increase further if generations
     // start getting truncated again.
+    //
+    // Temperature 0.2 — content is creative enough at low temperature; the
+    // higher we go the more often the model emits unescaped quotes / smart
+    // quotes that break JSON parsing.
     const stream = client.messages.stream({
       model,
       max_tokens: 32_000,
-      temperature: 0.7,
+      temperature: 0.2,
       system: [
         { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
       ],
@@ -154,7 +159,27 @@ function extractJson(text: string): unknown {
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const raw = fenceMatch ? fenceMatch[1] : text;
   if (!raw) throw new Error('Content engine returned empty response');
-  return JSON.parse(raw.trim());
+  const trimmed = raw.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (err) {
+    // The model occasionally slips on long content strings — unescaped quotes,
+    // raw newlines, smart-quote characters, trailing commas. jsonrepair fixes
+    // the common LLM JSON mistakes and lets the bundle through. We log the
+    // original error for diagnostics but don't fail the build for a syntax
+    // issue we can repair.
+    const originalErr = err instanceof Error ? err.message : String(err);
+    try {
+      const repaired = jsonrepair(trimmed);
+      return JSON.parse(repaired);
+    } catch (repairErr) {
+      const repairMsg = repairErr instanceof Error ? repairErr.message : String(repairErr);
+      throw new Error(
+        `Content engine returned unparsable JSON. ` +
+          `JSON.parse: ${originalErr}. jsonrepair: ${repairMsg}`,
+      );
+    }
+  }
 }
 
 function capitalize(s: string): string {
