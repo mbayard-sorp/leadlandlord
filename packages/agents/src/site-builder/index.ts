@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { eq } from 'drizzle-orm';
 import { getDb, sites, agentEvents } from '@leadlandlord/db';
-import { vercel, imagen } from '@leadlandlord/integrations';
+import { vercel, imagen, klaviyo } from '@leadlandlord/integrations';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
@@ -56,6 +56,12 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       { site_id: siteId },
       { siteId, parentRunId: ctx.runId },
     );
+
+    // 3b. Provision a Klaviyo list for this site (idempotent — skips when one
+    //     is already saved on the row, or when Klaviyo creds aren't set).
+    //     The list ID feeds into NEXT_PUBLIC_* env baked into the build via
+    //     /api/lead → subscribeProfileToList.
+    const klaviyoListId = await this.ensureKlaviyoList(siteId, bundle, ctx);
 
     // 4. Pick a Vercel project name.
     const projectName = await vercel.projectNameFor({
@@ -183,6 +189,49 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     };
   }
 
+  /**
+   * Idempotently ensure a Klaviyo list exists for this site and the row's
+   * `klaviyoListId` is set. Returns the list ID, or undefined when Klaviyo
+   * isn't configured (sites without a list ID just skip the subscribe step in
+   * /api/lead — the lead row still gets written + operator still notified).
+   */
+  private async ensureKlaviyoList(
+    siteId: string,
+    bundle: { niche: string; city: string; state: string },
+    ctx: AgentContext,
+  ): Promise<string | undefined> {
+    if (!process.env.KLAVIYO_PRIVATE_API_KEY) {
+      ctx.log.info('klaviyo: KLAVIYO_PRIVATE_API_KEY not set — skipping list creation');
+      return undefined;
+    }
+    const db = getDb();
+    const row = (
+      await db
+        .select({ klaviyoListId: sites.klaviyoListId })
+        .from(sites)
+        .where(eq(sites.id, siteId))
+        .limit(1)
+    )[0];
+    if (row?.klaviyoListId) {
+      ctx.log.info({ listId: row.klaviyoListId }, 'klaviyo: list already provisioned');
+      return row.klaviyoListId;
+    }
+    try {
+      const listName = `${cap(bundle.niche)} · ${bundle.city}, ${bundle.state}`;
+      const { listId } = await klaviyo.createList(listName);
+      await db.update(sites).set({ klaviyoListId: listId }).where(eq(sites.id, siteId));
+      ctx.log.info({ listId, listName }, 'klaviyo: list created');
+      return listId;
+    } catch (err) {
+      // Don't block deploy on a Klaviyo hiccup — operator can fix later.
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'klaviyo: list creation failed — proceeding without it',
+      );
+      return undefined;
+    }
+  }
+
   private async upsertSite(input: SiteBuilderInput): Promise<string> {
     const db = getDb();
     if (input.site_id) return input.site_id;
@@ -218,6 +267,10 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
 
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function countPages(bundle: { services: unknown[]; service_areas: unknown[]; blog_posts: unknown[] }) {
