@@ -6,7 +6,10 @@ import { verifySession, sessionCookieName } from '../../../../lib/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+// 800s is Vercel Pro's ceiling. Site Builder pipeline can take 4-7 min on
+// niche-heavy bundles — 300s was racing the cap. Bumped here so manual
+// kickoffs from /operator/build don't get killed mid-deploy.
+export const maxDuration = 800;
 
 const Body = z.object({
   niche: z.string().min(1).max(80),
