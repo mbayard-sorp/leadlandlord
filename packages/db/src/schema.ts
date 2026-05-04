@@ -446,6 +446,7 @@ export type Niche = typeof niches.$inferSelect;
 export type NewNiche = typeof niches.$inferInsert;
 export type Tenant = typeof tenants.$inferSelect;
 export type Prospect = typeof prospects.$inferSelect;
+export type NewProspect = typeof prospects.$inferInsert;
 export type Trial = typeof trials.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type Call = typeof calls.$inferSelect;
