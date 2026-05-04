@@ -37,9 +37,13 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     // minutes wall-clock; non-streaming requests get killed by intermediate
     // proxies after ~5min. Anthropic SDK aggregates the stream into a final
     // message we can use just like a non-streaming response.
+    // 32K output tokens — generous enough for the full bundle on niches with
+    // long service catalogs (swimming pool scale removal, fence repair, etc).
+    // Sonnet 4.6 supports up to 64K natively. Increase further if generations
+    // start getting truncated again.
     const stream = client.messages.stream({
       model,
-      max_tokens: 16_000,
+      max_tokens: 32_000,
       temperature: 0.7,
       system: [
         { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
