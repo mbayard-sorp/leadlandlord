@@ -12,7 +12,9 @@ const EnvSchema = z.object({
 
   // Optional
   VERCEL_TEAM_ID: z.string().optional(),
-  CALLRAIL_API_KEY: z.string().optional(),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
   MOCK_TELEPHONY: z
     .string()
     .optional()
@@ -57,7 +59,9 @@ export function getEnvLoose() {
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
     OPERATOR_PASSWORD: process.env.OPERATOR_PASSWORD,
     OPERATOR_SESSION_SECRET: process.env.OPERATOR_SESSION_SECRET,
-    CALLRAIL_API_KEY: process.env.CALLRAIL_API_KEY,
+    TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
+    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
+    TWILIO_FROM_NUMBER: process.env.TWILIO_FROM_NUMBER,
     MOCK_TELEPHONY: process.env.MOCK_TELEPHONY === 'true',
     SENTRY_DSN: process.env.SENTRY_DSN,
     OPERATOR_PUBLIC_URL: process.env.OPERATOR_PUBLIC_URL ?? 'http://localhost:3000',

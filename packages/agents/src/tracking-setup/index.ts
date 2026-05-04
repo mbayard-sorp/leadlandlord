@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseAgent, type AgentContext } from '../base';
 import { TrackingNumber } from '@leadlandlord/shared/types';
-import { provisionNumber } from '@leadlandlord/integrations/callrail';
+import { provisionNumber } from '@leadlandlord/integrations/twilio';
 
 export const TrackingSetupInput = z.object({
   site_id: z.string().uuid(),

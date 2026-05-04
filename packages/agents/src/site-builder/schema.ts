@@ -16,7 +16,7 @@ export const SiteBuilderOutput = z.object({
   vercel_project_name: z.string(),
   preview_url: z.string().url(),
   tracking_number: z.string(),
-  tracking_provider: z.enum(['callrail', 'twilio', 'mock']),
+  tracking_provider: z.enum(['twilio', 'mock']),
   deployed_at: z.string(),
   build_dir: z.string(),
 });

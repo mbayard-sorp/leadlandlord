@@ -21,16 +21,22 @@ export default function Home() {
 
 export function generateMetadata() {
   const bundle = loadBundle();
-  const jsonLd = bundle.home.schema_org_jsonld;
   return {
     title: bundle.home.title,
     description: bundle.home.meta_description,
+    alternates: { canonical: '/' },
     openGraph: {
       title: bundle.home.title,
       description: bundle.home.meta_description,
       type: 'website',
+      url: '/',
       ...(bundle.hero_image_url ? { images: [{ url: bundle.hero_image_url }] } : {}),
     },
-    other: jsonLd ? { 'application/ld+json': JSON.stringify(jsonLd) } : undefined,
+    twitter: {
+      card: 'summary_large_image',
+      title: bundle.home.title,
+      description: bundle.home.meta_description,
+      ...(bundle.hero_image_url ? { images: [bundle.hero_image_url] } : {}),
+    },
   };
 }

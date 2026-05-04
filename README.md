@@ -38,7 +38,7 @@ apps/
 packages/
   db/              Drizzle schema + Neon client + queue helpers
   agents/          Claude Agent SDK wrappers; 3 working, 13 stubs
-  integrations/    Vercel REST API, CallRail, Anthropic SDK, stubs
+  integrations/    Vercel REST API, Twilio, Anthropic SDK, Imagen, stubs
   shared/          Cross-package types, env validation, logger
 scripts/
   dry-run.ts       End-to-end: niche → deployed Vercel preview URL

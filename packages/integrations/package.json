@@ -9,7 +9,7 @@
     ".": "./src/index.ts",
     "./anthropic": "./src/anthropic.ts",
     "./vercel": "./src/vercel/index.ts",
-    "./callrail": "./src/callrail/index.ts",
+    "./twilio": "./src/twilio/index.ts",
     "./stripe": "./src/stripe/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
     "./namecheap": "./src/namecheap/index.ts",

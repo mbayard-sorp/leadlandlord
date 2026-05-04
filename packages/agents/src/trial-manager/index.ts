@@ -18,7 +18,9 @@ export class TrialManager extends BaseAgent<typeof TrialManagerInput, typeof Tri
     super({ name: 'trial-manager', inputSchema: TrialManagerInput, outputSchema: TrialManagerOutput });
   }
   protected async execute(): Promise<z.infer<typeof TrialManagerOutput>> {
-    // TODO(phase-3): CallRail webhook routing, transcription, LLM classification of call outcome.
+    // TODO(phase-3): Twilio webhook routing (update IncomingPhoneNumber.VoiceUrl
+    // to flip forwarding to tenant), recording status callback, transcription
+    // via Voice Intelligence, then LLM classification of call outcome.
     throw new NotImplementedError('trial-manager');
   }
 }

@@ -10,8 +10,6 @@ export default function About() {
       niche={bundle.niche}
       city={bundle.city}
       state={bundle.state}
-      navServices={bundle.services.map((s) => ({ slug: s.slug, title: s.title }))}
-      navAreas={bundle.service_areas.map((a) => ({ slug: a.slug, title: a.title }))}
     >
       <PageBody page={bundle.about} />
     </SiteShell>
@@ -23,5 +21,12 @@ export function generateMetadata() {
   return {
     title: bundle.about.title,
     description: bundle.about.meta_description,
+    alternates: { canonical: '/about/' },
+    openGraph: {
+      title: bundle.about.title,
+      description: bundle.about.meta_description,
+      type: 'website',
+      url: '/about/',
+    },
   };
 }
