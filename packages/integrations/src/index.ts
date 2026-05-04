@@ -4,6 +4,7 @@ export * as twilio from './twilio/index';
 export * as klaviyo from './klaviyo/index';
 export * as resend from './resend/index';
 export * as googlePlaces from './google-places/index';
+export * as apollo from './apollo/index';
 export * as stripe from './stripe/index';
 export * as dataforseo from './dataforseo/index';
 export * as namecheap from './namecheap/index';

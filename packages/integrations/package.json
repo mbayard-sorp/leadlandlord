@@ -13,6 +13,7 @@
     "./klaviyo": "./src/klaviyo/index.ts",
     "./resend": "./src/resend/index.ts",
     "./google-places": "./src/google-places/index.ts",
+    "./apollo": "./src/apollo/index.ts",
     "./stripe": "./src/stripe/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
     "./namecheap": "./src/namecheap/index.ts",

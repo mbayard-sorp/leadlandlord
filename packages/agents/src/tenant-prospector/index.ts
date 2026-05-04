@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
 import { getDb, sites, prospects, type NewProspect } from '@leadlandlord/db';
 import { searchN, type Place } from '@leadlandlord/integrations/google-places';
+import { findOwnerByDomain } from '@leadlandlord/integrations/apollo';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 
 export const TenantProspectorInput = z.object({
@@ -22,6 +23,7 @@ export const TenantProspectorOutput = z.object({
   skipped_duplicates: z.number().int().nonnegative(),
   skipped_no_phone: z.number().int().nonnegative(),
   skipped_self: z.number().int().nonnegative(),
+  enriched: z.number().int().nonnegative(),
 });
 export type TenantProspectorOutput = z.infer<typeof TenantProspectorOutput>;
 
@@ -87,11 +89,13 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
     const existingNames = new Set(existingRows.map((r) => r.businessName.toLowerCase().trim()));
 
     const trackingNumber = normalizePhone(site.trackingNumber);
+    const apolloEnabled = !!process.env.APOLLO_API_KEY;
 
     let inserted = 0;
     let skippedDuplicates = 0;
     let skippedNoPhone = 0;
     let skippedSelf = 0;
+    let enriched = 0;
 
     const toInsert: NewProspect[] = [];
     for (const place of places) {
@@ -118,14 +122,47 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
       existingPhones.add(phone);
       existingNames.add(name.toLowerCase());
 
+      // Apollo enrichment — best-effort, never throws. Adds owner name +
+      // email when Apollo has the org. Skipped entirely when no website,
+      // when APOLLO_API_KEY isn't set, or when Apollo has no record.
+      let contactName: string | null = null;
+      let email: string | null = null;
+      let apolloMetadata: Record<string, unknown> | undefined;
+      if (apolloEnabled && place.websiteUri) {
+        const owner = await safeFindOwner(place.websiteUri, ctx);
+        if (owner) {
+          enriched++;
+          const fullName =
+            owner.person.name ??
+            ([owner.person.first_name, owner.person.last_name].filter(Boolean).join(' ').trim() ||
+              null);
+          contactName = fullName || null;
+          email = owner.person.email && !owner.person.email.includes('email_not_unlocked')
+            ? owner.person.email
+            : null;
+          apolloMetadata = {
+            apollo_org_id: owner.org.id,
+            apollo_person_id: owner.person.id,
+            apollo_title: owner.person.title,
+            apollo_email_status: owner.person.email_status,
+            apollo_seniority: owner.person.seniority,
+            apollo_linkedin: owner.person.linkedin_url,
+            apollo_employees: owner.org.estimated_num_employees,
+            apollo_industry: owner.org.industry,
+          };
+        }
+      }
+
       toInsert.push({
         siteId: input.site_id,
         businessName: name,
+        contactName,
         phone,
+        email,
         websiteUrl: place.websiteUri ?? null,
         source: 'google-places',
         status: 'new',
-        metadata: buildMetadata(place),
+        metadata: { ...buildMetadata(place), ...(apolloMetadata ?? {}) },
       });
     }
 
@@ -142,6 +179,7 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
         skippedDuplicates,
         skippedNoPhone,
         skippedSelf,
+        enriched,
       },
       'tenant-prospector finished',
     );
@@ -153,7 +191,28 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
       skipped_duplicates: skippedDuplicates,
       skipped_no_phone: skippedNoPhone,
       skipped_self: skippedSelf,
+      enriched,
     };
+  }
+}
+
+/**
+ * Wrap Apollo's findOwnerByDomain so a single failed lookup can't break the
+ * whole prospecting run. Network blips, 404s, masked emails — all logged
+ * but treated as "no enrichment, continue with Google Places data alone."
+ */
+async function safeFindOwner(
+  websiteUri: string,
+  ctx: AgentContext,
+): Promise<Awaited<ReturnType<typeof findOwnerByDomain>>> {
+  try {
+    return await findOwnerByDomain(websiteUri);
+  } catch (err) {
+    ctx.log.warn(
+      { err: err instanceof Error ? err.message : err, website: websiteUri },
+      'apollo enrichment failed — continuing without it',
+    );
+    return null;
   }
 }
 

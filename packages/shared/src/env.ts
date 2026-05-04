@@ -25,6 +25,8 @@ const EnvSchema = z.object({
   KLAVIYO_PRIVATE_API_KEY: z.string().optional(),
   /** Google Cloud API key with Places API (New) enabled. */
   GOOGLE_PLACES_API_KEY: z.string().optional(),
+  /** Apollo restricted API key for organizations/enrich + organization_top_people. */
+  APOLLO_API_KEY: z.string().optional(),
   /** ElevenLabs API key for Conversational AI outbound voice (Phase 6). */
   ELEVENLABS_API_KEY: z.string().optional(),
   /** ElevenLabs Agent ID — created in the ElevenLabs dashboard. */
@@ -82,6 +84,7 @@ export function getEnvLoose() {
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     KLAVIYO_PRIVATE_API_KEY: process.env.KLAVIYO_PRIVATE_API_KEY,
     GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
+    APOLLO_API_KEY: process.env.APOLLO_API_KEY,
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     ELEVENLABS_AGENT_ID: process.env.ELEVENLABS_AGENT_ID,
     MOCK_TELEPHONY: process.env.MOCK_TELEPHONY === 'true',
