@@ -30,9 +30,14 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
 
     const userPrompt = buildUserPrompt(input);
 
-    ctx.log.info({ model, fast_mode: !!input.fast_mode }, 'requesting content bundle from claude');
+    ctx.log.info({ model, fast_mode: !!input.fast_mode }, 'requesting content bundle from claude (streaming)');
 
-    const response = await client.messages.create({
+    // Stream the response to avoid HTTP-level timeouts on long generations.
+    // The Content Engine produces ~6-10K output tokens which can take 4-8
+    // minutes wall-clock; non-streaming requests get killed by intermediate
+    // proxies after ~5min. Anthropic SDK aggregates the stream into a final
+    // message we can use just like a non-streaming response.
+    const stream = client.messages.stream({
       model,
       max_tokens: 16_000,
       temperature: 0.7,
@@ -41,6 +46,7 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
       ],
       messages: [{ role: 'user', content: userPrompt }],
     });
+    const response = await stream.finalMessage();
 
     const usage = response.usage;
     const cost = estimateCostUsd(model, {

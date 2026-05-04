@@ -28,7 +28,10 @@ export default async function BlogPostPage({ params }: Params) {
 
 export async function generateStaticParams() {
   const bundle = loadBundle();
-  return bundle.blog_posts.map((p) => ({ slug: slugFromUrl(p.slug) }));
+  const params = bundle.blog_posts.map((p) => ({ slug: slugFromUrl(p.slug) }));
+  // Static export requires at least one path. Stub when bundle is empty
+  // (running the template in isolation without content.json).
+  return params.length > 0 ? params : [{ slug: '_placeholder' }];
 }
 
 export async function generateMetadata({ params }: Params) {

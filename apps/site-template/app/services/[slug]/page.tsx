@@ -28,7 +28,8 @@ export default async function ServicePage({ params }: Params) {
 
 export async function generateStaticParams() {
   const bundle = loadBundle();
-  return bundle.services.map((s) => ({ slug: slugFromUrl(s.slug) }));
+  const params = bundle.services.map((s) => ({ slug: slugFromUrl(s.slug) }));
+  return params.length > 0 ? params : [{ slug: '_placeholder' }];
 }
 
 export async function generateMetadata({ params }: Params) {

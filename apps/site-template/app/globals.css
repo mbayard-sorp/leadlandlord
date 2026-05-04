@@ -1,15 +1,98 @@
 @import 'tailwindcss';
+@import '../styles/themes/classic.css';
+@import '../styles/themes/modern.css';
+@import '../styles/themes/premium.css';
+@import '../styles/themes/bright.css';
+@import '../styles/components.css';
+@import '../styles/variants/classic.css';
 
+/* ── Defaults applied before a theme is set on <html> ────────────── */
 :root {
-  --color-brand: #1d4ed8;
-  --color-bg: #ffffff;
-  --color-fg: #0f172a;
-  --color-muted: #475569;
+  --ink: #181613;
+  --ink-2: #3a342d;
+  --paper: #fbfaf6;
+  --paper-2: #f3eee2;
+  --accent: #181613;
+  --rule: #d9d3c4;
+  --font-display: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 html, body {
-  background: var(--color-bg);
-  color: var(--color-fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+/* ── Visually-hidden helper for SEO literal H1s ──────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Tabular numerals for prices and phone numbers ────────────────── */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Prose styling for MDX-rendered service / blog body ──────────── */
+.prose-site {
+  max-width: 70ch;
+  font-family: var(--font-body);
+  color: var(--ink-2);
+  line-height: 1.65;
+}
+.prose-site h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin: 2.5em 0 0.6em;
+  color: var(--ink);
+}
+.prose-site h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.25rem;
+  margin: 1.75em 0 0.4em;
+  color: var(--ink);
+}
+.prose-site p {
+  margin: 1em 0;
+}
+.prose-site ul {
+  padding-left: 1.25rem;
+  margin: 1em 0;
+}
+.prose-site li {
+  margin: 0.35em 0;
+}
+.prose-site a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose-site strong {
+  color: var(--ink);
 }

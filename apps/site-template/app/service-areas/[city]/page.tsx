@@ -28,7 +28,8 @@ export default async function ServiceAreaPage({ params }: Params) {
 
 export async function generateStaticParams() {
   const bundle = loadBundle();
-  return bundle.service_areas.map((a) => ({ city: slugFromUrl(a.slug) }));
+  const params = bundle.service_areas.map((a) => ({ city: slugFromUrl(a.slug) }));
+  return params.length > 0 ? params : [{ city: '_placeholder' }];
 }
 
 export async function generateMetadata({ params }: Params) {

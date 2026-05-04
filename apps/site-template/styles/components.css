@@ -1,0 +1,178 @@
+/* Theme-aware shared component styling — driven entirely by CSS variables.
+ * Each variant's colors/fonts/radii come from styles/themes/*.css.
+ */
+
+/* ── Lead form ────────────────────────────────────────────────── */
+.leadform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+}
+.leadform-heading {
+  font-family: var(--font-display);
+  margin: 0;
+}
+.leadform-sub {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-3, var(--ink-2));
+}
+.leadform-input {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  border: var(--border-card, 1.5px) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  border-radius: var(--radius-card, 8px);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.leadform-input:focus {
+  border-color: var(--accent);
+}
+.leadform-textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+.leadform-honeypot {
+  position: absolute;
+  left: -9999px;
+  opacity: 0;
+}
+.leadform-error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #b53a2a;
+}
+.leadform-submit {
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  border: var(--border-card, 1.5px) solid var(--ink);
+  background: var(--accent);
+  color: var(--ink);
+  border-radius: var(--radius-button, 4px);
+  transition: opacity 0.15s, transform 0.05s;
+}
+.leadform-submit:hover {
+  opacity: 0.9;
+}
+.leadform-submit:active {
+  transform: translateY(1px);
+}
+.leadform-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.leadform-success {
+  padding: 16px 18px;
+  border: var(--border-card, 1.5px) solid var(--ink);
+  border-radius: var(--radius-card, 8px);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+.leadform-success p {
+  margin: 0 0 6px;
+}
+.leadform-success-phone {
+  color: var(--ink-3, var(--ink-2));
+  font-size: 0.875rem;
+}
+
+/* Variant-specific nudges that genuinely differ between themes. */
+.leadform-classic .leadform-input {
+  text-transform: none;
+}
+.leadform-classic .leadform-submit {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.leadform-modern .leadform-submit {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  border-color: var(--ink);
+}
+.leadform-premium .leadform-input {
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+.leadform-premium .leadform-submit {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  border-radius: 0;
+  align-self: flex-start;
+}
+.leadform-bright .leadform-input {
+  border-radius: 14px;
+  background: #fff;
+}
+.leadform-bright .leadform-submit {
+  font-family: var(--font-display);
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+/* ── Sticky mobile bar ─────────────────────────────────────────── */
+.sticky-mobile-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--ink);
+  color: var(--paper);
+  border-top: 2px solid var(--ink);
+  font-family: var(--font-body);
+}
+.sticky-mobile-bar a {
+  text-decoration: none;
+}
+.sticky-mobile-bar .phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+.sticky-mobile-bar .cta {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+@media (min-width: 768px) {
+  .sticky-mobile-bar { display: none; }
+}

@@ -1,0 +1,28 @@
+/* Variant C — Premium Curated
+ * For custom landscape, kitchen remodel, pool builders, fine carpenters, masons.
+ * Editorial. Owner-as-craftsperson. Photography-led, monochrome design.
+ */
+[data-theme='premium'] {
+  --ink: #171411;
+  --ink-2: #594b3a;
+  --ink-3: #7a6a55;
+  --paper: #f4ece0;
+  --paper-2: #e3d8c2;
+  --accent: #171411; /* monochrome — accent is ink */
+  --accent-50: #e3d8c2;
+  --rule: #171411;
+
+  --font-display: var(--font-dm-serif), 'Cambria', Georgia, serif;
+  --font-display-italic: var(--font-cormorant), 'Cambria', Georgia, serif;
+  --font-body: var(--font-source-serif), 'Cambria', Georgia, serif;
+
+  --radius-card: 0px;
+  --radius-button: 0px;
+  --radius-pill: 0px;
+  --border-card: 0px;
+  --border-rule: 1px;
+  --hairline: 0.5px;
+
+  --section-pad-y: clamp(80px, 11vw, 140px);
+  --container-max: 1100px;
+}
