@@ -94,4 +94,31 @@ export async function setEnvVars(projectId: string, vars: Record<string, string>
   );
 }
 
+const EnvVarSchema = z.object({
+  id: z.string().optional(),
+  key: z.string(),
+  value: z.string().optional(),
+  type: z.string(),
+  target: z.array(z.string()).default([]),
+  configurationId: z.string().nullable().optional(),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+});
+export type ProjectEnvVar = z.infer<typeof EnvVarSchema>;
+
+/**
+ * List a project's environment variables. By default values are returned in
+ * encrypted form for `type: 'encrypted'` vars. Pass `decrypt: true` to receive
+ * plaintext (the API only returns plaintext when the caller has Owner/Admin
+ * scope on the team — `VERCEL_TOKEN` typically does).
+ */
+export async function getEnvVars(
+  projectId: string,
+  opts: { decrypt?: boolean } = {},
+): Promise<ProjectEnvVar[]> {
+  const qs = opts.decrypt ? '?decrypt=true' : '';
+  const res = await vercelFetch<{ envs: unknown[] }>(`/v9/projects/${projectId}/env${qs}`);
+  return res.envs.map((e) => EnvVarSchema.parse(e));
+}
+
 export { EdgeConfigSchema };

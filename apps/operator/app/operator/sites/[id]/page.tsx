@@ -11,6 +11,7 @@ import {
   type Lead,
   type AgentRun,
 } from '@leadlandlord/db';
+import { vercel } from '@leadlandlord/integrations';
 import { PhoneAssignmentForm } from './PhoneAssignmentForm';
 import { ManualCallForm } from './ManualCallForm';
 
@@ -25,25 +26,65 @@ interface SiteDetailData {
   recentCalls: Call[];
   recentLeads: Lead[];
   recentRuns: AgentRun[];
+  envVars: ProjectEnv[] | null;
+  envVarsError: string | null;
+}
+
+interface ProjectEnv {
+  key: string;
+  type: string;
+  target: string[];
+  /** Plaintext value when retrievable; otherwise undefined. */
+  value?: string;
 }
 
 async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
   const db = getDb();
   const siteRow = (await db.select().from(sites).where(eq(sites.id, id)).limit(1))[0];
   if (!siteRow) return null;
-  const [recentCalls, recentLeads, recentRuns] = await Promise.all([
+  const [recentCalls, recentLeads, recentRuns, envVarsResult] = await Promise.all([
     db.select().from(calls).where(eq(calls.siteId, id)).orderBy(desc(calls.startedAt)).limit(20),
     db.select().from(leads).where(eq(leads.siteId, id)).orderBy(desc(leads.createdAt)).limit(20),
     db.select().from(agentRuns).where(eq(agentRuns.siteId, id)).orderBy(desc(agentRuns.startedAt)).limit(20),
+    loadEnvVars(siteRow.vercelProjectId),
   ]);
-  return { site: siteRow, recentCalls, recentLeads, recentRuns };
+  return {
+    site: siteRow,
+    recentCalls,
+    recentLeads,
+    recentRuns,
+    envVars: envVarsResult.envs,
+    envVarsError: envVarsResult.error,
+  };
+}
+
+async function loadEnvVars(projectId: string | null): Promise<{
+  envs: ProjectEnv[] | null;
+  error: string | null;
+}> {
+  if (!projectId) return { envs: null, error: null };
+  if (!process.env.VERCEL_TOKEN) return { envs: null, error: 'VERCEL_TOKEN not set' };
+  try {
+    const envs = await vercel.getEnvVars(projectId, { decrypt: true });
+    return {
+      envs: envs.map((e) => ({
+        key: e.key,
+        type: e.type,
+        target: e.target,
+        value: e.value,
+      })),
+      error: null,
+    };
+  } catch (err) {
+    return { envs: null, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export default async function SiteDetailPage({ params }: Params) {
   const { id } = await params;
   const data = await loadSiteDetail(id);
   if (!data) notFound();
-  const { site, recentCalls, recentLeads, recentRuns } = data;
+  const { site, recentCalls, recentLeads, recentRuns, envVars, envVarsError } = data;
 
   return (
     <div className="space-y-8">
@@ -78,6 +119,22 @@ export default async function SiteDetailPage({ params }: Params) {
         <PhoneAssignmentForm site={site} />
       </section>
 
+      <section>
+        <header className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Site env vars
+          </h2>
+          <span className="text-xs text-slate-500">
+            Set by Site Builder. Edit by re-running{' '}
+            <code className="px-1 py-0.5 bg-slate-800 rounded text-slate-300">
+              pnpm dry-run --force
+            </code>{' '}
+            with new values.
+          </span>
+        </header>
+        <EnvVarsTable envs={envVars} error={envVarsError} />
+      </section>
+
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <header className="flex items-center justify-between mb-2">
@@ -106,6 +163,83 @@ export default async function SiteDetailPage({ params }: Params) {
       </section>
     </div>
   );
+}
+
+function EnvVarsTable({ envs, error }: { envs: ProjectEnv[] | null; error: string | null }) {
+  if (error) {
+    return (
+      <div className="rounded-lg border border-amber-700/40 bg-amber-900/10 p-4 text-sm text-amber-300">
+        Couldn&apos;t load env vars from Vercel: <code className="font-mono">{error}</code>
+      </div>
+    );
+  }
+  if (!envs) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 p-4 text-sm text-slate-500">
+        No Vercel project linked yet — env vars appear once Site Builder deploys this site.
+      </div>
+    );
+  }
+  if (envs.length === 0) {
+    return <Empty>No env vars set on this project.</Empty>;
+  }
+  // Sort: NEXT_PUBLIC_* first (visible to bundle), then secrets.
+  const sorted = [...envs].sort((a, b) => {
+    const ap = a.key.startsWith('NEXT_PUBLIC_') ? 0 : 1;
+    const bp = b.key.startsWith('NEXT_PUBLIC_') ? 0 : 1;
+    if (ap !== bp) return ap - bp;
+    return a.key.localeCompare(b.key);
+  });
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Value</th>
+          <th>Targets</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((e) => (
+          <tr key={e.key} className="hover:bg-slate-900/40">
+            <td className="font-mono text-xs">{e.key}</td>
+            <td className="font-mono text-xs text-slate-300">
+              {renderEnvValue(e)}
+            </td>
+            <td>
+              <div className="flex gap-1 flex-wrap">
+                {e.target.map((t) => (
+                  <span
+                    key={t}
+                    className="inline-block px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800/60 text-[10px] uppercase tracking-wide text-slate-400"
+                  >
+                    {t.slice(0, 4)}
+                  </span>
+                ))}
+              </div>
+            </td>
+            <td className="text-xs text-slate-500">{e.type}</td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
+/** Show NEXT_PUBLIC_* values plain (they're already in the bundled JS), mask others. */
+function renderEnvValue(e: ProjectEnv): string {
+  if (typeof e.value !== 'string') return '(unavailable)';
+  if (e.key.startsWith('NEXT_PUBLIC_')) return truncateValue(e.value);
+  // Sensitive — show only the first/last 4 chars so the operator can verify
+  // they pasted the right value without leaking the whole secret.
+  if (e.value.length <= 12) return '••••••••';
+  return `${e.value.slice(0, 4)}••••${e.value.slice(-4)}`;
+}
+
+function truncateValue(v: string): string {
+  if (v.length <= 80) return v;
+  return `${v.slice(0, 78)}…`;
 }
 
 function Pill({ children }: { children: React.ReactNode }) {
