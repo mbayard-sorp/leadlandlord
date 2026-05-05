@@ -21,3 +21,32 @@ export function pageDocId(siteId: string, kind: PageKind, index = 0): string {
 export function themeDocId(name: ThemeName): string {
   return `theme-${name}`;
 }
+
+export type CorporatePageKind =
+  | 'home'
+  | 'services'
+  | 'pricing'
+  | 'about'
+  | 'contact'
+  | 'privacy'
+  | 'terms';
+
+export const CORPORATE_PAGE_KINDS: readonly CorporatePageKind[] = [
+  'home',
+  'services',
+  'pricing',
+  'about',
+  'contact',
+  'privacy',
+  'terms',
+] as const;
+
+/** Singleton corporate-site doc id. One doc per dataset. */
+export function corporateSiteDocId(brand = 'leadslandlord'): string {
+  return `corporate-site-${brand}`;
+}
+
+/** Deterministic id for each corporate page. One doc per kind. */
+export function corporatePageDocId(kind: CorporatePageKind, brand = 'leadslandlord'): string {
+  return `corporate-page-${brand}-${kind}`;
+}
