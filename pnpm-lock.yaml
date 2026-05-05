@@ -39,6 +39,9 @@ importers:
       '@leadlandlord/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@leadlandlord/sanity-schema':
+        specifier: workspace:*
+        version: link:../../packages/sanity-schema
       '@leadlandlord/shared':
         specifier: workspace:*
         version: link:../../packages/shared

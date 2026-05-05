@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/operator-tick",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/domain-verifier",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {

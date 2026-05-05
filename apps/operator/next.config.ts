@@ -18,9 +18,10 @@ const config: NextConfig = {
     '@leadlandlord/agents',
     '@leadlandlord/db',
     '@leadlandlord/integrations',
+    '@leadlandlord/sanity-schema',
     '@leadlandlord/shared',
   ],
-  serverExternalPackages: ['pino', '@neondatabase/serverless'],
+  serverExternalPackages: ['pino', '@neondatabase/serverless', '@sanity/client'],
   // Static text files read by agents at runtime (e.g. ContentEngine's
   // system.md) aren't traced automatically by Vercel's nft. Include them
   // explicitly for any route that may invoke an agent.
