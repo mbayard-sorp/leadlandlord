@@ -13,6 +13,7 @@ import { BillingDunning } from './billing-dunning/index';
 import { ChurnRecovery } from './churn-recovery/index';
 import { PortfolioAnalyst } from './portfolio-analyst/index';
 import { ComplianceGuard } from './compliance-guard/index';
+import { CallClassifier } from './call-classifier/index';
 import { Operator } from './operator/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,6 +35,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'churn-recovery': () => new ChurnRecovery(),
   'portfolio-analyst': () => new PortfolioAnalyst(),
   'compliance-guard': () => new ComplianceGuard(),
+  'call-classifier': () => new CallClassifier(),
   operator: () => new Operator(),
 };
 

@@ -109,13 +109,21 @@ export async function generateMetadata({ params }: Params) {
   const bundle = loadBundle();
   const page = bundle.info_pages.find((p) => slugFromUrl(p.slug) === slug);
   if (!page) return {};
+  const canonical = `/pages/${slug}/`;
   return {
     title: page.title,
     description: page.meta_description,
+    alternates: { canonical },
     openGraph: {
       title: page.title,
       description: page.meta_description,
       type: 'article',
+      url: canonical,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: page.title,
+      description: page.meta_description,
     },
   };
 }

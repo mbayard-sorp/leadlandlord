@@ -2,18 +2,37 @@ import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { eq } from 'drizzle-orm';
 import { getDb, sites, agentEvents } from '@leadlandlord/db';
-import { vercel, imagen } from '@leadlandlord/integrations';
+import { vercel, imagen, klaviyo } from '@leadlandlord/integrations';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
-import { materializeSite } from './materialize';
+import { materializeSite, writeContentBundle } from './materialize';
+
+export type SiteBuilderProgressEvent =
+  | { step: 'site_row_ready'; site_id: string }
+  | { step: 'content_started' }
+  | { step: 'content_generated'; pages: number }
+  | { step: 'tracking_provisioned'; number: string; provider: string }
+  | { step: 'klaviyo_list_ready'; list_id: string | null }
+  | { step: 'project_created'; project_name: string }
+  | { step: 'env_vars_synced'; keys: number }
+  | { step: 'site_materialized'; build_dir: string }
+  | { step: 'hero_image_started' }
+  | { step: 'hero_image_done'; url: string | null }
+  | { step: 'deploy_started' }
+  | { step: 'deploy_succeeded'; url: string };
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
   private readonly trackingSetup = new TrackingSetup();
 
-  constructor() {
+  /**
+   * Optional progress callback invoked at each step. Used by /operator/build
+   * to stream live updates over Server-Sent Events. Errors thrown by the
+   * callback are swallowed — progress reporting must never break the build.
+   */
+  constructor(private onProgress?: (event: SiteBuilderProgressEvent) => void) {
     super({
       name: 'site-builder',
       inputSchema: SiteBuilderInput,
@@ -23,12 +42,22 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     });
   }
 
+  private emit(event: SiteBuilderProgressEvent): void {
+    if (!this.onProgress) return;
+    try {
+      this.onProgress(event);
+    } catch {
+      // never let a misbehaving callback break the build
+    }
+  }
+
   protected async execute(input: SiteBuilderInput, ctx: AgentContext): Promise<SiteBuilderOutput> {
     const db = getDb();
 
     // 1. Insert/find site row.
     const siteId = await this.upsertSite(input);
     ctx.log.info({ siteId }, 'site row ready');
+    this.emit({ step: 'site_row_ready', site_id: siteId });
 
     await db
       .update(sites)
@@ -36,6 +65,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       .where(eq(sites.id, siteId));
 
     // 2. Generate content bundle.
+    this.emit({ step: 'content_started' });
     const bundle = await this.contentEngine.run(
       {
         site_id: siteId,
@@ -50,12 +80,25 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       { pages: countPages(bundle) },
       'content bundle generated',
     );
+    this.emit({ step: 'content_generated', pages: countPages(bundle) });
 
     // 3. Provision tracking number (mocked when MOCK_TELEPHONY=true).
     const tracking = await this.trackingSetup.run(
       { site_id: siteId },
       { siteId, parentRunId: ctx.runId },
     );
+    this.emit({
+      step: 'tracking_provisioned',
+      number: tracking.number,
+      provider: tracking.provider,
+    });
+
+    // 3b. Provision a Klaviyo list for this site (idempotent — skips when one
+    //     is already saved on the row, or when Klaviyo creds aren't set).
+    //     The list ID feeds into NEXT_PUBLIC_* env baked into the build via
+    //     /api/lead → subscribeProfileToList.
+    const klaviyoListId = await this.ensureKlaviyoList(siteId, bundle, ctx);
+    this.emit({ step: 'klaviyo_list_ready', list_id: klaviyoListId ?? null });
 
     // 4. Pick a Vercel project name.
     const projectName = await vercel.projectNameFor({
@@ -65,18 +108,39 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     });
     ctx.log.info({ projectName }, 'reserved project name');
 
-    // 5. Create the project (idempotent).
+    // 5. Create the project (idempotent), then upsert env vars.
+    //
+    // The env-var bundle is what Vercel CLI bakes into the static export at
+    // build time. We always upsert on every run because:
+    //   - createProject() is no-op on existing projects (and would NOT update
+    //     env vars even if values change), and
+    //   - re-runs need to be able to roll out new env keys (e.g. when
+    //     NEXT_PUBLIC_LEAD_API_URL was added in Phase 2 — without upsert,
+    //     existing sites would never pick it up without manual intervention).
+    const operatorUrl = (process.env.OPERATOR_PUBLIC_URL ?? '').replace(/\/$/, '');
+    const envVars: Record<string, string> = {
+      NEXT_PUBLIC_SITE_NAME: bundle.business_name,
+      NEXT_PUBLIC_NICHE: bundle.niche,
+      NEXT_PUBLIC_CITY: bundle.city,
+      NEXT_PUBLIC_STATE: bundle.state,
+      NEXT_PUBLIC_TRACKING_NUMBER: tracking.number,
+      NEXT_PUBLIC_VARIANT: bundle.variant,
+      NEXT_PUBLIC_SITE_ID: siteId,
+      NEXT_PUBLIC_SITE_SLUG: projectName,
+    };
+    if (operatorUrl) {
+      envVars.NEXT_PUBLIC_LEAD_API_URL = `${operatorUrl}/api/lead`;
+    }
     const project = await vercel.createProject({
       name: projectName,
       framework: 'nextjs',
-      envVars: {
-        NEXT_PUBLIC_SITE_NAME: bundle.business_name,
-        NEXT_PUBLIC_NICHE: bundle.niche,
-        NEXT_PUBLIC_CITY: bundle.city,
-        NEXT_PUBLIC_STATE: bundle.state,
-        NEXT_PUBLIC_TRACKING_NUMBER: tracking.number,
-      },
+      envVars,
     });
+    // Upsert always — covers re-runs where the project already existed.
+    await vercel.setEnvVars(project.id, envVars);
+    ctx.log.info({ keys: Object.keys(envVars).length }, 'env vars upserted on project');
+    this.emit({ step: 'project_created', project_name: projectName });
+    this.emit({ step: 'env_vars_synced', keys: Object.keys(envVars).length });
 
     // 6. Materialize site files into a build dir.
     const buildDir = resolve(tmpdir(), `llbuild-${siteId}`);
@@ -87,11 +151,14 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       vercelProjectName: projectName,
     });
     ctx.log.info({ buildDir }, 'site files materialized');
+    this.emit({ step: 'site_materialized', build_dir: buildDir });
 
     // 6b. Generate hero image into <buildDir>/public/hero.jpg if we have a
     //     prompt and the AI Gateway key is configured. Falls back gracefully
     //     to no-op when the key is missing — variants render their placeholder.
     if (bundle.hero_image_prompt) {
+      this.emit({ step: 'hero_image_started' });
+      let heroDoneUrl: string | null = null;
       try {
         const imgRes = await imagen.generateHeroImageInto(
           buildDir,
@@ -102,14 +169,12 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
             { path: imgRes.path, size: imgRes.size, model: imgRes.model },
             'hero image generated',
           );
+          heroDoneUrl = imgRes.publicPath;
           bundle.hero_image_url = imgRes.publicPath;
-          // Re-write content.json so the build picks up the URL.
-          await materializeSite({
-            buildDir,
-            bundle,
-            trackingNumber: tracking.number,
-            vercelProjectName: projectName,
-          });
+          // Re-write only content.json + MDX so the build picks up the URL —
+          // re-running the full materialize would clean buildDir and wipe the
+          // hero image we just generated.
+          await writeContentBundle(buildDir, bundle);
         }
       } catch (err) {
         ctx.log.warn(
@@ -117,14 +182,17 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
           'hero image generation failed — proceeding without it',
         );
       }
+      this.emit({ step: 'hero_image_done', url: heroDoneUrl });
     }
 
     // 7. Deploy.
+    this.emit({ step: 'deploy_started' });
     const deploy = await vercel.deployDirectory({
       projectName,
       cwd: buildDir,
     });
     ctx.log.info({ url: deploy.url, durationMs: deploy.durationMs }, 'deploy succeeded');
+    this.emit({ step: 'deploy_succeeded', url: deploy.url });
 
     const deployedAt = new Date();
 
@@ -167,6 +235,49 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     };
   }
 
+  /**
+   * Idempotently ensure a Klaviyo list exists for this site and the row's
+   * `klaviyoListId` is set. Returns the list ID, or undefined when Klaviyo
+   * isn't configured (sites without a list ID just skip the subscribe step in
+   * /api/lead — the lead row still gets written + operator still notified).
+   */
+  private async ensureKlaviyoList(
+    siteId: string,
+    bundle: { niche: string; city: string; state: string },
+    ctx: AgentContext,
+  ): Promise<string | undefined> {
+    if (!process.env.KLAVIYO_PRIVATE_API_KEY) {
+      ctx.log.info('klaviyo: KLAVIYO_PRIVATE_API_KEY not set — skipping list creation');
+      return undefined;
+    }
+    const db = getDb();
+    const row = (
+      await db
+        .select({ klaviyoListId: sites.klaviyoListId })
+        .from(sites)
+        .where(eq(sites.id, siteId))
+        .limit(1)
+    )[0];
+    if (row?.klaviyoListId) {
+      ctx.log.info({ listId: row.klaviyoListId }, 'klaviyo: list already provisioned');
+      return row.klaviyoListId;
+    }
+    try {
+      const listName = `${cap(bundle.niche)} · ${bundle.city}, ${bundle.state}`;
+      const { listId } = await klaviyo.createList(listName);
+      await db.update(sites).set({ klaviyoListId: listId }).where(eq(sites.id, siteId));
+      ctx.log.info({ listId, listName }, 'klaviyo: list created');
+      return listId;
+    } catch (err) {
+      // Don't block deploy on a Klaviyo hiccup — operator can fix later.
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'klaviyo: list creation failed — proceeding without it',
+      );
+      return undefined;
+    }
+  }
+
   private async upsertSite(input: SiteBuilderInput): Promise<string> {
     const db = getDb();
     if (input.site_id) return input.site_id;
@@ -202,6 +313,10 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
 
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function countPages(bundle: { services: unknown[]; service_areas: unknown[]; blog_posts: unknown[] }) {

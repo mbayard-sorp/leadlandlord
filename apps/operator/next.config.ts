@@ -21,6 +21,17 @@ const config: NextConfig = {
     '@leadlandlord/shared',
   ],
   serverExternalPackages: ['pino', '@neondatabase/serverless'],
+  // Static text files read by agents at runtime (e.g. ContentEngine's
+  // system.md) aren't traced automatically by Vercel's nft. Include them
+  // explicitly for any route that may invoke an agent.
+  outputFileTracingIncludes: {
+    '/api/operator/build': [
+      '../../packages/agents/src/content-engine/system.md',
+    ],
+    '/api/cron/agent/[name]': [
+      '../../packages/agents/src/content-engine/system.md',
+    ],
+  },
 };
 
 export default config;

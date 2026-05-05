@@ -11,6 +11,10 @@
     "./site-builder": "./src/site-builder/index.ts",
     "./content-engine": "./src/content-engine/index.ts",
     "./tracking-setup": "./src/tracking-setup/index.ts",
+    "./call-classifier": "./src/call-classifier/index.ts",
+    "./tenant-prospector": "./src/tenant-prospector/index.ts",
+    "./compliance-guard": "./src/compliance-guard/index.ts",
+    "./outreach-agent": "./src/outreach-agent/index.ts",
     "./registry": "./src/registry.ts"
   },
   "scripts": {
@@ -22,7 +26,9 @@
     "@leadlandlord/integrations": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
     "drizzle-orm": "^0.36.4",
-    "zod": "^3.24.0"
+    "jsonrepair": "^3.14.0",
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

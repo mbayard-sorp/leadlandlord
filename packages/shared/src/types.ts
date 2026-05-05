@@ -71,7 +71,9 @@ export type ContentBundle = z.infer<typeof ContentBundle>;
 
 export const TrackingNumber = z.object({
   number: z.string(),
-  provider: z.enum(['callrail', 'twilio', 'mock']),
+  provider: z.enum(['twilio', 'mock']),
+  /** Twilio IncomingPhoneNumber SID — needed to update forwarding/recording later. */
+  twilio_sid: z.string().optional(),
   whisper: z.string().optional(),
   recording_enabled: z.boolean(),
 });

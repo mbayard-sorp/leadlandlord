@@ -9,7 +9,12 @@
     ".": "./src/index.ts",
     "./anthropic": "./src/anthropic.ts",
     "./vercel": "./src/vercel/index.ts",
-    "./callrail": "./src/callrail/index.ts",
+    "./twilio": "./src/twilio/index.ts",
+    "./klaviyo": "./src/klaviyo/index.ts",
+    "./resend": "./src/resend/index.ts",
+    "./google-places": "./src/google-places/index.ts",
+    "./apollo": "./src/apollo/index.ts",
+    "./elevenlabs": "./src/elevenlabs/index.ts",
     "./stripe": "./src/stripe/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
     "./namecheap": "./src/namecheap/index.ts",
@@ -21,6 +26,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@leadlandlord/shared": "workspace:*",
+    "stripe": "^22.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

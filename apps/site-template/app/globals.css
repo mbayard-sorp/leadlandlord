@@ -5,6 +5,9 @@
 @import '../styles/themes/bright.css';
 @import '../styles/components.css';
 @import '../styles/variants/classic.css';
+@import '../styles/variants/modern.css';
+@import '../styles/variants/premium.css';
+@import '../styles/variants/bright.css';
 @import '../styles/info-page.css';
 
 /* ── Defaults — wrapped in :where() to give them 0 specificity so the

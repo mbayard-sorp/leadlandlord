@@ -39,12 +39,19 @@ export function LeadForm({ variant, heading, sub, submit = 'Send →', source = 
       return;
     }
     try {
-      const res = await fetch('/api/lead', {
+      // Static-export tenant sites post cross-origin to the operator app's
+      // /api/lead route. Site Builder injects NEXT_PUBLIC_LEAD_API_URL +
+      // NEXT_PUBLIC_SITE_ID at deploy time so each lead is attributed correctly.
+      const endpoint = process.env.NEXT_PUBLIC_LEAD_API_URL ?? '/api/lead';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          site_id: process.env.NEXT_PUBLIC_SITE_ID,
+          site_slug: process.env.NEXT_PUBLIC_SITE_SLUG,
           name: fd.get('name'),
           phone: fd.get('phone'),
+          email: fd.get('email'),
           zip: fd.get('zip'),
           message: fd.get('message'),
           source,

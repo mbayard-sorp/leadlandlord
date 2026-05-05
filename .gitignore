@@ -10,6 +10,12 @@ build/
 out/
 *.tsbuildinfo
 
+# Don't gitignore source `build` route segments (the operator app has
+# /operator/build and /api/operator/build pages that the broader `build/`
+# rule above would otherwise eat).
+!apps/operator/app/operator/build/
+!apps/operator/app/api/operator/build/
+
 # env
 .env
 .env.local

@@ -7,7 +7,11 @@ import { log } from '@leadlandlord/shared/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+// 800s — Vercel Pro ceiling. Site Builder runs through this worker and its
+// content-gen + Imagen + deploy pipeline can take 4-7 min on niche-heavy
+// bundles. 300s was racing the cap. Phase 7 will move long-running agents
+// to Vercel Workflow for proper durable execution.
+export const maxDuration = 800;
 
 const Body = z.object({
   event_id: z.string().uuid(),

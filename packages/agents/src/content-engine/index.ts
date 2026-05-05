@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
@@ -9,6 +10,22 @@ import { ContentBundle } from '@leadlandlord/shared/types';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SYSTEM_PROMPT = readFileSync(resolve(__dirname, 'system.md'), 'utf-8');
+
+/**
+ * JSON Schema generated from the Zod ContentBundle. Anthropic's tool use
+ * mode constrains the model to output JSON that matches this schema exactly,
+ * eliminating the unparsable-JSON failures we were hitting at 30K+ token
+ * outputs (unescaped quotes inside long mdx content, missing colons, etc.).
+ *
+ * `target: 'jsonSchema7'` produces a schema Anthropic understands. We don't
+ * pass strict mode because the model needs flexibility to fill defaults.
+ */
+const TOOL_INPUT_SCHEMA = zodToJsonSchema(ContentBundle, {
+  target: 'jsonSchema7',
+  $refStrategy: 'none', // inline refs — Anthropic's tool schema doesn't follow $ref reliably
+}) as Record<string, unknown>;
+
+const OUTPUT_TOOL_NAME = 'output_content_bundle';
 
 export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof ContentEngineOutput> {
   constructor() {
@@ -30,20 +47,31 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
 
     const userPrompt = buildUserPrompt(input);
 
-    ctx.log.info({ model, fast_mode: !!input.fast_mode }, 'requesting content bundle from claude (streaming)');
+    ctx.log.info({ model, fast_mode: !!input.fast_mode }, 'requesting content bundle from claude (tool use)');
 
-    // Stream the response to avoid HTTP-level timeouts on long generations.
-    // The Content Engine produces ~6-10K output tokens which can take 4-8
-    // minutes wall-clock; non-streaming requests get killed by intermediate
-    // proxies after ~5min. Anthropic SDK aggregates the stream into a final
-    // message we can use just like a non-streaming response.
+    // Tool use mode — the model is constrained to invoke output_content_bundle
+    // with input matching the JSON schema. This guarantees parseable JSON
+    // even at 30K+ token outputs, replacing the previous text+jsonrepair
+    // approach that struggled with long mdx strings.
+    //
+    // Streaming so the connection stays alive through the full ~5min run;
+    // intermediate proxies otherwise close idle HTTPS connections.
     const stream = client.messages.stream({
       model,
-      max_tokens: 16_000,
-      temperature: 0.7,
+      max_tokens: 32_000,
+      temperature: 0.2,
       system: [
         { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
       ],
+      tools: [
+        {
+          name: OUTPUT_TOOL_NAME,
+          description:
+            'Output the complete content bundle for the website. Call this exactly once with the full bundle.',
+          input_schema: TOOL_INPUT_SCHEMA as never,
+        },
+      ],
+      tool_choice: { type: 'tool', name: OUTPUT_TOOL_NAME },
       messages: [{ role: 'user', content: userPrompt }],
     });
     const response = await stream.finalMessage();
@@ -64,24 +92,28 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
       cost_usd: cost,
     });
 
-    const text = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { type: 'text'; text: string }).text)
-      .join('');
+    const toolUse = response.content.find(
+      (block): block is Extract<typeof block, { type: 'tool_use' }> =>
+        block.type === 'tool_use' && block.name === OUTPUT_TOOL_NAME,
+    );
+    if (!toolUse) {
+      throw new Error(
+        `Content engine: model did not invoke ${OUTPUT_TOOL_NAME}. ` +
+          `Stop reason: ${response.stop_reason}.`,
+      );
+    }
 
-    const raw = extractJson(text);
-    const normalized = normalizeBundle(raw, input);
+    const normalized = normalizeBundle(toolUse.input, input);
     const parsed = ContentBundle.parse(normalized);
     return parsed;
   }
 }
 
 /**
- * Defensive post-processing on the model's JSON before strict Zod validation.
- *
- * The model is generally good but not perfect — meta_descriptions sometimes
- * run a few chars over 160, and `generated_at` is occasionally missing. Rather
- * than retry the whole content gen for a trivial fix, we patch up here.
+ * Defensive post-processing on the model's tool input before strict Zod
+ * validation. Even with tool use, the model may omit defaultable fields or
+ * occasionally emit a meta_description a few chars over 160. Rather than
+ * retry the whole content gen for a trivial fix, we patch up here.
  */
 function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   if (raw == null || typeof raw !== 'object') return raw;
@@ -110,7 +142,7 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   for (const key of ['home', 'about', 'contact'] as const) {
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);
   }
-  for (const key of ['services', 'service_areas', 'blog_posts'] as const) {
+  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
     const arr = bundle[key];
     if (Array.isArray(arr)) {
       bundle[key] = arr.map(trimPage);
@@ -142,15 +174,7 @@ state: ${input.state}
 business_name: ${businessName}
 fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}
 
-Output ONLY the JSON object — no preamble, no commentary, no fenced code block.`;
-}
-
-function extractJson(text: string): unknown {
-  // Tolerant of fenced code blocks even though we asked it not to fence.
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const raw = fenceMatch ? fenceMatch[1] : text;
-  if (!raw) throw new Error('Content engine returned empty response');
-  return JSON.parse(raw.trim());
+Invoke the ${OUTPUT_TOOL_NAME} tool exactly once with the full bundle. Do not return prose — only the tool call.`;
 }
 
 function capitalize(s: string): string {

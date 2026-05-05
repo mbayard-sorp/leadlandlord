@@ -3,6 +3,8 @@ import Link from 'next/link';
 const links = [
   { href: '/operator', label: 'Overview' },
   { href: '/operator/portfolio', label: 'Portfolio' },
+  { href: '/operator/build', label: 'Build site' },
+  { href: '/operator/calls', label: 'Calls' },
   { href: '/operator/agents', label: 'Agents' },
   { href: '/operator/pipeline', label: 'Pipeline', disabled: true },
   { href: '/operator/tenants', label: 'Tenants', disabled: true },

@@ -2,6 +2,96 @@
  * Each variant's colors/fonts/radii come from styles/themes/*.css.
  */
 
+/* ── Generic page shell (about / contact) ──────────────────────── */
+.site-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+.site-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px clamp(20px, 4vw, 48px);
+  border-bottom: var(--border-rule, 1px) solid var(--rule, var(--ink));
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.site-page-brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.site-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+}
+.site-page-nav a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.site-page-nav a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.site-page-phone {
+  padding: 8px 14px;
+  border: var(--border-rule, 1.5px) solid var(--ink);
+  border-radius: var(--radius-pill, 4px);
+  background: var(--accent);
+  color: var(--ink) !important;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.site-page-main {
+  flex: 1;
+  width: 100%;
+  max-width: 70ch;
+  margin: 0 auto;
+  padding: clamp(32px, 6vw, 64px) clamp(20px, 4vw, 48px);
+}
+.site-page-footer {
+  border-top: var(--border-rule, 1px) solid var(--rule, var(--ink));
+  background: var(--paper-2, var(--paper));
+  padding: 24px clamp(20px, 4vw, 48px);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--ink-2, var(--ink));
+}
+.site-page-footer p {
+  margin: 0 0 8px;
+}
+.site-page-disclaimer {
+  opacity: 0.7;
+  font-size: 0.75rem;
+}
+.site-contact-cta {
+  margin-top: 32px;
+  padding: 24px;
+  border: var(--border-card, 1.5px) solid var(--ink);
+  border-radius: var(--radius-card, 8px);
+  background: var(--paper-2, var(--paper));
+}
+.site-contact-cta h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+.site-contact-cta h2 a {
+  color: var(--accent);
+}
+
 /* ── Lead form ────────────────────────────────────────────────── */
 .leadform {
   display: flex;
