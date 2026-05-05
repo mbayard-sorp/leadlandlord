@@ -28,9 +28,20 @@ export async function claimEvents(limit = 10, claimedBy?: string): Promise<Agent
     UPDATE agent_events
     SET processing_at = NOW()
     WHERE id IN (SELECT id FROM claimed)
-    RETURNING id, agent, type, payload, target_agent, requires_approval, created_at, processing_at, processed_at, error
+    RETURNING id,
+      agent,
+      type,
+      payload,
+      target_agent AS "targetAgent",
+      requires_approval AS "requiresApproval",
+      created_at AS "createdAt",
+      processing_at AS "processingAt",
+      processed_at AS "processedAt",
+      error
   `)) as unknown as { rows: AgentEvent[] };
   // The Neon driver returns either an array or { rows } depending on context.
+  // Snake→camel aliases above match Drizzle's $inferSelect prop names so
+  // callers (operator-tick) can read ev.targetAgent without a separate map.
   return Array.isArray(rows) ? (rows as unknown as AgentEvent[]) : rows.rows;
 }
 
