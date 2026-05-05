@@ -1,12 +1,24 @@
 import { config as loadEnv } from 'dotenv';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
 
-// Load secrets from the workspace-root .env.local — Next.js only auto-loads
-// from the app dir, but in this monorepo secrets live at the repo root.
+// Walk up looking for .env.local. Works inside git worktrees where the
+// worktree root has no .env.local but the LeadLandlord parent checkout does.
+function findEnvFile(start: string, name: string): string | undefined {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    const candidate = resolve(dir, name);
+    if (existsSync(candidate)) return candidate;
+    const parent = resolve(dir, '..');
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+  return undefined;
+}
 const repoRoot = resolve(__dirname, '../..');
-loadEnv({ path: resolve(repoRoot, '.env.local'), override: true });
-loadEnv({ path: resolve(repoRoot, '.env'), override: true });
+const envLocal = findEnvFile(__dirname, '.env.local');
+if (envLocal) loadEnv({ path: envLocal, override: true });
 
 const config: NextConfig = {
   reactStrictMode: true,
