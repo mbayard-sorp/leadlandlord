@@ -1,0 +1,27 @@
+import { defineConfig } from 'sanity';
+import { structureTool } from 'sanity/structure';
+import { visionTool } from '@sanity/vision';
+import { schemaTypes } from '@leadlandlord/sanity-schema';
+
+const projectId = process.env.SANITY_STUDIO_PROJECT_ID ?? 'ybdv5za2';
+
+export default defineConfig([
+  {
+    name: 'production',
+    title: 'LeadLandlord — Production',
+    basePath: '/production',
+    projectId,
+    dataset: 'production',
+    plugins: [structureTool(), visionTool()],
+    schema: { types: schemaTypes },
+  },
+  {
+    name: 'development',
+    title: 'LeadLandlord — Development',
+    basePath: '/development',
+    projectId,
+    dataset: 'development',
+    plugins: [structureTool(), visionTool()],
+    schema: { types: schemaTypes },
+  },
+]);
