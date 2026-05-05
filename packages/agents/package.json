@@ -15,7 +15,8 @@
     "./tenant-prospector": "./src/tenant-prospector/index.ts",
     "./compliance-guard": "./src/compliance-guard/index.ts",
     "./outreach-agent": "./src/outreach-agent/index.ts",
-    "./registry": "./src/registry.ts"
+    "./registry": "./src/registry.ts",
+    "./scheduler": "./src/scheduler/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

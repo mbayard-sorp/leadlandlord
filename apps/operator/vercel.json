@@ -1,18 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    {
-      "path": "/api/cron/operator-tick",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/domain-verifier",
-      "schedule": "*/5 * * * *"
-    }
+    { "path": "/api/cron/operator-tick", "schedule": "* * * * *" },
+    { "path": "/api/cron/domain-verifier", "schedule": "*/5 * * * *" },
+
+    { "path": "/api/cron/schedule/tenant-prospector", "schedule": "0 14 * * 1" },
+    { "path": "/api/cron/schedule/outreach-agent", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/schedule/trial-manager", "schedule": "0 16 * * *" },
+    { "path": "/api/cron/schedule/billing-dunning", "schedule": "0 17 * * *" },
+    { "path": "/api/cron/schedule/churn-recovery", "schedule": "30 17 * * *" }
   ],
   "functions": {
     "app/api/cron/agent/[name]/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/schedule/[name]/route.ts": {
+      "maxDuration": 60
     }
   }
 }
