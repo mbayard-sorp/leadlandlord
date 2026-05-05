@@ -1,8 +1,8 @@
 import type { SchemaTypeDefinition } from 'sanity';
-import { site } from './site.js';
-import { page } from './page.js';
-import { theme } from './theme.js';
-import { siteDomain } from './site-domain.js';
+import { site } from './site';
+import { page } from './page';
+import { theme } from './theme';
+import { siteDomain } from './site-domain';
 
 export { site, page, theme, siteDomain };
 

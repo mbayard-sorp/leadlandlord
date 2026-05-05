@@ -1,4 +1,4 @@
-export { schemaTypes, site, page, theme, siteDomain } from './types/index.js';
+export { schemaTypes, site, page, theme, siteDomain } from './types/index';
 export {
   siteDocId,
   pageDocId,
@@ -6,5 +6,5 @@ export {
   THEME_NAMES,
   type PageKind,
   type ThemeName,
-} from './ids.js';
-export { createReadClient, createWriteClient, type SanityClientOptions } from './client.js';
+} from './ids';
+export { createReadClient, createWriteClient, type SanityClientOptions } from './client';
