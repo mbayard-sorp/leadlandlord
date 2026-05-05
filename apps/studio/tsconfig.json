@@ -6,7 +6,13 @@
     "moduleResolution": "bundler",
     "allowJs": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    // Studio is a Vite-built app — emitting .d.ts files is meaningless
+    // and requires every default export to have an explicit external type
+    // annotation, which conflicts with sanity v4's defineConfig() returning
+    // a private PluginOptions type.
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules", "dist", ".sanity"]

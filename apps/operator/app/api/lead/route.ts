@@ -13,9 +13,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Public lead-form endpoint. Tenant sites POST here from their static-export
- * lead forms — possibly cross-origin if the site is on a custom domain. The
- * shape matches LeadForm.tsx in the site-template package.
+ * Public lead-form endpoint. Tenant sites POST here from their lead forms.
+ * Phase F+: site-host's /api/lead proxy forwards same-origin browser POSTs
+ * here with `x-leadlandlord-host` so we can resolve the tenant by host even
+ * when the form payload omits site_id. The JSON shape still matches
+ * LeadForm.tsx (now in apps/site-host/components/shared/) for backwards
+ * compat with any pre-pivot tenant sites posting site_id directly.
  *
  * Pipeline:
  *   1. Validate + write the lead row (always — even if every external call fails)
