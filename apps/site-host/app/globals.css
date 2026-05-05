@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+
+/*
+ * Theme variants — exactly one applies per <html data-theme="..."> at runtime.
+ * Each file defines its own font + color CSS vars and component classes.
+ */
+@import '../styles/themes/classic.css' layer(themes);
+@import '../styles/themes/modern.css' layer(themes);
+@import '../styles/themes/premium.css' layer(themes);
+@import '../styles/themes/bright.css' layer(themes);
+
+@import '../styles/variants/classic.css' layer(variants);
+@import '../styles/variants/modern.css' layer(variants);
+@import '../styles/variants/premium.css' layer(variants);
+@import '../styles/variants/bright.css' layer(variants);
+
+@import '../styles/components.css' layer(components);
+@import '../styles/info-page.css' layer(components);

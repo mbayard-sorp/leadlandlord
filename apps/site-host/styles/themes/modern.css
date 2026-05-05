@@ -1,0 +1,28 @@
+/* Variant B — Clean Modern
+ * For solar, EV charging, smart-home, water treatment, energy audits.
+ * Calm, geometric, single accent color. "Nerdy so you don't have to be."
+ */
+[data-theme='modern'] {
+  --ink: #101418;
+  --ink-2: #3a4046;
+  --ink-3: #5a6065;
+  --paper: #fbfaf6;
+  --paper-2: #f3eedf;
+  --accent: #0d8e94; /* deep aqua */
+  --accent-50: #dff4f5;
+  --rule: #dfdacc;
+
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-body: var(--font-dm-sans), system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --radius-button: 999px;
+  --radius-pill: 999px;
+  --border-card: 1px;
+  --border-rule: 1px;
+
+  --shadow-soft: 0 1px 0 rgba(16, 20, 24, 0.04), 0 8px 20px rgba(16, 20, 24, 0.04);
+
+  --section-pad-y: clamp(64px, 9vw, 112px);
+  --container-max: 1200px;
+}
