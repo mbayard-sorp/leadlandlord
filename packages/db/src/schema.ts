@@ -467,6 +467,21 @@ export const agentBudgets = pgTable('agent_budgets', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Single-row settings table for portfolio-wide controls. Keyed by a constant
+ * `id = 'global'` so the operator dashboard can flip the kill switch without
+ * needing a separate row per tenant. New flags get added as columns; the
+ * insert/upsert path in helpers/system-state.ts keeps the row alive.
+ */
+export const systemState = pgTable('system_state', {
+  id: text('id').primaryKey().default('global'),
+  killSwitch: boolean('kill_switch').notNull().default(false),
+  killSwitchReason: text('kill_switch_reason'),
+  killSwitchActivatedAt: timestamp('kill_switch_activated_at', { withTimezone: true }),
+  killSwitchActivatedBy: text('kill_switch_activated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
@@ -491,3 +506,4 @@ export type AgentRun = typeof agentRuns.$inferSelect;
 export type NewAgentRun = typeof agentRuns.$inferInsert;
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
+export type SystemState = typeof systemState.$inferSelect;

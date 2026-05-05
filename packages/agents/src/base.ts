@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { eq, and, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, agentRuns, agentBudgets } from '@leadlandlord/db';
-import { AgentRunError, BudgetExceededError } from '@leadlandlord/shared/errors';
+import { getDb, agentRuns, agentBudgets, getSystemState } from '@leadlandlord/db';
+import {
+  AgentRunError,
+  BudgetExceededError,
+  KillSwitchActiveError,
+} from '@leadlandlord/shared/errors';
 import { log as rootLog, type Logger } from '@leadlandlord/shared/log';
 
 export interface AgentContext {
@@ -67,6 +71,17 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         rootLog.info({ agent: this.name, dedupeKey, runId: existing.id }, 'returning cached run output');
         return this.outputSchema.parse(existing.output);
       }
+    }
+
+    // Portfolio-wide kill switch — flipped from /operator when something looks
+    // wrong (runaway spend, broken integration, customer escalation). Throws
+    // before the agent_runs row is inserted, so a flipped switch shows up
+    // upstream as a markEventFailed on the agent_events row rather than a
+    // failed agent_runs row. That's the right treatment: the run never
+    // started, so don't pretend it did.
+    const sys = await getSystemState();
+    if (sys.killSwitch) {
+      throw new KillSwitchActiveError(this.name, sys.killSwitchReason);
     }
 
     await this.assertBudgetAvailable();
@@ -154,6 +169,15 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
 
   protected async assertBudgetAvailable(): Promise<void> {
     const db = getDb();
+    // Atomic UTC-day reset: if the row's updated_at is from a prior UTC day,
+    // zero spent_today_usd before reading. Without this the cap permanently
+    // bricks an agent the first day it hits the limit.
+    await db.execute(sql`
+      UPDATE agent_budgets
+      SET spent_today_usd = 0, updated_at = NOW()
+      WHERE agent = ${this.name}
+        AND date_trunc('day', updated_at AT TIME ZONE 'UTC') < date_trunc('day', NOW() AT TIME ZONE 'UTC')
+    `);
     const [row] = await db.select().from(agentBudgets).where(eq(agentBudgets.agent, this.name)).limit(1);
     const cap = row ? Number(row.dailyCostCapUsd) : this.defaultDailyCapUsd;
     const spent = row ? Number(row.spentTodayUsd) : 0;
@@ -175,7 +199,18 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
       .onConflictDoUpdate({
         target: agentBudgets.agent,
         set: {
-          spentTodayUsd: sql`${agentBudgets.spentTodayUsd} + ${amountUsd.toFixed(4)}`,
+          // Reset spent to the current amount when updated_at is from a prior
+          // UTC day; otherwise add to the running total. Mirrors the assert-
+          // path reset so a credit racing across midnight lands on the new
+          // day's tally rather than yesterday's.
+          spentTodayUsd: sql`
+            CASE
+              WHEN date_trunc('day', ${agentBudgets.updatedAt} AT TIME ZONE 'UTC')
+                 < date_trunc('day', NOW() AT TIME ZONE 'UTC')
+              THEN ${amountUsd.toFixed(4)}::numeric
+              ELSE ${agentBudgets.spentTodayUsd} + ${amountUsd.toFixed(4)}::numeric
+            END
+          `,
           updatedAt: new Date(),
         },
       });

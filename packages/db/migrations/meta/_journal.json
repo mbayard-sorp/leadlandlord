@@ -29,6 +29,13 @@
       "when": 1777929938790,
       "tag": "0003_watery_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778011963027,
+      "tag": "0004_yielding_shaman",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,16 @@ export class BudgetExceededError extends Error {
   }
 }
 
+export class KillSwitchActiveError extends Error {
+  readonly code = 'KILL_SWITCH_ACTIVE';
+  constructor(agent: string, reason?: string | null) {
+    super(
+      `Agent "${agent}" refused to run: portfolio kill switch is active${reason ? ` (${reason})` : ''}.`,
+    );
+    this.name = 'KillSwitchActiveError';
+  }
+}
+
 export class AgentRunError extends Error {
   readonly code = 'AGENT_RUN_ERROR';
   constructor(
