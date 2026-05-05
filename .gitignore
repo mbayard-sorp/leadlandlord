@@ -56,3 +56,4 @@ tmp/
 # coverage
 coverage/
 .nyc_output/
+.vercel

@@ -13,15 +13,32 @@
 import { config as loadEnv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { performance } from 'node:perf_hooks';
 
 // Load env BEFORE the package imports below so they see the values at import time.
+// Walk up from this file to find the repo root's .env.local — works inside git
+// worktrees where the worktree root has no .env.local but the main checkout does.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const __repoRoot = resolve(__dirname, '..');
-loadEnv({ path: resolve(__repoRoot, '.env.local'), override: true });
-loadEnv({ path: resolve(__repoRoot, '.env'), override: true });
+// Walk up looking for .env.local. Don't load a generic `.env` — a stray
+// `~/.env` with override:true would clobber values from .env.local
+// (this happened during Phase E rollout — `~/.env` had ANTHROPIC_API_KEY=
+// empty and silently wiped out the real key).
+function findEnvFile(start: string, name: string): string | undefined {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    const candidate = resolve(dir, name);
+    if (existsSync(candidate)) return candidate;
+    const parent = resolve(dir, '..');
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+  return undefined;
+}
+const envLocal = findEnvFile(__dirname, '.env.local');
+if (envLocal) loadEnv({ path: envLocal, override: true });
 
 // eslint-disable-next-line import/order
 import { sql } from 'drizzle-orm';
@@ -72,8 +89,15 @@ function hr(label: string) {
 
 async function ensurePreflight(): Promise<void> {
   process.env.MOCK_TELEPHONY = 'true';
+  // Phase E onward: force the `development` dataset for dry-runs so smoke
+  // tests never write into production tenant content. Override with
+  // DRY_RUN_SANITY_DATASET if you really mean to write elsewhere.
+  process.env.SANITY_DATASET = process.env.DRY_RUN_SANITY_DATASET ?? 'development';
+  process.env.NEXT_PUBLIC_SANITY_DATASET = process.env.SANITY_DATASET;
 
-  const required = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'VERCEL_TOKEN'];
+  // Phase E onward: no per-tenant Vercel project anymore — VERCEL_TOKEN is
+  // no longer a hard requirement for dry-run. SANITY_API_TOKEN is.
+  const required = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'SANITY_API_TOKEN'];
   const missing = required.filter((k) => !process.env[k] || process.env[k]!.trim() === '');
   if (missing.length) {
     console.error(`Missing env vars in .env.local: ${missing.join(', ')}`);
@@ -137,19 +161,21 @@ async function main() {
   const elapsedSec = ((performance.now() - t0) / 1000).toFixed(1);
 
   hr('Done');
-  console.log(`  site_id          : ${result.site_id}`);
-  console.log(`  vercel_project   : ${result.vercel_project_name} (${result.vercel_project_id})`);
-  console.log(`  preview_url      : ${result.preview_url}`);
-  console.log(`  tracking_number  : ${result.tracking_number} (${result.tracking_provider})`);
-  console.log(`  build_dir        : ${result.build_dir}`);
-  console.log(`  deployed_at      : ${result.deployed_at}`);
-  console.log(`  elapsed          : ${elapsedSec}s`);
+  console.log(`  site_id            : ${result.site_id}`);
+  console.log(`  sanity_site_doc_id : ${result.sanity_site_doc_id}`);
+  console.log(`  pages_written      : ${result.pages_written}`);
+  console.log(`  theme              : ${result.theme}`);
+  console.log(`  hero_image_url     : ${result.hero_image_url ?? '(none — no GOOGLE_API_KEY or generation skipped)'}`);
+  console.log(`  tracking_number    : ${result.tracking_number} (${result.tracking_provider})`);
+  console.log(`  deployed_at        : ${result.deployed_at}`);
+  console.log(`  elapsed            : ${elapsedSec}s`);
 
   hr('Next steps');
-  console.log('  • Visit the preview URL above and eyeball the home page + a service page.');
+  console.log('  • Open Sanity Studio (https://leadlandlord.sanity.studio) → confirm the new site doc + 7+ page docs.');
+  console.log('  • Hit the leadlandlord-sites Vercel app with x-site-host pointing at one of this site\'s domains');
+  console.log('    (or attach a domain via the operator dashboard, Phase F).');
   console.log('  • Open /operator/portfolio — the new row should be visible with status "warming".');
   console.log('  • Open /operator/agents — Site Builder + Content Engine + Tracking Setup runs visible.');
-  console.log("  • If anything's off, the build_dir holds every generated file for inspection.");
 }
 
 main().catch((err) => {

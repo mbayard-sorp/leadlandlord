@@ -7,14 +7,18 @@ import { sendSms } from '@leadlandlord/integrations/twilio';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import { createOrUpdateProfile, subscribeProfileToList } from '@leadlandlord/integrations/klaviyo';
 import { log } from '@leadlandlord/shared/log';
+import { resolveSiteIdFromHost } from '@/lib/sanity-read';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Public lead-form endpoint. Tenant sites POST here from their static-export
- * lead forms — possibly cross-origin if the site is on a custom domain. The
- * shape matches LeadForm.tsx in the site-template package.
+ * Public lead-form endpoint. Tenant sites POST here from their lead forms.
+ * Phase F+: site-host's /api/lead proxy forwards same-origin browser POSTs
+ * here with `x-leadlandlord-host` so we can resolve the tenant by host even
+ * when the form payload omits site_id. The JSON shape still matches
+ * LeadForm.tsx (now in apps/site-host/components/shared/) for backwards
+ * compat with any pre-pivot tenant sites posting site_id directly.
  *
  * Pipeline:
  *   1. Validate + write the lead row (always — even if every external call fails)
@@ -76,7 +80,11 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const site = await resolveSite(payload);
+  // Phase F: site-host's /api/lead proxy attaches x-leadlandlord-host with the
+  // tenant's Host header. Try a Sanity-by-host lookup first; fall through to
+  // the legacy site_id / site_slug paths if no match.
+  const hostHeader = req.headers.get('x-leadlandlord-host') ?? undefined;
+  const site = await resolveSite(payload, hostHeader);
 
   if (!site) {
     log.warn({ payload }, 'lead submission with no resolvable site');
@@ -124,14 +132,38 @@ export async function POST(req: Request) {
   return corsResponse(NextResponse.json({ ok: true, lead_id: inserted.id }));
 }
 
-async function resolveSite(payload: z.infer<typeof Body>): Promise<Site | null> {
+async function resolveSite(payload: z.infer<typeof Body>, hostHeader?: string): Promise<Site | null> {
   const db = getDb();
+
+  // 1. Host-based path (Phase F+) — site-host's /api/lead proxy sets
+  //    x-leadlandlord-host with the tenant's Host header. Sanity is the
+  //    source of truth for which site owns which host.
+  if (hostHeader) {
+    try {
+      const siteId = await resolveSiteIdFromHost(hostHeader);
+      if (siteId) {
+        const rows = await db.select().from(sites).where(eq(sites.id, siteId)).limit(1);
+        if (rows[0]) return rows[0];
+      }
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : err, host: hostHeader },
+        'host-based site resolution failed, falling through to id/slug',
+      );
+    }
+  }
+
+  // 2. site_id (UUID) — preferred path for sites that pre-date the host resolver
+  //    or are submitted with the explicit field set.
   if (payload.site_id) {
     const rows = await db.select().from(sites).where(eq(sites.id, payload.site_id)).limit(1);
     if (rows[0]) return rows[0];
   }
+
+  // 3. site_slug → match against legacy `vercelProjectName` (niche-city slug
+  //    Site Builder used pre-pivot). Kept for backwards compat with sites
+  //    deployed before the multi-tenant pivot.
   if (payload.site_slug) {
-    // Match against vercel project name — Site Builder slugs niche-city.
     const rows = await db
       .select()
       .from(sites)
@@ -139,8 +171,9 @@ async function resolveSite(payload: z.infer<typeof Body>): Promise<Site | null> 
       .limit(1);
     if (rows[0]) return rows[0];
   }
-  // Fallback: if there's exactly one live site, attribute to it. Useful for
-  // dev where the form omits site_id and the operator has just one site.
+
+  // 4. Fallback: if there's exactly one site total, attribute to it. Useful for
+  //    dev where the form omits site_id and the operator has just one site.
   const all = await db.select().from(sites).limit(2);
   if (all.length === 1 && all[0]) return all[0];
   return null;

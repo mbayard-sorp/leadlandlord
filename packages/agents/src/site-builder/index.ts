@@ -1,13 +1,16 @@
-import { resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { eq } from 'drizzle-orm';
 import { getDb, sites, agentEvents } from '@leadlandlord/db';
-import { vercel, imagen, klaviyo } from '@leadlandlord/integrations';
+import { imagen, klaviyo } from '@leadlandlord/integrations';
+import {
+  createWriteClient,
+  siteDocId,
+  uploadHeroImage,
+} from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
-import { materializeSite, writeContentBundle } from './materialize';
+import { writeSiteToSanity } from './persist-sanity';
 
 export type SiteBuilderProgressEvent =
   | { step: 'site_row_ready'; site_id: string }
@@ -15,13 +18,12 @@ export type SiteBuilderProgressEvent =
   | { step: 'content_generated'; pages: number }
   | { step: 'tracking_provisioned'; number: string; provider: string }
   | { step: 'klaviyo_list_ready'; list_id: string | null }
-  | { step: 'project_created'; project_name: string }
-  | { step: 'env_vars_synced'; keys: number }
-  | { step: 'site_materialized'; build_dir: string }
+  | { step: 'sanity_publish_started' }
+  | { step: 'sanity_pages_written'; pages: number }
+  | { step: 'sanity_site_doc_written'; site_doc_id: string; theme: string }
   | { step: 'hero_image_started' }
   | { step: 'hero_image_done'; url: string | null }
-  | { step: 'deploy_started' }
-  | { step: 'deploy_succeeded'; url: string };
+  | { step: 'site_ready'; site_doc_id: string };
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
@@ -95,115 +97,72 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
 
     // 3b. Provision a Klaviyo list for this site (idempotent — skips when one
     //     is already saved on the row, or when Klaviyo creds aren't set).
-    //     The list ID feeds into NEXT_PUBLIC_* env baked into the build via
-    //     /api/lead → subscribeProfileToList.
     const klaviyoListId = await this.ensureKlaviyoList(siteId, bundle, ctx);
     this.emit({ step: 'klaviyo_list_ready', list_id: klaviyoListId ?? null });
 
-    // 4. Pick a Vercel project name.
-    const projectName = await vercel.projectNameFor({
-      niche: input.niche,
-      city: input.city,
-      state: input.state,
+    // 4. Persist content to Sanity. Single transactional createOrReplace —
+    //    deterministic doc IDs make it idempotent across re-runs. Replaces
+    //    the legacy materialize → vercel project create → env-var sync chain
+    //    (no per-tenant Vercel project anymore — all rendering goes through
+    //    the shared `leadlandlord-sites` project).
+    this.emit({ step: 'sanity_publish_started' });
+    const persisted = await writeSiteToSanity(siteId, bundle);
+    ctx.log.info(
+      { pages: persisted.pagesWritten, txId: persisted.transactionId },
+      'site + pages written to sanity',
+    );
+    this.emit({ step: 'sanity_pages_written', pages: persisted.pagesWritten });
+    this.emit({
+      step: 'sanity_site_doc_written',
+      site_doc_id: persisted.siteDocId,
+      theme: bundle.variant,
     });
-    ctx.log.info({ projectName }, 'reserved project name');
 
-    // 5. Create the project (idempotent), then upsert env vars.
-    //
-    // The env-var bundle is what Vercel CLI bakes into the static export at
-    // build time. We always upsert on every run because:
-    //   - createProject() is no-op on existing projects (and would NOT update
-    //     env vars even if values change), and
-    //   - re-runs need to be able to roll out new env keys (e.g. when
-    //     NEXT_PUBLIC_LEAD_API_URL was added in Phase 2 — without upsert,
-    //     existing sites would never pick it up without manual intervention).
-    const operatorUrl = (process.env.OPERATOR_PUBLIC_URL ?? '').replace(/\/$/, '');
-    const envVars: Record<string, string> = {
-      NEXT_PUBLIC_SITE_NAME: bundle.business_name,
-      NEXT_PUBLIC_NICHE: bundle.niche,
-      NEXT_PUBLIC_CITY: bundle.city,
-      NEXT_PUBLIC_STATE: bundle.state,
-      NEXT_PUBLIC_TRACKING_NUMBER: tracking.number,
-      NEXT_PUBLIC_VARIANT: bundle.variant,
-      NEXT_PUBLIC_SITE_ID: siteId,
-      NEXT_PUBLIC_SITE_SLUG: projectName,
-    };
-    if (operatorUrl) {
-      envVars.NEXT_PUBLIC_LEAD_API_URL = `${operatorUrl}/api/lead`;
-    }
-    const project = await vercel.createProject({
-      name: projectName,
-      framework: 'nextjs',
-      envVars,
-    });
-    // Upsert always — covers re-runs where the project already existed.
-    await vercel.setEnvVars(project.id, envVars);
-    ctx.log.info({ keys: Object.keys(envVars).length }, 'env vars upserted on project');
-    this.emit({ step: 'project_created', project_name: projectName });
-    this.emit({ step: 'env_vars_synced', keys: Object.keys(envVars).length });
-
-    // 6. Materialize site files into a build dir.
-    const buildDir = resolve(tmpdir(), `llbuild-${siteId}`);
-    await materializeSite({
-      buildDir,
-      bundle,
-      trackingNumber: tracking.number,
-      vercelProjectName: projectName,
-    });
-    ctx.log.info({ buildDir }, 'site files materialized');
-    this.emit({ step: 'site_materialized', build_dir: buildDir });
-
-    // 6b. Generate hero image into <buildDir>/public/hero.jpg if we have a
-    //     prompt and the AI Gateway key is configured. Falls back gracefully
-    //     to no-op when the key is missing — variants render their placeholder.
+    // 5. Hero image — generate buffer, upload to Sanity assets, patch the
+    //    site doc to reference the new asset. Failures here are non-fatal:
+    //    variants render their placeholder background when no hero is set.
+    let heroUrl: string | null = null;
     if (bundle.hero_image_prompt) {
       this.emit({ step: 'hero_image_started' });
-      let heroDoneUrl: string | null = null;
       try {
-        const imgRes = await imagen.generateHeroImageInto(
-          buildDir,
-          bundle.hero_image_prompt,
-        );
-        if (imgRes) {
+        const img = await imagen.generateHeroImageBuffer(bundle.hero_image_prompt);
+        if (img) {
+          const uploaded = await uploadHeroImage(siteId, img.buffer);
+          await createWriteClient()
+            .patch(siteDocId(siteId))
+            .set({
+              heroImage: {
+                _type: 'image',
+                asset: { _type: 'reference', _ref: uploaded.assetId },
+              },
+            })
+            .commit({ visibility: 'sync' });
+          heroUrl = uploaded.url;
           ctx.log.info(
-            { path: imgRes.path, size: imgRes.size, model: imgRes.model },
-            'hero image generated',
+            { assetId: uploaded.assetId, size: uploaded.size, model: img.model, provider: img.provider },
+            'hero image uploaded to sanity',
           );
-          heroDoneUrl = imgRes.publicPath;
-          bundle.hero_image_url = imgRes.publicPath;
-          // Re-write only content.json + MDX so the build picks up the URL —
-          // re-running the full materialize would clean buildDir and wipe the
-          // hero image we just generated.
-          await writeContentBundle(buildDir, bundle);
         }
       } catch (err) {
         ctx.log.warn(
           { err: err instanceof Error ? err.message : err },
-          'hero image generation failed — proceeding without it',
+          'hero image generation/upload failed — proceeding without it',
         );
       }
-      this.emit({ step: 'hero_image_done', url: heroDoneUrl });
+      this.emit({ step: 'hero_image_done', url: heroUrl });
     }
-
-    // 7. Deploy.
-    this.emit({ step: 'deploy_started' });
-    const deploy = await vercel.deployDirectory({
-      projectName,
-      cwd: buildDir,
-    });
-    ctx.log.info({ url: deploy.url, durationMs: deploy.durationMs }, 'deploy succeeded');
-    this.emit({ step: 'deploy_succeeded', url: deploy.url });
 
     const deployedAt = new Date();
 
-    // 8. Update site row.
+    // 6. Update site row. NOTE: we keep the legacy `vercelProjectId` /
+    //    `vercelProjectName` columns nullable + leave them unset — every site
+    //    now renders out of the shared `leadlandlord-sites` project, so per-
+    //    tenant Vercel project IDs aren't a thing anymore. The columns stay
+    //    on the schema for backward compat with rows from before the pivot.
     await db
       .update(sites)
       .set({
         status: 'warming',
-        domain: deploy.url,
-        vercelProjectId: project.id,
-        vercelProjectName: projectName,
         trackingNumber: tracking.number,
         trackingProvider: tracking.provider,
         deployedAt,
@@ -211,27 +170,29 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       })
       .where(eq(sites.id, siteId));
 
-    // 9. Emit event so downstream agents (SEO Operator, Backlink Builder) can wake up.
+    // 7. Emit event so downstream agents (SEO Operator, Backlink Builder) wake up.
     await db.insert(agentEvents).values({
       agent: 'site-builder',
       type: 'site.deployed',
       targetAgent: 'seo-operator',
       payload: {
         site_id: siteId,
-        preview_url: deploy.url,
-        vercel_project_id: project.id,
+        sanity_site_doc_id: persisted.siteDocId,
+        theme: bundle.variant,
       },
     });
 
+    this.emit({ step: 'site_ready', site_doc_id: persisted.siteDocId });
+
     return {
       site_id: siteId,
-      vercel_project_id: project.id,
-      vercel_project_name: projectName,
-      preview_url: deploy.url,
+      sanity_site_doc_id: persisted.siteDocId,
+      pages_written: persisted.pagesWritten,
+      theme: bundle.variant,
+      hero_image_url: heroUrl,
       tracking_number: tracking.number,
       tracking_provider: tracking.provider,
       deployed_at: deployedAt.toISOString(),
-      build_dir: buildDir,
     };
   }
 
@@ -269,7 +230,6 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       ctx.log.info({ listId, listName }, 'klaviyo: list created');
       return listId;
     } catch (err) {
-      // Don't block deploy on a Klaviyo hiccup — operator can fix later.
       ctx.log.warn(
         { err: err instanceof Error ? err.message : err },
         'klaviyo: list creation failed — proceeding without it',
@@ -283,16 +243,6 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     if (input.site_id) return input.site_id;
 
     const stateUpper = input.state.toUpperCase();
-    const existing = await db
-      .select({ id: sites.id })
-      .from(sites)
-      .where(eq(sites.niche, input.niche));
-    const match = existing.find((_) => true); // narrow the OR below in a follow-up
-    if (match) {
-      // This is a coarse check; real dedup is enforced by the unique index on (niche, city, state).
-      // We rely on the dedupe_key short-circuit in BaseAgent for true idempotency.
-    }
-
     const [row] = await db
       .insert(sites)
       .values({
@@ -319,8 +269,9 @@ function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function countPages(bundle: { services: unknown[]; service_areas: unknown[]; blog_posts: unknown[] }) {
-  return 3 + bundle.services.length + bundle.service_areas.length + bundle.blog_posts.length;
+function countPages(bundle: { services: unknown[]; service_areas: unknown[]; blog_posts: unknown[]; info_pages: unknown[] }) {
+  return 3 + bundle.services.length + bundle.service_areas.length + bundle.blog_posts.length + bundle.info_pages.length;
 }
 
 export { SiteBuilderInput, SiteBuilderOutput } from './schema';
+export { writeSiteToSanity } from './persist-sanity';
