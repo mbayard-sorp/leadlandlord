@@ -11,13 +11,13 @@ interface ProgressEvent {
 
 interface DoneEvent {
   site_id: string;
-  vercel_project_id: string;
-  vercel_project_name: string;
-  preview_url: string;
+  sanity_site_doc_id: string;
+  pages_written: number;
+  theme: 'classic' | 'modern' | 'premium' | 'bright';
+  hero_image_url: string | null;
   tracking_number: string;
   tracking_provider: string;
   deployed_at: string;
-  build_dir: string;
   elapsed_ms: number;
 }
 
@@ -34,13 +34,12 @@ const STEP_LABELS: Record<string, string> = {
   content_generated: 'Content bundle ready',
   tracking_provisioned: 'Tracking number provisioned',
   klaviyo_list_ready: 'Klaviyo list ready',
-  project_created: 'Vercel project created',
-  env_vars_synced: 'Env vars synced to Vercel',
-  site_materialized: 'Site files materialized',
+  sanity_publish_started: 'Publishing to Sanity…',
+  sanity_pages_written: 'Pages written to Sanity',
+  sanity_site_doc_written: 'Site doc written to Sanity',
   hero_image_started: 'Generating hero image (Imagen)…',
-  hero_image_done: 'Hero image done',
-  deploy_started: 'Deploying to Vercel…',
-  deploy_succeeded: 'Deploy succeeded',
+  hero_image_done: 'Hero image uploaded',
+  site_ready: 'Site ready',
 };
 
 /**
@@ -194,29 +193,36 @@ export function BuildForm() {
       {done && (
         <div className="rounded-lg border border-emerald-700/50 bg-emerald-900/30 p-4 text-sm">
           <p className="font-semibold text-emerald-200">
-            Site deployed in {(done.elapsed_ms / 1000).toFixed(1)}s
+            Site published to Sanity in {(done.elapsed_ms / 1000).toFixed(1)}s
           </p>
           <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-300">
             <div>
-              <span className="text-slate-500">Preview: </span>
-              <a
-                href={done.preview_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-300 hover:text-sky-200"
-              >
-                {done.preview_url} ↗
-              </a>
+              <span className="text-slate-500">Theme: </span>
+              <span className="font-mono">{done.theme}</span>
+              <span className="text-slate-500"> · {done.pages_written} pages</span>
             </div>
             <div>
               <span className="text-slate-500">Tracking: </span>
               <span className="font-mono">{done.tracking_number}</span>{' '}
               <span className="text-slate-500">({done.tracking_provider})</span>
             </div>
-            <div>
-              <span className="text-slate-500">Project: </span>
-              <span className="font-mono">{done.vercel_project_name}</span>
+            <div className="col-span-full">
+              <span className="text-slate-500">Sanity doc: </span>
+              <span className="font-mono">{done.sanity_site_doc_id}</span>
             </div>
+            {done.hero_image_url && (
+              <div className="col-span-full">
+                <span className="text-slate-500">Hero: </span>
+                <a
+                  href={done.hero_image_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sky-300 hover:text-sky-200 break-all"
+                >
+                  {done.hero_image_url} ↗
+                </a>
+              </div>
+            )}
             <div>
               <Link
                 href={`/operator/sites/${done.site_id}`}
@@ -224,6 +230,9 @@ export function BuildForm() {
               >
                 Open in dashboard →
               </Link>
+            </div>
+            <div className="text-slate-500 text-xs italic">
+              Domain attach is now a separate step — operator dashboard / Phase F.
             </div>
           </div>
         </div>

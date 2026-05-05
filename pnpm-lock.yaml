@@ -208,6 +208,9 @@ importers:
       '@leadlandlord/integrations':
         specifier: workspace:*
         version: link:../integrations
+      '@leadlandlord/sanity-schema':
+        specifier: workspace:*
+        version: link:../sanity-schema
       '@leadlandlord/shared':
         specifier: workspace:*
         version: link:../shared
@@ -261,6 +264,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.39.0
         version: 0.39.0
+      '@leadlandlord/sanity-schema':
+        specifier: workspace:*
+        version: link:../sanity-schema
       '@leadlandlord/shared':
         specifier: workspace:*
         version: link:../shared

@@ -248,3 +248,145 @@ export async function generateHeroImageInto(
   const outputPath = resolve(buildDir, 'public', filename);
   return generateHeroImage({ prompt, outputPath });
 }
+
+export interface HeroImageBuffer {
+  buffer: Buffer;
+  /** image/jpeg or image/png — currently always jpeg from both providers. */
+  contentType: string;
+  size: number;
+  model: string;
+  provider: 'ai-gateway' | 'google';
+  costUsd?: number;
+}
+
+/**
+ * In-memory hero image generation. Same provider routing as
+ * `generateHeroImage` (Google direct → AI Gateway → no-op fallback) but
+ * returns the raw bytes instead of writing to disk. Used by the new
+ * Sanity-backed Site Builder which uploads the buffer to Sanity assets.
+ */
+export async function generateHeroImageBuffer(
+  prompt: string,
+  opts: { aspectRatio?: '16:9' | '4:3' | '1:1' | '3:2'; negativePrompt?: string } = {},
+): Promise<HeroImageBuffer | null> {
+  const aiGatewayKey = process.env.AI_GATEWAY_API_KEY;
+  const googleKey = process.env.GOOGLE_API_KEY;
+  const forced = process.env.IMAGEN_PROVIDER as 'google' | 'ai-gateway' | undefined;
+  const order: Array<'google' | 'ai-gateway'> = forced ? [forced] : ['google', 'ai-gateway'];
+
+  const aspectRatio = opts.aspectRatio ?? '16:9';
+  let lastErr: unknown = null;
+
+  for (const provider of order) {
+    if (provider === 'google' && googleKey) {
+      try {
+        return await bufferViaGoogle(prompt, aspectRatio, googleKey);
+      } catch (err) {
+        lastErr = err;
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'google imagen (buffer) failed — trying next provider',
+        );
+      }
+    }
+    if (provider === 'ai-gateway' && aiGatewayKey) {
+      try {
+        return await bufferViaAiGateway(prompt, aspectRatio, aiGatewayKey, opts.negativePrompt);
+      } catch (err) {
+        lastErr = err;
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'ai-gateway imagen (buffer) failed — trying next provider',
+        );
+      }
+    }
+  }
+  if (lastErr) throw lastErr;
+  log.warn('No AI_GATEWAY_API_KEY or GOOGLE_API_KEY set — skipping hero image generation');
+  return null;
+}
+
+async function bufferViaGoogle(
+  prompt: string,
+  aspectRatio: '16:9' | '4:3' | '1:1' | '3:2',
+  key: string,
+): Promise<HeroImageBuffer> {
+  const model = process.env.GOOGLE_IMAGEN_MODEL ?? 'imagen-4.0-fast-generate-001';
+  const body = {
+    instances: [{ prompt: enrichPrompt(prompt) }],
+    parameters: { sampleCount: 1, aspectRatio, personGeneration: 'allow_adult' },
+  };
+  log.info({ model, aspectRatio, prompt: prompt.slice(0, 80) }, 'requesting hero image buffer (google)');
+  const url = `${GOOGLE_AI_BASE}/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(key)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await safeBody(res);
+    log.error({ status: res.status, body: errBody, model }, 'google-imagen error response');
+    throw new IntegrationError('google-imagen', `Image generation failed: ${res.status}`, res.status, errBody);
+  }
+  const json = (await res.json()) as {
+    predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+  };
+  const item = json.predictions?.[0];
+  if (!item?.bytesBase64Encoded) {
+    throw new IntegrationError('google-imagen', 'Empty image response', undefined, json);
+  }
+  const buffer = Buffer.from(item.bytesBase64Encoded, 'base64');
+  return {
+    buffer,
+    contentType: item.mimeType ?? 'image/jpeg',
+    size: buffer.byteLength,
+    model,
+    provider: 'google',
+  };
+}
+
+async function bufferViaAiGateway(
+  prompt: string,
+  aspectRatio: '16:9' | '4:3' | '1:1' | '3:2',
+  key: string,
+  negativePrompt?: string,
+): Promise<HeroImageBuffer> {
+  const model = process.env.IMAGEN_MODEL ?? 'google/imagen-4.0-fast-generate-001';
+  const size = sizeForAspect(aspectRatio);
+  const body = {
+    model,
+    prompt: enrichPrompt(prompt),
+    n: 1,
+    size,
+    response_format: 'b64_json' as const,
+    ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+  };
+  log.info({ model, aspectRatio, prompt: prompt.slice(0, 80) }, 'requesting hero image buffer (ai-gateway)');
+  const res = await fetch(`${AI_GATEWAY_BASE}/images/generations`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await safeBody(res);
+    log.error({ status: res.status, body: errBody, model }, 'ai-gateway error response');
+    throw new IntegrationError('ai-gateway', `Image generation failed: ${res.status}`, res.status, errBody);
+  }
+  const json = (await res.json()) as {
+    data?: Array<{ b64_json?: string; url?: string }>;
+    usage?: { total_cost?: number };
+  };
+  const item = json.data?.[0];
+  if (!item) {
+    throw new IntegrationError('ai-gateway', 'Empty image response');
+  }
+  const buffer = await readImageBuffer(item);
+  return {
+    buffer,
+    contentType: 'image/jpeg',
+    size: buffer.byteLength,
+    model,
+    provider: 'ai-gateway',
+    costUsd: json.usage?.total_cost,
+  };
+}
