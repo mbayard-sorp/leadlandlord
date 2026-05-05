@@ -29,7 +29,13 @@ export default function proxy(req: NextRequest) {
 
   const hostNoPort = (host.split(':')[0] ?? '').toLowerCase();
   const isCorporateQuery = req.nextUrl.searchParams.get('corporate') === '1';
-  const isCorporate = CORPORATE_HOSTS.has(hostNoPort) || isCorporateQuery;
+  // Sticky preview marker: nav links inside the corporate site are bare
+  // (`/services`, `/privacy`, etc.) and lose `?corporate=1` on click. The
+  // cookie keeps subsequent requests routed to the corporate namespace.
+  // No-op in production once the real host serves traffic.
+  const isCorporateCookie = req.cookies.get('ll_corp')?.value === '1';
+  const isCorporate =
+    CORPORATE_HOSTS.has(hostNoPort) || isCorporateQuery || isCorporateCookie;
 
   if (isCorporate) {
     headers.set('x-site-mode', 'corporate');
@@ -41,12 +47,24 @@ export default function proxy(req: NextRequest) {
       path === '/favicon.ico' ||
       path === '/sitemap.xml' ||
       path === '/robots.txt';
+    let res: NextResponse;
     if (!passthrough) {
       const url = req.nextUrl.clone();
       url.pathname = `/leadslandlord${path === '/' ? '' : path}`;
-      return NextResponse.rewrite(url, { request: { headers } });
+      res = NextResponse.rewrite(url, { request: { headers } });
+    } else {
+      res = NextResponse.next({ request: { headers } });
     }
-    return NextResponse.next({ request: { headers } });
+    if (isCorporateQuery && !isCorporateCookie) {
+      res.cookies.set('ll_corp', '1', {
+        httpOnly: false,
+        sameSite: 'lax',
+        path: '/',
+        // Session cookie — clears when the browser closes. Long enough to
+        // browse the preview, short enough not to follow you forever.
+      });
+    }
+    return res;
   }
 
   // dev: subdomain → slug
