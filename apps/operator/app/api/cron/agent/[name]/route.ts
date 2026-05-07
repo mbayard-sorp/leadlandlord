@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { z } from 'zod';
 import { getAgent } from '@leadlandlord/agents/registry';
+import { classifyAgentError } from '@leadlandlord/agents/error-classify';
 import { markEventProcessed, markEventFailed } from '@leadlandlord/db/queue';
 import { verifyCronSignature } from '../../../../../lib/auth';
 import { log } from '@leadlandlord/shared/log';
@@ -62,8 +63,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
     agent = getAgent(name);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.error({ agent: name, event_id, err: msg }, 'unknown agent');
-    await markEventFailed(event_id, msg);
+    log.error({ agent: name, event_id, err: msg }, 'unknown agent — dead-lettering');
+    await markEventFailed(event_id, msg, 'unknown_agent');
     return NextResponse.json({ ok: false, error: msg }, { status: 400 });
   }
 
@@ -79,9 +80,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
         log.info({ agent: name, event_id }, 'agent invocation succeeded');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log.error({ agent: name, event_id, err: msg }, 'agent invocation failed');
+        const kind = classifyAgentError(err);
+        log.error({ agent: name, event_id, err: msg, kind }, 'agent invocation failed');
         try {
-          await markEventFailed(event_id, msg);
+          await markEventFailed(event_id, msg, kind);
         } catch (markErr) {
           log.error(
             { agent: name, event_id, err: markErr instanceof Error ? markErr.message : markErr },

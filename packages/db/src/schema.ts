@@ -460,6 +460,31 @@ export const agentEvents = pgTable(
     processingAt: timestamp('processing_at', { withTimezone: true }),
     processedAt: timestamp('processed_at', { withTimezone: true }),
     error: text('error'),
+    /**
+     * Number of times this event has been claimed and failed. Reset to 0 on
+     * a successful processing. Bounded by maxAttempts in markEventFailed.
+     */
+    attempts: integer('attempts').notNull().default(0),
+    /**
+     * Earliest time at which this event may be re-claimed. Null means
+     * "claim immediately". Set on transient failures to implement linear backoff.
+     */
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+    /**
+     * Non-null means terminal — the event will never be claimed again. Set when:
+     *  - input validation fails (ZodError) — schema mismatch is a code bug
+     *  - the target agent is unknown — registry mismatch is a code bug
+     *  - the target agent is not implemented — deterministic, not transient
+     *  - attempts exceed the runtime-error retry budget
+     * The operator UI surfaces these for triage; manual replay clears the field.
+     */
+    deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+    /**
+     * Tag describing why an event failed. One of: 'validation_error',
+     * 'unknown_agent', 'not_implemented', 'runtime_error'. Used by the UI
+     * and by replay logic to decide whether to re-attempt a dead-letter.
+     */
+    failureKind: text('failure_kind'),
   },
   (t) => ({
     unprocessedIdx: index('agent_events_unprocessed_idx')
@@ -469,6 +494,16 @@ export const agentEvents = pgTable(
     approvalIdx: index('agent_events_approval_idx')
       .on(t.requiresApproval)
       .where(sql`${t.processedAt} IS NULL`),
+    // Replaces unprocessedIdx for claim-path queries — narrows to rows actually
+    // eligible for claim (not done, not dead-lettered). Kept alongside the older
+    // index because other consumers (operator UI history) still filter by just
+    // processed_at IS NULL.
+    claimableIdx: index('agent_events_claimable_idx')
+      .on(t.createdAt)
+      .where(sql`${t.processedAt} IS NULL AND ${t.deadLetteredAt} IS NULL`),
+    deadLetteredIdx: index('agent_events_dead_lettered_idx')
+      .on(t.deadLetteredAt)
+      .where(sql`${t.deadLetteredAt} IS NOT NULL`),
   }),
 );
 
