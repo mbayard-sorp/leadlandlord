@@ -59,14 +59,27 @@ export async function GET(req: Request) {
       continue;
     }
 
+    // Pull `site_id` off the event payload and forward it to BaseAgent.run
+    // as opts.siteId. Without this, the parent agent_runs row is created
+    // with site_id = NULL — sub-agents (which receive siteId via parentRun
+    // propagation) still get scoped, but the parent doesn't show up in the
+    // operator activity panel's `WHERE site_id = $siteId` query.
+    const payload = ev.payload as Record<string, unknown>;
+    const payloadSiteId =
+      typeof payload?.site_id === 'string' ? payload.site_id : undefined;
+
     // Run inline via waitUntil. Errors are caught here because waitUntil
     // swallows them — we always need to close the loop on the agent_event row.
     waitUntil(
       (async () => {
         try {
-          log.info({ agent: targetAgent, event_id: ev.id }, 'agent invocation starting (inline)');
-          await agent.run(ev.payload as Record<string, unknown>, {
+          log.info(
+            { agent: targetAgent, event_id: ev.id, site_id: payloadSiteId ?? null },
+            'agent invocation starting (inline)',
+          );
+          await agent.run(payload, {
             dedupeKey: `event:${ev.id}`,
+            siteId: payloadSiteId,
           });
           await markEventProcessed(ev.id);
           log.info({ agent: targetAgent, event_id: ev.id }, 'agent invocation succeeded');
