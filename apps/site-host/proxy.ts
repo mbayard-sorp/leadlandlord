@@ -71,11 +71,27 @@ export default function proxy(req: NextRequest) {
   const sub = matchLocalSubdomain(host);
   if (sub) headers.set('x-site-slug', sub);
 
-  // dev: ?site=foo → slug (overrides subdomain)
+  // dev/preview: ?site=foo → slug. Internal links on rendered pages are bare
+  // (e.g. /about, /services/foo) so the query param drops on every nav unless
+  // we sticky it via cookie. Same pattern as ?corporate=1 above. No-op in
+  // production once a real domain is attached and the Host header carries
+  // identity directly.
   const querySite = req.nextUrl.searchParams.get('site');
-  if (querySite) headers.set('x-site-slug', querySite);
+  const cookieSite = req.cookies.get('ll_site')?.value ?? null;
+  const effectiveSlug = querySite ?? (cookieSite || null);
+  if (effectiveSlug) headers.set('x-site-slug', effectiveSlug);
 
-  return NextResponse.next({ request: { headers } });
+  const res = NextResponse.next({ request: { headers } });
+  if (querySite && querySite !== cookieSite) {
+    // Set/refresh the sticky cookie when a fresh ?site= comes in. Session-
+    // scoped — clears when the browser closes.
+    res.cookies.set('ll_site', querySite, {
+      httpOnly: false,
+      sameSite: 'lax',
+      path: '/',
+    });
+  }
+  return res;
 }
 
 function matchLocalSubdomain(host: string): string | null {
