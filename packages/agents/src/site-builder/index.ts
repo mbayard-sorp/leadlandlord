@@ -11,7 +11,7 @@ import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
 import { KeywordPlanner } from '../keyword-planner/index';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
-import { writeSiteToSanity } from './persist-sanity';
+import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
 
 export type SiteBuilderProgressEvent =
@@ -71,6 +71,16 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       .update(sites)
       .set({ status: 'building', updatedAt: new Date() })
       .where(eq(sites.id, siteId));
+
+    // 1b. Create a minimal Sanity site stub so keyword-planner's cluster
+    //     docs (which carry a `site` reference) don't fail with "non-existent
+    //     document" errors. The full createOrReplace at step 4 overwrites
+    //     this stub with the populated version. Idempotent on re-runs.
+    await ensureSiteDocStub(siteId, {
+      niche: input.niche,
+      city: input.city,
+      state: input.state,
+    });
 
     // 2. Plan keyword clusters from DataForSEO. Skipped on re-target so the
     //    operator can refresh content without re-paying for keyword research.

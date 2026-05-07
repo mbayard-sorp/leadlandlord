@@ -31,6 +31,52 @@ interface PageRef {
 }
 
 /**
+ * Create a minimal Sanity `site` doc up front so downstream agents can
+ * write docs that reference it without hitting "non-existent document"
+ * mutation errors.
+ *
+ * Why this exists: Keyword Planner runs early in the site-builder pipeline
+ * and persists `keywordCluster` docs whose `site` field is a reference to
+ * `site-${siteId}`. Sanity rejects mutations whose references point at
+ * non-existent docs (referential integrity). The full `writeSiteToSanity`
+ * at the end of site-builder createOrReplaces this stub with the populated
+ * version — references stay valid because the `_id` is identical.
+ *
+ * Idempotent: safe to call multiple times. Stub fields (niche/city/state/
+ * slug) are preserved on the second call; the final populated overwrite
+ * replaces them with their real values from the content bundle.
+ */
+export async function ensureSiteDocStub(
+  siteId: string,
+  basics: { niche: string; city: string; state: string },
+  opts: WriteSiteToSanityOptions = {},
+): Promise<void> {
+  const client = createWriteClient(opts.dataset ? { dataset: opts.dataset } : {});
+  // createIfNotExists, not createOrReplace — we MUST NOT clobber a fully-
+  // populated site doc on a re-run (e.g. when site-builder is re-targeted).
+  // The final writeSiteToSanity at the end of site-builder uses
+  // createOrReplace to update everything. Between the two, downstream agents
+  // (keyword-planner) can safely reference `site-${siteId}`.
+  const stubSlug = `${basics.niche}-${basics.city}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  await client.createIfNotExists({
+    _id: siteDocId(siteId),
+    _type: 'site',
+    siteId,
+    slug: { _type: 'slug', current: stubSlug },
+    niche: basics.niche,
+    city: basics.city,
+    state: basics.state.toUpperCase(),
+    domains: [],
+    robotsDisallow: true,
+    trustSignals: [],
+    nearbyCities: [],
+  });
+}
+
+/**
  * Persist a generated content bundle to Sanity. Idempotent — re-running for
  * the same siteId overwrites every doc in place via deterministic IDs +
  * `createOrReplace`. References stay valid because the page doc IDs are
