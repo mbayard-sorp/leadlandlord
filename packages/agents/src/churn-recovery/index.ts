@@ -125,6 +125,10 @@ export class ChurnRecovery extends BaseAgent<typeof ChurnRecoveryInput, typeof C
       } as Record<string, unknown>,
     }));
     if (events.length > 0) {
+      // Legitimate fan-out: one event per prospect. NOT a "next-step" emit, so
+      // ctx.emitNextStepEvent's parentRunId-suppression semantics would be
+      // wrong here — even when churn-recovery runs as a sub-agent, we still
+      // need to enqueue per-prospect outreach work. Raw insert is correct.
       await db.insert(agentEvents).values(events);
     }
 

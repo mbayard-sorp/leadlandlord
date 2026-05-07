@@ -42,44 +42,64 @@ export async function GET(req: Request) {
   log.info({ claimed: events.length }, 'operator-tick claimed events');
 
   const dispatched: string[] = [];
-
+  // Dispatch SEQUENTIALLY inside a single waitUntil. Previously we called
+  // waitUntil per-event, spawning N parallel background promises that all
+  // hit assertBudgetAvailable() concurrently — they all read stale
+  // spent_today_usd before any committed cost, defeating daily caps.
+  // Sequential dispatch eliminates that race entirely. Latency cost: 5 events
+  // × ~60s p95 = ~5 min within the 800s maxDuration budget. Cascade case
+  // collapses to ~0 (dedupe short-circuit). See incident 2026-05-07.
+  const eligibleEvents: typeof events = [];
   for (const ev of events) {
     const targetAgent = ev.targetAgent ?? ev.agent;
     if (!targetAgent || ev.requiresApproval) {
       // Approval-gated events stay claimed but unprocessed until a human acts on them.
       continue;
     }
+    eligibleEvents.push(ev);
+    dispatched.push(targetAgent);
+  }
 
-    let agent;
-    try {
-      agent = getAgent(targetAgent);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.error({ event_id: ev.id, agent: targetAgent, err: msg }, 'unknown agent — dead-lettering');
-      await markEventFailed(ev.id, msg, 'unknown_agent');
-      continue;
-    }
+  // Pre-validate registry membership BEFORE the long-running waitUntil so we
+  // can fail-fast on unknown agents and dead-letter them within this request.
+  const knownAgents = await Promise.all(
+    eligibleEvents.map(async (ev) => {
+      const targetAgent = ev.targetAgent ?? ev.agent;
+      try {
+        return { ev, agent: getAgent(targetAgent!), targetAgent: targetAgent! };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error({ event_id: ev.id, agent: targetAgent, err: msg }, 'unknown agent — dead-lettering');
+        await markEventFailed(ev.id, msg, 'unknown_agent');
+        return null;
+      }
+    }),
+  );
+  const toDispatch = knownAgents.filter((x): x is NonNullable<typeof x> => x !== null);
 
-    // Pull `site_id` off the event payload and forward it to BaseAgent.run
-    // as opts.siteId. Without this, the parent agent_runs row is created
-    // with site_id = NULL — sub-agents (which receive siteId via parentRun
-    // propagation) still get scoped, but the parent doesn't show up in the
-    // operator activity panel's `WHERE site_id = $siteId` query.
-    const payload = ev.payload as Record<string, unknown>;
-    const payloadSiteId =
-      typeof payload?.site_id === 'string' ? payload.site_id : undefined;
-
-    // Run inline via waitUntil. Errors are caught here because waitUntil
-    // swallows them — we always need to close the loop on the agent_event row.
-    waitUntil(
-      (async () => {
+  waitUntil(
+    (async () => {
+      for (const { ev, agent, targetAgent } of toDispatch) {
+        // Pull `site_id` off the event payload and forward it to BaseAgent.run
+        // as opts.siteId. Without this, the parent agent_runs row is created
+        // with site_id = NULL — sub-agents (which receive siteId via parentRun
+        // propagation) still get scoped, but the parent doesn't show up in the
+        // operator activity panel's `WHERE site_id = $siteId` query.
+        const payload = ev.payload as Record<string, unknown>;
+        const payloadSiteId =
+          typeof payload?.site_id === 'string' ? payload.site_id : undefined;
         try {
           log.info(
             { agent: targetAgent, event_id: ev.id, site_id: payloadSiteId ?? null },
-            'agent invocation starting (inline)',
+            'agent invocation starting (inline, sequential)',
           );
           await agent.run(payload, {
-            dedupeKey: `event:${ev.id}`,
+            // Pass eventId, NOT dedupeKey. BaseAgent prefers the agent's
+            // natural dedupeKeyFn (e.g. `${niche}:${city}:${state}`) and falls
+            // back to `event:${eventId}` only when no keyFn exists. This lets
+            // duplicate events for the same logical work collapse to one run
+            // via findExistingSuccess. See incident 2026-05-07.
+            eventId: ev.id,
             siteId: payloadSiteId,
           });
           await markEventProcessed(ev.id);
@@ -104,10 +124,9 @@ export async function GET(req: Request) {
             );
           }
         }
-      })(),
-    );
-    dispatched.push(targetAgent);
-  }
+      }
+    })(),
+  );
 
   return NextResponse.json({ ok: true, claimed: events.length, dispatched });
 }

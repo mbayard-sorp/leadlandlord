@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { eq, and, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, agentRuns, agentBudgets, getSystemState } from '@leadlandlord/db';
+import { getDb, agentRuns, agentBudgets, agentEvents, getSystemState } from '@leadlandlord/db';
 import {
+  AgentDisabledError,
   AgentRunError,
   BudgetExceededError,
   KillSwitchActiveError,
@@ -37,12 +38,49 @@ export interface AgentContext {
    * `label` for a free-text status. Cleared automatically when the run ends.
    */
   progress(args: { step?: number; total?: number; label: string }): void;
+  /**
+   * Insert a "next step" event into the agent_events queue, intended for the
+   * cron dispatcher to pick up and route to `targetAgent`. Automatically
+   * SUPPRESSED when this agent is running as a sub-agent (parentRunId set) —
+   * the parent orchestrator is already chaining the next step in-process; a
+   * second cron-driven invocation would spawn a duplicate pipeline.
+   *
+   * Use this helper instead of raw `db.insert(agentEvents)` for any emit that
+   * represents "the next step in the pipeline." Reserve raw inserts for
+   * legitimate fan-outs (one event per child entity) where the suppression
+   * semantics would be wrong — see churn-recovery's outreach.kick emits.
+   *
+   * Hit a 79-event cluster.ready cascade on 2026-05-07 from forgetting this
+   * guard in keyword-planner. Never again.
+   */
+  emitNextStepEvent(args: {
+    type: string;
+    targetAgent: string;
+    payload: Record<string, unknown>;
+  }): Promise<void>;
 }
 
 export interface AgentRunOptions {
+  /**
+   * Explicit dedupe key. When set, takes precedence over the agent's own
+   * `dedupeKeyFn`. Reserved for callers that must override the agent's
+   * natural idempotency (rare). Most callers should leave this undefined
+   * and let the agent's `dedupeKeyFn` win.
+   */
   dedupeKey?: string;
   parentRunId?: string;
   siteId?: string;
+  /**
+   * The agent_events row id this run was dispatched from, when applicable.
+   * Used as a last-resort dedupeKey fallback when the agent has no
+   * `dedupeKeyFn`. PRIOR BUG: the dispatcher used to pass this as the
+   * primary `dedupeKey`, which OVERRODE every agent's `dedupeKeyFn`. With
+   * 79 cluster.ready events stacked in the queue, the override produced
+   * 79 unique dedupe keys, defeating BaseAgent's findExistingSuccess
+   * short-circuit and causing 154 content-engine runs to spawn.
+   * See incident 2026-05-07.
+   */
+  eventId?: string;
 }
 
 export interface BaseAgentConfig<I extends z.ZodTypeAny, O extends z.ZodTypeAny> {
@@ -78,7 +116,14 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
 
   async run(rawInput: unknown, opts: AgentRunOptions = {}): Promise<z.infer<O>> {
     const input = this.inputSchema.parse(rawInput);
-    const dedupeKey = opts.dedupeKey ?? this.dedupeKeyFn?.(input);
+    // Precedence: explicit override > agent's natural keyFn > event-id fallback.
+    // The agent's `dedupeKeyFn` MUST win over `eventId` so duplicate events for
+    // the same logical work (e.g. 79 cluster.ready events for one site) collapse
+    // to a single cached run via findExistingSuccess. See incident 2026-05-07.
+    const dedupeKey =
+      opts.dedupeKey
+      ?? this.dedupeKeyFn?.(input)
+      ?? (opts.eventId ? `event:${opts.eventId}` : undefined);
 
     // Idempotent short-circuit: if we already succeeded for this dedupe key, return that output.
     if (dedupeKey) {
@@ -171,6 +216,19 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         tokensOut += u.output_tokens;
       },
       progress: (entry) => scheduleProgress(entry),
+      emitNextStepEvent: async (args) => {
+        // Suppress when running as a sub-agent. The parent orchestrator is
+        // chaining the next step in-process; emitting here would spawn a
+        // duplicate cron-driven pipeline. See cluster.ready cascade
+        // incident 2026-05-07 ($85.53 burned).
+        if (opts.parentRunId !== undefined) return;
+        await db.insert(agentEvents).values({
+          agent: this.name,
+          type: args.type,
+          targetAgent: args.targetAgent,
+          payload: args.payload,
+        });
+      },
     };
 
     try {
@@ -260,6 +318,14 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         AND date_trunc('day', updated_at AT TIME ZONE 'UTC') < date_trunc('day', NOW() AT TIME ZONE 'UTC')
     `);
     const [row] = await db.select().from(agentBudgets).where(eq(agentBudgets.agent, this.name)).limit(1);
+    // Order matters: enabled-check before spend-cap. Operator's mental model
+    // for flipping the enabled flag is "stop now," not "stop on cap." If we
+    // checked spend first, a disabled agent under cap would still report
+    // BudgetExceeded once it eventually overflowed instead of the clearer
+    // AgentDisabled signal.
+    if (row && row.enabled === false) {
+      throw new AgentDisabledError(this.name);
+    }
     const cap = row ? Number(row.dailyCostCapUsd) : this.defaultDailyCapUsd;
     const spent = row ? Number(row.spentTodayUsd) : 0;
     if (spent >= cap) {

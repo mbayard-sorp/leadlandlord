@@ -223,9 +223,11 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       })
       .where(eq(sites.id, siteId));
 
-    // 7. Emit event so downstream agents (SEO Operator, Backlink Builder) wake up.
-    await db.insert(agentEvents).values({
-      agent: 'site-builder',
+    // 7. Emit event so downstream agents (SEO Operator, Backlink Builder)
+    //    wake up. Helper auto-suppresses when site-builder is itself running
+    //    as a sub-agent (e.g. via a future portfolio-level orchestrator) —
+    //    same cascade-prevention as keyword-planner's cluster.ready emit.
+    await ctx.emitNextStepEvent({
       type: 'site.deployed',
       targetAgent: 'seo-operator',
       payload: {
