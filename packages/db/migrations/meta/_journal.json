@@ -43,6 +43,13 @@
       "when": 1778900000000,
       "tag": "0005_agent_runs_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779000000000,
+      "tag": "0006_agent_events_resilience",
+      "breakpoints": true
     }
   ]
 }

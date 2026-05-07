@@ -4,7 +4,6 @@ import { NotImplementedError } from '@leadlandlord/shared/errors';
 
 export const SeoOperatorInput = z.object({
   site_id: z.string().uuid(),
-  preview_url: z.string().url(),
   audit_kind: z.enum(['on_page', 'core_web_vitals', 'internal_links', 'schema', 'all']).default('all'),
 });
 

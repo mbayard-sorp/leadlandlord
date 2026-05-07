@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { claimEvents, markEventProcessed, markEventFailed } from '@leadlandlord/db/queue';
 import { getAgent } from '@leadlandlord/agents/registry';
+import { classifyAgentError } from '@leadlandlord/agents/error-classify';
 import { log } from '@leadlandlord/shared/log';
 
 export const runtime = 'nodejs';
@@ -54,8 +55,8 @@ export async function GET(req: Request) {
       agent = getAgent(targetAgent);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.error({ event_id: ev.id, agent: targetAgent, err: msg }, 'unknown agent');
-      await markEventFailed(ev.id, msg);
+      log.error({ event_id: ev.id, agent: targetAgent, err: msg }, 'unknown agent — dead-lettering');
+      await markEventFailed(ev.id, msg, 'unknown_agent');
       continue;
     }
 
@@ -72,9 +73,13 @@ export async function GET(req: Request) {
           log.info({ agent: targetAgent, event_id: ev.id }, 'agent invocation succeeded');
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          log.error({ agent: targetAgent, event_id: ev.id, err: msg }, 'agent invocation failed');
+          const kind = classifyAgentError(err);
+          log.error(
+            { agent: targetAgent, event_id: ev.id, err: msg, kind },
+            'agent invocation failed',
+          );
           try {
-            await markEventFailed(ev.id, msg);
+            await markEventFailed(ev.id, msg, kind);
           } catch (markErr) {
             log.error(
               {
