@@ -172,6 +172,7 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     const seeds = this.buildSeeds(input.niche, input.city);
     ctx.log.info({ seeds }, 'keyword-planner fetching candidates');
     const fetched = new Map<string, KeywordCandidate>();
+    const seedErrors: Array<{ seed: string; err: string }> = [];
     for (let i = 0; i < seeds.length; i++) {
       const seed = seeds[i]!;
       ctx.progress({
@@ -188,14 +189,28 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
           }
         }
       } catch (err) {
-        ctx.log.warn(
-          { seed, err: err instanceof Error ? err.message : err },
-          'keyword fetch failed for seed, continuing',
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        seedErrors.push({ seed, err: msg });
+        ctx.log.warn({ seed, err: msg }, 'keyword fetch failed for seed, continuing');
       }
     }
     const candidatesFetched = fetched.size;
-    ctx.log.info({ candidatesFetched }, 'keyword-planner candidates fetched');
+    ctx.log.info(
+      { candidatesFetched, seedErrors: seedErrors.length, totalSeeds: seeds.length },
+      'keyword-planner candidates fetched',
+    );
+
+    // If every seed failed, this is an upstream API problem (auth, balance,
+    // outage) — not a filter or niche-thinness issue. Surface that distinctly
+    // so triage skips the filter rabbit hole.
+    if (candidatesFetched === 0 && seedErrors.length === seeds.length) {
+      const firstErr = seedErrors[0]?.err ?? 'unknown';
+      throw new IntegrationError(
+        'keyword-planner',
+        `DataForSEO returned no data — every seed failed (${seedErrors.length}/${seeds.length}). ` +
+          `First error: ${firstErr.slice(0, 200)}. Check API auth and account balance at https://app.dataforseo.com.`,
+      );
+    }
 
     // 3. Filter + score.
     const filtered: ScoredCandidate[] = [];
@@ -217,7 +232,10 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     if (filtered.length < 5) {
       throw new IntegrationError(
         'keyword-planner',
-        `only ${filtered.length} candidates after filter — niche may be too thin or filters too strict`,
+        `only ${filtered.length} candidates after filter (fetched ${candidatesFetched}, ${seedErrors.length}/${seeds.length} seed errors) — ` +
+          (candidatesFetched < 10
+            ? 'DataForSEO returned little data; check API health and account balance'
+            : 'niche may be too thin or filters (min_search_volume, max_kd) too strict'),
       );
     }
 
