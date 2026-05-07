@@ -12,6 +12,15 @@ import { log as rootLog, type Logger } from '@leadlandlord/shared/log';
 export interface AgentContext {
   runId: string;
   log: Logger;
+  /**
+   * Set when the agent is invoked as a sub-agent of another agent (e.g.
+   * site-builder calling keyword-planner). Sub-agents should suppress emits
+   * of "next-step" events that the parent already orchestrates in-process —
+   * e.g. keyword-planner emits `cluster.ready → site-builder` only when it
+   * runs standalone (operator UI re-target button); inside site-builder the
+   * orchestrator chains the next step directly.
+   */
+  parentRunId: string | null;
   /** Subclasses call this whenever they make an LLM call so cost tracking flows up. */
   recordUsage(args: {
     model: string;
@@ -155,6 +164,7 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
     const ctx: AgentContext = {
       runId,
       log,
+      parentRunId: opts.parentRunId ?? null,
       recordUsage: (u) => {
         totalCost += u.cost_usd;
         tokensIn += u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);

@@ -251,18 +251,27 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     ctx.progress({ label: `persisting ${enriched.length} clusters to Sanity` });
     const persisted = await this.persistClusters(input.site_id, enriched);
 
-    // 7. Emit cluster.ready downstream event so site-builder picks up.
-    await db.insert(agentEvents).values({
-      agent: 'keyword-planner',
-      type: 'cluster.ready',
-      targetAgent: 'site-builder',
-      payload: {
-        niche: input.niche,
-        city: input.city,
-        state: input.state,
-        site_id: input.site_id,
-      },
-    });
+    // 7. Emit cluster.ready ONLY when running standalone (operator clicked
+    //    "re-pull keywords" on an existing site). Inside the site-builder
+    //    pipeline, the orchestrator chains directly to content-engine in the
+    //    same process — emitting here would cause cron to dispatch a second
+    //    site-builder run, which would re-run keyword-planner, which would
+    //    emit another cluster.ready ... cascading event explosion. Hit this
+    //    in prod 2026-05-07: 12 cascading cluster.ready events stacked in
+    //    the queue burning Anthropic credit before we caught it.
+    if (ctx.parentRunId === null) {
+      await db.insert(agentEvents).values({
+        agent: 'keyword-planner',
+        type: 'cluster.ready',
+        targetAgent: 'site-builder',
+        payload: {
+          niche: input.niche,
+          city: input.city,
+          state: input.state,
+          site_id: input.site_id,
+        },
+      });
+    }
 
     const totalVolume = enriched.reduce(
       (s, c) => s + c.totalVolume,
