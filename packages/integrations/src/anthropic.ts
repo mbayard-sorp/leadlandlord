@@ -1,8 +1,21 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createMockAnthropicClient } from './anthropic-mock';
 
 let cached: Anthropic | null = null;
 
 export function getAnthropicClient(apiKey?: string): Anthropic {
+  // MOCK_AI bypasses the real Anthropic SDK and returns canned tool-use
+  // responses. Used for end-to-end pipeline testing without burning credits.
+  // See packages/integrations/src/anthropic-mock.ts. Activated by setting
+  // MOCK_AI=true on the Vercel project (Production scope) — UNSET when ready
+  // to resume real generation. Hit a $103 cascade today (2026-05-07) before
+  // shipping this safety valve.
+  if (process.env.MOCK_AI === 'true') {
+    if (!cached) {
+      cached = createMockAnthropicClient() as Anthropic;
+    }
+    return cached;
+  }
   if (cached) return cached;
   const key = apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!key) {

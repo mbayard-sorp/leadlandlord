@@ -112,6 +112,16 @@ export async function getLocalKeywordMetrics(args: {
 }): Promise<KeywordMetrics[]> {
   const { keywords, location, language = 'en' } = args;
   if (keywords.length === 0) return [];
+  // MOCK_AI: return canned metrics so niche-hunter scoring path still runs.
+  if (process.env.MOCK_AI === 'true') {
+    return keywords.map((kw, i) => ({
+      keyword: kw,
+      search_volume: 200 + i * 10,
+      cpc: 2.0,
+      competition: 0.4,
+      kd: 25 + (i % 20),
+    }));
+  }
 
   // Volume + CPC + competition
   const volumeRows = await dfsPost<{ items: SearchVolumeRow[] | null } | SearchVolumeRow>(
@@ -416,6 +426,12 @@ export async function getKeywordCandidates(args: {
   relatedLimit?: number;
   suggestionLimit?: number;
 }): Promise<KeywordCandidate[]> {
+  // MOCK_AI bypasses DataForSEO and returns canned candidates. Used by
+  // the same end-to-end test harness that mocks Anthropic — see
+  // packages/integrations/src/anthropic-mock.ts. Activated via Vercel env var.
+  if (process.env.MOCK_AI === 'true') {
+    return mockKeywordCandidates(args.seed);
+  }
   const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30 } = args;
   const [related, suggestions] = await Promise.all([
     getRelatedKeywords({ keyword: seed, language, limit: relatedLimit }),
@@ -429,4 +445,24 @@ export async function getKeywordCandidates(args: {
     }
   }
   return Array.from(byPhrase.values()).sort((a, b) => b.search_volume - a.search_volume);
+}
+
+function mockKeywordCandidates(seed: string): KeywordCandidate[] {
+  // Generate ~30 deterministic-shaped candidates per seed so keyword-planner
+  // gets enough volume to pass its `< 5 candidates → throw` filter (it expects
+  // at least 5 phrases per seed). All values plausible; intents varied.
+  const intents: Array<KeywordCandidate['intent']> = ['commercial', 'informational', 'transactional', null];
+  const out: KeywordCandidate[] = [];
+  for (let i = 0; i < 30; i++) {
+    out.push({
+      phrase: `${seed} mock variant ${i}`,
+      search_volume: 200 - i * 5,
+      kd: 5 + (i % 30),
+      cpc: 1.5 + (i % 5) * 0.5,
+      competition: 0.3 + (i % 7) * 0.05,
+      intent: intents[i % intents.length] ?? null,
+      source: i % 2 === 0 ? 'related' : 'suggestion',
+    });
+  }
+  return out;
 }

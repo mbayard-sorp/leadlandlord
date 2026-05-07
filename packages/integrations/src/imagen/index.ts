@@ -42,6 +42,12 @@ export async function generateHeroImageBuffer(
   prompt: string,
   opts: { aspectRatio?: '16:9' | '4:3' | '1:1' | '3:2'; negativePrompt?: string } = {},
 ): Promise<HeroImageBuffer | null> {
+  // MOCK_AI: skip image generation entirely. Site-builder treats this as
+  // non-fatal — the theme renders a placeholder background. Lets the full
+  // build pipeline complete with $0 image-gen spend.
+  if (process.env.MOCK_AI === 'true') {
+    return null;
+  }
   const aiGatewayKey = process.env.AI_GATEWAY_API_KEY;
   const googleKey = process.env.GOOGLE_API_KEY;
   const forced = process.env.IMAGEN_PROVIDER as 'google' | 'ai-gateway' | undefined;
