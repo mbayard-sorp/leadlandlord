@@ -9,11 +9,15 @@ import {
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
+import { KeywordPlanner } from '../keyword-planner/index';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { writeSiteToSanity } from './persist-sanity';
+import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
 
 export type SiteBuilderProgressEvent =
   | { step: 'site_row_ready'; site_id: string }
+  | { step: 'keywords_planning_started' }
+  | { step: 'keywords_planned'; clusters: number; total_volume: number }
   | { step: 'content_started' }
   | { step: 'content_generated'; pages: number }
   | { step: 'tracking_provisioned'; number: string; provider: string }
@@ -28,6 +32,7 @@ export type SiteBuilderProgressEvent =
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
   private readonly trackingSetup = new TrackingSetup();
+  private readonly keywordPlanner = new KeywordPlanner();
 
   /**
    * Optional progress callback invoked at each step. Used by /operator/build
@@ -66,7 +71,38 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       .set({ status: 'building', updatedAt: new Date() })
       .where(eq(sites.id, siteId));
 
-    // 2. Generate content bundle.
+    // 2. Plan keyword clusters from DataForSEO. Skipped on re-target so the
+    //    operator can refresh content without re-paying for keyword research.
+    let clusters: KeywordClusterInput[] = [];
+    const skipPlanner = input.skip_keyword_planning ?? false;
+    if (!skipPlanner) {
+      this.emit({ step: 'keywords_planning_started' });
+      const planResult = await this.keywordPlanner.run(
+        {
+          site_id: siteId,
+          niche: input.niche,
+          city: input.city,
+          state: input.state.toUpperCase(),
+        },
+        { siteId, parentRunId: ctx.runId },
+      );
+      ctx.log.info(
+        { clusters: planResult.clusters_persisted, totalVolume: planResult.total_volume },
+        'keyword clusters planned',
+      );
+      this.emit({
+        step: 'keywords_planned',
+        clusters: planResult.clusters_persisted,
+        total_volume: planResult.total_volume,
+      });
+    }
+    // Always read clusters from Sanity (whether we just wrote them or
+    // they're being reused for a re-target). Empty list is acceptable for
+    // backwards-compat — Content Engine handles missing clusters gracefully.
+    clusters = await loadKeywordClustersForSite(siteId);
+    ctx.log.info({ clusters: clusters.length }, 'clusters loaded for content engine');
+
+    // 3. Generate content bundle.
     this.emit({ step: 'content_started' });
     const bundle = await this.contentEngine.run(
       {
@@ -75,6 +111,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         city: input.city,
         state: input.state.toUpperCase(),
         fast_mode: input.fast_mode ?? false,
+        keyword_clusters: clusters,
       },
       { siteId, parentRunId: ctx.runId },
     );

@@ -11,13 +11,20 @@ import {
   type Lead,
   type AgentRun,
 } from '@leadlandlord/db';
-import { fetchSanitySiteDetail, studioDeepLink, type SanitySiteDetail } from '@/lib/sanity-read';
+import {
+  fetchSanitySiteDetail,
+  fetchKeywordClustersForSite,
+  studioDeepLink,
+  type SanitySiteDetail,
+  type SanityKeywordClusterSummary,
+} from '@/lib/sanity-read';
 import { PhoneAssignmentForm } from './PhoneAssignmentForm';
 import { ManualCallForm } from './ManualCallForm';
 import { ThemePicker } from './ThemePicker';
 import { DomainAttachForm } from './DomainAttachForm';
 import { SiteConfigPanel } from './SiteConfigPanel';
 import { RegenerateButtons } from './RegenerateButtons';
+import { KeywordsPanel } from './KeywordsPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,26 +38,28 @@ interface SiteDetailData {
   recentLeads: Lead[];
   recentRuns: AgentRun[];
   sanity: SanitySiteDetail | null;
+  keywordClusters: SanityKeywordClusterSummary[];
 }
 
 async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
   const db = getDb();
   const siteRow = (await db.select().from(sites).where(eq(sites.id, id)).limit(1))[0];
   if (!siteRow) return null;
-  const [recentCalls, recentLeads, recentRuns, sanity] = await Promise.all([
+  const [recentCalls, recentLeads, recentRuns, sanity, keywordClusters] = await Promise.all([
     db.select().from(calls).where(eq(calls.siteId, id)).orderBy(desc(calls.startedAt)).limit(20),
     db.select().from(leads).where(eq(leads.siteId, id)).orderBy(desc(leads.createdAt)).limit(20),
     db.select().from(agentRuns).where(eq(agentRuns.siteId, id)).orderBy(desc(agentRuns.startedAt)).limit(20),
     fetchSanitySiteDetail(id).catch(() => null),
+    fetchKeywordClustersForSite(id).catch(() => [] as SanityKeywordClusterSummary[]),
   ]);
-  return { site: siteRow, recentCalls, recentLeads, recentRuns, sanity };
+  return { site: siteRow, recentCalls, recentLeads, recentRuns, sanity, keywordClusters };
 }
 
 export default async function SiteDetailPage({ params }: Params) {
   const { id } = await params;
   const data = await loadSiteDetail(id);
   if (!data) notFound();
-  const { site, recentCalls, recentLeads, recentRuns, sanity } = data;
+  const { site, recentCalls, recentLeads, recentRuns, sanity, keywordClusters } = data;
 
   const primaryHost = sanity?.domains.find((d) => d.isPrimary)?.host
     ?? sanity?.domains[0]?.host
@@ -142,6 +151,13 @@ export default async function SiteDetailPage({ params }: Params) {
             </a>
           </div>
         )}
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          SEO Keywords
+        </h2>
+        <KeywordsPanel siteId={site.id} clusters={keywordClusters} />
       </section>
 
       <section>

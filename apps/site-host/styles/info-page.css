@@ -30,9 +30,9 @@
   font-family: var(--font-display);
   font-weight: 700;
   text-decoration: none;
-  color: var(--ink);
+  color: var(--accent-fg, #fff);
   background: var(--accent);
-  border: var(--border-card, 2px) solid var(--ink);
+  border: var(--border-card, 2px) solid var(--accent);
   padding: 8px 14px;
   border-radius: var(--radius-button, 4px);
   font-size: 0.9375rem;
@@ -113,6 +113,8 @@
 }
 .info-page-btn-primary {
   background: var(--accent);
+  color: var(--accent-fg, #fff);
+  border-color: var(--accent);
 }
 .info-page-btn-secondary {
   background: var(--paper);

@@ -2,6 +2,7 @@ import { SiteBuilder } from './site-builder/index';
 import { ContentEngine } from './content-engine/index';
 import { TrackingSetup } from './tracking-setup/index';
 import { NicheHunter } from './niche-hunter/index';
+import { KeywordPlanner } from './keyword-planner/index';
 import { DomainProcurer } from './domain-procurer/index';
 import { SeoOperator } from './seo-operator/index';
 import { BacklinkBuilder } from './backlink-builder/index';
@@ -24,6 +25,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'content-engine': () => new ContentEngine(),
   'tracking-setup': () => new TrackingSetup(),
   'niche-hunter': () => new NicheHunter(),
+  'keyword-planner': () => new KeywordPlanner(),
   'domain-procurer': () => new DomainProcurer(),
   'seo-operator': () => new SeoOperator(),
   'backlink-builder': () => new BacklinkBuilder(),

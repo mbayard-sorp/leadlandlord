@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { z } from 'zod';
 import { getAgent } from '@leadlandlord/agents/registry';
 import { markEventProcessed, markEventFailed } from '@leadlandlord/db/queue';
@@ -9,8 +10,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 // 800s — Vercel Pro ceiling. Site Builder runs through this worker and its
 // content-gen + Imagen + deploy pipeline can take 4-7 min on niche-heavy
-// bundles. 300s was racing the cap. Phase 7 will move long-running agents
-// to Vercel Workflow for proper durable execution.
+// bundles. waitUntil keeps the function instance alive for the agent run
+// up to this ceiling.
 export const maxDuration = 800;
 
 const Body = z.object({
@@ -19,6 +20,28 @@ const Body = z.object({
   payload: z.record(z.unknown()),
 });
 
+/**
+ * Long-running agent dispatch endpoint. Receives signed POSTs from
+ * operator-tick, validates synchronously, then runs the agent in a
+ * `waitUntil` background task and returns 202 immediately.
+ *
+ * Why 202 + waitUntil and not the natural `await agent.run()` pattern:
+ *
+ *   - Site Builder (and other Phase 6 agents) take 3-7 minutes per run.
+ *     If we await before responding, the caller's HTTP fetch hits the
+ *     undici default headers timeout (~5 min) and gives up — leaving the
+ *     event "in-flight" with no record. We saw this exact failure in prod
+ *     during the niche-approved E2E.
+ *   - Vercel Fluid Compute's `waitUntil` is designed for exactly this:
+ *     respond fast, keep the instance alive until the registered promise
+ *     settles (or maxDuration expires).
+ *   - The function still has the full 800s budget to complete the work.
+ *     If agent.run actually exceeds 800s, the instance is killed and
+ *     markEventFailed runs with a timeout note (not yet implemented —
+ *     would need an external timer; today the event just stays claimed
+ *     and the next operator-tick won't reclaim because processing_at is
+ *     set. Acceptable for a 3-7 min worst-case.)
+ */
 export async function POST(req: Request, ctx: { params: Promise<{ name: string }> }) {
   const { name } = await ctx.params;
   const rawBody = await req.text();
@@ -34,17 +57,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
   }
 
   const { event_id, payload } = parsed.data;
-  const agent = getAgent(name);
-
+  let agent;
   try {
-    log.info({ agent: name, event_id }, 'agent invocation starting');
-    await agent.run(payload, { dedupeKey: `event:${event_id}` });
-    await markEventProcessed(event_id);
-    return NextResponse.json({ ok: true });
+    agent = getAgent(name);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.error({ agent: name, event_id, err: msg }, 'agent invocation failed');
+    log.error({ agent: name, event_id, err: msg }, 'unknown agent');
     await markEventFailed(event_id, msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: msg }, { status: 400 });
   }
+
+  // Background work — `waitUntil` keeps the function instance alive until
+  // the promise resolves. Errors are caught here (waitUntil swallows them
+  // otherwise) so we always close the loop on the agent_event row.
+  waitUntil(
+    (async () => {
+      try {
+        log.info({ agent: name, event_id }, 'agent invocation starting');
+        await agent.run(payload, { dedupeKey: `event:${event_id}` });
+        await markEventProcessed(event_id);
+        log.info({ agent: name, event_id }, 'agent invocation succeeded');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error({ agent: name, event_id, err: msg }, 'agent invocation failed');
+        try {
+          await markEventFailed(event_id, msg);
+        } catch (markErr) {
+          log.error(
+            { agent: name, event_id, err: markErr instanceof Error ? markErr.message : markErr },
+            'failed to mark event failed (queue inconsistency risk)',
+          );
+        }
+      }
+    })(),
+  );
+
+  return NextResponse.json({ ok: true, accepted: true }, { status: 202 });
 }

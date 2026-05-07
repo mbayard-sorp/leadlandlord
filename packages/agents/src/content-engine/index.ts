@@ -105,8 +105,67 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
 
     const normalized = normalizeBundle(toolUse.input, input);
     const parsed = ContentBundle.parse(normalized);
+
+    // Coverage check — every input cluster must be claimed by some page.
+    const coverage = checkClusterCoverage(parsed, input.keyword_clusters ?? []);
+    if (coverage.missing.length > 0) {
+      const missRate = coverage.missing.length / input.keyword_clusters.length;
+      ctx.log.warn(
+        {
+          total: input.keyword_clusters.length,
+          missing: coverage.missing.length,
+          missRate: Number(missRate.toFixed(2)),
+          missingKeys: coverage.missing.slice(0, 10),
+        },
+        'cluster coverage gaps detected',
+      );
+      // Hard fail when miss rate is too high — Claude likely misunderstood
+      // the contract; retry-with-context would help, deferred to Phase 2.
+      if (missRate > 0.2) {
+        throw new Error(
+          `cluster coverage too low: ${coverage.missing.length}/${input.keyword_clusters.length} clusters not covered. Missing: ${coverage.missing.slice(0, 5).join(', ')}`,
+        );
+      }
+    }
     return parsed;
   }
+}
+
+interface CoverageReport {
+  covered: string[];
+  missing: string[];
+}
+
+function checkClusterCoverage(
+  bundle: ContentBundle,
+  clusters: ContentEngineInput['keyword_clusters'],
+): CoverageReport {
+  if (!clusters || clusters.length === 0) {
+    return { covered: [], missing: [] };
+  }
+  const allPages = collectAllPages(bundle);
+  const claimed = new Set<string>();
+  for (const p of allPages) {
+    if (p.cluster_key) claimed.add(p.cluster_key);
+  }
+  const covered: string[] = [];
+  const missing: string[] = [];
+  for (const c of clusters) {
+    if (claimed.has(c.cluster_key)) covered.push(c.cluster_key);
+    else missing.push(c.cluster_key);
+  }
+  return { covered, missing };
+}
+
+function collectAllPages(bundle: ContentBundle): ContentBundle['home'][] {
+  const pages: ContentBundle['home'][] = [];
+  if (bundle.home) pages.push(bundle.home);
+  if (bundle.about) pages.push(bundle.about);
+  if (bundle.contact) pages.push(bundle.contact);
+  for (const arr of [bundle.services, bundle.service_areas, bundle.blog_posts, bundle.info_pages]) {
+    if (Array.isArray(arr)) pages.push(...arr);
+  }
+  return pages;
 }
 
 /**
@@ -166,15 +225,28 @@ function trimPage(p: unknown): unknown {
 function buildUserPrompt(input: ContentEngineInput): string {
   const businessName =
     input.business_name ?? `${capitalize(input.city)} ${capitalize(input.niche)} Pros`;
+  const clusterTable = renderClusterTable(input.keyword_clusters);
+  const clusterSection = clusterTable
+    ? `\n\nKEYWORD CLUSTERS — TARGETING REQUIREMENT:\nYou are given ${input.keyword_clusters.length} pre-planned keyword clusters from real search-volume data. EACH CLUSTER MUST BE TARGETED BY EXACTLY ONE PAGE. The page's H1, slug, meta_description, and first 100 words of body must include the cluster's primary_keyword verbatim. Each page must declare \`cluster_key\`, \`primary_keyword\`, and \`targeted_keywords\` fields. Match cluster.page_kind to the page kind you choose.\n\n${clusterTable}`
+    : '\n\nNo pre-planned keyword clusters. Generate copy using best-practice local SEO patterns for the niche × city.';
   return `Generate a complete content bundle for a local lead-gen website.
 
 niche: ${input.niche}
 city: ${input.city}
 state: ${input.state}
 business_name: ${businessName}
-fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}
+fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}${clusterSection}
 
 Invoke the ${OUTPUT_TOOL_NAME} tool exactly once with the full bundle. Do not return prose — only the tool call.`;
+}
+
+function renderClusterTable(clusters: ContentEngineInput['keyword_clusters']): string {
+  if (!clusters || clusters.length === 0) return '';
+  const lines = clusters.map(
+    (c) =>
+      `- cluster_key="${c.cluster_key}" page_kind=${c.page_kind} intent=${c.intent} primary="${c.primary_keyword}" supporting=[${(c.supporting_keywords ?? []).slice(0, 6).join(', ')}] vol=${c.search_volume}`,
+  );
+  return lines.join('\n');
 }
 
 function capitalize(s: string): string {

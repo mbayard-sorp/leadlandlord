@@ -8,6 +8,7 @@
   --ink-3: #7a6a55;
   --paper: #f4ece0;
   --paper-2: #e3d8c2;
+  --accent-fg: #f4ece0; /* cream paper on near-black accent */
   --accent: #171411; /* monochrome — accent is ink */
   --accent-50: #e3d8c2;
   --rule: #171411;

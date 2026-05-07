@@ -16,6 +16,7 @@
     "@leadlandlord/integrations": "workspace:*",
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
+    "@vercel/functions": "^2.0.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.36.4",
     "next": "^16.0.0",

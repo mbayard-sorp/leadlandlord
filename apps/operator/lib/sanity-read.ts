@@ -83,3 +83,44 @@ export function studioDeepLink(siteId: string, dataset: 'production' | 'developm
   const workspace = dataset === 'production' ? 'production' : 'development';
   return `https://leadlandlord.sanity.studio/${workspace}/structure/site;site-${siteId}`;
 }
+
+// ---- Keyword clusters -----------------------------------------------------
+
+export interface SanityKeywordClusterSummary {
+  _id: string;
+  clusterKey: string;
+  pageKind: 'home' | 'service' | 'service_area' | 'blog' | 'info';
+  intent: string;
+  primaryKeyword: string;
+  totalVolume: number;
+  status: 'planned' | 'covered' | 'gap' | 'underperforming' | 'retired';
+  fetchedAt: string | null;
+  keywordCount: number;
+  primaryKd: number | null;
+  primaryVolume: number | null;
+  targetPageRef: string | null;
+  keywords: Array<{
+    phrase: string;
+    role: 'primary' | 'secondary' | 'supporting' | null;
+    searchVolume: number | null;
+    kd: number | null;
+    intent: string | null;
+    source: string | null;
+  }>;
+}
+
+const CLUSTERS_QUERY = `*[_type == "keywordCluster" && siteId == $siteId] | order(totalVolume desc) {
+  _id, clusterKey, pageKind, intent, primaryKeyword, totalVolume, status, fetchedAt,
+  "keywordCount": count(keywords),
+  "primaryKd": keywords[role == "primary"][0].kd,
+  "primaryVolume": keywords[role == "primary"][0].searchVolume,
+  "targetPageRef": targetPage._ref,
+  keywords[]{ phrase, role, searchVolume, kd, intent, source }
+}`;
+
+/** Fetch all keyword clusters for a site, ordered by total volume. */
+export async function fetchKeywordClustersForSite(
+  siteId: string,
+): Promise<SanityKeywordClusterSummary[]> {
+  return getSanityReader().fetch<SanityKeywordClusterSummary[]>(CLUSTERS_QUERY, { siteId });
+}

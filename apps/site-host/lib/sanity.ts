@@ -96,3 +96,58 @@ export async function fetchSiteBySlug(slug: string): Promise<SanitySite | null> 
   const result = await sanity.fetch<SanitySite | null>(SITE_BY_SLUG_QUERY, { slug });
   return result ?? null;
 }
+
+// --- corporate (leadslandlord.com) -----------------------------------------
+
+export interface CorporatePage {
+  kind: string;
+  slug?: string | null;
+  title: string;
+  metaDescription?: string | null;
+  heroEyebrow?: string | null;
+  heroHeadline?: string | null;
+  heroSubhead?: string | null;
+  mdx?: string | null;
+  jsonLd?: string | null;
+}
+
+export interface CorporateSite {
+  _id: string;
+  brandName: string;
+  tagline?: string | null;
+  primaryHost?: string | null;
+  legalEntity?: {
+    name?: string | null;
+    dba?: string | null;
+    address?: string | null;
+    supportEmail?: string | null;
+    legalEmail?: string | null;
+  } | null;
+  navItems?: Array<{ label: string; href: string }> | null;
+  footerLinks?: Array<{ label: string; href: string }> | null;
+  primaryCta?: { label?: string | null; href?: string | null } | null;
+  smsDisclosure?: string | null;
+  gaMeasurementId?: string | null;
+  robotsDisallow?: boolean | null;
+}
+
+const CORPORATE_SITE_QUERY = `*[_type=="corporateSite"][0]{
+  _id, brandName, tagline, primaryHost,
+  legalEntity, navItems, footerLinks, primaryCta,
+  smsDisclosure, gaMeasurementId, robotsDisallow
+}`;
+
+const CORPORATE_PAGE_QUERY = `*[_type=="corporatePage" && kind==$kind][0]{
+  kind, slug, title, metaDescription,
+  heroEyebrow, heroHeadline, heroSubhead, mdx, jsonLd
+}`;
+
+export async function fetchCorporateSite(): Promise<CorporateSite | null> {
+  const result = await sanity.fetch<CorporateSite | null>(CORPORATE_SITE_QUERY, {});
+  return result ?? null;
+}
+
+export async function fetchCorporatePage(kind: string): Promise<CorporatePage | null> {
+  const result = await sanity.fetch<CorporatePage | null>(CORPORATE_PAGE_QUERY, { kind });
+  return result ?? null;
+}

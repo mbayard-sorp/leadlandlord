@@ -6,6 +6,7 @@ import {
   themeDocId,
   type PageKind,
 } from '@leadlandlord/integrations/sanity';
+import { keywordClusterDocId } from '@leadlandlord/sanity-schema';
 
 export interface WriteSiteToSanityOptions {
   /** Override Sanity dataset (defaults to env). Used by dry-run for `development`. */
@@ -81,7 +82,35 @@ export async function writeSiteToSanity(
       jsonLd: ref.page.schema_org_jsonld != null
         ? JSON.stringify(ref.page.schema_org_jsonld)
         : undefined,
+      // Keyword targeting (when content engine declared a cluster).
+      primaryKeyword: ref.page.primary_keyword,
+      targetedKeywords: (ref.page.targeted_keywords ?? []).map((k, i) => ({
+        _key: `tk${i}`,
+        phrase: k.phrase,
+        role: k.role,
+        clusterKey: k.cluster_key,
+      })),
     });
+  }
+
+  // Update keywordCluster docs: stamp targetPage + flip status to 'covered'
+  // (or 'gap' for unclaimed clusters). We patch instead of createOrReplace
+  // because keyword-planner owns the rest of the cluster doc — we only update
+  // these three fields here.
+  const claimedClusters = new Map<string, string>(); // cluster_key → page _id
+  for (let i = 0; i < refs.length; i++) {
+    const r = refs[i]!;
+    const ck = r.page.cluster_key;
+    if (ck) claimedClusters.set(ck, pageIds[i]!);
+  }
+  for (const [clusterKey, pageId] of claimedClusters.entries()) {
+    tx.patch(keywordClusterDocId(siteId, clusterKey), (p) =>
+      p
+        .set({
+          targetPage: { _ref: pageId, _type: 'reference' },
+          status: 'covered',
+        }),
+    );
   }
 
   // Site doc — references all pages by deterministic id. _key fields keep

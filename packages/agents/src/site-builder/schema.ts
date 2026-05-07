@@ -7,6 +7,12 @@ export const SiteBuilderInput = z.object({
   niche_id: z.string().uuid().optional(),
   site_id: z.string().uuid().optional(),
   fast_mode: z.boolean().optional(),
+  /**
+   * Re-target mode flag. When true, skip the keyword-planner sub-call (keep
+   * existing Sanity clusters as-is) and let Content Engine regenerate against
+   * them. Used by the operator's "Re-target content" button.
+   */
+  skip_keyword_planning: z.boolean().optional(),
 });
 export type SiteBuilderInput = z.infer<typeof SiteBuilderInput>;
 

@@ -15,7 +15,10 @@
     "./tenant-prospector": "./src/tenant-prospector/index.ts",
     "./compliance-guard": "./src/compliance-guard/index.ts",
     "./outreach-agent": "./src/outreach-agent/index.ts",
-    "./registry": "./src/registry.ts"
+    "./registry": "./src/registry.ts",
+    "./scheduler": "./src/scheduler/index.ts",
+    "./niche-hunter": "./src/niche-hunter/index.ts",
+    "./keyword-planner": "./src/keyword-planner/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

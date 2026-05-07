@@ -179,6 +179,39 @@ Page object same shape as services/blog_posts. Slugs MUST start with `/pages/`.
   posts. Each service page links to all service-areas. Each blog post links
   back to the most-related service.
 
+## Keyword targeting discipline (when clusters are provided)
+
+The user prompt may include a list of keyword clusters from real DataForSEO
+search-volume data. When clusters are present, treat them as a hard ranking
+contract:
+
+- Each cluster maps to **exactly one page**. Match `cluster.page_kind` to the
+  page kind in your output.
+- The cluster's `primary_keyword` MUST appear verbatim (lowercased OK,
+  natural phrasing OK) in:
+    * the page's H1 (title), exactly once
+    * the page's slug (kebab-cased form)
+    * the page's meta_description, exactly once
+    * the first 100 words of mdx body, exactly once
+- Supporting keywords: each one appears 1-3 times in the body. Don't
+  keyword-stuff. Use natural variants (singular/plural, with/without
+  state abbreviation).
+- The page MUST declare its targeting in the output:
+    * `cluster_key`: the cluster identifier you targeted
+    * `primary_keyword`: cluster.primary_keyword (lowercased)
+    * `targeted_keywords`: array of `{ phrase, role, cluster_key }` where
+      `role` is `"primary"` for the cluster primary and `"supporting"` for
+      each supporting keyword you actually used in body
+- Missing a cluster (no page declared `cluster_key=X` for some cluster X)
+  is a bug. Coverage is checked post-output; >20% miss rate triggers retry.
+- If a cluster set conflicts with your usual page-count budget (e.g. 8
+  service clusters but you'd normally emit 5), emit MORE services to cover
+  every cluster. Coverage > round-number page counts.
+
+When **no clusters are provided** (legacy / niche-hunter-only flow), you
+MAY omit `cluster_key`, `primary_keyword`, and `targeted_keywords` —
+generate copy with best-practice local SEO patterns instead.
+
 ## When you're done
 
 Return ONLY the JSON object. No preamble, no commentary, no closing remarks.

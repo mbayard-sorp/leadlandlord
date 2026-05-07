@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
-import { getDb } from '@leadlandlord/db';
+import { getDb, getSystemState } from '@leadlandlord/db';
+import { KillSwitchPanel } from './KillSwitchPanel';
 
 export const revalidate = 30;
 
@@ -50,7 +51,7 @@ const loadOverview = unstable_cache(
 );
 
 export default async function OverviewPage() {
-  const row = await loadOverview();
+  const [row, systemStateRow] = await Promise.all([loadOverview(), getSystemState()]);
 
   const kpis: Kpi[] = [
     {
@@ -82,6 +83,7 @@ export default async function OverviewPage() {
           </div>
         ))}
       </section>
+      <KillSwitchPanel state={systemStateRow} />
     </div>
   );
 }

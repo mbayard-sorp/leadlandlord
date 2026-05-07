@@ -17,6 +17,18 @@ export const PageKind = z.enum([
 ]);
 export type PageKind = z.infer<typeof PageKind>;
 
+/**
+ * One keyword Content Engine declares the page targets. Stamped onto the
+ * Sanity page doc by persist-sanity. Joined against GSC reality by Phase 4
+ * SEO Operator.
+ */
+export const TargetedKeyword = z.object({
+  phrase: z.string(),
+  role: z.enum(['primary', 'secondary', 'supporting']),
+  cluster_key: z.string().optional(),
+});
+export type TargetedKeyword = z.infer<typeof TargetedKeyword>;
+
 export const Page = z.object({
   kind: PageKind,
   slug: z.string(),
@@ -24,6 +36,15 @@ export const Page = z.object({
   meta_description: z.string().max(160),
   mdx: z.string(),
   schema_org_jsonld: z.unknown().optional(),
+  /**
+   * Stable cluster identifier this page targets. Optional only because
+   * legacy bundles (pre-keyword-planner) won't have it.
+   */
+  cluster_key: z.string().optional(),
+  /** The cluster's primary_keyword. Must appear in title, h1, slug, meta. */
+  primary_keyword: z.string().optional(),
+  /** Each declared targeted keyword. Max 12 to keep tool output bounded. */
+  targeted_keywords: z.array(TargetedKeyword).max(12).default([]),
 });
 export type Page = z.infer<typeof Page>;
 
