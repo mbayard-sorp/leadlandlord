@@ -84,7 +84,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
           city: input.city,
           state: input.state.toUpperCase(),
         },
-        { siteId, parentRunId: ctx.runId },
+        { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:keyword-planner` },
       );
       ctx.log.info(
         { clusters: planResult.clusters_persisted, totalVolume: planResult.total_volume },
@@ -113,7 +113,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         fast_mode: input.fast_mode ?? false,
         keyword_clusters: clusters,
       },
-      { siteId, parentRunId: ctx.runId },
+      { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:content-engine` },
     );
     ctx.log.info(
       { pages: countPages(bundle) },
@@ -124,7 +124,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     // 3. Provision tracking number (mocked when MOCK_TELEPHONY=true).
     const tracking = await this.trackingSetup.run(
       { site_id: siteId },
-      { siteId, parentRunId: ctx.runId },
+      { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:tracking-setup` },
     );
     this.emit({
       step: 'tracking_provisioned',
