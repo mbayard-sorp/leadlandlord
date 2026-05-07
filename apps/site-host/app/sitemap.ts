@@ -6,6 +6,10 @@ import { sanityToBundle } from '../lib/theme-bundle';
 /**
  * Per-host dynamic sitemap. Site-host is multi-tenant — sitemap.xml resolves
  * to the current host's Sanity content. Cached at the Sanity-fetch layer.
+ *
+ * Includes every page kind Content Engine emits: home, about, contact, plus
+ * services, service-areas, blog, and info pages. Each kind has its own
+ * change frequency + priority.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = await resolveCurrentSite();
@@ -17,18 +21,42 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const bundle = sanityToBundle(site);
   const lastModified = bundle.generated_at ? new Date(bundle.generated_at) : new Date();
 
+  const normalize = (slug: string): string =>
+    `${base}${slug.startsWith('/') ? slug : `/${slug}`}`.replace(/\/?$/, '/');
+
   const fixed: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified, changeFrequency: 'weekly', priority: 1 },
     { url: `${base}/about/`, lastModified, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${base}/contact/`, lastModified, changeFrequency: 'monthly', priority: 0.7 },
   ];
 
-  const infoPages: MetadataRoute.Sitemap = bundle.info_pages.map((p) => ({
-    url: `${base}${p.slug.startsWith('/') ? p.slug : `/${p.slug}`}`.replace(/\/?$/, '/'),
+  const services: MetadataRoute.Sitemap = bundle.services.map((p) => ({
+    url: normalize(p.slug),
+    lastModified,
+    changeFrequency: 'monthly',
+    priority: 0.8,
+  }));
+
+  const serviceAreas: MetadataRoute.Sitemap = bundle.service_areas.map((p) => ({
+    url: normalize(p.slug),
+    lastModified,
+    changeFrequency: 'monthly',
+    priority: 0.7,
+  }));
+
+  const blog: MetadataRoute.Sitemap = bundle.blog_posts.map((p) => ({
+    url: normalize(p.slug),
     lastModified,
     changeFrequency: 'monthly',
     priority: 0.5,
   }));
 
-  return [...fixed, ...infoPages];
+  const infoPages: MetadataRoute.Sitemap = bundle.info_pages.map((p) => ({
+    url: normalize(p.slug),
+    lastModified,
+    changeFrequency: 'monthly',
+    priority: 0.5,
+  }));
+
+  return [...fixed, ...services, ...serviceAreas, ...blog, ...infoPages];
 }
