@@ -5,11 +5,9 @@ import {
   sites,
   calls,
   leads,
-  agentRuns,
   type Site,
   type Call,
   type Lead,
-  type AgentRun,
 } from '@leadlandlord/db';
 import {
   fetchSanitySiteDetail,
@@ -37,7 +35,6 @@ interface SiteDetailData {
   site: Site;
   recentCalls: Call[];
   recentLeads: Lead[];
-  recentRuns: AgentRun[];
   sanity: SanitySiteDetail | null;
   keywordClusters: SanityKeywordClusterSummary[];
 }
@@ -46,21 +43,20 @@ async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
   const db = getDb();
   const siteRow = (await db.select().from(sites).where(eq(sites.id, id)).limit(1))[0];
   if (!siteRow) return null;
-  const [recentCalls, recentLeads, recentRuns, sanity, keywordClusters] = await Promise.all([
+  const [recentCalls, recentLeads, sanity, keywordClusters] = await Promise.all([
     db.select().from(calls).where(eq(calls.siteId, id)).orderBy(desc(calls.startedAt)).limit(20),
     db.select().from(leads).where(eq(leads.siteId, id)).orderBy(desc(leads.createdAt)).limit(20),
-    db.select().from(agentRuns).where(eq(agentRuns.siteId, id)).orderBy(desc(agentRuns.startedAt)).limit(20),
     fetchSanitySiteDetail(id).catch(() => null),
     fetchKeywordClustersForSite(id).catch(() => [] as SanityKeywordClusterSummary[]),
   ]);
-  return { site: siteRow, recentCalls, recentLeads, recentRuns, sanity, keywordClusters };
+  return { site: siteRow, recentCalls, recentLeads, sanity, keywordClusters };
 }
 
 export default async function SiteDetailPage({ params }: Params) {
   const { id } = await params;
   const data = await loadSiteDetail(id);
   if (!data) notFound();
-  const { site, recentCalls, recentLeads, recentRuns, sanity, keywordClusters } = data;
+  const { site, recentCalls, recentLeads, sanity, keywordClusters } = data;
 
   const primaryHost = sanity?.domains.find((d) => d.isPrimary)?.host
     ?? sanity?.domains[0]?.host
@@ -194,13 +190,6 @@ export default async function SiteDetailPage({ params }: Params) {
           <LeadsTable rows={recentLeads} />
         </div>
       </section>
-
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">
-          Agent runs ({recentRuns.length})
-        </h2>
-        <AgentRunsTable rows={recentRuns} />
-      </section>
     </div>
   );
 }
@@ -286,32 +275,6 @@ function LeadsTable({ rows }: { rows: Lead[] }) {
                 <span className="ml-1 text-emerald-300/80">klaviyo ✓</span>
               )}
             </td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  );
-}
-
-function AgentRunsTable({ rows }: { rows: AgentRun[] }) {
-  if (rows.length === 0) return <Empty>No agent runs for this site yet.</Empty>;
-  return (
-    <Table>
-      <thead>
-        <tr>
-          <th>Agent</th>
-          <th>Status</th>
-          <th>Started</th>
-          <th>Cost</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id} className="hover:bg-slate-900/40">
-            <td className="font-mono">{r.agent}</td>
-            <td>{r.status}</td>
-            <td className="text-slate-400">{new Date(r.startedAt).toLocaleString()}</td>
-            <td className="text-slate-400">${Number(r.costUsd).toFixed(4)}</td>
           </tr>
         ))}
       </tbody>
