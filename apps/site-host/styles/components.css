@@ -45,10 +45,10 @@
 }
 .site-page-phone {
   padding: 8px 14px;
-  border: var(--border-rule, 1.5px) solid var(--ink);
+  border: var(--border-rule, 1.5px) solid var(--accent);
   border-radius: var(--radius-pill, 4px);
   background: var(--accent);
-  color: var(--ink) !important;
+  color: var(--accent-fg, #fff) !important;
   font-family: var(--font-display);
   font-weight: 700;
   text-transform: uppercase;
@@ -150,9 +150,9 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 0.9375rem;
-  border: var(--border-card, 1.5px) solid var(--ink);
+  border: var(--border-card, 1.5px) solid var(--accent);
   background: var(--accent);
-  color: var(--ink);
+  color: var(--accent-fg, #fff);
   border-radius: var(--radius-button, 4px);
   transition: opacity 0.15s, transform 0.05s;
 }
@@ -257,7 +257,7 @@
   padding: 6px 14px;
   border-radius: 999px;
   background: var(--accent);
-  color: var(--ink);
+  color: var(--accent-fg, #fff);
   font-weight: 700;
   font-size: 0.8125rem;
   text-transform: uppercase;
