@@ -62,6 +62,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     const db = getDb();
 
     // 1. Insert/find site row.
+    ctx.progress({ step: 1, total: 7, label: 'preparing site record' });
     const siteId = await this.upsertSite(input);
     ctx.log.info({ siteId }, 'site row ready');
     this.emit({ step: 'site_row_ready', site_id: siteId });
@@ -76,6 +77,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     let clusters: KeywordClusterInput[] = [];
     const skipPlanner = input.skip_keyword_planning ?? false;
     if (!skipPlanner) {
+      ctx.progress({ step: 2, total: 7, label: 'planning keyword clusters' });
       this.emit({ step: 'keywords_planning_started' });
       const planResult = await this.keywordPlanner.run(
         {
@@ -103,6 +105,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     ctx.log.info({ clusters: clusters.length }, 'clusters loaded for content engine');
 
     // 3. Generate content bundle.
+    ctx.progress({ step: 3, total: 7, label: 'generating site content' });
     this.emit({ step: 'content_started' });
     const bundle = await this.contentEngine.run(
       {
@@ -122,6 +125,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     this.emit({ step: 'content_generated', pages: countPages(bundle) });
 
     // 3. Provision tracking number (mocked when MOCK_TELEPHONY=true).
+    ctx.progress({ step: 4, total: 7, label: 'provisioning tracking number' });
     const tracking = await this.trackingSetup.run(
       { site_id: siteId },
       { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:tracking-setup` },
@@ -142,6 +146,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     //    the legacy materialize → vercel project create → env-var sync chain
     //    (no per-tenant Vercel project anymore — all rendering goes through
     //    the shared `leadlandlord-sites` project).
+    ctx.progress({ step: 5, total: 7, label: 'publishing pages to Sanity' });
     this.emit({ step: 'sanity_publish_started' });
     const persisted = await writeSiteToSanity(siteId, bundle);
     ctx.log.info(
@@ -160,6 +165,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     //    variants render their placeholder background when no hero is set.
     let heroUrl: string | null = null;
     if (bundle.hero_image_prompt) {
+      ctx.progress({ step: 6, total: 7, label: 'generating hero image' });
       this.emit({ step: 'hero_image_started' });
       try {
         const img = await imagen.generateHeroImageBuffer(bundle.hero_image_prompt);
@@ -219,6 +225,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       },
     });
 
+    ctx.progress({ step: 7, total: 7, label: 'finalizing site' });
     this.emit({ step: 'site_ready', site_doc_id: persisted.siteDocId });
 
     return {

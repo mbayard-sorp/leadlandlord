@@ -172,7 +172,13 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     const seeds = this.buildSeeds(input.niche, input.city);
     ctx.log.info({ seeds }, 'keyword-planner fetching candidates');
     const fetched = new Map<string, KeywordCandidate>();
-    for (const seed of seeds) {
+    for (let i = 0; i < seeds.length; i++) {
+      const seed = seeds[i]!;
+      ctx.progress({
+        step: i + 1,
+        total: seeds.length,
+        label: `fetching candidates for "${seed}" (${i + 1}/${seeds.length})`,
+      });
       try {
         const list = await getKeywordCandidates({ seed, relatedLimit: 50, suggestionLimit: 30 });
         for (const c of list) {
@@ -216,6 +222,7 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     }
 
     // 4. Cluster via Claude (tool-use enforced).
+    ctx.progress({ label: `clustering ${filtered.length} candidates with Claude` });
     const clusters = await this.clusterWithClaude(input, filtered, ctx);
 
     // 5. Match each cluster's primary + supporting back to fetched candidate
@@ -223,6 +230,7 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     const enriched = clusters.map((c) => enrichClusterWithMetrics(c, fetched));
 
     // 6. Persist to Sanity. createOrReplace so re-runs overwrite.
+    ctx.progress({ label: `persisting ${enriched.length} clusters to Sanity` });
     const persisted = await this.persistClusters(input.site_id, enriched);
 
     // 7. Emit cluster.ready downstream event so site-builder picks up.

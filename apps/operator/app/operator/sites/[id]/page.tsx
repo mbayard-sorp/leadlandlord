@@ -25,6 +25,7 @@ import { DomainAttachForm } from './DomainAttachForm';
 import { SiteConfigPanel } from './SiteConfigPanel';
 import { RegenerateButtons } from './RegenerateButtons';
 import { KeywordsPanel } from './KeywordsPanel';
+import { AgentActivityPanel } from './AgentActivityPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -158,6 +159,13 @@ export default async function SiteDetailPage({ params }: Params) {
           SEO Keywords
         </h2>
         <KeywordsPanel siteId={site.id} clusters={keywordClusters} />
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Agent activity
+        </h2>
+        <AgentActivityPanel siteId={site.id} />
       </section>
 
       <section>
