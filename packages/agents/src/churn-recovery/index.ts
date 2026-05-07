@@ -81,7 +81,7 @@ export class ChurnRecovery extends BaseAgent<typeof ChurnRecoveryInput, typeof C
       try {
         const result = await this.tenantProspector.run(
           { site_id: input.site_id, count: input.target_count - freshRows.length },
-          { siteId: input.site_id, parentRunId: ctx.runId },
+          { siteId: input.site_id, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:tenant-prospector` },
         );
         prospectsAdded = result.inserted;
       } catch (err) {
