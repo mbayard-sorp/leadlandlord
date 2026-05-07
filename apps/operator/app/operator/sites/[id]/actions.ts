@@ -572,3 +572,68 @@ export async function regenerateContent(siteId: string): Promise<ActionResult & 
 function hostKey(host: string): string {
   return host.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 63);
 }
+
+/**
+ * Run keyword-planner against this site. Pulls fresh DataForSEO keywords +
+ * re-clusters them. Operator clicks this when:
+ *   - The site is brand new and never had clusters
+ *   - Existing clusters are stale (90-day refresh)
+ *   - Niche pivoted slightly and keywords need updating
+ *
+ * Async via agent_events queue — operator-tick claims and runs.
+ */
+export async function repullKeywords(siteId: string): Promise<ActionResult & { eventId?: string }> {
+  const db = getDb();
+  const site = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
+  if (!site) return { ok: false, message: 'site not found' };
+  const eventId = randomUUID();
+  await db.insert(agentEvents).values({
+    id: eventId,
+    agent: 'operator-dashboard',
+    type: 'keyword.repull-requested',
+    targetAgent: 'keyword-planner',
+    payload: {
+      site_id: siteId,
+      niche: site.niche,
+      city: site.city,
+      state: site.state,
+    },
+  });
+  log.info({ siteId, eventId }, 'keyword-planner re-run enqueued');
+  revalidatePath(`/operator/sites/${siteId}`);
+  return { ok: true, eventId };
+}
+
+/**
+ * Re-target content: re-runs Content Engine against the existing clusters
+ * (skips keyword-planner). Operator clicks this when:
+ *   - Clusters were just edited (added an operator keyword, retired a cluster)
+ *   - Content drifted from the cluster shape and needs to snap back
+ *
+ * Cheaper than `regenerateContent` because it skips the keyword-planning
+ * spend.
+ */
+export async function retargetContent(siteId: string): Promise<ActionResult & { eventId?: string }> {
+  const db = getDb();
+  const site = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
+  if (!site) return { ok: false, message: 'site not found' };
+  const eventId = randomUUID();
+  await db.insert(agentEvents).values({
+    id: eventId,
+    agent: 'operator-dashboard',
+    type: 'content.retarget-requested',
+    targetAgent: 'site-builder',
+    payload: {
+      site_id: siteId,
+      niche: site.niche,
+      city: site.city,
+      state: site.state,
+      niche_id: site.nicheId ?? undefined,
+      fast_mode: false,
+      skip_keyword_planning: true,
+    },
+  });
+  log.info({ siteId, eventId }, 'content re-target enqueued');
+  revalidatePath(`/operator/sites/${siteId}`);
+  return { ok: true, eventId };
+}

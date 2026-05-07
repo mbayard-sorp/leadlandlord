@@ -17,7 +17,8 @@
     "./outreach-agent": "./src/outreach-agent/index.ts",
     "./registry": "./src/registry.ts",
     "./scheduler": "./src/scheduler/index.ts",
-    "./niche-hunter": "./src/niche-hunter/index.ts"
+    "./niche-hunter": "./src/niche-hunter/index.ts",
+    "./keyword-planner": "./src/keyword-planner/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

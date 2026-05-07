@@ -4,6 +4,7 @@ export { SiteBuilder } from './site-builder/index';
 export { ContentEngine } from './content-engine/index';
 export { TrackingSetup } from './tracking-setup/index';
 export { NicheHunter } from './niche-hunter/index';
+export { KeywordPlanner } from './keyword-planner/index';
 export { DomainProcurer } from './domain-procurer/index';
 export { SeoOperator } from './seo-operator/index';
 export { BacklinkBuilder } from './backlink-builder/index';

@@ -254,3 +254,179 @@ export async function getSerpResults(args: {
       description: it.description,
     }));
 }
+
+// ---------- Keyword expansion (Labs) --------------------------------------
+
+/**
+ * Single keyword candidate with the metrics we care about for clustering.
+ * Sourced from related_keywords or keyword_suggestions; both endpoints
+ * return enough overlap that we normalize into one shape.
+ */
+export interface KeywordCandidate {
+  phrase: string;
+  search_volume: number;
+  kd: number;
+  cpc: number;
+  competition: number;
+  /** 'informational' | 'commercial' | 'navigational' | 'transactional' (or null when DFS doesn't classify). */
+  intent: string | null;
+  /** Where this candidate came from — used to weight scoring downstream. */
+  source: 'related' | 'suggestion';
+}
+
+interface LabsKeywordInfo {
+  search_volume?: number | null;
+  cpc?: number | null;
+  competition?: number | null;
+  competition_level?: string | null;
+}
+
+interface LabsKeywordProperties {
+  keyword_difficulty?: number | null;
+}
+
+interface LabsSearchIntentInfo {
+  main_intent?: string | null;
+  foreign_intent?: string[] | null;
+}
+
+interface LabsRelatedItem {
+  keyword_data?: {
+    keyword?: string;
+    keyword_info?: LabsKeywordInfo;
+    keyword_properties?: LabsKeywordProperties;
+    search_intent_info?: LabsSearchIntentInfo;
+  };
+  depth?: number;
+}
+
+interface LabsSuggestionItem {
+  keyword?: string;
+  keyword_info?: LabsKeywordInfo;
+  keyword_properties?: LabsKeywordProperties;
+  search_intent_info?: LabsSearchIntentInfo;
+}
+
+/**
+ * Pull semantic-neighbor keywords for a seed via DataForSEO Labs.
+ *
+ * `depth=2` returns ~50-72 candidates with full keyword_info +
+ * keyword_difficulty + search_intent in one call. Cost: ~$0.015 per seed.
+ *
+ * USA location_code (2840) is hardcoded — Labs endpoints reject location_name.
+ */
+export async function getRelatedKeywords(args: {
+  keyword: string;
+  language?: string;
+  depth?: number;
+  limit?: number;
+}): Promise<KeywordCandidate[]> {
+  const { keyword, language = 'en', depth = 2, limit = 50 } = args;
+  const rows = await dfsPost<{ items: LabsRelatedItem[] | null }>(
+    '/dataforseo_labs/google/related_keywords/live',
+    [
+      {
+        keyword,
+        location_code: 2840,
+        language_code: language,
+        depth,
+        limit,
+        include_seed_keyword: true,
+        include_serp_info: false,
+      },
+    ],
+  );
+  const items = rows[0]?.items ?? [];
+  return items
+    .map((it) => normalizeRelated(it))
+    .filter((c): c is KeywordCandidate => c !== null);
+}
+
+/**
+ * Pull phrase-match long-tail keywords (the literal seed appears as a token
+ * in each suggestion). Complements related_keywords by catching things like
+ * "<niche> near me", "<niche> cost", "<niche> cheap". Cost: ~$0.013 per seed.
+ */
+export async function getKeywordSuggestions(args: {
+  keyword: string;
+  language?: string;
+  limit?: number;
+}): Promise<KeywordCandidate[]> {
+  const { keyword, language = 'en', limit = 30 } = args;
+  const rows = await dfsPost<{ items: LabsSuggestionItem[] | null }>(
+    '/dataforseo_labs/google/keyword_suggestions/live',
+    [
+      {
+        keyword,
+        location_code: 2840,
+        language_code: language,
+        limit,
+        include_serp_info: false,
+        ignore_synonyms: false,
+      },
+    ],
+  );
+  const items = rows[0]?.items ?? [];
+  return items
+    .map((it) => normalizeSuggestion(it))
+    .filter((c): c is KeywordCandidate => c !== null);
+}
+
+function normalizeRelated(it: LabsRelatedItem): KeywordCandidate | null {
+  const phrase = it.keyword_data?.keyword?.trim();
+  if (!phrase) return null;
+  const info = it.keyword_data?.keyword_info ?? {};
+  const props = it.keyword_data?.keyword_properties ?? {};
+  const intent = it.keyword_data?.search_intent_info?.main_intent ?? null;
+  return {
+    phrase: phrase.toLowerCase(),
+    search_volume: info.search_volume ?? 0,
+    kd: props.keyword_difficulty ?? 0,
+    cpc: info.cpc ?? 0,
+    competition: typeof info.competition === 'number' ? info.competition : 0,
+    intent,
+    source: 'related',
+  };
+}
+
+function normalizeSuggestion(it: LabsSuggestionItem): KeywordCandidate | null {
+  const phrase = it.keyword?.trim();
+  if (!phrase) return null;
+  const info = it.keyword_info ?? {};
+  const props = it.keyword_properties ?? {};
+  const intent = it.search_intent_info?.main_intent ?? null;
+  return {
+    phrase: phrase.toLowerCase(),
+    search_volume: info.search_volume ?? 0,
+    kd: props.keyword_difficulty ?? 0,
+    cpc: info.cpc ?? 0,
+    competition: typeof info.competition === 'number' ? info.competition : 0,
+    intent,
+    source: 'suggestion',
+  };
+}
+
+/**
+ * Combine related + suggestions and dedupe on phrase. Higher-volume entry
+ * wins on conflicts. Caller filters/clusters downstream.
+ */
+export async function getKeywordCandidates(args: {
+  seed: string;
+  language?: string;
+  relatedLimit?: number;
+  suggestionLimit?: number;
+}): Promise<KeywordCandidate[]> {
+  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30 } = args;
+  const [related, suggestions] = await Promise.all([
+    getRelatedKeywords({ keyword: seed, language, limit: relatedLimit }),
+    getKeywordSuggestions({ keyword: seed, language, limit: suggestionLimit }),
+  ]);
+  const byPhrase = new Map<string, KeywordCandidate>();
+  for (const c of [...related, ...suggestions]) {
+    const existing = byPhrase.get(c.phrase);
+    if (!existing || c.search_volume > existing.search_volume) {
+      byPhrase.set(c.phrase, c);
+    }
+  }
+  return Array.from(byPhrase.values()).sort((a, b) => b.search_volume - a.search_volume);
+}

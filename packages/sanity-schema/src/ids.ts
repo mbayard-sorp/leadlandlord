@@ -50,3 +50,30 @@ export function corporateSiteDocId(brand = 'leadslandlord'): string {
 export function corporatePageDocId(kind: CorporatePageKind, brand = 'leadslandlord'): string {
   return `corporate-page-${brand}-${kind}`;
 }
+
+/**
+ * Deterministic id for a keyword cluster doc. Re-running the keyword-planner
+ * for the same site overwrites in place (createOrReplace), so referenced
+ * pages keep their links intact.
+ */
+export function keywordClusterDocId(siteId: string, clusterKey: string): string {
+  return `cluster-${siteId}-${clusterKey}`;
+}
+
+export type ClusterIntent =
+  | 'commercial'
+  | 'informational'
+  | 'local-modifier'
+  | 'navigational'
+  | 'transactional';
+
+export type ClusterStatus =
+  | 'planned'
+  | 'covered'
+  | 'gap'
+  | 'underperforming'
+  | 'retired';
+
+export type KeywordRole = 'primary' | 'secondary' | 'supporting';
+
+export type KeywordSource = 'related' | 'suggestion' | 'seed' | 'operator';

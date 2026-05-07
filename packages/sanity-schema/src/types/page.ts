@@ -60,6 +60,44 @@ export const page = defineType({
       description: 'Raw JSON. Rendered into <script type="application/ld+json"> by site-host.',
       rows: 8,
     }),
+    defineField({
+      name: 'primaryKeyword',
+      title: 'Primary Keyword',
+      type: 'string',
+      description:
+        'Denormalized from keywordCluster.primaryKeyword. The single phrase this page targets. Set by Content Engine via persist-sanity.',
+    }),
+    defineField({
+      name: 'targetedKeywords',
+      title: 'Targeted Keywords',
+      type: 'array',
+      description:
+        'Keywords Content Engine declared this page targets. Source of truth for "what should this page rank for" — joined against GSC reality by Phase 4 SEO Operator.',
+      of: [
+        {
+          type: 'object',
+          fields: [
+            defineField({ name: 'phrase', title: 'Phrase', type: 'string', validation: (r) => r.required() }),
+            defineField({
+              name: 'role',
+              title: 'Role',
+              type: 'string',
+              options: { list: ['primary', 'secondary', 'supporting'] },
+            }),
+            defineField({
+              name: 'clusterKey',
+              title: 'Cluster Key',
+              type: 'string',
+              description: 'Which keywordCluster this came from. Useful for re-target lookups.',
+            }),
+          ],
+          preview: {
+            select: { title: 'phrase', role: 'role' },
+            prepare: ({ title, role }) => ({ title: title ?? '(no phrase)', subtitle: role }),
+          },
+        },
+      ],
+    }),
   ],
   preview: {
     select: { title: 'title', kind: 'kind', siteName: 'site.businessName' },
