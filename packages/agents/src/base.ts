@@ -21,6 +21,13 @@ export interface AgentContext {
     cache_creation_input_tokens?: number;
     cost_usd: number;
   }): void;
+  /**
+   * Emit a progress update visible in the operator activity panel. Throttled
+   * to ~once/sec — calls inside the throttle window are coalesced (the latest
+   * label wins). Pass `step`/`total` to render a progress bar; pass just
+   * `label` for a free-text status. Cleared automatically when the run ends.
+   */
+  progress(args: { step?: number; total?: number; label: string }): void;
 }
 
 export interface AgentRunOptions {
@@ -105,6 +112,46 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
     let tokensIn = 0;
     let tokensOut = 0;
 
+    // Progress throttle: an agent emitting per-iteration progress (e.g. one
+    // call per generated page) shouldn't hammer the DB. Coalesce to ~1/sec
+    // by buffering the latest call and flushing on a timer.
+    let pendingProgress: { step?: number; total?: number; label: string } | null = null;
+    let progressTimer: ReturnType<typeof setTimeout> | null = null;
+    let progressInflight = false;
+    const PROGRESS_INTERVAL_MS = 1000;
+
+    const flushProgress = async () => {
+      if (!pendingProgress || progressInflight) return;
+      const next = pendingProgress;
+      pendingProgress = null;
+      progressInflight = true;
+      try {
+        await db
+          .update(agentRuns)
+          .set({
+            progressMessage: next.label,
+            progressStep: next.step ?? null,
+            progressTotal: next.total ?? null,
+            progressUpdatedAt: new Date(),
+          })
+          .where(eq(agentRuns.id, runId));
+      } catch (err) {
+        // Progress writes are best-effort — never break the agent run.
+        log.warn({ err: err instanceof Error ? err.message : err }, 'progress update failed');
+      } finally {
+        progressInflight = false;
+      }
+    };
+
+    const scheduleProgress = (entry: { step?: number; total?: number; label: string }) => {
+      pendingProgress = entry;
+      if (progressTimer) return;
+      progressTimer = setTimeout(() => {
+        progressTimer = null;
+        void flushProgress();
+      }, PROGRESS_INTERVAL_MS);
+    };
+
     const ctx: AgentContext = {
       runId,
       log,
@@ -113,12 +160,21 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         tokensIn += u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
         tokensOut += u.output_tokens;
       },
+      progress: (entry) => scheduleProgress(entry),
     };
 
     try {
       log.info({ input }, 'agent run starting');
       const output = await this.execute(input, ctx);
       const validated = this.outputSchema.parse(output);
+
+      // Clear any pending throttled progress write — the run is finishing
+      // now and we're about to overwrite the row's progress columns.
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
+      pendingProgress = null;
 
       await db
         .update(agentRuns)
@@ -129,6 +185,10 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
           tokensOut,
           costUsd: totalCost.toFixed(4),
           endedAt: new Date(),
+          progressMessage: null,
+          progressStep: null,
+          progressTotal: null,
+          progressUpdatedAt: null,
         })
         .where(eq(agentRuns.id, runId));
 
@@ -139,6 +199,13 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
       const message = err instanceof Error ? err.message : String(err);
       const status = err instanceof BudgetExceededError ? 'budget_exceeded' : 'failed';
       log.error({ err: message }, 'agent run failed');
+
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
+      pendingProgress = null;
+
       await db
         .update(agentRuns)
         .set({
@@ -148,6 +215,10 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
           tokensOut,
           costUsd: totalCost.toFixed(4),
           endedAt: new Date(),
+          progressMessage: null,
+          progressStep: null,
+          progressTotal: null,
+          progressUpdatedAt: null,
         })
         .where(eq(agentRuns.id, runId));
       if (err instanceof BudgetExceededError) throw err;

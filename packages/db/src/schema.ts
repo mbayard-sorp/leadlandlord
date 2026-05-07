@@ -421,6 +421,16 @@ export const agentRuns = pgTable(
     costUsd: numeric('cost_usd', { precision: 10, scale: 4 }).notNull().default('0'),
     siteId: uuid('site_id').references(() => sites.id, { onDelete: 'set null' }),
     parentRunId: uuid('parent_run_id'),
+    /**
+     * Latest progress message emitted by the running agent (e.g. "generating
+     * page 14/21"). Read by the operator activity panel at ~4s polling. Reset
+     * to null when the run finishes — the run row itself becomes the history
+     * entry. See BaseAgent.AgentContext.progress.
+     */
+    progressMessage: text('progress_message'),
+    progressStep: integer('progress_step'),
+    progressTotal: integer('progress_total'),
+    progressUpdatedAt: timestamp('progress_updated_at', { withTimezone: true }),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },
@@ -430,6 +440,10 @@ export const agentRuns = pgTable(
       .where(sql`${t.dedupeKey} IS NOT NULL AND ${t.status} = 'succeeded'`),
     agentStartedIdx: index('agent_runs_agent_started_idx').on(t.agent, t.startedAt),
     statusIdx: index('agent_runs_status_idx').on(t.status),
+    // Activity panel reads in-flight + recent runs scoped to a site, ordered
+    // by startedAt desc. Without this index a populated agent_runs table forces
+    // a full scan + sort on every poll.
+    siteStartedIdx: index('agent_runs_site_started_idx').on(t.siteId, t.startedAt),
   }),
 );
 

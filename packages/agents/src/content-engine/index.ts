@@ -48,6 +48,10 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     const userPrompt = buildUserPrompt(input);
 
     ctx.log.info({ model, fast_mode: !!input.fast_mode }, 'requesting content bundle from claude (tool use)');
+    const clusterCount = input.keyword_clusters?.length ?? 0;
+    ctx.progress({
+      label: `sending prompt to Claude (${clusterCount} clusters, ${input.fast_mode ? 'fast' : 'full'} mode)`,
+    });
 
     // Tool use mode — the model is constrained to invoke output_content_bundle
     // with input matching the JSON schema. This guarantees parseable JSON
@@ -74,7 +78,20 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
       tool_choice: { type: 'tool', name: OUTPUT_TOOL_NAME },
       messages: [{ role: 'user', content: userPrompt }],
     });
+
+    // Tap the stream for token-level progress. Tool-use mode emits
+    // inputJson deltas (not text deltas) — count chars off the partial_json
+    // fragment. The throttle in BaseAgent collapses these into ~1 update per
+    // second regardless of stream rate.
+    let streamedChars = 0;
+    stream.on('inputJson', (partialJson: string) => {
+      streamedChars += partialJson.length;
+      ctx.progress({
+        label: `receiving content from Claude (${Math.round(streamedChars / 1024)} KB streamed)`,
+      });
+    });
     const response = await stream.finalMessage();
+    ctx.progress({ label: 'validating content bundle' });
 
     const usage = response.usage;
     const cost = estimateCostUsd(model, {
