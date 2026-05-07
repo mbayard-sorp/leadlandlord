@@ -129,6 +129,8 @@ Hard rules:
 - Prefer primary keywords with KD <= 30 — the platform exists to rank quickly. A KD-50 keyword that's "the obvious one" is wrong if KD-15 alternatives exist in the cluster.
 - One cluster's primary_keyword must NOT appear as primary in another cluster.
 - Supporting keywords are 3-8 candidates that share intent with the primary. Volume can be lower; KD up to 50 is fine for support.
+- For page_kind "service_area": the primary_keyword MUST contain the locality token from the cluster_key. E.g. cluster_key "service_area-mesa" requires the word "mesa" in the primary_keyword; "service_area-east-mesa" requires "mesa" (and ideally "east"). A generic "<niche> near me" phrase is NEVER a valid service_area primary — it does not anchor to the locality. If no candidate in the cluster contains the locality, drop the cluster entirely rather than fall back to a "near me" phrase.
+- Do NOT create clusters anchored on a competitor brand or proper-noun company name (e.g. "apex turf", "home depot reviews", "lowes installation"). Branded competitor traffic is not winnable — searchers using a brand name are looking for that specific company, not a comparison page. These phrases also dilute the page mix. If the only thing tying a candidate group together is a company name, skip it.
 
 Cluster types:
 - HOME (1): commercial intent, the broad head term + city. e.g. "<niche> <city>".
@@ -197,6 +199,9 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
       // Lightweight relevance gate — the phrase must mention some token of
       // the niche or city. Avoids semantic drift into adjacent industries.
       if (!isRelevant(c.phrase, input.niche, input.city, input.state)) continue;
+      // Drop "<brand> reviews" patterns — competitor-brand traffic isn't winnable
+      // and corrupts the cluster mix. See looksLikeCompetitorBrandReviews.
+      if (looksLikeCompetitorBrandReviews(c.phrase, input.niche, input.city, input.state)) continue;
       filtered.push({ ...c, score: scoreCandidate(c) });
     }
     filtered.sort((a, b) => b.score - a.score);
@@ -424,6 +429,45 @@ function isRelevant(phrase: string, niche: string, city: string, state: string):
     tokens.includes(cityToken) ||
     tokens.includes(stateToken)
   );
+}
+
+// Tokens that legitimately co-occur with "reviews" without indicating a brand:
+// niche/service vocabulary, geo, and ranking modifiers. Anything outside this
+// set + the niche/city/state tokens is treated as a likely proper-noun brand.
+const BENIGN_REVIEW_COOCCUR_TOKENS = new Set([
+  'best', 'top', 'cheap', 'cheapest', 'affordable', 'budget',
+  'cost', 'costs', 'price', 'prices', 'pricing',
+  'near', 'me', 'around', 'local', 'here', 'nearby',
+  'reviews', 'review', 'rated', 'rating', 'ratings', 'star', 'stars',
+  'service', 'services', 'installation', 'install', 'installer', 'installers',
+  'company', 'companies', 'contractor', 'contractors',
+  'pro', 'pros', 'professional', 'professionals',
+  'expert', 'experts', 'specialist', 'specialists',
+  'repair', 'replacement', 'replace', 'maintenance',
+  'and', 'or', 'of', 'the', 'a', 'an', 'in', 'for', 'with', 'without',
+  'vs', 'to', 'by', 'on', 'at', 'from', 'my', 'your',
+  '2024', '2025', '2026', '2027',
+]);
+
+function looksLikeCompetitorBrandReviews(
+  phrase: string,
+  niche: string,
+  city: string,
+  state: string,
+): boolean {
+  const tokens = phrase.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.includes('reviews') && !tokens.includes('review')) return false;
+  const nicheTokens = new Set(niche.toLowerCase().split(/\s+/).filter(Boolean));
+  const cityToken = city.toLowerCase();
+  const stateToken = state.toLowerCase();
+  for (const t of tokens) {
+    if (BENIGN_REVIEW_COOCCUR_TOKENS.has(t)) continue;
+    if (nicheTokens.has(t)) continue;
+    if (t === cityToken || t === stateToken) continue;
+    // Unknown token alongside "reviews" — likely a brand/company name.
+    return true;
+  }
+  return false;
 }
 
 function scoreCandidate(c: KeywordCandidate): number {
