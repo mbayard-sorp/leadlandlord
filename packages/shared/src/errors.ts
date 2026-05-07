@@ -24,6 +24,14 @@ export class KillSwitchActiveError extends Error {
   }
 }
 
+export class AgentDisabledError extends Error {
+  readonly code = 'AGENT_DISABLED';
+  constructor(agent: string) {
+    super(`Agent "${agent}" is disabled (agent_budgets.enabled = false).`);
+    this.name = 'AgentDisabledError';
+  }
+}
+
 export class AgentRunError extends Error {
   readonly code = 'AGENT_RUN_ERROR';
   constructor(

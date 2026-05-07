@@ -1,5 +1,9 @@
 import { ZodError } from 'zod';
-import { AgentRunError, NotImplementedError } from '@leadlandlord/shared/errors';
+import {
+  AgentRunError,
+  AgentDisabledError,
+  NotImplementedError,
+} from '@leadlandlord/shared/errors';
 
 /**
  * Failure kinds the agent_events queue understands. Mirrors the FailureKind
@@ -10,6 +14,7 @@ export type AgentFailureKind =
   | 'validation_error'
   | 'unknown_agent'
   | 'not_implemented'
+  | 'agent_disabled'
   | 'runtime_error';
 
 /**
@@ -32,9 +37,11 @@ export type AgentFailureKind =
  */
 export function classifyAgentError(err: unknown): AgentFailureKind {
   if (err instanceof ZodError) return 'validation_error';
+  if (err instanceof AgentDisabledError) return 'agent_disabled';
   if (err instanceof AgentRunError) {
     if (err.underlying instanceof ZodError) return 'validation_error';
     if (err.underlying instanceof NotImplementedError) return 'not_implemented';
+    if (err.underlying instanceof AgentDisabledError) return 'agent_disabled';
   }
   if (err instanceof NotImplementedError) return 'not_implemented';
   return 'runtime_error';

@@ -513,6 +513,15 @@ export const agentBudgets = pgTable('agent_budgets', {
     .notNull()
     .default('5'),
   spentTodayUsd: numeric('spent_today_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+  /**
+   * Per-agent enable flag. When `false`, BaseAgent.run throws AgentDisabledError
+   * before any work happens, the dispatcher classifies as terminal `agent_disabled`
+   * and dead-letters the event (no 5-attempt retry storm). Operator escape hatch
+   * during incidents — flip via `UPDATE agent_budgets SET enabled = false WHERE agent = ?`
+   * to surgically pause one agent (e.g. content-engine) without killing the whole
+   * portfolio via the global kill switch.
+   */
+  enabled: boolean('enabled').notNull().default(true),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

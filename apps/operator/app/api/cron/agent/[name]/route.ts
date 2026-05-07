@@ -75,7 +75,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ name: string }
     (async () => {
       try {
         log.info({ agent: name, event_id }, 'agent invocation starting');
-        await agent.run(payload, { dedupeKey: `event:${event_id}` });
+        // Pass eventId, not dedupeKey — agent's natural dedupeKeyFn wins.
+        // See operator-tick/route.ts for the full incident context.
+        await agent.run(payload, { eventId: event_id });
         await markEventProcessed(event_id);
         log.info({ agent: name, event_id }, 'agent invocation succeeded');
       } catch (err) {

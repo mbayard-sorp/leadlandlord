@@ -86,6 +86,7 @@ export type FailureKind =
   | 'validation_error'
   | 'unknown_agent'
   | 'not_implemented'
+  | 'agent_disabled'
   | 'runtime_error';
 
 /**
@@ -99,6 +100,10 @@ const TERMINAL_KINDS: ReadonlySet<FailureKind> = new Set([
   'validation_error',
   'unknown_agent',
   'not_implemented',
+  // agent_disabled is a deterministic operator decision — retrying while the
+  // agent stays disabled would just produce a 5-attempt retry storm. The
+  // operator manually replays via requeueDeadLetter once they re-enable.
+  'agent_disabled',
 ]);
 
 /**

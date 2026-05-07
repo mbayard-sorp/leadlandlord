@@ -50,6 +50,13 @@
       "when": 1779000000000,
       "tag": "0006_agent_events_resilience",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779100000000,
+      "tag": "0007_agent_disabled_flag",
+      "breakpoints": true
     }
   ]
 }
