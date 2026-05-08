@@ -157,12 +157,18 @@ export async function markEventFailed(
  * Manually replay a dead-lettered event. Clears the dead-letter state and
  * resets retry counters so the next claimEvents() picks it up. Use after
  * deploying a fix for the underlying bug.
+ *
+ * Also clears `processed_at` because cascade-cleanup paths can hard-poison
+ * an event by stamping both `processed_at` and `dead_lettered_at` in the
+ * same UPDATE; without resetting `processed_at`, claimEvents would still
+ * skip the row and the operator would have to patch it by hand.
  */
 export async function requeueDeadLetter(id: string) {
   const db = getDb();
   await db.execute(sql`
     UPDATE agent_events
     SET dead_lettered_at = NULL,
+        processed_at = NULL,
         processing_at = NULL,
         attempts = 0,
         next_attempt_at = NULL,
