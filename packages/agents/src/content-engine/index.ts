@@ -12,6 +12,55 @@ const __dirname = dirname(__filename);
 const SYSTEM_PROMPT = readFileSync(resolve(__dirname, 'system.md'), 'utf-8');
 
 /**
+ * Maps theme keys to overlay markdown filenames in `niches/`. The overlay is
+ * appended to the base system prompt at runtime so the model gets niche-
+ * specific terminology, seasonality, regulations, pain points, and tone for
+ * the chosen variant.
+ */
+const THEME_TO_OVERLAY: Record<string, string> = {
+  classic: 'trades',
+  modern: 'modern',
+  premium: 'premium',
+  bright: 'bright',
+};
+
+const overlayCache = new Map<string, string | null>();
+
+/**
+ * Synchronously read and cache the niche overlay for the given theme key.
+ * Returns null when the theme key is not one of the four known variants or
+ * the overlay file is missing — the caller falls back to the base prompt.
+ */
+export function loadNicheOverlay(themeKey: string): string | null {
+  if (overlayCache.has(themeKey)) return overlayCache.get(themeKey) ?? null;
+  const slug = THEME_TO_OVERLAY[themeKey];
+  if (!slug) {
+    overlayCache.set(themeKey, null);
+    return null;
+  }
+  try {
+    const content = readFileSync(resolve(__dirname, 'niches', `${slug}.md`), 'utf-8');
+    overlayCache.set(themeKey, content);
+    return content;
+  } catch {
+    overlayCache.set(themeKey, null);
+    return null;
+  }
+}
+
+/**
+ * Compose the system prompt: base + (optional) overlay separated by an
+ * `---` divider. Cache control on the system block still works because the
+ * structure is unchanged — only the text content varies by theme.
+ */
+export function composeSystemPrompt(themeKey: string | undefined): string {
+  if (!themeKey) return SYSTEM_PROMPT;
+  const overlay = loadNicheOverlay(themeKey);
+  if (!overlay) return SYSTEM_PROMPT;
+  return `${SYSTEM_PROMPT}\n\n---\n\n${overlay}`;
+}
+
+/**
  * JSON Schema generated from the Zod ContentBundle. Anthropic's tool use
  * mode constrains the model to output JSON that matches this schema exactly,
  * eliminating the unparsable-JSON failures we were hitting at 30K+ token
@@ -46,8 +95,12 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
 
     const userPrompt = buildUserPrompt(input);
+    const systemPrompt = composeSystemPrompt(input.theme);
 
-    ctx.log.info({ model, fast_mode: !!input.fast_mode }, 'requesting content bundle from claude (tool use)');
+    ctx.log.info(
+      { model, fast_mode: !!input.fast_mode, theme: input.theme ?? null, overlay: input.theme ? !!loadNicheOverlay(input.theme) : false },
+      'requesting content bundle from claude (tool use)',
+    );
     const clusterCount = input.keyword_clusters?.length ?? 0;
     ctx.progress({
       label: `sending prompt to Claude (${clusterCount} clusters, ${input.fast_mode ? 'fast' : 'full'} mode)`,
@@ -65,7 +118,7 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
       max_tokens: 32_000,
       temperature: 0.2,
       system: [
-        { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
       ],
       tools: [
         {
