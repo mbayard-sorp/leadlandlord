@@ -8,7 +8,12 @@
     { "path": "/api/cron/schedule/outreach-agent", "schedule": "0 15 * * *" },
     { "path": "/api/cron/schedule/trial-manager", "schedule": "0 16 * * *" },
     { "path": "/api/cron/schedule/billing-dunning", "schedule": "0 17 * * *" },
-    { "path": "/api/cron/schedule/churn-recovery", "schedule": "30 17 * * *" }
+    { "path": "/api/cron/schedule/churn-recovery", "schedule": "30 17 * * *" },
+
+    { "path": "/api/cron/schedule/lighthouse-audit", "schedule": "0 7 * * 1" },
+    { "path": "/api/cron/schedule/seo-operator", "schedule": "0 8 * * 1" },
+    { "path": "/api/cron/schedule/seo-ingest-gsc", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/schedule/seo-ingest-ga4", "schedule": "15 6 * * *" }
   ],
   "functions": {
     "app/api/cron/agent/[name]/route.ts": {
@@ -16,6 +21,9 @@
     },
     "app/api/cron/schedule/[name]/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/seo-apply/route.ts": {
+      "maxDuration": 300
     }
   }
 }

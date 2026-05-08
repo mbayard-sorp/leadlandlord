@@ -6,6 +6,7 @@ const links = [
   { href: '/operator/build', label: 'Build site' },
   { href: '/operator/calls', label: 'Calls' },
   { href: '/operator/agents', label: 'Agents' },
+  { href: '/operator/seo', label: 'SEO' },
   { href: '/operator/pipeline', label: 'Pipeline', disabled: true },
   { href: '/operator/tenants', label: 'Tenants', disabled: true },
   { href: '/operator/niches', label: 'Niches' },

@@ -1,13 +1,15 @@
 import { notFound } from 'next/navigation';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray, and } from 'drizzle-orm';
 import {
   getDb,
   sites,
   calls,
   leads,
+  domainCandidates,
   type Site,
   type Call,
   type Lead,
+  type DomainCandidate,
 } from '@leadlandlord/db';
 import {
   fetchSanitySiteDetail,
@@ -20,6 +22,7 @@ import { PhoneAssignmentForm } from './PhoneAssignmentForm';
 import { ManualCallForm } from './ManualCallForm';
 import { ThemePicker } from './ThemePicker';
 import { DomainAttachForm } from './DomainAttachForm';
+import { DomainCandidatesPanel } from './DomainCandidatesPanel';
 import { SiteConfigPanel } from './SiteConfigPanel';
 import { RegenerateButtons } from './RegenerateButtons';
 import { KeywordsPanel } from './KeywordsPanel';
@@ -37,26 +40,38 @@ interface SiteDetailData {
   recentLeads: Lead[];
   sanity: SanitySiteDetail | null;
   keywordClusters: SanityKeywordClusterSummary[];
+  domainCandidatesList: DomainCandidate[];
 }
 
 async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
   const db = getDb();
   const siteRow = (await db.select().from(sites).where(eq(sites.id, id)).limit(1))[0];
   if (!siteRow) return null;
-  const [recentCalls, recentLeads, sanity, keywordClusters] = await Promise.all([
+  const [recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList] = await Promise.all([
     db.select().from(calls).where(eq(calls.siteId, id)).orderBy(desc(calls.startedAt)).limit(20),
     db.select().from(leads).where(eq(leads.siteId, id)).orderBy(desc(leads.createdAt)).limit(20),
     fetchSanitySiteDetail(id).catch(() => null),
     fetchKeywordClustersForSite(id).catch(() => [] as SanityKeywordClusterSummary[]),
+    db
+      .select()
+      .from(domainCandidates)
+      .where(
+        and(
+          eq(domainCandidates.siteId, id),
+          inArray(domainCandidates.status, ['available', 'pending_approval']),
+        ),
+      )
+      .orderBy(domainCandidates.rank)
+      .limit(50),
   ]);
-  return { site: siteRow, recentCalls, recentLeads, sanity, keywordClusters };
+  return { site: siteRow, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList };
 }
 
 export default async function SiteDetailPage({ params }: Params) {
   const { id } = await params;
   const data = await loadSiteDetail(id);
   if (!data) notFound();
-  const { site, recentCalls, recentLeads, sanity, keywordClusters } = data;
+  const { site, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList } = data;
 
   const primaryHost = sanity?.domains.find((d) => d.isPrimary)?.host
     ?? sanity?.domains[0]?.host
@@ -103,6 +118,17 @@ export default async function SiteDetailPage({ params }: Params) {
           Theme
         </h2>
         <ThemePicker siteId={site.id} current={sanity?.theme ?? null} />
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Domains
+        </h2>
+        <DomainCandidatesPanel
+          siteId={site.id}
+          candidates={domainCandidatesList}
+          registeredDomain={site.domain ?? null}
+        />
       </section>
 
       <section>

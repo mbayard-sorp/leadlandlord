@@ -5,6 +5,9 @@ import { NicheHunter } from './niche-hunter/index';
 import { KeywordPlanner } from './keyword-planner/index';
 import { DomainProcurer } from './domain-procurer/index';
 import { SeoOperator } from './seo-operator/index';
+import { SeoIngestGsc } from './seo-ingest-gsc/index';
+import { SeoIngestGa4 } from './seo-ingest-ga4/index';
+import { LighthouseAudit } from './lighthouse-audit/index';
 import { BacklinkBuilder } from './backlink-builder/index';
 import { TenantProspector } from './tenant-prospector/index';
 import { OutreachAgent } from './outreach-agent/index';
@@ -28,6 +31,9 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'keyword-planner': () => new KeywordPlanner(),
   'domain-procurer': () => new DomainProcurer(),
   'seo-operator': () => new SeoOperator(),
+  'seo-ingest-gsc': () => new SeoIngestGsc(),
+  'seo-ingest-ga4': () => new SeoIngestGa4(),
+  'lighthouse-audit': () => new LighthouseAudit(),
   'backlink-builder': () => new BacklinkBuilder(),
   'tenant-prospector': () => new TenantProspector(),
   'outreach-agent': () => new OutreachAgent(),
