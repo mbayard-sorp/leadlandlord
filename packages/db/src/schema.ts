@@ -738,6 +738,22 @@ export const domainCandidates = pgTable(
   }),
 );
 
+/**
+ * Stripe webhook events — idempotency log. Stripe retries delivery on
+ * non-2xx responses (and occasionally re-delivers a successful event due
+ * to network conditions), so the webhook handler dedupes by `id` (the
+ * Stripe event ID) before processing. INSERT ... ON CONFLICT DO NOTHING
+ * at the top of the handler; if the insert is a no-op the event has
+ * already been processed and we ack 200 immediately.
+ */
+export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
+  // Stripe event ID, e.g. evt_1Hh1H2HvpVfH...
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+});
+
 // ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
@@ -773,3 +789,7 @@ export type LighthouseAudit = typeof lighthouseAudits.$inferSelect;
 export type NewLighthouseAudit = typeof lighthouseAudits.$inferInsert;
 export type DomainCandidate = typeof domainCandidates.$inferSelect;
 export type NewDomainCandidate = typeof domainCandidates.$inferInsert;
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
+export type OutreachEvent = typeof outreachEvents.$inferSelect;
+export type NewOutreachEvent = typeof outreachEvents.$inferInsert;

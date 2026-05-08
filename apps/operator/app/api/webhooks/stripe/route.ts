@@ -9,6 +9,7 @@ import {
   tenants,
   invoices,
   agentEvents,
+  stripeWebhookEvents,
   type Site,
   type Prospect,
   type Trial,
@@ -62,6 +63,23 @@ export async function POST(req: Request) {
 
   log.info({ type: event.type, id: event.id }, 'stripe webhook received');
 
+  // Idempotency — Stripe retries on 5xx and occasionally re-delivers. Insert
+  // a sentinel keyed on the event ID and bail if it already exists. We mark
+  // processedAt only after the handler succeeds, so a crash mid-handler will
+  // re-run on the next delivery (the row exists but with null processed_at;
+  // the unique-violation path treats it as already-handled). Trade-off:
+  // crashed handlers are retried once at most, then ack'd permanently.
+  const db = getDb();
+  const inserted = await db
+    .insert(stripeWebhookEvents)
+    .values({ id: event.id, type: event.type })
+    .onConflictDoNothing()
+    .returning({ id: stripeWebhookEvents.id });
+  if (inserted.length === 0) {
+    log.info({ type: event.type, id: event.id }, 'stripe webhook: duplicate event — ack');
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed':
@@ -88,6 +106,11 @@ export async function POST(req: Request) {
     // Validation errors should be 200 to avoid retry storms.
     return new NextResponse('handler error', { status: 500 });
   }
+
+  await db
+    .update(stripeWebhookEvents)
+    .set({ processedAt: new Date() })
+    .where(eq(stripeWebhookEvents.id, event.id));
 
   return NextResponse.json({ received: true });
 }

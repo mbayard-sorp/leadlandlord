@@ -39,13 +39,21 @@ export const OutreachAgentInput = z.object({
   step: OutreachStep,
   /** Override the auto-rendered message body. */
   body_override: z.string().optional(),
+  /**
+   * Dry-run mode: render the script + persist an outreach_events row tagged
+   * `metadata.dryRun: true` and channel `<channel>_dryrun`, but skip the
+   * actual send and DO NOT advance prospect.status. Per-input override; if
+   * unset, the env flag `OUTREACH_DRY_RUN=true` enables dry-run globally.
+   * Used by the operator preview UI before the first live close.
+   */
+  dryRun: z.boolean().optional(),
 });
 export type OutreachAgentInput = z.infer<typeof OutreachAgentInput>;
 
 export const OutreachAgentOutput = z.object({
   prospect_id: z.string().uuid(),
   step: OutreachStep,
-  status: z.enum(['sent', 'blocked', 'skipped', 'failed']),
+  status: z.enum(['sent', 'blocked', 'skipped', 'failed', 'dryrun']),
   channel: z.enum(['sms', 'email', 'voice']),
   message: z.string().optional(),
   external_id: z.string().optional(),
@@ -137,6 +145,40 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
         status: 'blocked',
         channel,
         violations: compliance.violations,
+      };
+    }
+
+    // Dry-run short-circuit. Render the body + persist an outreach_events
+    // row tagged for the operator preview UI, then return without touching
+    // the live integrations. Prospect status is NOT advanced.
+    const dryRun = input.dryRun ?? process.env.OUTREACH_DRY_RUN === 'true';
+    if (dryRun) {
+      ctx.log.info(
+        { prospectId: prospect.id, step: input.step, channel },
+        'outreach: dry-run — skipping live send',
+      );
+      await db.insert(outreachEvents).values({
+        prospectId: prospect.id,
+        channel: `${channel}_dryrun`,
+        templateId: input.step,
+        response: null,
+        metadata: {
+          status: 'dryrun',
+          dryRun: true,
+          recipient,
+          body,
+          ...(channel === 'email'
+            ? { subject: renderSubject(input.step, prospect, site) }
+            : {}),
+        },
+      });
+      return {
+        prospect_id: prospect.id,
+        step: input.step,
+        status: 'dryrun',
+        channel,
+        message: body,
+        violations: [],
       };
     }
 
