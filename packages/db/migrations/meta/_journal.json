@@ -99,6 +99,13 @@
       "when": 1779600000000,
       "tag": "0013_alert_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0014_operator_targets",
+      "breakpoints": true
     }
   ]
 }

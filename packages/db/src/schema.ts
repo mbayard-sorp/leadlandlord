@@ -593,6 +593,26 @@ export const systemState = pgTable('system_state', {
   killSwitchReason: text('kill_switch_reason'),
   killSwitchActivatedAt: timestamp('kill_switch_activated_at', { withTimezone: true }),
   killSwitchActivatedBy: text('kill_switch_activated_by'),
+  // ──────────────────────────────────────────────────────────
+  // Operator orchestrator targets + autonomy mode (Phase F).
+  // The operator agent reads these on every cron run to decide
+  // whether/how to dispatch work. Defaults are deliberately
+  // safe: operatorEnabled=false, mode=manual, all auto-approve
+  // budgets at zero. Autonomous mode must be opted into by a
+  // human via the /operator/control panel.
+  // ──────────────────────────────────────────────────────────
+  targetMrrUsd: numeric('target_mrr_usd', { precision: 10, scale: 2 }).notNull().default('0'),
+  targetActiveSites: integer('target_active_sites').notNull().default(0),
+  targetMonthlyMargin: numeric('target_monthly_margin', { precision: 5, scale: 4 })
+    .notNull()
+    .default('0'),
+  autoApproveNiches: boolean('auto_approve_niches').notNull().default(false),
+  autoApproveDomainBudgetUsd: numeric('auto_approve_domain_budget_usd', { precision: 8, scale: 2 })
+    .notNull()
+    .default('0'),
+  operatorEnabled: boolean('operator_enabled').notNull().default(false),
+  lastOperatorRunAt: timestamp('last_operator_run_at', { withTimezone: true }),
+  operatorMode: text('operator_mode').notNull().default('manual'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
