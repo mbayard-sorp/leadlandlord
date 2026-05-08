@@ -2,20 +2,22 @@ import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
 import { getDb, sites, domainCandidates } from '@leadlandlord/db';
-import { cloudflare } from '@leadlandlord/integrations';
+import { namecheap } from '@leadlandlord/integrations';
+import { attachDomain } from '@leadlandlord/integrations/vercel';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 
 /**
  * Domain Procurer (Phase A2).
  *
  * Two modes routed by `action`:
- *  - 'search'   → call Cloudflare availability for ~10 generated candidates,
+ *  - 'search'   → call Namecheap `domains.check` for ~10 generated candidates,
  *                 persist top-N into `domain_candidates` as 'pending_approval'
  *                 (operator must explicitly approve a row before we register —
  *                 registration spends real money).
  *  - 'register' → require an 'approved' candidate row, register via the
- *                 Cloudflare Registrar API, add the zone, and create apex +
- *                 wildcard CNAMEs to `cname.vercel-dns.com`. Updates
+ *                 Namecheap `domains.create` API, set apex A + www CNAME
+ *                 records pointing at Vercel, and attach the domain to the
+ *                 multi-tenant `leadlandlord-sites` Vercel project. Updates
  *                 `sites.domain` and the candidate row to `registered`.
  *
  * Payload shape uses snake_case to match the events emitted by
@@ -36,7 +38,10 @@ export const DomainProcurerOutput = z.object({
   site_id: z.string().uuid(),
   candidates_written: z.number().int().nonnegative().optional(),
   registered_domain: z.string().optional(),
-  zone_id: z.string().optional(),
+  // Namecheap returns OrderID + TransactionID at registration; we surface
+  // the txn id so the operator UI can link straight to the receipt.
+  transaction_id: z.string().optional(),
+  order_id: z.string().optional(),
 });
 
 type Input = z.infer<typeof DomainProcurerInput>;
@@ -94,7 +99,7 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
 
     ctx.progress({ label: `searching domains for ${site.niche} / ${site.city}` });
 
-    const found = await cloudflare.searchDomains({
+    const found = await namecheap.searchDomains({
       niche: site.niche,
       city: site.city,
       state: site.state,
@@ -114,7 +119,7 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
     const rows = found.map((c) => ({
       siteId: input.site_id,
       domain: c.domain,
-      registrar: 'cloudflare',
+      registrar: 'namecheap',
       priceUsd: c.priceUsd != null ? c.priceUsd.toFixed(2) : null,
       tld: extractTld(c.domain),
       matchType: c.matchType,
@@ -178,13 +183,13 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
     const domain = candidate.domain;
     ctx.progress({ label: `registering ${domain}` });
 
-    // Register the domain. Cloudflare integration pulls registrant contact
-    // from CLOUDFLARE_REGISTRANT_* env by default. Wrap in try/catch so we
+    // Register the domain. Namecheap integration pulls registrant contact
+    // from NAMECHEAP_REGISTRANT_* env by default. Wrap in try/catch so we
     // surface the underlying API error (status, body) on the run row rather
     // than letting a raw fetch error bubble up.
-    let registered: cloudflare.RegisterDomainResult;
+    let registered: namecheap.RegisterDomainResult;
     try {
-      registered = await cloudflare.registerDomain({ domain });
+      registered = await namecheap.registerDomain({ domain });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new IntegrationError(
@@ -197,17 +202,43 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
 
     ctx.progress({ label: `domain registered, configuring DNS` });
 
-    // registerDomain already calls addZone internally and returns zoneId, but
-    // in dev/mock the zoneId may be `mock-zone-...` — call addZone explicitly
-    // here so prod behaviour matches what the brief specifies (defensive: if
-    // the integration ever splits these, this path still works).
-    let zoneId = registered.zoneId;
-    if (!zoneId) {
-      const zone = await cloudflare.addZone(domain);
-      zoneId = zone.zoneId;
+    // Set DNS to point at Vercel. Namecheap's setHosts REPLACES all
+    // existing records, so this is the canonical "wire up Vercel" step.
+    // (apex A → 76.76.21.21, www CNAME → cname.vercel-dns.com)
+    try {
+      await namecheap.setVercelDns(domain);
+    } catch (err) {
+      ctx.log.error(
+        { domain, err: err instanceof Error ? err.message : err },
+        'namecheap.setVercelDns failed — domain registered but DNS not configured; manual fix required',
+      );
+      // Do NOT throw — registration already happened (real money spent).
     }
 
-    await cloudflare.createApexAndWildcardRecords({ zoneId });
+    // Attach the domain to the multi-tenant `leadlandlord-sites` Vercel project
+    // so requests to {domain} actually reach the site-host. Without this, DNS
+    // points at Vercel but Vercel rejects the host as unconfigured (Vercel 404).
+    // Idempotent — Vercel returns the existing config if the domain is already
+    // attached.
+    const vercelProjectId = process.env.VERCEL_SITES_PROJECT_ID;
+    if (vercelProjectId) {
+      try {
+        await attachDomain(vercelProjectId, domain);
+        ctx.log.info({ domain, vercelProjectId }, 'attached domain to vercel project');
+      } catch (err) {
+        ctx.log.error(
+          { domain, vercelProjectId, err: err instanceof Error ? err.message : err },
+          'vercel attachDomain failed — domain registered but not bound; manual fix required',
+        );
+        // Do NOT throw — domain registration already succeeded (real money
+        // spent). The operator can attach manually via Vercel dashboard.
+      }
+    } else {
+      ctx.log.warn(
+        { domain },
+        'VERCEL_SITES_PROJECT_ID not set — domain registered but not attached to Vercel project',
+      );
+    }
 
     // Persist on the site row + flip candidate status.
     const now = new Date();
@@ -232,13 +263,19 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
       payload: {
         site_id: input.site_id,
         domain,
-        zone_id: zoneId,
+        order_id: registered.orderId,
+        transaction_id: registered.transactionId,
       },
     });
 
     ctx.progress({ label: `registered ${domain}` });
     ctx.log.info(
-      { site_id: input.site_id, domain, zone_id: zoneId },
+      {
+        site_id: input.site_id,
+        domain,
+        order_id: registered.orderId,
+        transaction_id: registered.transactionId,
+      },
       'domain registered + DNS configured',
     );
 
@@ -246,7 +283,8 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
       action: 'register',
       site_id: input.site_id,
       registered_domain: domain,
-      zone_id: zoneId,
+      order_id: registered.orderId,
+      transaction_id: registered.transactionId,
     };
   }
 }
