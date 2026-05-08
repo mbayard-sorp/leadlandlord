@@ -16,7 +16,11 @@ export async function scheduleSeoIngestGa4(): Promise<ScheduledEvent[]> {
     WHERE s.status IN ('warming', 'live', 'rented')
   `)) as unknown as { rows: Array<{ site_id: string }> } | Array<{ site_id: string }>;
   const list = Array.isArray(rows) ? rows : rows.rows;
-  const day = ymdUtc(new Date());
+  // Yesterday (UTC) — GA4 today is partial; yesterday is the earliest day with
+  // a complete picture. Re-runs upsert if numbers shift slightly.
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const day = ymdUtc(yesterday);
   return list.map((r) => ({
     agent: 'seo-ingest-ga4',
     payload: { site_id: r.site_id, date: day },
