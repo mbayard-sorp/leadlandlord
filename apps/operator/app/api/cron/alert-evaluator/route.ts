@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm';
-import { getDb, alertRules, alertEvents } from '@leadlandlord/db';
+import { getDb, alertRules, alertEvents, eq, sql } from '@leadlandlord/db';
 import { pagerduty } from '@leadlandlord/integrations';
 import { log } from '@leadlandlord/shared/log';
 import { evaluateRule, type RuleContext } from '@leadlandlord/agents/alert-evaluator';
@@ -29,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
   }
   const db = getDb();
-  const rules = await db.select().from(alertRules).where(sql`${alertRules.enabled} = true`);
+  const rules = await db.select().from(alertRules).where(eq(alertRules.enabled, true));
   const now = new Date();
   const fired: Array<{ rule: string; severity: string }> = [];
   const skipped: Array<{ rule: string; reason: string }> = [];
