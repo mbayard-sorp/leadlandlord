@@ -10,3 +10,7 @@ export * as stripe from './stripe/index';
 export * as dataforseo from './dataforseo/index';
 export * as namecheap from './namecheap/index';
 export * as imagen from './imagen/index';
+export * as cloudflare from './cloudflare/index';
+export * as googleAuth from './google-auth/index';
+export * as googleSearchConsole from './google-search-console/index';
+export * as googleAnalytics from './google-analytics/index';

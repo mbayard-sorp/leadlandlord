@@ -19,10 +19,15 @@
     "./dataforseo": "./src/dataforseo/index.ts",
     "./namecheap": "./src/namecheap/index.ts",
     "./imagen": "./src/imagen/index.ts",
-    "./sanity": "./src/sanity/index.ts"
+    "./sanity": "./src/sanity/index.ts",
+    "./cloudflare": "./src/cloudflare/index.ts",
+    "./google-auth": "./src/google-auth/index.ts",
+    "./google-search-console": "./src/google-search-console/index.ts",
+    "./google-analytics": "./src/google-analytics/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -30,11 +35,13 @@
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
     "drizzle-orm": "^0.36.4",
+    "google-auth-library": "^10.6.2",
     "stripe": "^22.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
   }
 }
