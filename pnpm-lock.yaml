@@ -242,6 +242,9 @@ importers:
       '@leadlandlord/shared':
         specifier: workspace:*
         version: link:../shared
+      drizzle-orm:
+        specifier: ^0.36.4
+        version: 0.36.4(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)(@types/react@19.2.14)(react@19.2.5)
       stripe:
         specifier: ^22.1.0
         version: 22.1.0(@types/node@22.19.17)
