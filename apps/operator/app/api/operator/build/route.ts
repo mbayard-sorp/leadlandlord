@@ -15,6 +15,7 @@ const Body = z.object({
   niche: z.string().min(1).max(80),
   city: z.string().min(1).max(80),
   state: z.string().length(2),
+  niche_id: z.string().uuid().optional(),
   fast_mode: z.boolean().optional(),
 });
 
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { niche, city, state, fast_mode } = parsed.data;
+  const { niche, city, state, niche_id, fast_mode } = parsed.data;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -76,6 +77,7 @@ export async function POST(req: Request) {
           niche,
           city,
           state: state.toUpperCase(),
+          niche_id,
           fast_mode: fast_mode ?? true,
         });
 
