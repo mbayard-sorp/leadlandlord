@@ -1,0 +1,2 @@
+2026-05-08T05:45 — git integration connected, triggering first git-based deploy
+to migrate Vercel cron off the 9h-old stale deployment.
