@@ -8,6 +8,7 @@ const links = [
   { href: '/operator/agents', label: 'Agents' },
   { href: '/operator/seo', label: 'SEO' },
   { href: '/operator/backlinks', label: 'Backlinks' },
+  { href: '/operator/maintenance', label: 'Maintenance' },
   { href: '/operator/pipeline', label: 'Pipeline', disabled: true },
   { href: '/operator/tenants', label: 'Tenants', disabled: true },
   { href: '/operator/niches', label: 'Niches' },
