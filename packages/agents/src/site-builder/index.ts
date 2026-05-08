@@ -310,7 +310,10 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       })
       .onConflictDoUpdate({
         target: [sites.niche, sites.city, sites.state],
-        set: { updatedAt: new Date() },
+        set: {
+          updatedAt: new Date(),
+          ...(input.niche_id ? { nicheId: input.niche_id } : {}),
+        },
       })
       .returning({ id: sites.id });
     return row!.id;
