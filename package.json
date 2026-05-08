@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "db:generate": "pnpm --filter @leadlandlord/db generate",
     "db:migrate": "pnpm --filter @leadlandlord/db migrate",
+    "db:migrate-recover": "pnpm --filter @leadlandlord/db migrate-recover",
     "db:studio": "pnpm --filter @leadlandlord/db studio",
     "dry-run": "tsx scripts/dry-run.ts"
   },
