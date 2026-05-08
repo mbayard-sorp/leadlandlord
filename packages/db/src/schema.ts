@@ -394,11 +394,22 @@ export const backlinks = pgTable(
     type: backlinkTypeEnum('type').notNull(),
     status: backlinkStatusEnum('status').notNull().default('pending'),
     dr: integer('dr'),
+    domainAuthority: integer('domain_authority'),
+    pitchDraft: text('pitch_draft'),
+    subjectLine: text('subject_line'),
+    rejectionReason: text('rejection_reason'),
+    dedupeKey: text('dedupe_key'),
+    responseAt: timestamp('response_at', { withTimezone: true }),
+    responseSnippet: text('response_snippet'),
     acquiredAt: timestamp('acquired_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     metadata: jsonb('metadata'),
   },
   (t) => ({
     siteIdx: index('backlinks_site_idx').on(t.siteId),
+    dedupeUniq: uniqueIndex('backlinks_dedupe_key_uniq')
+      .on(t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL`),
   }),
 );
 

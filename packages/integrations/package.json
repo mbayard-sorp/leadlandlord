@@ -23,7 +23,8 @@
     "./cloudflare": "./src/cloudflare/index.ts",
     "./google-auth": "./src/google-auth/index.ts",
     "./google-search-console": "./src/google-search-console/index.ts",
-    "./google-analytics": "./src/google-analytics/index.ts"
+    "./google-analytics": "./src/google-analytics/index.ts",
+    "./brightlocal": "./src/brightlocal/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
