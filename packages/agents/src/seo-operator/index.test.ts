@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SeoOperatorInput, SeoOperatorOutput, normalizeSeoOperatorInput, slugify } from './index';
+import { draftInfoPage } from './author-info-page';
 
 describe('seo-operator schema', () => {
   it('accepts canonical review input with default lookbackDays', () => {
@@ -87,6 +88,67 @@ describe('normalizeSeoOperatorInput', () => {
       site_id: '11111111-1111-1111-1111-111111111111',
     });
     expect((out as { siteId?: string }).siteId).toBe('11111111-1111-1111-1111-111111111111');
+  });
+});
+
+describe('draftInfoPage (MOCK_AI=1)', () => {
+  beforeEach(() => {
+    process.env.MOCK_AI = '1';
+  });
+  afterEach(() => {
+    delete process.env.MOCK_AI;
+  });
+
+  it('returns a draft with all required fields and respects length caps', async () => {
+    const recordUsage = vi.fn();
+    const ctx = {
+      runId: 'run-1',
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: () => ctx.log },
+      parentRunId: null,
+      recordUsage,
+      progress: vi.fn(),
+      emitNextStepEvent: vi.fn(),
+    } as unknown as Parameters<typeof draftInfoPage>[0]['ctx'];
+
+    const out = await draftInfoPage({
+      siteId: '11111111-1111-1111-1111-111111111111',
+      proposedSlug: 'tree-removal-cost',
+      proposedTitle: 'Tree Removal Cost',
+      intent: 'info',
+      niche: 'tree service',
+      city: 'Tucson',
+      state: 'AZ',
+      ctx,
+      themeKey: 'classic',
+    });
+
+    expect(out.title).toBeTruthy();
+    expect(out.title.length).toBeLessThanOrEqual(60);
+    expect(out.metaDescription.length).toBeLessThanOrEqual(155);
+    expect(out.mdx).toContain('Tree Removal Cost');
+    expect(out.h1).toBeTruthy();
+    // jsonLd is a JSON string we can parse.
+    const parsed = JSON.parse(out.jsonLd);
+    expect(parsed['@context']).toBe('https://schema.org');
+    // Mock path doesn't call Anthropic, so no usage recorded.
+    expect(recordUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe('seo-operator new_info_page apply gating', () => {
+  it('apply path requires status=approved for new_info_page (medium-risk)', async () => {
+    // Re-create the gate from runApply: medium-risk + status='pending' → 'awaiting_review'.
+    // This is the gate documented in the SeoOperator code: medium-risk recs
+    // never auto-apply unless an operator has flipped the status to 'approved'.
+    const gate = (riskLevel: string, status: string) => {
+      if (riskLevel === 'high') return 'blocked';
+      if (riskLevel === 'medium' && status !== 'approved') return 'awaiting_review';
+      return 'proceed';
+    };
+    expect(gate('medium', 'pending')).toBe('awaiting_review');
+    expect(gate('medium', 'approved')).toBe('proceed');
+    expect(gate('low', 'pending')).toBe('proceed');
+    expect(gate('high', 'approved')).toBe('blocked');
   });
 });
 

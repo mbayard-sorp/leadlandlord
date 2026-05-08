@@ -34,21 +34,29 @@ import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/
 // Lazy-imported below to keep the test surface (schema + pure helpers) free
 // of the sanity module graph (which pulls in CSS via the sanity package and
 // breaks vitest's default loader). See `loadSanity()`.
+type SanityPatchOps = {
+  set: (v: Record<string, unknown>) => SanityPatchOps;
+  setIfMissing?: (v: Record<string, unknown>) => SanityPatchOps;
+  commit: () => Promise<unknown>;
+};
 type SanityClientLite = {
-  patch: (id: string) => { set: (v: Record<string, unknown>) => { commit: () => Promise<unknown> } };
+  patch: (id: string) => SanityPatchOps;
   fetch: <T = unknown>(query: string, params?: Record<string, unknown>) => Promise<T>;
+  createOrReplace: (doc: Record<string, unknown>) => Promise<unknown>;
 };
 async function loadSanity(): Promise<{
   createWriteClient: () => SanityClientLite;
   siteDocId: (id: string) => string;
 }> {
-  const mod = (await import('@leadlandlord/integrations/sanity')) as {
+  const mod = (await import('@leadlandlord/integrations/sanity')) as unknown as {
     createWriteClient: () => SanityClientLite;
     siteDocId: (id: string) => string;
   };
   return { createWriteClient: mod.createWriteClient, siteDocId: mod.siteDocId };
 }
 import { BaseAgent, type AgentContext } from '../base';
+import { ComplianceGuard } from '../compliance-guard/index';
+import { draftInfoPage } from './author-info-page';
 
 // ────────────────────────────────────────────────────────────
 // Schemas
@@ -126,6 +134,7 @@ export function normalizeSeoOperatorInput(raw: unknown): unknown {
 }
 
 export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOperatorOutput> {
+  private readonly compliance = new ComplianceGuard();
   constructor() {
     super({
       name: 'seo-operator',
@@ -470,10 +479,11 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
         // TODO(phase-2): MDX patching is fragile in v1 — keep operator-in-the-loop.
         return 'awaiting_review';
       case 'new_info_page':
-        // TODO(phase-2): trigger content-engine sub-agent to author the page,
-        // then attach to site doc's info_pages array. Marking awaiting_review
-        // for now since this is medium-risk; operator approval already required.
-        return 'awaiting_review';
+        // Medium-risk → only proceeds when status='approved' (the medium-risk
+        // gate in runApply already enforces this). Auto-authors a single info
+        // page via Claude, runs it through compliance-guard, then writes to
+        // Sanity and appends the page reference to the site doc.
+        return this.applyNewInfoPage(rec, ctx);
       case 'lighthouse_perf':
         // Perf fixes usually need code changes; operator review required.
         return 'awaiting_review';
@@ -524,6 +534,200 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
     const client = createWriteClient();
     await client.patch(pageDoc._id).set({ metaDescription: newMeta }).commit();
     ctx.log.info({ recId: rec.id, pageId: pageDoc._id }, 'meta description patched');
+    return 'auto_applied';
+  }
+
+  /**
+   * Author a brand-new info page for a content-gap recommendation, then
+   * persist it to Sanity and attach it to the site doc.
+   *
+   * Compliance-guard runs against the drafted MDX before persistence — if it
+   * blocks, we mark the recommendation 'failed' (caller maps that to the
+   * outer return). Warnings are logged but don't stop the write.
+   *
+   * Idempotency: doc id derived from (siteId, slug). Re-running the same
+   * recommendation `createOrReplace`s the page in place — safe.
+   */
+  private async applyNewInfoPage(
+    rec: SeoRecommendation,
+    ctx: AgentContext,
+  ): Promise<'auto_applied' | 'failed'> {
+    const payload = (rec.actionPayload ?? {}) as Record<string, unknown>;
+    const proposedSlug = typeof payload.proposedSlug === 'string' ? payload.proposedSlug : '';
+    const proposedTitle = typeof payload.proposedTitle === 'string' ? payload.proposedTitle : '';
+    const intentRaw = typeof payload.intent === 'string' ? payload.intent : 'info';
+    const intent: 'info' | 'service' | 'comparison' =
+      intentRaw === 'service' || intentRaw === 'comparison' ? intentRaw : 'info';
+    if (!proposedSlug || !proposedTitle) {
+      ctx.log.warn(
+        { recId: rec.id, payload },
+        'new_info_page: missing proposedSlug/proposedTitle in actionPayload',
+      );
+      return 'failed';
+    }
+
+    // Site row gives niche/city/state — needed for the prompt context.
+    const db = getDb();
+    const [siteRow] = await db.select().from(sites).where(eq(sites.id, rec.siteId)).limit(1);
+    if (!siteRow) {
+      ctx.log.warn({ recId: rec.id, siteId: rec.siteId }, 'new_info_page: site row not found');
+      return 'failed';
+    }
+
+    // Theme key from Sanity site doc — informational only (used to flavor the
+    // prompt). Pulled best-effort; default to 'classic' on miss.
+    const { createWriteClient, siteDocId } = await loadSanity();
+    const client = createWriteClient();
+    const siteRef = siteDocId(rec.siteId);
+    let themeKey: 'classic' | 'modern' | 'premium' | 'bright' = 'classic';
+    try {
+      const themeDoc = await client.fetch<{ theme?: { _ref?: string } } | null>(
+        `*[_id == $siteRef][0]{ "theme": theme }`,
+        { siteRef },
+      );
+      const ref = themeDoc?.theme?._ref;
+      if (ref?.startsWith('theme-')) {
+        const k = ref.slice('theme-'.length);
+        if (k === 'classic' || k === 'modern' || k === 'premium' || k === 'bright') themeKey = k;
+      }
+    } catch {
+      // ignore — themeKey is decorative
+    }
+
+    // 1. Draft via Claude (or MOCK_AI mock).
+    let drafted;
+    try {
+      drafted = await draftInfoPage({
+        siteId: rec.siteId,
+        proposedSlug,
+        proposedTitle,
+        intent,
+        niche: siteRow.niche,
+        city: siteRow.city,
+        state: siteRow.state,
+        ctx,
+        themeKey,
+      });
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err, recId: rec.id },
+        'new_info_page: draft failed',
+      );
+      return 'failed';
+    }
+
+    // 2. Compliance-guard — block on any blocker (fake reviews, license #
+    //    claims that look real, fake awards). Warnings just log.
+    const compliance = await this.compliance.run(
+      {
+        scope: 'site_content',
+        text: `${drafted.title}\n${drafted.metaDescription}\n${drafted.mdx}`,
+      },
+      { siteId: rec.siteId, parentRunId: ctx.runId },
+    );
+    if (!compliance.ok) {
+      ctx.log.warn(
+        { recId: rec.id, violations: compliance.violations },
+        'new_info_page: compliance-guard blocked drafted content',
+      );
+      // Stamp violations into rationale via failed-path so operator can review.
+      await db
+        .update(seoRecommendations)
+        .set({
+          status: 'failed',
+          appliedRunId: ctx.runId,
+          appliedAt: new Date(),
+          rationale: `${rec.rationale}\n\n[compliance blocked: ${compliance.violations
+            .filter((v) => v.severity === 'blocker')
+            .map((v) => v.rule)
+            .join(', ')}]`,
+        })
+        .where(eq(seoRecommendations.id, rec.id));
+      // Returning 'failed' lets runApply skip its own status write — we already
+      // wrote the failure row. But runApply unconditionally calls markStatus
+      // after this, which would overwrite. Match that contract: return 'failed'
+      // and let markStatus stamp the final state. Rationale already updated.
+      return 'failed';
+    }
+
+    // 3. Persist to Sanity. Deterministic ID by slug so re-running this
+    //    recommendation overwrites in place.
+    const pageDocId = `page-${rec.siteId}-info-${proposedSlug}`;
+    try {
+      await client.createOrReplace({
+        _id: pageDocId,
+        _type: 'page',
+        site: { _ref: siteRef, _type: 'reference' },
+        kind: 'info',
+        slug: proposedSlug,
+        title: drafted.title,
+        metaDescription: drafted.metaDescription,
+        mdx: drafted.mdx,
+        jsonLd: drafted.jsonLd,
+      });
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err, recId: rec.id, pageDocId },
+        'new_info_page: Sanity createOrReplace failed',
+      );
+      return 'failed';
+    }
+
+    // 4. Append the page ref to the site doc's infoPages array. Read-then-set
+    //    is fine because re-running with the same slug produces an identical
+    //    ref; we de-dup by _ref.
+    try {
+      const siteDoc = await client.fetch<{ infoPages?: Array<{ _ref?: string; _key?: string }> } | null>(
+        `*[_id == $siteRef][0]{ infoPages }`,
+        { siteRef },
+      );
+      const existing = Array.isArray(siteDoc?.infoPages) ? siteDoc!.infoPages! : [];
+      if (!existing.some((r) => r?._ref === pageDocId)) {
+        const next = [
+          ...existing,
+          {
+            _key: `info-${proposedSlug}`.slice(0, 40),
+            _ref: pageDocId,
+            _type: 'reference',
+          },
+        ];
+        await client.patch(siteRef).set({ infoPages: next }).commit();
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err, recId: rec.id, siteRef },
+        'new_info_page: site doc patch failed (page persisted, ref attach skipped)',
+      );
+      // Non-fatal: page exists, but won't be linked from site nav until next
+      // site-builder run. Still 'auto_applied' since the page itself shipped.
+    }
+
+    // 5. Stamp the page id back onto the recommendation payload so the
+    //    operator UI can deep-link to the new doc.
+    try {
+      await db
+        .update(seoRecommendations)
+        .set({
+          actionPayload: { ...payload, pageDocId, slug: proposedSlug },
+        })
+        .where(eq(seoRecommendations.id, rec.id));
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err, recId: rec.id },
+        'new_info_page: actionPayload patch failed (non-fatal)',
+      );
+    }
+
+    // 6. Best-effort revalidate via the Sanity webhook path (the createOrReplace
+    //    above will fire the webhook, which hits site-host /api/revalidate).
+    await this.requestRevalidation(rec.siteId, `/${proposedSlug}`, ctx).catch(() => {
+      /* logged inside */
+    });
+
+    ctx.log.info(
+      { recId: rec.id, pageDocId, slug: proposedSlug },
+      'new_info_page: authored + persisted',
+    );
     return 'auto_applied';
   }
 
