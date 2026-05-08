@@ -85,7 +85,24 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     // 2. Plan keyword clusters from DataForSEO. Skipped on re-target so the
     //    operator can refresh content without re-paying for keyword research.
     let clusters: KeywordClusterInput[] = [];
-    const skipPlanner = input.skip_keyword_planning ?? false;
+    let skipPlanner = input.skip_keyword_planning ?? false;
+    // Auto-skip when clusters already exist for this site. Belt-and-suspenders
+    // guard against the cluster.ready cascade: if a prior site-builder run
+    // already populated clusters in Sanity, a re-dispatched run (e.g. cron
+    // claiming a stale cluster.ready event) will skip planner, breaking the
+    // loop even if sub-emit suppression fails. Hit 2026-05-08: keyword-planner
+    // emitted cluster.ready despite being a sub-agent, fired 4 cascading
+    // site-builder runs before manual halt.
+    if (!skipPlanner) {
+      const existing = await loadKeywordClustersForSite(siteId);
+      if (existing.length > 0) {
+        ctx.log.info(
+          { existingClusters: existing.length },
+          'site already has clusters, skipping keyword-planner (loop guard)',
+        );
+        skipPlanner = true;
+      }
+    }
     if (!skipPlanner) {
       ctx.progress({ step: 2, total: 7, label: 'planning keyword clusters' });
       this.emit({ step: 'keywords_planning_started' });
