@@ -17,6 +17,7 @@
 
     { "path": "/api/cron/schedule/maintenance", "schedule": "0 7 * * *" },
     { "path": "/api/cron/schedule/portfolio-analyst", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/schedule/operator", "schedule": "*/10 * * * *" },
 
     { "path": "/api/cron/alert-evaluator", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/backups", "schedule": "0 3 * * *" }
