@@ -215,6 +215,26 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
     bundle.info_pages = [];
   }
 
+  // Defensive parse for page arrays. Claude occasionally serializes one of
+  // services/service_areas/blog_posts/info_pages as a JSON-encoded string
+  // (esp. on long content bundles). JSON.parse first, fall back to empty
+  // array. Hit 2026-05-08 on foundation repair build: blog_posts came back
+  // as a string and zod rejected the bundle, costing $0.51 per failed
+  // content-engine retry.
+  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
+    const v = bundle[key];
+    if (typeof v === 'string') {
+      try {
+        const parsed = JSON.parse(v);
+        bundle[key] = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        bundle[key] = [];
+      }
+    } else if (!Array.isArray(v)) {
+      bundle[key] = [];
+    }
+  }
+
   for (const key of ['home', 'about', 'contact'] as const) {
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);
   }
