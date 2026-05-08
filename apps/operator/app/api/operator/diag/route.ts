@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ANTHROPIC_MODULE_VERSION, getAnthropicClient } from '@leadlandlord/integrations/anthropic';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,11 +17,32 @@ export const dynamic = 'force-dynamic';
  *   - now: server timestamp
  */
 export async function GET() {
+  // Actually invoke getAnthropicClient and inspect the result. Proves whether
+  // the cron path's bundle has the same anthropic.ts that diag has.
+  let clientType = 'unknown';
+  let clientErr: string | null = null;
+  try {
+    const c: unknown = getAnthropicClient();
+    // Mock client has no real Anthropic prototype; real client has `_client`
+    // and `messages` of specific shape. Use a heuristic.
+    if (c && typeof c === 'object' && 'messages' in c) {
+      const m = (c as { messages: { create?: unknown } }).messages;
+      // Mock's messages.create is a plain async fn; SDK's is bound on a class.
+      const ctor = c.constructor?.name ?? 'unknown';
+      clientType = ctor === 'Object' ? 'mock' : ctor;
+      void m;
+    }
+  } catch (err) {
+    clientErr = err instanceof Error ? err.message : String(err);
+  }
+
   return NextResponse.json({
     mockAi: process.env.MOCK_AI ?? 'unset',
     hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+    anthropicModuleVersion: ANTHROPIC_MODULE_VERSION,
+    anthropicClientType: clientType,
+    anthropicClientErr: clientErr,
     codeMarkers: {
-      // PR 10 marker — bumped each time we ship a build to verify freshness.
       pr10_dedupe_fix: 'eventId-fallback-2026-05-07',
       pr12_mock_ai: 'mock-ai-2026-05-07',
     },

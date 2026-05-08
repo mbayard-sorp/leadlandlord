@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createMockAnthropicClient } from './anthropic-mock';
 
+/** Build-time marker — bumped on each fix to verify which code is running in prod. */
+export const ANTHROPIC_MODULE_VERSION = 'mock-ai-v1-2026-05-07T2358';
+
 let cached: Anthropic | null = null;
 
 export function getAnthropicClient(apiKey?: string): Anthropic {
