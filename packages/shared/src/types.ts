@@ -14,6 +14,7 @@ export const PageKind = z.enum([
   'about',
   'contact',
   'blog',
+  'info',
 ]);
 export type PageKind = z.infer<typeof PageKind>;
 

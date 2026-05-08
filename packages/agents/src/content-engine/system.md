@@ -112,7 +112,7 @@ A single JSON object:
 ```
 
 Every page object has:
-- `kind`: one of `home`, `service`, `service_area`, `about`, `contact`, `blog`
+- `kind`: one of `home`, `service`, `service_area`, `about`, `contact`, `blog`, `info`
 - `slug`: URL path (e.g., `/services/roof-inspection`)
 - `title`: HTML `<title>` tag content (≤60 chars where possible)
 - `meta_description`: ≤160 chars
