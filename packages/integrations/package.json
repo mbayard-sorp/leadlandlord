@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@leadlandlord/db": "workspace:*",
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
     "stripe": "^22.1.0",

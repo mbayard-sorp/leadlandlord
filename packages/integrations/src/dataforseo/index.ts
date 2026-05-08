@@ -1,4 +1,5 @@
 import { IntegrationError } from '@leadlandlord/shared/errors';
+import { stableKey, withDataForSeoCache } from './cache';
 
 /**
  * DataForSEO REST client.
@@ -109,8 +110,10 @@ export async function getLocalKeywordMetrics(args: {
   location: string;
   /** Defaults to 'en'. */
   language?: string;
+  /** Skip cache and re-fetch from DataForSEO. */
+  forceRefresh?: boolean;
 }): Promise<KeywordMetrics[]> {
-  const { keywords, location, language = 'en' } = args;
+  const { keywords, location, language = 'en', forceRefresh } = args;
   if (keywords.length === 0) return [];
   // MOCK_AI: return canned metrics so niche-hunter scoring path still runs.
   if (process.env.MOCK_AI === 'true') {
@@ -123,6 +126,29 @@ export async function getLocalKeywordMetrics(args: {
     }));
   }
 
+  // Cache key: language + location + sorted-deduped keyword set. Sorting means
+  // order doesn't matter; dedup means {a,b,a} hashes the same as {a,b}.
+  const sortedKeywords = Array.from(new Set(keywords.map((k) => k.toLowerCase()))).sort();
+  const cacheKey = stableKey([language, location, ...sortedKeywords]);
+  const { value } = await withDataForSeoCache<KeywordMetrics[]>({
+    endpoint: 'metrics',
+    key: cacheKey,
+    // Search volume / CPC drift over weeks; 30 days is the sweet spot before
+    // the underlying ranking signals shift enough to matter for site planning.
+    ttlDays: 30,
+    // ~$0.0006 search_volume + ~$0.001 KD per keyword. Stamp the per-call total.
+    costUsd: keywords.length * 0.0016,
+    forceRefresh,
+    fetcher: () => fetchLocalKeywordMetricsFromApi(keywords, location, language),
+  });
+  return value;
+}
+
+async function fetchLocalKeywordMetricsFromApi(
+  keywords: string[],
+  location: string,
+  language: string,
+): Promise<KeywordMetrics[]> {
   // Volume + CPC + competition
   const volumeRows = await dfsPost<{ items: SearchVolumeRow[] | null } | SearchVolumeRow>(
     '/keywords_data/google_ads/search_volume/live',
@@ -425,6 +451,8 @@ export async function getKeywordCandidates(args: {
   language?: string;
   relatedLimit?: number;
   suggestionLimit?: number;
+  /** Skip cache and re-fetch from DataForSEO. */
+  forceRefresh?: boolean;
 }): Promise<KeywordCandidate[]> {
   // MOCK_AI bypasses DataForSEO and returns canned candidates. Used by
   // the same end-to-end test harness that mocks Anthropic — see
@@ -432,19 +460,36 @@ export async function getKeywordCandidates(args: {
   if (process.env.MOCK_AI === 'true') {
     return mockKeywordCandidates(args.seed);
   }
-  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30 } = args;
-  const [related, suggestions] = await Promise.all([
-    getRelatedKeywords({ keyword: seed, language, limit: relatedLimit }),
-    getKeywordSuggestions({ keyword: seed, language, limit: suggestionLimit }),
-  ]);
-  const byPhrase = new Map<string, KeywordCandidate>();
-  for (const c of [...related, ...suggestions]) {
-    const existing = byPhrase.get(c.phrase);
-    if (!existing || c.search_volume > existing.search_volume) {
-      byPhrase.set(c.phrase, c);
-    }
-  }
-  return Array.from(byPhrase.values()).sort((a, b) => b.search_volume - a.search_volume);
+  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30, forceRefresh } = args;
+  // The seed is the natural cache key — keyword-planner emits seeds like
+  // `<niche>`, `<niche> near me`, `<niche> cost` that are city-independent
+  // and reusable across every site we ever build for that niche.
+  const cacheKey = `${language}:${seed.toLowerCase().trim()}:r${relatedLimit}:s${suggestionLimit}`;
+  const { value } = await withDataForSeoCache<KeywordCandidate[]>({
+    endpoint: 'candidates',
+    key: cacheKey,
+    // Candidate phrase universe is stable; semantic neighbors don't shift
+    // much over a quarter. 90 days keeps cost down without going stale.
+    ttlDays: 90,
+    // related_keywords ~$0.015 + keyword_suggestions ~$0.013.
+    costUsd: 0.028,
+    forceRefresh,
+    fetcher: async () => {
+      const [related, suggestions] = await Promise.all([
+        getRelatedKeywords({ keyword: seed, language, limit: relatedLimit }),
+        getKeywordSuggestions({ keyword: seed, language, limit: suggestionLimit }),
+      ]);
+      const byPhrase = new Map<string, KeywordCandidate>();
+      for (const c of [...related, ...suggestions]) {
+        const existing = byPhrase.get(c.phrase);
+        if (!existing || c.search_volume > existing.search_volume) {
+          byPhrase.set(c.phrase, c);
+        }
+      }
+      return Array.from(byPhrase.values()).sort((a, b) => b.search_volume - a.search_volume);
+    },
+  });
+  return value;
 }
 
 function mockKeywordCandidates(seed: string): KeywordCandidate[] {

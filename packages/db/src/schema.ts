@@ -531,6 +531,39 @@ export const agentBudgets = pgTable('agent_budgets', {
  * needing a separate row per tenant. New flags get added as columns; the
  * insert/upsert path in helpers/system-state.ts keeps the row alive.
  */
+/**
+ * Cache for DataForSEO API responses. Avoids re-paying for the same lookups
+ * across builds — keyword-planner seeds like `<niche>`, `<niche> near me`,
+ * `<niche> cost`, `<niche> services` are city-independent and reusable
+ * across every site we ever build for that niche.
+ *
+ * Keyed by (endpoint, key) where:
+ *   - endpoint: 'candidates' | 'metrics' | 'serp'
+ *   - key: a deterministic string per endpoint (the seed for candidates;
+ *          a hash of language|location|keywords for metrics; etc.)
+ *
+ * Caller checks freshness via `expires_at`. On hit, increments `hit_count`
+ * + stamps `last_hit_at` so we can see what's actually being reused.
+ */
+export const dataforseoCache = pgTable(
+  'dataforseo_cache',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    endpoint: text('endpoint').notNull(),
+    key: text('key').notNull(),
+    payload: jsonb('payload').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    costUsd: numeric('cost_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+    hitCount: integer('hit_count').notNull().default(0),
+    lastHitAt: timestamp('last_hit_at', { withTimezone: true }),
+  },
+  (t) => ({
+    endpointKeyIdx: uniqueIndex('dataforseo_cache_endpoint_key_idx').on(t.endpoint, t.key),
+    expiresAtIdx: index('dataforseo_cache_expires_at_idx').on(t.expiresAt),
+  }),
+);
+
 export const systemState = pgTable('system_state', {
   id: text('id').primaryKey().default('global'),
   killSwitch: boolean('kill_switch').notNull().default(false),
