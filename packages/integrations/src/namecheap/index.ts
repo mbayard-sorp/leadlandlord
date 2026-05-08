@@ -540,12 +540,67 @@ export async function searchDomains(args: {
 }
 
 /**
+ * Convert E.164 (`+18187267258`) to Namecheap's required `+CC.Number` format
+ * (`+1.8187267258`). Namecheap's RegistrantPhone validator rejects the bare
+ * E.164 string with error 2011182 ("Parameter RegistrantPhone is Invalid")
+ * and demands the period-separated country-code form.
+ *
+ * Accepts: `+1...`, `+1.812...`, `1812...`, `(818) 726-7258`, etc.
+ * Returns the canonical `+CC.Number` form. Country code defaulted to US (1)
+ * when not detectable.
+ */
+function normalizePhoneForNamecheap(input: string): string {
+  // Strip everything except digits and a leading + so the parse is stable.
+  const cleaned = input.trim().replace(/[^\d+]/g, '');
+  // Already in CC.Number form? Pass through.
+  const dotForm = input.match(/^\+(\d{1,3})\.(\d{6,})$/);
+  if (dotForm) return `+${dotForm[1]}.${dotForm[2]}`;
+
+  let cc = '';
+  let rest = '';
+  if (cleaned.startsWith('+')) {
+    // +1XXXXXXXXXX → cc=1, rest=XXXXXXXXXX (US/Canada). For other countries
+    // (2-digit and 3-digit codes) use a small heuristic: the cc portion is
+    // 1 digit if starts with 1 or 7, 2 digits for most others, 3 for African.
+    // For now we only ship to US-based fleets, so default to +1.
+    const digits = cleaned.slice(1);
+    if (digits.startsWith('1') && digits.length === 11) {
+      cc = '1';
+      rest = digits.slice(1);
+    } else if (digits.length >= 8 && digits.length <= 11) {
+      // Assume the first 1-3 chars are CC; for safety default to length-10 → cc=1
+      if (digits.length === 10) {
+        cc = '1';
+        rest = digits;
+      } else {
+        cc = digits.slice(0, digits.length - 10);
+        rest = digits.slice(-10);
+      }
+    } else {
+      cc = '1';
+      rest = digits;
+    }
+  } else {
+    // No leading + — assume US, strip a leading 1 if present.
+    if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      cc = '1';
+      rest = cleaned.slice(1);
+    } else {
+      cc = '1';
+      rest = cleaned;
+    }
+  }
+  return `+${cc}.${rest}`;
+}
+
+/**
  * Build the contact-block params for `domains.create`. Namecheap requires
  * all FOUR contact blocks (Registrant/Tech/Admin/AuxBilling); we set all
  * of them to identical values.
  */
 function buildContactParams(c: RegistrantContact): Record<string, string> {
   const blocks = ['Registrant', 'Tech', 'Admin', 'AuxBilling'] as const;
+  const phone = normalizePhoneForNamecheap(c.phone);
   const params: Record<string, string> = {};
   for (const b of blocks) {
     params[`${b}FirstName`] = c.firstName;
@@ -555,7 +610,7 @@ function buildContactParams(c: RegistrantContact): Record<string, string> {
     params[`${b}StateProvince`] = c.state;
     params[`${b}PostalCode`] = c.zip;
     params[`${b}Country`] = c.country;
-    params[`${b}Phone`] = c.phone;
+    params[`${b}Phone`] = phone;
     params[`${b}EmailAddress`] = c.email;
     if (c.organization) params[`${b}OrganizationName`] = c.organization;
   }
