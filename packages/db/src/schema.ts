@@ -823,6 +823,45 @@ export const maintenanceFindings = pgTable(
 );
 
 // ────────────────────────────────────────────────────────────
+// Alerts (Phase E)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Configurable alerting rules evaluated by the alert-evaluator cron. Each
+ * rule names a fixed evaluator (in apps/operator/app/api/cron/alert-evaluator)
+ * and carries rule-specific thresholds + cooldown to suppress flapping.
+ * Channels list is the default — actual fired channels are tracked per-event.
+ */
+export const alertRules = pgTable('alert_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** 'agent_failure_rate' | 'llm_spend_spike' | 'stripe_webhook_failures' | 'ssl_expiry' | 'domain_expiry' */
+  name: text('name').notNull().unique(),
+  enabled: boolean('enabled').notNull().default(true),
+  thresholds: jsonb('thresholds').notNull(),
+  cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
+  lastFiredAt: timestamp('last_fired_at', { withTimezone: true }),
+  channels: jsonb('channels').notNull().default(sql`'["pagerduty","slack"]'::jsonb`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const alertEvents = pgTable(
+  'alert_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ruleId: uuid('rule_id').references(() => alertRules.id, { onDelete: 'cascade' }),
+    ruleName: text('rule_name').notNull(),
+    /** 'info' | 'warning' | 'critical' */
+    severity: text('severity').notNull(),
+    payload: jsonb('payload').notNull(),
+    channelsFired: jsonb('channels_fired').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    ruleCreatedIdx: index('alert_events_rule_created_idx').on(t.ruleName, t.createdAt),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
 
@@ -857,6 +896,10 @@ export type LighthouseAudit = typeof lighthouseAudits.$inferSelect;
 export type NewLighthouseAudit = typeof lighthouseAudits.$inferInsert;
 export type DomainCandidate = typeof domainCandidates.$inferSelect;
 export type NewDomainCandidate = typeof domainCandidates.$inferInsert;
+export type AlertRule = typeof alertRules.$inferSelect;
+export type NewAlertRule = typeof alertRules.$inferInsert;
+export type AlertEvent = typeof alertEvents.$inferSelect;
+export type NewAlertEvent = typeof alertEvents.$inferInsert;
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 export type OutreachEvent = typeof outreachEvents.$inferSelect;
