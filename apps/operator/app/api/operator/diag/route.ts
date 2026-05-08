@@ -45,6 +45,7 @@ export async function GET() {
     codeMarkers: {
       pr10_dedupe_fix: 'eventId-fallback-2026-05-07',
       pr12_mock_ai: 'mock-ai-2026-05-07',
+      pr15_cascade_defense: 'loop-guard-2026-05-08T0530',
     },
     now: new Date().toISOString(),
   });
