@@ -233,6 +233,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.39.0
         version: 0.39.0
+      '@leadlandlord/db':
+        specifier: workspace:*
+        version: link:../db
       '@leadlandlord/sanity-schema':
         specifier: workspace:*
         version: link:../sanity-schema
