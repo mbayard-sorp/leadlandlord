@@ -2,9 +2,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createMockAnthropicClient } from './anthropic-mock';
 
 /** Build-time marker — bumped on each fix to verify which code is running in prod. */
-export const ANTHROPIC_MODULE_VERSION = 'mock-ai-v1-2026-05-07T2358';
+export const ANTHROPIC_MODULE_VERSION = 'mock-ai-v2-2026-05-08T0030-split-cache';
 
-let cached: Anthropic | null = null;
+// Separate caches per mode. PRIOR BUG: a single shared `cached` meant a real
+// Anthropic client constructed before MOCK_AI was set in env would be returned
+// even after MOCK_AI=true (because the mock branch's `if (!cached)` saw the
+// real client and returned it). Split caches eliminate the bleed.
+let cachedReal: Anthropic | null = null;
+let cachedMock: Anthropic | null = null;
 
 export function getAnthropicClient(apiKey?: string): Anthropic {
   // MOCK_AI bypasses the real Anthropic SDK and returns canned tool-use
@@ -14,18 +19,18 @@ export function getAnthropicClient(apiKey?: string): Anthropic {
   // to resume real generation. Hit a $103 cascade today (2026-05-07) before
   // shipping this safety valve.
   if (process.env.MOCK_AI === 'true') {
-    if (!cached) {
-      cached = createMockAnthropicClient() as Anthropic;
+    if (!cachedMock) {
+      cachedMock = createMockAnthropicClient() as Anthropic;
     }
-    return cached;
+    return cachedMock;
   }
-  if (cached) return cached;
+  if (cachedReal) return cachedReal;
   const key = apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!key) {
     throw new Error('ANTHROPIC_API_KEY is not set.');
   }
-  cached = new Anthropic({ apiKey: key });
-  return cached;
+  cachedReal = new Anthropic({ apiKey: key });
+  return cachedReal;
 }
 
 /**

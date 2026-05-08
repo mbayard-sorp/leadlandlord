@@ -38,6 +38,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
   }
 
+  // BUILD MARKER — printed every tick to verify which build is running.
+  // Bumped 2026-05-08T00:30 with PR 12 + alias-fix verification.
+  log.info(
+    { build_marker: 'pr12-mock-2026-05-08T0030', mock_ai: process.env.MOCK_AI ?? 'unset' },
+    'operator-tick build marker',
+  );
   const events = await claimEvents(BATCH_LIMIT);
   log.info({ claimed: events.length }, 'operator-tick claimed events');
 
