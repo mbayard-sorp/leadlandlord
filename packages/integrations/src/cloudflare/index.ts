@@ -103,7 +103,62 @@ const RegistrarDomainResult = z.object({
 // ─────────────────────────────────────────────────────────────────────────
 
 function isMock(): boolean {
-  return process.env.CLOUDFLARE_DRY_RUN === 'true' || process.env.MOCK_TELEPHONY === 'true';
+  // MOCK_TELEPHONY is a Twilio-only flag and must NOT gate Cloudflare —
+  // historically it triggered mock here too, which made the agent silently
+  // return synthetic candidates even when the operator wanted real data.
+  return process.env.CLOUDFLARE_DRY_RUN === 'true';
+}
+
+/**
+ * RDAP-based domain availability check. Cloudflare's `/registrar/domains/{name}/availability`
+ * endpoint is not in the public API surface (returns 404), so we use the
+ * registry-of-record's RDAP service via the rdap.org bootstrap.
+ *
+ * Returns `{ available: true }` when no registration record exists (HTTP 404),
+ * `{ available: false }` when one exists (HTTP 200), and `null` on error so
+ * the caller can decide to skip vs treat as unavailable.
+ */
+async function rdapCheckAvailability(domain: string): Promise<boolean | null> {
+  try {
+    const r = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
+      method: 'GET',
+      // rdap.org redirects to the authoritative registry; follow them.
+      redirect: 'follow',
+    });
+    if (r.status === 404) return true;  // No registration record → available
+    if (r.status === 200) return false; // Registration exists → taken
+    // 429 / 5xx / other — treat as unknown
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cloudflare publishes at-cost domain pricing on their pricing page; the public
+ * API doesn't expose them for unowned domains. Hardcode the common TLDs with
+ * their current at-cost annual price (USD). Source: cloudflare.com/products/registrar/
+ * — verify periodically. Unknown TLDs return null and the candidate is shown
+ * with "—" price; the actual charge is computed at registration time.
+ */
+const CF_AT_COST_PRICES: Record<string, number> = {
+  com: 10.44,
+  net: 12.18,
+  org: 10.11,
+  io: 41.4,
+  co: 25.31,
+  app: 14.0,
+  dev: 12.0,
+  ai: 75.0,
+  xyz: 9.95,
+  info: 14.99,
+  biz: 16.61,
+  us: 8.61,
+};
+
+function priceForTld(domain: string): number | null {
+  const tld = domain.split('.').pop()?.toLowerCase();
+  return tld ? CF_AT_COST_PRICES[tld] ?? null : null;
 }
 
 function getCreds(): { token: string; accountId: string } {
@@ -196,33 +251,102 @@ interface RawCandidate {
   matchType: 'exact' | 'partial' | 'keyword';
 }
 
+/**
+ * Allowed TLDs are read from `CLOUDFLARE_ALLOWED_TLDS` (CSV) and default to
+ * the SEO-trustworthy set: `.com` is universally trusted, `.net` is the
+ * accepted fallback. Avoid `.io`, `.co`, `.app` etc. for local-services
+ * sites — clients type `.com` instinctively, alt-TLDs hurt trust + CTR.
+ *
+ * To enable an alt TLD per build, set the env var, e.g.:
+ *   CLOUDFLARE_ALLOWED_TLDS=com,net,co
+ */
+function getAllowedTlds(): Set<string> {
+  const raw = process.env.CLOUDFLARE_ALLOWED_TLDS ?? 'com,net';
+  return new Set(
+    raw
+      .split(',')
+      .map((t) => t.trim().toLowerCase().replace(/^\./, ''))
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Common metro nicknames for better candidate generation. When a city has a
+ * widely-used short form, also generate `{niche}{nickname}.com` style domains.
+ * Keep this list focused on US metros with high SEO competition where the
+ * canonical name is often already taken.
+ */
+const CITY_NICKNAMES: Record<string, string[]> = {
+  'las vegas': ['vegas', 'lv'],
+  'los angeles': ['la', 'losangeles'],
+  'new york': ['nyc', 'newyork', 'ny'],
+  'san francisco': ['sf', 'sfbay'],
+  'philadelphia': ['philly'],
+  'phoenix': ['phx'],
+  'chicago': ['chitown', 'chi'],
+  'washington': ['dc'],
+  'minneapolis': ['mpls', 'twincities'],
+  'st. louis': ['stl'],
+  'st louis': ['stl'],
+};
+
 function generateCandidates(args: { niche: string; city: string; state: string }): RawCandidate[] {
   const niche = slug(args.niche);
   const city = slug(args.city);
   const state = slug(args.state);
   const nicheH = slugWithHyphens(args.niche);
   const cityH = slugWithHyphens(args.city);
+  const cityKey = args.city.toLowerCase().trim();
+  const nicknames = CITY_NICKNAMES[cityKey] ?? [];
 
+  const allowed = getAllowedTlds();
   const out: RawCandidate[] = [];
   const push = (domain: string, matchType: 'exact' | 'partial' | 'keyword') => {
+    const tld = domain.split('.').pop()?.toLowerCase();
+    if (tld && !allowed.has(tld)) return;
     if (!out.find((c) => c.domain === domain)) out.push({ domain, matchType });
   };
 
-  // Exact-match: niche+city, niche+city+state across .com/.net/.io
+  // Exact-match: niche + city
   push(`${niche}${city}.com`, 'exact');
   push(`${nicheH}-${cityH}.com`, 'exact');
   push(`${niche}${city}.net`, 'exact');
   push(`${niche}${city}.io`, 'exact');
+  push(`${niche}${city}.co`, 'exact');
+
+  // Exact-match against city nicknames (often the only available option for
+  // competitive metros where the full city name is taken).
+  for (const nick of nicknames) {
+    push(`${niche}${nick}.com`, 'exact');
+    push(`${nicheH}-${nick}.com`, 'exact');
+    push(`${niche}${nick}.net`, 'exact');
+  }
 
   // Partial: niche+state, city+niche
   push(`${niche}${state}.com`, 'partial');
+  push(`${niche}${state}.net`, 'partial');
   push(`${city}${niche}.com`, 'partial');
+  push(`${city}${niche}.net`, 'partial');
   push(`${nicheH}-${cityH}.io`, 'partial');
 
-  // Keyword: niche only / city only
+  // Keyword variants — descriptors that signal local services without being
+  // brand-y. Heavy on .com because that's where SEO trust lives.
   push(`${niche}.io`, 'keyword');
   push(`get${niche}${city}.com`, 'keyword');
   push(`${niche}${city}pros.com`, 'keyword');
+  push(`${niche}${city}llc.com`, 'keyword');
+  push(`${niche}${city}co.com`, 'keyword');
+  push(`local${niche}${city}.com`, 'keyword');
+  push(`${niche}of${city}.com`, 'keyword');
+  push(`${niche}services${city}.com`, 'keyword');
+  push(`${city}${niche}company.com`, 'keyword');
+  push(`top${niche}${city}.com`, 'keyword');
+  push(`best${niche}${city}.com`, 'keyword');
+  for (const nick of nicknames) {
+    push(`${niche}${nick}pros.com`, 'keyword');
+    push(`get${niche}${nick}.com`, 'keyword');
+    push(`top${niche}${nick}.com`, 'keyword');
+  }
 
   return out;
 }
@@ -261,35 +385,21 @@ export async function searchDomains(args: {
     }));
   }
 
-  const { token, accountId } = getCreds();
+  // Validate creds early so we fail loudly rather than silently producing
+  // an empty list (which historically looked identical to "all taken").
+  getCreds();
   const checked = await Promise.all(
     candidates.map(async (c) => {
-      try {
-        const result = (await cfFetch(
-          `/accounts/${encodeURIComponent(accountId)}/registrar/domains/${encodeURIComponent(c.domain)}/availability`,
-          { method: 'GET', token },
-        )) as unknown;
-        const parsed = AvailabilityResult.parse(result ?? {});
-        const price =
-          parsed.current_price ?? parsed.registration_price ?? parsed.transfer_in_price ?? null;
-        return {
-          domain: c.domain,
-          available: parsed.available === true,
-          priceUsd: price,
-          matchType: c.matchType,
-        };
-      } catch (err) {
-        log.warn(
-          { domain: c.domain, err: err instanceof Error ? err.message : String(err) },
-          'availability check failed — skipping candidate',
-        );
-        return {
-          domain: c.domain,
-          available: false,
-          priceUsd: null,
-          matchType: c.matchType,
-        };
+      const available = await rdapCheckAvailability(c.domain);
+      if (available === null) {
+        log.warn({ domain: c.domain }, 'rdap availability check inconclusive — skipping candidate');
       }
+      return {
+        domain: c.domain,
+        available: available === true,
+        priceUsd: priceForTld(c.domain),
+        matchType: c.matchType,
+      };
     }),
   );
 
