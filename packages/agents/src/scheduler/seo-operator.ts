@@ -21,7 +21,10 @@ export async function scheduleSeoOperator(): Promise<ScheduledEvent[]> {
   const week = isoWeekKey(new Date());
   return list.map((r) => ({
     agent: 'seo-operator',
-    payload: { site_id: r.site_id, audit_kind: 'all' },
+    // The seo-operator agent normalizes legacy `{ site_id }` payloads to
+    // `{ mode: 'review', siteId }`. Send the canonical shape directly so the
+    // operator-tick activity panel records the correct site association.
+    payload: { mode: 'review', siteId: r.site_id, site_id: r.site_id },
     dedupeKey: `seo-operator:site:${r.site_id}:${week}`,
   }));
 }

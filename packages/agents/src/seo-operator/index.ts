@@ -29,8 +29,25 @@ import {
   type NewSeoRecommendation,
   type SeoRecommendation,
 } from '@leadlandlord/db';
-import { createWriteClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
+
+// Lazy-imported below to keep the test surface (schema + pure helpers) free
+// of the sanity module graph (which pulls in CSS via the sanity package and
+// breaks vitest's default loader). See `loadSanity()`.
+type SanityClientLite = {
+  patch: (id: string) => { set: (v: Record<string, unknown>) => { commit: () => Promise<unknown> } };
+  fetch: <T = unknown>(query: string, params?: Record<string, unknown>) => Promise<T>;
+};
+async function loadSanity(): Promise<{
+  createWriteClient: () => SanityClientLite;
+  siteDocId: (id: string) => string;
+}> {
+  const mod = (await import('@leadlandlord/integrations/sanity')) as {
+    createWriteClient: () => SanityClientLite;
+    siteDocId: (id: string) => string;
+  };
+  return { createWriteClient: mod.createWriteClient, siteDocId: mod.siteDocId };
+}
 import { BaseAgent, type AgentContext } from '../base';
 
 // ────────────────────────────────────────────────────────────
@@ -68,6 +85,46 @@ export type SeoOperatorOutput = z.infer<typeof SeoOperatorOutput>;
 // Agent
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Pre-parse normalizer. Two upstream payload shapes need translation to the
+ * canonical SeoOperatorInput discriminated union:
+ *
+ *  - scheduler/seo-operator.ts emits `{ site_id, audit_kind: 'all' }` (legacy
+ *    stub-era shape). Map to `{ mode: 'review', siteId: site_id }`.
+ *  - apps/operator/app/operator/seo/actions.ts emits
+ *    `{ site_id, recommendation_id, action_payload }` for
+ *    seo.recommendation.approved. Map to `{ mode: 'apply', recommendationId }`.
+ *
+ * Anything that already declares `mode` is passed through, with snake_case
+ * keys bridged to camelCase if needed.
+ */
+export function normalizeSeoOperatorInput(raw: unknown): unknown {
+  if (raw == null || typeof raw !== 'object') return raw;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.mode === 'string') {
+    if (r.mode === 'review' && typeof r.site_id === 'string' && r.siteId == null) {
+      return { ...r, siteId: r.site_id };
+    }
+    if (r.mode === 'apply' && typeof r.recommendation_id === 'string' && r.recommendationId == null) {
+      return { ...r, recommendationId: r.recommendation_id };
+    }
+    return r;
+  }
+  if (typeof r.recommendation_id === 'string' || typeof r.recommendationId === 'string') {
+    return {
+      mode: 'apply',
+      recommendationId: (r.recommendationId ?? r.recommendation_id) as string,
+    };
+  }
+  if (typeof r.site_id === 'string' || typeof r.siteId === 'string') {
+    return {
+      mode: 'review',
+      siteId: (r.siteId ?? r.site_id) as string,
+    };
+  }
+  return r;
+}
+
 export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOperatorOutput> {
   constructor() {
     super({
@@ -82,6 +139,18 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
         return `apply:${input.recommendationId}`;
       },
     });
+  }
+
+  /**
+   * Accept legacy snake_case event payloads from the scheduler and operator UI.
+   * Normalize before BaseAgent's zod parse so the discriminated union stays
+   * strict everywhere else.
+   */
+  override async run(
+    rawInput: unknown,
+    opts: Parameters<BaseAgent<typeof SeoOperatorInput, typeof SeoOperatorOutput>['run']>[1] = {},
+  ): Promise<SeoOperatorOutput> {
+    return super.run(normalizeSeoOperatorInput(rawInput), opts);
   }
 
   protected async execute(
@@ -432,6 +501,7 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
     const newTitle = await this.draftTitle(pageDoc.title ?? '', query ?? '', ctx);
     if (!newTitle) return 'failed';
 
+    const { createWriteClient } = await loadSanity();
     const client = createWriteClient();
     await client.patch(pageDoc._id).set({ title: newTitle }).commit();
     ctx.log.info({ recId: rec.id, pageId: pageDoc._id, newTitle }, 'title patched');
@@ -450,6 +520,7 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
     const newMeta = await this.draftMeta(pageDoc.title ?? '', pageDoc.metaDescription ?? '', ctx);
     if (!newMeta) return 'failed';
 
+    const { createWriteClient } = await loadSanity();
     const client = createWriteClient();
     await client.patch(pageDoc._id).set({ metaDescription: newMeta }).commit();
     ctx.log.info({ recId: rec.id, pageId: pageDoc._id }, 'meta description patched');
@@ -485,6 +556,7 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
       description: pageDoc.metaDescription ?? '',
     });
 
+    const { createWriteClient } = await loadSanity();
     const client = createWriteClient();
     await client.patch(pageDoc._id).set({ jsonLd }).commit();
     return 'auto_applied';
@@ -596,6 +668,7 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
     ctx: AgentContext,
   ): Promise<{ _id: string; title?: string; metaDescription?: string; slug?: string } | null> {
     const slug = extractSlug(targetPage);
+    const { createWriteClient, siteDocId } = await loadSanity();
     const client = createWriteClient();
     const siteRef = siteDocId(siteId);
     // GROQ — match site reference + slug variants. The home page slug may be
@@ -690,25 +763,31 @@ interface AggByQuery {
 }
 
 function aggregateByQueryPage(rows: GscRow[]): AggByQueryPage[] {
-  const acc = new Map<string, { clicks: number; impressions: number; weightedPos: number }>();
+  const acc = new Map<
+    string,
+    { query: string; page: string; clicks: number; impressions: number; weightedPos: number }
+  >();
   for (const r of rows) {
-    const key = `${r.query}${r.page}`;
-    const cur = acc.get(key) ?? { clicks: 0, impressions: 0, weightedPos: 0 };
+    const key = `${r.query} ${r.page}`;
+    const cur = acc.get(key) ?? {
+      query: r.query,
+      page: r.page,
+      clicks: 0,
+      impressions: 0,
+      weightedPos: 0,
+    };
     cur.clicks += r.clicks;
     cur.impressions += r.impressions;
     cur.weightedPos += Number(r.position) * r.impressions;
     acc.set(key, cur);
   }
-  return Array.from(acc.entries()).map(([key, v]) => {
-    const [query, page] = key.split('');
-    return {
-      query: query!,
-      page: page!,
-      clicks: v.clicks,
-      impressions: v.impressions,
-      position: v.impressions > 0 ? v.weightedPos / v.impressions : 0,
-    };
-  });
+  return Array.from(acc.values()).map((v) => ({
+    query: v.query,
+    page: v.page,
+    clicks: v.clicks,
+    impressions: v.impressions,
+    position: v.impressions > 0 ? v.weightedPos / v.impressions : 0,
+  }));
 }
 
 function aggregateByPage(rows: GscRow[]): AggByPage[] {

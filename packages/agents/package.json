@@ -10,6 +10,7 @@
     "./base": "./src/base.ts",
     "./site-builder": "./src/site-builder/index.ts",
     "./content-engine": "./src/content-engine/index.ts",
+    "./seo-operator": "./src/seo-operator/index.ts",
     "./tracking-setup": "./src/tracking-setup/index.ts",
     "./call-classifier": "./src/call-classifier/index.ts",
     "./tenant-prospector": "./src/tenant-prospector/index.ts",

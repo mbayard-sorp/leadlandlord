@@ -21,9 +21,6 @@
     },
     "app/api/cron/schedule/[name]/route.ts": {
       "maxDuration": 60
-    },
-    "app/api/cron/seo-apply/route.ts": {
-      "maxDuration": 300
     }
   }
 }
