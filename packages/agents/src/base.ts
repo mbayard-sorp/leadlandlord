@@ -220,8 +220,21 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         // Suppress when running as a sub-agent. The parent orchestrator is
         // chaining the next step in-process; emitting here would spawn a
         // duplicate cron-driven pipeline. See cluster.ready cascade
-        // incident 2026-05-07 ($85.53 burned).
-        if (opts.parentRunId !== undefined) return;
+        // incident 2026-05-07 ($85.53 burned) and 2026-05-08 (3 cascading
+        // site-builder runs despite suppression check passing in source —
+        // the diagnostic log below captures opts shape so we can debug).
+        const parentRunIdAtEmit = opts.parentRunId;
+        const suppress = parentRunIdAtEmit !== undefined;
+        log.info(
+          {
+            event_type: args.type,
+            target_agent: args.targetAgent,
+            parent_run_id: parentRunIdAtEmit ?? null,
+            suppressed: suppress,
+          },
+          suppress ? 'emitNextStepEvent suppressed (sub-agent)' : 'emitNextStepEvent firing',
+        );
+        if (suppress) return;
         await db.insert(agentEvents).values({
           agent: this.name,
           type: args.type,
