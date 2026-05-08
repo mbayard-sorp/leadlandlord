@@ -13,7 +13,13 @@
     { "path": "/api/cron/schedule/lighthouse-audit", "schedule": "0 7 * * 1" },
     { "path": "/api/cron/schedule/seo-operator", "schedule": "0 8 * * 1" },
     { "path": "/api/cron/schedule/seo-ingest-gsc", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/schedule/seo-ingest-ga4", "schedule": "15 6 * * *" }
+    { "path": "/api/cron/schedule/seo-ingest-ga4", "schedule": "15 6 * * *" },
+
+    { "path": "/api/cron/schedule/maintenance", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/schedule/portfolio-analyst", "schedule": "0 18 * * *" },
+
+    { "path": "/api/cron/alert-evaluator", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/backups", "schedule": "0 3 * * *" }
   ],
   "functions": {
     "app/api/cron/agent/[name]/route.ts": {

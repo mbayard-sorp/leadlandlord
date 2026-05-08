@@ -16,6 +16,7 @@ import { CloserAgent } from './closer-agent/index';
 import { BillingDunning } from './billing-dunning/index';
 import { ChurnRecovery } from './churn-recovery/index';
 import { PortfolioAnalyst } from './portfolio-analyst/index';
+import { MaintenanceAgent } from './maintenance/index';
 import { ComplianceGuard } from './compliance-guard/index';
 import { CallClassifier } from './call-classifier/index';
 import { Operator } from './operator/index';
@@ -42,6 +43,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'billing-dunning': () => new BillingDunning(),
   'churn-recovery': () => new ChurnRecovery(),
   'portfolio-analyst': () => new PortfolioAnalyst(),
+  maintenance: () => new MaintenanceAgent(),
   'compliance-guard': () => new ComplianceGuard(),
   'call-classifier': () => new CallClassifier(),
   operator: () => new Operator(),

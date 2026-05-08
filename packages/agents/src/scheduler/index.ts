@@ -8,6 +8,8 @@ import { scheduleSeoOperator } from './seo-operator';
 import { scheduleSeoIngestGsc } from './seo-ingest-gsc';
 import { scheduleSeoIngestGa4 } from './seo-ingest-ga4';
 import { scheduleLighthouseAudit } from './lighthouse-audit';
+import { scheduleMaintenance } from './maintenance';
+import { schedulePortfolioAnalyst } from './portfolio-analyst';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -24,6 +26,8 @@ export const schedulers: Record<string, Scheduler> = {
   'seo-ingest-gsc': scheduleSeoIngestGsc,
   'seo-ingest-ga4': scheduleSeoIngestGa4,
   'lighthouse-audit': scheduleLighthouseAudit,
+  maintenance: scheduleMaintenance,
+  'portfolio-analyst': schedulePortfolioAnalyst,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';
