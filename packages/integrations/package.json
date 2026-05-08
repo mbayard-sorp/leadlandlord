@@ -29,6 +29,7 @@
     "@leadlandlord/db": "workspace:*",
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
+    "drizzle-orm": "^0.36.4",
     "stripe": "^22.1.0",
     "zod": "^3.24.0"
   },
