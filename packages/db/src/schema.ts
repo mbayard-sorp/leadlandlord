@@ -755,6 +755,74 @@ export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
 });
 
 // ────────────────────────────────────────────────────────────
+// Phase D — Portfolio Analyst + Maintenance
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Per-site / per-niche / portfolio-wide daily snapshot rows.
+ *
+ *   - `siteId` set, `niche` null  → per-site row
+ *   - `siteId` null, `niche` set  → per-niche aggregate row
+ *   - `siteId` null, `niche` null → portfolio-wide aggregate row
+ */
+export const portfolioSnapshots = pgTable(
+  'portfolio_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    date: text('date').notNull(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    niche: text('niche'),
+    mrrUsd: numeric('mrr_usd', { precision: 10, scale: 2 }).notNull().default('0'),
+    costsUsd: numeric('costs_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+    callsCount: integer('calls_count').notNull().default(0),
+    leadsCount: integer('leads_count').notNull().default(0),
+    trialActiveCount: integer('trial_active_count').notNull().default(0),
+    tenantsActiveCount: integer('tenants_active_count').notNull().default(0),
+    status: text('status'),
+    rationale: text('rationale'),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    dateSiteIdx: uniqueIndex('portfolio_snapshots_date_site_uniq')
+      .on(t.date, t.siteId)
+      .where(sql`${t.siteId} IS NOT NULL`),
+    dateNicheIdx: uniqueIndex('portfolio_snapshots_date_niche_uniq')
+      .on(t.date, t.niche)
+      .where(sql`${t.siteId} IS NULL AND ${t.niche} IS NOT NULL`),
+    datePortfolioIdx: uniqueIndex('portfolio_snapshots_date_portfolio_uniq')
+      .on(t.date)
+      .where(sql`${t.siteId} IS NULL AND ${t.niche} IS NULL`),
+    dateIdx: index('portfolio_snapshots_date_idx').on(t.date),
+  }),
+);
+
+/**
+ * Findings emitted by the maintenance agent. The agent dedupes at write
+ * time so a recurring finding for (siteId, category) with status='open'
+ * updates the existing row instead of inserting a duplicate.
+ */
+export const maintenanceFindings = pgTable(
+  'maintenance_findings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    category: text('category').notNull(),
+    severity: text('severity').notNull(),
+    detail: text('detail').notNull(),
+    status: text('status').notNull().default('open'),
+    autoFixedAt: timestamp('auto_fixed_at', { withTimezone: true }),
+    metadata: jsonb('metadata'),
+    detectedAt: timestamp('detected_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (t) => ({
+    siteCategoryIdx: index('maintenance_findings_site_category_idx').on(t.siteId, t.category),
+    statusIdx: index('maintenance_findings_status_idx').on(t.status),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
 
@@ -793,3 +861,7 @@ export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 export type OutreachEvent = typeof outreachEvents.$inferSelect;
 export type NewOutreachEvent = typeof outreachEvents.$inferInsert;
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
+export type NewPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
+export type MaintenanceFinding = typeof maintenanceFindings.$inferSelect;
+export type NewMaintenanceFinding = typeof maintenanceFindings.$inferInsert;
