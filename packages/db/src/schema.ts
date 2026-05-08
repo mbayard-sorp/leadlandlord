@@ -512,7 +512,19 @@ export const agentBudgets = pgTable('agent_budgets', {
   dailyCostCapUsd: numeric('daily_cost_cap_usd', { precision: 10, scale: 2 })
     .notNull()
     .default('5'),
+  weeklyCostCapUsd: numeric('weekly_cost_cap_usd', { precision: 10, scale: 2 })
+    .notNull()
+    .default('50'),
+  monthlyCostCapUsd: numeric('monthly_cost_cap_usd', { precision: 10, scale: 2 })
+    .notNull()
+    .default('200'),
   spentTodayUsd: numeric('spent_today_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+  spentThisWeekUsd: numeric('spent_this_week_usd', { precision: 10, scale: 4 })
+    .notNull()
+    .default('0'),
+  spentThisMonthUsd: numeric('spent_this_month_usd', { precision: 10, scale: 4 })
+    .notNull()
+    .default('0'),
   /**
    * Per-agent enable flag. When `false`, BaseAgent.run throws AgentDisabledError
    * before any work happens, the dispatcher classifies as terminal `agent_disabled`
@@ -574,6 +586,148 @@ export const systemState = pgTable('system_state', {
 });
 
 // ────────────────────────────────────────────────────────────
+// SEO / GA4 / Lighthouse / Recommendations (Phase A)
+// ────────────────────────────────────────────────────────────
+
+export const seoMetricsDaily = pgTable(
+  'seo_metrics_daily',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** YYYY-MM-DD; stored as text for portability across drizzle versions. */
+    date: text('date').notNull(),
+    query: text('query').notNull(),
+    page: text('page').notNull(),
+    clicks: integer('clicks').notNull().default(0),
+    impressions: integer('impressions').notNull().default(0),
+    ctr: numeric('ctr', { precision: 6, scale: 4 }).notNull().default('0'),
+    position: numeric('position', { precision: 6, scale: 2 }).notNull().default('0'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteDateQueryPageUniq: uniqueIndex('seo_metrics_daily_site_date_query_page_uniq').on(
+      t.siteId,
+      t.date,
+      t.query,
+      t.page,
+    ),
+    siteDateIdx: index('seo_metrics_daily_site_date_idx').on(t.siteId, t.date),
+  }),
+);
+
+export const ga4MetricsDaily = pgTable(
+  'ga4_metrics_daily',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    sessions: integer('sessions').notNull().default(0),
+    users: integer('users').notNull().default(0),
+    engagedSessions: integer('engaged_sessions').notNull().default(0),
+    conversions: integer('conversions').notNull().default(0),
+    avgEngagementS: numeric('avg_engagement_s', { precision: 8, scale: 2 }).default('0'),
+    bounceRate: numeric('bounce_rate', { precision: 6, scale: 4 }).default('0'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteDateUniq: uniqueIndex('ga4_metrics_daily_site_date_uniq').on(t.siteId, t.date),
+  }),
+);
+
+export const seoRecommendations = pgTable(
+  'seo_recommendations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** 'title_rewrite' | 'meta_rewrite' | 'alt_text' | 'internal_link' | 'schema_fix' | 'new_info_page' | 'copy_rewrite' | 'hero_regen' | 'lighthouse_perf' */
+    type: text('type').notNull(),
+    /** 'low' | 'medium' | 'high' */
+    riskLevel: text('risk_level').notNull().default('medium'),
+    /** Sanity slug or URL path. */
+    targetPage: text('target_page'),
+    rationale: text('rationale').notNull(),
+    estImpactScore: numeric('est_impact_score', { precision: 6, scale: 2 }).default('0'),
+    /** Self-contained instructions for the apply pass. */
+    actionPayload: jsonb('action_payload').notNull(),
+    /** 'pending' | 'auto_applied' | 'awaiting_review' | 'approved' | 'rejected' | 'blocked' | 'failed' */
+    status: text('status').notNull().default('pending'),
+    /** No FK constraint to keep things simple. */
+    appliedRunId: uuid('applied_run_id'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    reviewedBy: text('reviewed_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteStatusIdx: index('seo_recommendations_site_status_idx').on(t.siteId, t.status),
+    statusCreatedIdx: index('seo_recommendations_status_created_idx').on(t.status, t.createdAt),
+  }),
+);
+
+export const lighthouseAudits = pgTable(
+  'lighthouse_audits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    /** Scores 0-100, nullable. */
+    performance: integer('performance'),
+    accessibility: integer('accessibility'),
+    bestPractices: integer('best_practices'),
+    seo: integer('seo'),
+    lcpMs: integer('lcp_ms'),
+    fcpMs: integer('fcp_ms'),
+    ttiMs: integer('tti_ms'),
+    clsMilli: integer('cls_milli'),
+    rawJson: jsonb('raw_json'),
+    auditedAt: timestamp('audited_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteAuditedIdx: index('lighthouse_audits_site_audited_idx').on(t.siteId, t.auditedAt),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
+// Domain Procurer (Phase A2)
+// ────────────────────────────────────────────────────────────
+
+export const domainCandidates = pgTable(
+  'domain_candidates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** e.g. 'treeremovaltucson.com' */
+    domain: text('domain').notNull(),
+    registrar: text('registrar').notNull().default('cloudflare'),
+    priceUsd: numeric('price_usd', { precision: 8, scale: 2 }),
+    tld: text('tld'),
+    /** 'exact' | 'partial' | 'keyword' */
+    matchType: text('match_type'),
+    /** 1..N from search */
+    rank: integer('rank').notNull(),
+    /** 'available' | 'pending_approval' | 'approved' | 'registered' | 'rejected' | 'taken' */
+    status: text('status').notNull().default('available'),
+    registeredAt: timestamp('registered_at', { withTimezone: true }),
+    autoRenew: boolean('auto_renew').notNull().default(true),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteDomainUniq: uniqueIndex('domain_candidates_site_domain_uniq').on(t.siteId, t.domain),
+    siteStatusIdx: index('domain_candidates_site_status_idx').on(t.siteId, t.status),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
 
@@ -598,3 +752,13 @@ export type NewAgentRun = typeof agentRuns.$inferInsert;
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type SystemState = typeof systemState.$inferSelect;
+export type SeoMetricDaily = typeof seoMetricsDaily.$inferSelect;
+export type NewSeoMetricDaily = typeof seoMetricsDaily.$inferInsert;
+export type Ga4MetricDaily = typeof ga4MetricsDaily.$inferSelect;
+export type NewGa4MetricDaily = typeof ga4MetricsDaily.$inferInsert;
+export type SeoRecommendation = typeof seoRecommendations.$inferSelect;
+export type NewSeoRecommendation = typeof seoRecommendations.$inferInsert;
+export type LighthouseAudit = typeof lighthouseAudits.$inferSelect;
+export type NewLighthouseAudit = typeof lighthouseAudits.$inferInsert;
+export type DomainCandidate = typeof domainCandidates.$inferSelect;
+export type NewDomainCandidate = typeof domainCandidates.$inferInsert;
