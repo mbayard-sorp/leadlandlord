@@ -3,7 +3,12 @@ import { unstable_cache } from 'next/cache';
 import { getDb, getSystemState } from '@leadlandlord/db';
 import { KillSwitchPanel } from './KillSwitchPanel';
 
-export const revalidate = 30;
+// `force-dynamic` so the page never prerenders at build time. Drizzle SELECTs
+// the full column set defined in the schema; a build that lands before the DB
+// migration runs would throw "column does not exist" against a not-yet-migrated
+// DB and abort the deploy. Run dynamically per request — by then, migrations
+// have applied. Phase F added new columns to system_state.
+export const dynamic = 'force-dynamic';
 
 interface Kpi {
   label: string;

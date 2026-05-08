@@ -64,6 +64,48 @@
       "when": 1779200000000,
       "tag": "0008_dataforseo_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778257414275,
+      "tag": "0009_early_norrin_radd",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0010_backlinks_extension",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779500000000,
+      "tag": "0011_stripe_webhook_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779550000000,
+      "tag": "0012_flaky_karen_page",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779600000000,
+      "tag": "0013_alert_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0014_operator_targets",
+      "breakpoints": true
     }
   ]
 }

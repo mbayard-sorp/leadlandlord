@@ -394,11 +394,22 @@ export const backlinks = pgTable(
     type: backlinkTypeEnum('type').notNull(),
     status: backlinkStatusEnum('status').notNull().default('pending'),
     dr: integer('dr'),
+    domainAuthority: integer('domain_authority'),
+    pitchDraft: text('pitch_draft'),
+    subjectLine: text('subject_line'),
+    rejectionReason: text('rejection_reason'),
+    dedupeKey: text('dedupe_key'),
+    responseAt: timestamp('response_at', { withTimezone: true }),
+    responseSnippet: text('response_snippet'),
     acquiredAt: timestamp('acquired_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     metadata: jsonb('metadata'),
   },
   (t) => ({
     siteIdx: index('backlinks_site_idx').on(t.siteId),
+    dedupeUniq: uniqueIndex('backlinks_dedupe_key_uniq')
+      .on(t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL`),
   }),
 );
 
@@ -512,7 +523,19 @@ export const agentBudgets = pgTable('agent_budgets', {
   dailyCostCapUsd: numeric('daily_cost_cap_usd', { precision: 10, scale: 2 })
     .notNull()
     .default('5'),
+  weeklyCostCapUsd: numeric('weekly_cost_cap_usd', { precision: 10, scale: 2 })
+    .notNull()
+    .default('50'),
+  monthlyCostCapUsd: numeric('monthly_cost_cap_usd', { precision: 10, scale: 2 })
+    .notNull()
+    .default('200'),
   spentTodayUsd: numeric('spent_today_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+  spentThisWeekUsd: numeric('spent_this_week_usd', { precision: 10, scale: 4 })
+    .notNull()
+    .default('0'),
+  spentThisMonthUsd: numeric('spent_this_month_usd', { precision: 10, scale: 4 })
+    .notNull()
+    .default('0'),
   /**
    * Per-agent enable flag. When `false`, BaseAgent.run throws AgentDisabledError
    * before any work happens, the dispatcher classifies as terminal `agent_disabled`
@@ -570,8 +593,293 @@ export const systemState = pgTable('system_state', {
   killSwitchReason: text('kill_switch_reason'),
   killSwitchActivatedAt: timestamp('kill_switch_activated_at', { withTimezone: true }),
   killSwitchActivatedBy: text('kill_switch_activated_by'),
+  // ──────────────────────────────────────────────────────────
+  // Operator orchestrator targets + autonomy mode (Phase F).
+  // The operator agent reads these on every cron run to decide
+  // whether/how to dispatch work. Defaults are deliberately
+  // safe: operatorEnabled=false, mode=manual, all auto-approve
+  // budgets at zero. Autonomous mode must be opted into by a
+  // human via the /operator/control panel.
+  // ──────────────────────────────────────────────────────────
+  targetMrrUsd: numeric('target_mrr_usd', { precision: 10, scale: 2 }).notNull().default('0'),
+  targetActiveSites: integer('target_active_sites').notNull().default(0),
+  targetMonthlyMargin: numeric('target_monthly_margin', { precision: 5, scale: 4 })
+    .notNull()
+    .default('0'),
+  autoApproveNiches: boolean('auto_approve_niches').notNull().default(false),
+  autoApproveDomainBudgetUsd: numeric('auto_approve_domain_budget_usd', { precision: 8, scale: 2 })
+    .notNull()
+    .default('0'),
+  operatorEnabled: boolean('operator_enabled').notNull().default(false),
+  lastOperatorRunAt: timestamp('last_operator_run_at', { withTimezone: true }),
+  operatorMode: text('operator_mode').notNull().default('manual'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ────────────────────────────────────────────────────────────
+// SEO / GA4 / Lighthouse / Recommendations (Phase A)
+// ────────────────────────────────────────────────────────────
+
+export const seoMetricsDaily = pgTable(
+  'seo_metrics_daily',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** YYYY-MM-DD; stored as text for portability across drizzle versions. */
+    date: text('date').notNull(),
+    query: text('query').notNull(),
+    page: text('page').notNull(),
+    clicks: integer('clicks').notNull().default(0),
+    impressions: integer('impressions').notNull().default(0),
+    ctr: numeric('ctr', { precision: 6, scale: 4 }).notNull().default('0'),
+    position: numeric('position', { precision: 6, scale: 2 }).notNull().default('0'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteDateQueryPageUniq: uniqueIndex('seo_metrics_daily_site_date_query_page_uniq').on(
+      t.siteId,
+      t.date,
+      t.query,
+      t.page,
+    ),
+    siteDateIdx: index('seo_metrics_daily_site_date_idx').on(t.siteId, t.date),
+  }),
+);
+
+export const ga4MetricsDaily = pgTable(
+  'ga4_metrics_daily',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    sessions: integer('sessions').notNull().default(0),
+    users: integer('users').notNull().default(0),
+    engagedSessions: integer('engaged_sessions').notNull().default(0),
+    conversions: integer('conversions').notNull().default(0),
+    avgEngagementS: numeric('avg_engagement_s', { precision: 8, scale: 2 }).default('0'),
+    bounceRate: numeric('bounce_rate', { precision: 6, scale: 4 }).default('0'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteDateUniq: uniqueIndex('ga4_metrics_daily_site_date_uniq').on(t.siteId, t.date),
+  }),
+);
+
+export const seoRecommendations = pgTable(
+  'seo_recommendations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** 'title_rewrite' | 'meta_rewrite' | 'alt_text' | 'internal_link' | 'schema_fix' | 'new_info_page' | 'copy_rewrite' | 'hero_regen' | 'lighthouse_perf' */
+    type: text('type').notNull(),
+    /** 'low' | 'medium' | 'high' */
+    riskLevel: text('risk_level').notNull().default('medium'),
+    /** Sanity slug or URL path. */
+    targetPage: text('target_page'),
+    rationale: text('rationale').notNull(),
+    estImpactScore: numeric('est_impact_score', { precision: 6, scale: 2 }).default('0'),
+    /** Self-contained instructions for the apply pass. */
+    actionPayload: jsonb('action_payload').notNull(),
+    /** 'pending' | 'auto_applied' | 'awaiting_review' | 'approved' | 'rejected' | 'blocked' | 'failed' */
+    status: text('status').notNull().default('pending'),
+    /** No FK constraint to keep things simple. */
+    appliedRunId: uuid('applied_run_id'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    reviewedBy: text('reviewed_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteStatusIdx: index('seo_recommendations_site_status_idx').on(t.siteId, t.status),
+    statusCreatedIdx: index('seo_recommendations_status_created_idx').on(t.status, t.createdAt),
+  }),
+);
+
+export const lighthouseAudits = pgTable(
+  'lighthouse_audits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    /** Scores 0-100, nullable. */
+    performance: integer('performance'),
+    accessibility: integer('accessibility'),
+    bestPractices: integer('best_practices'),
+    seo: integer('seo'),
+    lcpMs: integer('lcp_ms'),
+    fcpMs: integer('fcp_ms'),
+    ttiMs: integer('tti_ms'),
+    clsMilli: integer('cls_milli'),
+    rawJson: jsonb('raw_json'),
+    auditedAt: timestamp('audited_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteAuditedIdx: index('lighthouse_audits_site_audited_idx').on(t.siteId, t.auditedAt),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
+// Domain Procurer (Phase A2)
+// ────────────────────────────────────────────────────────────
+
+export const domainCandidates = pgTable(
+  'domain_candidates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** e.g. 'treeremovaltucson.com' */
+    domain: text('domain').notNull(),
+    registrar: text('registrar').notNull().default('cloudflare'),
+    priceUsd: numeric('price_usd', { precision: 8, scale: 2 }),
+    tld: text('tld'),
+    /** 'exact' | 'partial' | 'keyword' */
+    matchType: text('match_type'),
+    /** 1..N from search */
+    rank: integer('rank').notNull(),
+    /** 'available' | 'pending_approval' | 'approved' | 'registered' | 'rejected' | 'taken' */
+    status: text('status').notNull().default('available'),
+    registeredAt: timestamp('registered_at', { withTimezone: true }),
+    autoRenew: boolean('auto_renew').notNull().default(true),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteDomainUniq: uniqueIndex('domain_candidates_site_domain_uniq').on(t.siteId, t.domain),
+    siteStatusIdx: index('domain_candidates_site_status_idx').on(t.siteId, t.status),
+  }),
+);
+
+/**
+ * Stripe webhook events — idempotency log. Stripe retries delivery on
+ * non-2xx responses (and occasionally re-delivers a successful event due
+ * to network conditions), so the webhook handler dedupes by `id` (the
+ * Stripe event ID) before processing. INSERT ... ON CONFLICT DO NOTHING
+ * at the top of the handler; if the insert is a no-op the event has
+ * already been processed and we ack 200 immediately.
+ */
+export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
+  // Stripe event ID, e.g. evt_1Hh1H2HvpVfH...
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+});
+
+// ────────────────────────────────────────────────────────────
+// Phase D — Portfolio Analyst + Maintenance
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Per-site / per-niche / portfolio-wide daily snapshot rows.
+ *
+ *   - `siteId` set, `niche` null  → per-site row
+ *   - `siteId` null, `niche` set  → per-niche aggregate row
+ *   - `siteId` null, `niche` null → portfolio-wide aggregate row
+ */
+export const portfolioSnapshots = pgTable(
+  'portfolio_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    date: text('date').notNull(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    niche: text('niche'),
+    mrrUsd: numeric('mrr_usd', { precision: 10, scale: 2 }).notNull().default('0'),
+    costsUsd: numeric('costs_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+    callsCount: integer('calls_count').notNull().default(0),
+    leadsCount: integer('leads_count').notNull().default(0),
+    trialActiveCount: integer('trial_active_count').notNull().default(0),
+    tenantsActiveCount: integer('tenants_active_count').notNull().default(0),
+    status: text('status'),
+    rationale: text('rationale'),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    dateSiteIdx: uniqueIndex('portfolio_snapshots_date_site_uniq')
+      .on(t.date, t.siteId)
+      .where(sql`${t.siteId} IS NOT NULL`),
+    dateNicheIdx: uniqueIndex('portfolio_snapshots_date_niche_uniq')
+      .on(t.date, t.niche)
+      .where(sql`${t.siteId} IS NULL AND ${t.niche} IS NOT NULL`),
+    datePortfolioIdx: uniqueIndex('portfolio_snapshots_date_portfolio_uniq')
+      .on(t.date)
+      .where(sql`${t.siteId} IS NULL AND ${t.niche} IS NULL`),
+    dateIdx: index('portfolio_snapshots_date_idx').on(t.date),
+  }),
+);
+
+/**
+ * Findings emitted by the maintenance agent. The agent dedupes at write
+ * time so a recurring finding for (siteId, category) with status='open'
+ * updates the existing row instead of inserting a duplicate.
+ */
+export const maintenanceFindings = pgTable(
+  'maintenance_findings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    category: text('category').notNull(),
+    severity: text('severity').notNull(),
+    detail: text('detail').notNull(),
+    status: text('status').notNull().default('open'),
+    autoFixedAt: timestamp('auto_fixed_at', { withTimezone: true }),
+    metadata: jsonb('metadata'),
+    detectedAt: timestamp('detected_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (t) => ({
+    siteCategoryIdx: index('maintenance_findings_site_category_idx').on(t.siteId, t.category),
+    statusIdx: index('maintenance_findings_status_idx').on(t.status),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
+// Alerts (Phase E)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Configurable alerting rules evaluated by the alert-evaluator cron. Each
+ * rule names a fixed evaluator (in apps/operator/app/api/cron/alert-evaluator)
+ * and carries rule-specific thresholds + cooldown to suppress flapping.
+ * Channels list is the default — actual fired channels are tracked per-event.
+ */
+export const alertRules = pgTable('alert_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** 'agent_failure_rate' | 'llm_spend_spike' | 'stripe_webhook_failures' | 'ssl_expiry' | 'domain_expiry' */
+  name: text('name').notNull().unique(),
+  enabled: boolean('enabled').notNull().default(true),
+  thresholds: jsonb('thresholds').notNull(),
+  cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
+  lastFiredAt: timestamp('last_fired_at', { withTimezone: true }),
+  channels: jsonb('channels').notNull().default(sql`'["pagerduty","slack"]'::jsonb`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const alertEvents = pgTable(
+  'alert_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ruleId: uuid('rule_id').references(() => alertRules.id, { onDelete: 'cascade' }),
+    ruleName: text('rule_name').notNull(),
+    /** 'info' | 'warning' | 'critical' */
+    severity: text('severity').notNull(),
+    payload: jsonb('payload').notNull(),
+    channelsFired: jsonb('channels_fired').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    ruleCreatedIdx: index('alert_events_rule_created_idx').on(t.ruleName, t.createdAt),
+  }),
+);
 
 // ────────────────────────────────────────────────────────────
 // Type exports
@@ -598,3 +906,25 @@ export type NewAgentRun = typeof agentRuns.$inferInsert;
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type SystemState = typeof systemState.$inferSelect;
+export type SeoMetricDaily = typeof seoMetricsDaily.$inferSelect;
+export type NewSeoMetricDaily = typeof seoMetricsDaily.$inferInsert;
+export type Ga4MetricDaily = typeof ga4MetricsDaily.$inferSelect;
+export type NewGa4MetricDaily = typeof ga4MetricsDaily.$inferInsert;
+export type SeoRecommendation = typeof seoRecommendations.$inferSelect;
+export type NewSeoRecommendation = typeof seoRecommendations.$inferInsert;
+export type LighthouseAudit = typeof lighthouseAudits.$inferSelect;
+export type NewLighthouseAudit = typeof lighthouseAudits.$inferInsert;
+export type DomainCandidate = typeof domainCandidates.$inferSelect;
+export type NewDomainCandidate = typeof domainCandidates.$inferInsert;
+export type AlertRule = typeof alertRules.$inferSelect;
+export type NewAlertRule = typeof alertRules.$inferInsert;
+export type AlertEvent = typeof alertEvents.$inferSelect;
+export type NewAlertEvent = typeof alertEvents.$inferInsert;
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
+export type OutreachEvent = typeof outreachEvents.$inferSelect;
+export type NewOutreachEvent = typeof outreachEvents.$inferInsert;
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
+export type NewPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
+export type MaintenanceFinding = typeof maintenanceFindings.$inferSelect;
+export type NewMaintenanceFinding = typeof maintenanceFindings.$inferInsert;

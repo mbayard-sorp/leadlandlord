@@ -30,6 +30,12 @@ export const ContentEngineInput = z.object({
   /** When set, content engine generates fewer pages — useful for the dry-run. */
   fast_mode: z.boolean().optional(),
   /**
+   * Theme variant for the site. Drives a niche-specific system-prompt overlay
+   * (terminology, seasonality, tone) appended to the base prompt at runtime.
+   * Optional — falls back to base prompt when omitted or unknown.
+   */
+  theme: z.enum(['classic', 'modern', 'premium', 'bright']).optional(),
+  /**
    * Pre-planned keyword clusters from Keyword Planner. When non-empty,
    * Content Engine must target each cluster with exactly one page and
    * declare `targeted_keywords` + `primary_keyword` in the output.

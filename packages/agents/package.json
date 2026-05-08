@@ -10,6 +10,7 @@
     "./base": "./src/base.ts",
     "./site-builder": "./src/site-builder/index.ts",
     "./content-engine": "./src/content-engine/index.ts",
+    "./seo-operator": "./src/seo-operator/index.ts",
     "./tracking-setup": "./src/tracking-setup/index.ts",
     "./call-classifier": "./src/call-classifier/index.ts",
     "./tenant-prospector": "./src/tenant-prospector/index.ts",
@@ -19,10 +20,12 @@
     "./error-classify": "./src/error-classify.ts",
     "./scheduler": "./src/scheduler/index.ts",
     "./niche-hunter": "./src/niche-hunter/index.ts",
-    "./keyword-planner": "./src/keyword-planner/index.ts"
+    "./keyword-planner": "./src/keyword-planner/index.ts",
+    "./alert-evaluator": "./src/alert-evaluator/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -37,6 +40,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
   }
 }

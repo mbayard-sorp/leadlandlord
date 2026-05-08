@@ -4,6 +4,13 @@ import { scheduleOutreachAgent } from './outreach-agent';
 import { scheduleTrialManager } from './trial-manager';
 import { scheduleBillingDunning } from './billing-dunning';
 import { scheduleChurnRecovery } from './churn-recovery';
+import { scheduleSeoOperator } from './seo-operator';
+import { scheduleSeoIngestGsc } from './seo-ingest-gsc';
+import { scheduleSeoIngestGa4 } from './seo-ingest-ga4';
+import { scheduleLighthouseAudit } from './lighthouse-audit';
+import { scheduleMaintenance } from './maintenance';
+import { schedulePortfolioAnalyst } from './portfolio-analyst';
+import { scheduleOperator } from './operator';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -16,6 +23,13 @@ export const schedulers: Record<string, Scheduler> = {
   'trial-manager': scheduleTrialManager,
   'billing-dunning': scheduleBillingDunning,
   'churn-recovery': scheduleChurnRecovery,
+  'seo-operator': scheduleSeoOperator,
+  'seo-ingest-gsc': scheduleSeoIngestGsc,
+  'seo-ingest-ga4': scheduleSeoIngestGa4,
+  'lighthouse-audit': scheduleLighthouseAudit,
+  maintenance: scheduleMaintenance,
+  'portfolio-analyst': schedulePortfolioAnalyst,
+  operator: scheduleOperator,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';

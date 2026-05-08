@@ -10,6 +10,8 @@ import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { TrackingSetup } from '../tracking-setup/index';
 import { KeywordPlanner } from '../keyword-planner/index';
+import { ComplianceGuard } from '../compliance-guard/index';
+import { IntegrationError } from '@leadlandlord/shared/errors';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
@@ -174,6 +176,67 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     //    (no per-tenant Vercel project anymore — all rendering goes through
     //    the shared `leadlandlord-sites` project).
     ctx.progress({ step: 5, total: 7, label: 'publishing pages to Sanity' });
+
+    // 4a. Compliance gate. Run compliance-guard on every page's MDX before we
+    //     publish to Sanity. Any blocker → emit `site.compliance.failed` and
+    //     throw an IntegrationError so the agent_runs row fails (no publish).
+    //     Soft override via COMPLIANCE_GATE_DISABLED=true for dev only.
+    if (process.env.COMPLIANCE_GATE_DISABLED === 'true') {
+      ctx.log.warn(
+        { siteId },
+        'COMPLIANCE_GATE_DISABLED=true — skipping site_publish compliance check',
+      );
+    } else {
+      const guard = new ComplianceGuard();
+      const allPages = [
+        bundle.home,
+        ...bundle.services,
+        ...bundle.service_areas,
+        bundle.about,
+        bundle.contact,
+        ...bundle.blog_posts,
+        ...bundle.info_pages,
+      ];
+      const failures: Array<{ slug: string; rule: string; message: string; details?: string[] }> = [];
+      for (const page of allPages) {
+        try {
+          const result = await guard.run(
+            { scope: 'site_publish', text: page.mdx, metadata: { slug: page.slug, kind: page.kind } },
+            { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:compliance-guard:${page.slug}` },
+          );
+          if (!result.ok) {
+            for (const v of result.violations) {
+              if (v.severity === 'blocker') {
+                failures.push({ slug: page.slug, rule: v.rule, message: v.message, details: v.details });
+              }
+            }
+          }
+        } catch (err) {
+          // Compliance guard failure should not be silently swallowed — but
+          // also shouldn't crash the build over a guard internal error. Log
+          // + treat as a warning, not a blocker. Operator can re-run.
+          ctx.log.warn(
+            { slug: page.slug, err: err instanceof Error ? err.message : err },
+            'compliance-guard internal error on page — proceeding (no blocker)',
+          );
+        }
+      }
+      if (failures.length > 0) {
+        ctx.log.error({ siteId, failures }, 'compliance gate blocked publish');
+        await ctx.emitNextStepEvent({
+          type: 'site.compliance.failed',
+          targetAgent: 'operator',
+          payload: { site_id: siteId, failures },
+        });
+        throw new IntegrationError(
+          'compliance-guard',
+          `compliance gate blocked publish: ${failures.length} blocker(s) across ${
+            new Set(failures.map((f) => f.slug)).size
+          } page(s)`,
+        );
+      }
+    }
+
     this.emit({ step: 'sanity_publish_started' });
     const persisted = await writeSiteToSanity(siteId, bundle);
     ctx.log.info(

@@ -15,6 +15,7 @@
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
     "@sanity/image-url": "^1.1.0",
+    "@sentry/nextjs": "^10.52.0",
     "drizzle-orm": "^0.36.4",
     "next": "^16.0.0",
     "next-sanity": "^9.8.0",
