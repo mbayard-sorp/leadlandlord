@@ -20,7 +20,8 @@
     "./error-classify": "./src/error-classify.ts",
     "./scheduler": "./src/scheduler/index.ts",
     "./niche-hunter": "./src/niche-hunter/index.ts",
-    "./keyword-planner": "./src/keyword-planner/index.ts"
+    "./keyword-planner": "./src/keyword-planner/index.ts",
+    "./alert-evaluator": "./src/alert-evaluator/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

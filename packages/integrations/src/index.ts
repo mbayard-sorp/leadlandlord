@@ -15,3 +15,4 @@ export * as googleAuth from './google-auth/index';
 export * as googleSearchConsole from './google-search-console/index';
 export * as googleAnalytics from './google-analytics/index';
 export * as brightlocal from './brightlocal/index';
+export * as pagerduty from './pagerduty/index';
