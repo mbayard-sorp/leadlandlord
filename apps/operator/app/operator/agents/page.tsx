@@ -147,7 +147,7 @@ export default async function AgentsPage() {
               {recentRuns.map((r) => {
                 const dur =
                   r.endedAt && r.startedAt
-                    ? `${((r.endedAt.getTime() - r.startedAt.getTime()) / 1000).toFixed(1)}s`
+                    ? `${((new Date(r.endedAt).getTime() - new Date(r.startedAt).getTime()) / 1000).toFixed(1)}s`
                     : '…';
                 return (
                   <tr key={r.id} className="hover:bg-slate-900/40">
