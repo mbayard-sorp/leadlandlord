@@ -207,7 +207,12 @@
 @media (min-width: 640px) { [data-theme='classic'] .classic-services-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1024px) { [data-theme='classic'] .classic-services-grid { grid-template-columns: repeat(4, 1fr); } }
 [data-theme='classic'] .classic-service-tile {
+  display: block; text-decoration: none; color: inherit;
   border: 2px solid var(--ink); background: var(--paper); padding: 18px;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+[data-theme='classic'] .classic-service-tile:hover {
+  transform: translateY(-2px); box-shadow: 4px 4px 0 0 var(--ink);
 }
 [data-theme='classic'] .classic-service-tile:first-child { background: var(--accent-50); }
 [data-theme='classic'] .classic-service-num {

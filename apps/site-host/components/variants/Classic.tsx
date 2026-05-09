@@ -123,12 +123,12 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </header>
           <div className="classic-services-grid">
             {bundle.services.map((s, i) => (
-              <article key={s.slug} className="classic-service-tile">
+              <a key={s.slug} href={s.slug} className="classic-service-tile">
                 <div className="classic-service-num num">{String(i + 1).padStart(2, '0')}</div>
                 <h3 className="classic-service-title">{s.title}</h3>
                 <p className="classic-service-blurb">{s.meta_description}</p>
                 <span className="classic-service-link">READ MORE →</span>
-              </article>
+              </a>
             ))}
           </div>
         </section>
