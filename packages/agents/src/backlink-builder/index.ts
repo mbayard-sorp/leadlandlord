@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { getDb, backlinks, sites, type Site } from '@leadlandlord/db';
-import { sendEmail } from '@leadlandlord/integrations/resend';
+import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
+import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
+import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
@@ -336,23 +338,100 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       };
     }
 
-    // Send via Resend, mirroring outreach-agent's email path.
+    // Provider selection: Zoho MCP behind a feature flag, otherwise Resend.
+    // Read env on each invocation (no module-level caching).
+    const useZoho = process.env.ZOHO_MCP_ENABLED === 'true';
+    const mailbox = useZoho
+      ? (process.env.ZOHO_DEFAULT_FROM ?? '')
+      : (process.env.RESEND_FROM_ADDRESS ?? '');
+    if (!mailbox) {
+      throw new Error(useZoho ? 'ZOHO_DEFAULT_FROM not set' : 'RESEND_FROM_ADDRESS not set');
+    }
+
+    // Throttle check (only meaningful when useZoho — Resend has its own caps).
+    let throttled = false;
+    if (useZoho) {
+      const { remaining, cap, sentToday } = await getRemainingSendsToday(mailbox);
+      ctx.log.info({ mailbox, remaining, cap, sentToday }, 'guest_post: throttle check');
+      if (remaining <= 0) throttled = true;
+    }
+
+    if (throttled) {
+      await recordSend({
+        siteId: input.siteId,
+        mailbox,
+        toAddress: input.targetEditorEmail,
+        subject,
+        purpose: 'guest_post',
+        provider: 'zoho',
+        status: 'throttled',
+        metadata: { reason: 'daily_cap_reached' },
+      });
+      await db
+        .insert(backlinks)
+        .values({
+          siteId: input.siteId,
+          sourceDomain: input.targetDomain.toLowerCase(),
+          targetUrl: null,
+          type: 'guest_post',
+          status: 'pending',
+          dedupeKey,
+          pitchDraft: body,
+          subjectLine: subject,
+          rejectionReason: null,
+          metadata: {
+            targetEditorEmail: input.targetEditorEmail,
+            pitchTopic: input.pitchTopic,
+            throttled: true,
+          },
+        })
+        .onConflictDoNothing({ target: backlinks.dedupeKey });
+      return {
+        mode: 'guest_post',
+        siteId: input.siteId,
+        rowsCreated: 1,
+        rowsRejected: 0,
+        rowsSent: 0,
+      };
+    }
+
+    // Send.
     let externalId: string | undefined;
     let sendError: string | undefined;
     try {
-      const from = process.env.RESEND_FROM_ADDRESS;
-      if (!from) throw new Error('RESEND_FROM_ADDRESS not set');
-      const res = await sendEmail({
-        to: input.targetEditorEmail,
-        from,
-        subject,
-        text: body,
-      });
-      externalId = res.messageId;
+      if (useZoho) {
+        const res = await sendEmailZoho({
+          to: input.targetEditorEmail,
+          from: mailbox,
+          subject,
+          text: body,
+        });
+        externalId = res.messageId;
+      } else {
+        const res = await sendEmailResend({
+          to: input.targetEditorEmail,
+          from: mailbox,
+          subject,
+          text: body,
+        });
+        externalId = res.messageId;
+      }
     } catch (err) {
       sendError = err instanceof Error ? err.message : String(err);
       ctx.log.error({ err: sendError, targetDomain: input.targetDomain }, 'guest_post send failed');
     }
+
+    await recordSend({
+      siteId: input.siteId,
+      mailbox,
+      toAddress: input.targetEditorEmail,
+      subject,
+      purpose: 'guest_post',
+      provider: useZoho ? 'zoho' : 'resend',
+      externalId: externalId ?? null,
+      status: sendError ? 'failed' : 'sent',
+      errorMessage: sendError ?? null,
+    });
 
     const status = sendError ? 'pending' : 'submitted';
     await db
@@ -436,6 +515,8 @@ Tone: helpful expert, no marketing fluff. No links. No claims like "best in stat
   ): Promise<{ subject: string; body: string }> {
     const client = getAnthropicClient();
     const model = process.env.BACKLINK_BUILDER_MODEL ?? 'claude-haiku-4-5';
+    const postalAddress = process.env.LEADLANDLORD_POSTAL_ADDRESS
+      ?? `LeadLandlord, [postal address not set], ${site.city}, ${site.state}`;
     const userPrompt = `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
 
 Sender: a ${site.niche} business in ${site.city}, ${site.state}.
@@ -446,7 +527,7 @@ Constraints:
 - Body: ~120 words, plain text.
 - Suggest 2 concrete article angles relevant to ${input.targetDomain}'s audience.
 - Include an unsubscribe line: "Reply with REMOVE if you'd rather not hear from me again."
-- Include a postal address line on its own line: "LeadLandlord, PO Box 0000, ${site.city}, ${site.state} 00000".
+- Include a postal address line on its own line: "${postalAddress}".
 - Sign off "— ${site.niche} team in ${site.city}".
 - No fake credentials, no superlatives.
 
@@ -493,7 +574,7 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
         `Reply with REMOVE if you'd rather not hear from me again.`,
         ``,
         `— ${site.niche} team in ${site.city}`,
-        `LeadLandlord, PO Box 0000, ${site.city}, ${site.state} 00000`,
+        postalAddress,
       ].join('\n'),
     };
   }

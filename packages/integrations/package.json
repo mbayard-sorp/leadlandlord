@@ -12,6 +12,7 @@
     "./twilio": "./src/twilio/index.ts",
     "./klaviyo": "./src/klaviyo/index.ts",
     "./resend": "./src/resend/index.ts",
+    "./zoho-mcp": "./src/zoho-mcp/index.ts",
     "./google-places": "./src/google-places/index.ts",
     "./apollo": "./src/apollo/index.ts",
     "./elevenlabs": "./src/elevenlabs/index.ts",

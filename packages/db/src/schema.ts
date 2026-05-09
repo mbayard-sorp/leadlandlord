@@ -3,6 +3,7 @@ import {
   pgTable,
   uuid,
   text,
+  varchar,
   timestamp,
   integer,
   numeric,
@@ -410,6 +411,39 @@ export const backlinks = pgTable(
     dedupeUniq: uniqueIndex('backlinks_dedupe_key_uniq')
       .on(t.dedupeKey)
       .where(sql`${t.dedupeKey} IS NOT NULL`),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
+// Email sends — outbound mail audit log + per-mailbox throttle source
+// ────────────────────────────────────────────────────────────
+
+/**
+ * One row per outbound email attempt (success, failure, or throttled-skip).
+ * Read by `email-throttle.ts` to enforce a daily cap per `mailbox`, with a
+ * configurable warmup ramp keyed off the first successful send. Counted rows
+ * are filtered to `status = 'sent'` so throttled/failed attempts don't burn
+ * the cap.
+ */
+export const emailSends = pgTable(
+  'email_sends',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'set null' }),
+    mailbox: varchar('mailbox', { length: 320 }).notNull(),
+    toAddress: varchar('to_address', { length: 320 }).notNull(),
+    subject: text('subject').notNull(),
+    purpose: varchar('purpose', { length: 32 }).notNull(),
+    provider: varchar('provider', { length: 16 }).notNull(),
+    externalId: text('external_id'),
+    status: varchar('status', { length: 16 }).notNull(),
+    errorMessage: text('error_message'),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  },
+  (t) => ({
+    mailboxSentAtIdx: index('email_sends_mailbox_sent_at_idx').on(t.mailbox, t.sentAt),
+    siteIdIdx: index('email_sends_site_id_idx').on(t.siteId),
   }),
 );
 
@@ -928,3 +962,5 @@ export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
 export type NewPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
 export type MaintenanceFinding = typeof maintenanceFindings.$inferSelect;
 export type NewMaintenanceFinding = typeof maintenanceFindings.$inferInsert;
+export type EmailSend = typeof emailSends.$inferSelect;
+export type NewEmailSend = typeof emailSends.$inferInsert;

@@ -9,8 +9,10 @@ import {
   type Site,
 } from '@leadlandlord/db';
 import { sendSms } from '@leadlandlord/integrations/twilio';
-import { sendEmail } from '@leadlandlord/integrations/resend';
+import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
+import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { startOutboundCall } from '@leadlandlord/integrations/elevenlabs';
+import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
 
@@ -182,10 +184,53 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
       };
     }
 
+    // Email throttle check (only meaningful when Zoho is enabled — Resend has
+    // its own caps). When throttled, skip the send and record a failed event.
+    if (channel === 'email') {
+      const useZoho = process.env.ZOHO_MCP_ENABLED === 'true';
+      const mailbox = useZoho
+        ? (process.env.ZOHO_DEFAULT_FROM ?? '')
+        : (process.env.RESEND_FROM_ADDRESS ?? '');
+      if (mailbox && useZoho) {
+        const { remaining, cap, sentToday } = await getRemainingSendsToday(mailbox);
+        ctx.log.info({ mailbox, remaining, cap, sentToday }, 'outreach email: throttle check');
+        if (remaining <= 0) {
+          const subject = renderSubject(input.step, prospect, site);
+          await recordSend({
+            siteId: site.id,
+            mailbox,
+            toAddress: recipient,
+            subject,
+            purpose: 'outreach_email_day_1',
+            provider: 'zoho',
+            status: 'throttled',
+            metadata: { reason: 'daily_cap_reached' },
+          });
+          await db.insert(outreachEvents).values({
+            prospectId: prospect.id,
+            channel,
+            templateId: input.step,
+            response: null,
+            metadata: { status: 'failed', error: 'throttled', body },
+          });
+          return {
+            prospect_id: prospect.id,
+            step: input.step,
+            status: 'failed',
+            channel,
+            message: 'throttled',
+            violations: [],
+          };
+        }
+      }
+    }
+
     // Dispatch.
     let externalId: string | undefined;
     let status: 'sent' | 'failed' = 'sent';
     let failMessage: string | undefined;
+    let emailMailbox: string | undefined;
+    let emailUseZoho = false;
     try {
       switch (channel) {
         case 'sms': {
@@ -196,11 +241,21 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
           break;
         }
         case 'email': {
-          const from = process.env.RESEND_FROM_ADDRESS;
-          if (!from) throw new Error('RESEND_FROM_ADDRESS not set');
+          emailUseZoho = process.env.ZOHO_MCP_ENABLED === 'true';
+          emailMailbox = emailUseZoho
+            ? (process.env.ZOHO_DEFAULT_FROM ?? '')
+            : (process.env.RESEND_FROM_ADDRESS ?? '');
+          if (!emailMailbox) {
+            throw new Error(emailUseZoho ? 'ZOHO_DEFAULT_FROM not set' : 'RESEND_FROM_ADDRESS not set');
+          }
           const subject = renderSubject(input.step, prospect, site);
-          const res = await sendEmail({ to: recipient, from, subject, text: body });
-          externalId = res.messageId;
+          if (emailUseZoho) {
+            const res = await sendEmailZoho({ to: recipient, from: emailMailbox, subject, text: body });
+            externalId = res.messageId;
+          } else {
+            const res = await sendEmailResend({ to: recipient, from: emailMailbox, subject, text: body });
+            externalId = res.messageId;
+          }
           break;
         }
         case 'voice': {
@@ -220,6 +275,22 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
         { prospectId: prospect.id, step: input.step, err: failMessage },
         'outreach send failed',
       );
+    }
+
+    // Audit email sends to the email_sends table (works for both providers so
+    // the throttle counter is accurate regardless of which provider sent).
+    if (channel === 'email' && emailMailbox) {
+      await recordSend({
+        siteId: site.id,
+        mailbox: emailMailbox,
+        toAddress: recipient,
+        subject: renderSubject(input.step, prospect, site),
+        purpose: 'outreach_email_day_1',
+        provider: emailUseZoho ? 'zoho' : 'resend',
+        externalId: externalId ?? null,
+        status: failMessage ? 'failed' : 'sent',
+        errorMessage: failMessage ?? null,
+      });
     }
 
     await db.insert(outreachEvents).values({
@@ -311,7 +382,9 @@ function renderBody(step: OutreachStep, prospect: Prospect, site: Site): string 
   switch (step) {
     case 'sms_day_0':
       return `Hey ${firstName}, I run a ${niche} site getting calls in ${city}. Want a free week of these calls forwarded to your line? Reply YES or STOP.`;
-    case 'email_day_1':
+    case 'email_day_1': {
+      const postalAddress = process.env.LEADLANDLORD_POSTAL_ADDRESS
+        ?? `LeadLandlord, [postal address not set], ${city}`;
       return [
         `Hi ${firstName},`,
         '',
@@ -327,8 +400,9 @@ function renderBody(step: OutreachStep, prospect: Prospect, site: Site): string 
         ``,
         `If you'd rather not hear from me, reply with "unsubscribe" and you're out.`,
         ``,
-        `LeadLandlord, PO Box (replace), ${city}`,
+        postalAddress,
       ].join('\n');
+    }
     case 'voice_day_3':
       return `Hi ${firstName}, this is the ${niche} calls thing in ${city}. You free for a quick 60 seconds?`;
     case 'sms_day_5':

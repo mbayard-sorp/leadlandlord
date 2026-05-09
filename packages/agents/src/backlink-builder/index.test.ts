@@ -28,12 +28,19 @@ function makeFakeDb(siteRow: Record<string, unknown> | null) {
       values: (values: Record<string, unknown>) => {
         const tableName = table?.__table ?? '?';
         const chain = {
-          onConflictDoNothing: () => ({
-            returning: async () => {
-              insertCalls.push({ table: tableName, values });
-              return [{ id: `row-${insertCalls.length}` }];
-            },
-          }),
+          onConflictDoNothing: () => {
+            const subChain = {
+              returning: async () => {
+                insertCalls.push({ table: tableName, values });
+                return [{ id: `row-${insertCalls.length}` }];
+              },
+              then: (resolve: (v: unknown) => void) => {
+                insertCalls.push({ table: tableName, values });
+                resolve(undefined);
+              },
+            };
+            return subChain;
+          },
           onConflictDoUpdate: async () => {
             insertCalls.push({ table: tableName, values });
             return undefined;
@@ -89,8 +96,21 @@ vi.mock('@leadlandlord/db/suppression', () => ({
   isSuppressed: async () => false,
 }));
 
+const sendEmailResendMock = vi.fn(async () => ({ messageId: 'mock-msg-id' }));
 vi.mock('@leadlandlord/integrations/resend', () => ({
-  sendEmail: vi.fn(async () => ({ messageId: 'mock-msg-id' })),
+  sendEmail: sendEmailResendMock,
+}));
+
+const sendEmailZohoMock = vi.fn(async () => ({ messageId: 'zoho-mock-id' }));
+vi.mock('@leadlandlord/integrations/zoho-mcp', () => ({
+  sendEmail: sendEmailZohoMock,
+}));
+
+const getRemainingSendsTodayMock = vi.fn(async () => ({ remaining: 50, cap: 50, sentToday: 0 }));
+const recordSendMock = vi.fn(async () => undefined);
+vi.mock('@leadlandlord/db/email-throttle', () => ({
+  getRemainingSendsToday: getRemainingSendsTodayMock,
+  recordSend: recordSendMock,
 }));
 
 const fakeAnthropic = {
@@ -104,7 +124,7 @@ const fakeAnthropic = {
             'Hi — I run a plumbing business in Austin, TX. ' +
             'Happy to share what we see day-to-day if it helps with the piece. ' +
             'Reply with REMOVE if you\'d rather not hear from me again. ' +
-            'LeadLandlord, PO Box 0000, Austin, TX 78701',
+            'LeadLandlord, [postal address not set], Austin, TX',
         },
       ],
     })),
@@ -124,9 +144,19 @@ describe('backlink-builder', () => {
   beforeEach(() => {
     insertCalls.length = 0;
     fakeAnthropic.messages.create.mockClear();
+    sendEmailResendMock.mockClear();
+    sendEmailZohoMock.mockClear();
+    getRemainingSendsTodayMock.mockClear();
+    getRemainingSendsTodayMock.mockResolvedValue({ remaining: 50, cap: 50, sentToday: 0 });
+    recordSendMock.mockClear();
+    delete process.env.ZOHO_MCP_ENABLED;
+    delete process.env.ZOHO_DEFAULT_FROM;
+    delete process.env.RESEND_FROM_ADDRESS;
   });
 
   afterEach(() => {
+    delete process.env.ZOHO_MCP_ENABLED;
+    delete process.env.ZOHO_DEFAULT_FROM;
     delete process.env.RESEND_FROM_ADDRESS;
   });
 
@@ -291,6 +321,118 @@ describe('backlink-builder', () => {
     expect(row.status).toBe('pending');
     expect(typeof row.pitchDraft).toBe('string');
     expect((row.pitchDraft as string).length).toBeGreaterThan(0);
+  });
+
+  it('guest_post mode without ZOHO_MCP_ENABLED falls back to Resend', async () => {
+    process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+    const { BacklinkBuilder } = await import('./index');
+    const agent = new BacklinkBuilder();
+    const exec = (
+      agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+    ).execute.bind(agent);
+    const c = {
+      runId: 'run-gp-1',
+      log: { info: () => {}, warn: () => {}, error: () => {} },
+      recordUsage: () => {},
+      progress: () => {},
+      emitNextStepEvent: async () => {},
+      parentRunId: null,
+    };
+    const result = (await exec(
+      {
+        mode: 'guest_post',
+        siteId: FAKE_SITE.id,
+        targetDomain: 'example.com',
+        targetEditorEmail: 'editor@example.com',
+        pitchTopic: 'home maintenance',
+      },
+      c,
+    )) as { rowsSent: number };
+
+    expect(sendEmailResendMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailZohoMock).not.toHaveBeenCalled();
+    expect(result.rowsSent).toBe(1);
+    expect(recordSendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'resend', status: 'sent' }),
+    );
+  });
+
+  it('guest_post mode with ZOHO_MCP_ENABLED=true sends via Zoho', async () => {
+    process.env.ZOHO_MCP_ENABLED = 'true';
+    process.env.ZOHO_DEFAULT_FROM = 'kyle@leadlandlord.example';
+    const { BacklinkBuilder } = await import('./index');
+    const agent = new BacklinkBuilder();
+    const exec = (
+      agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+    ).execute.bind(agent);
+    const c = {
+      runId: 'run-gp-2',
+      log: { info: () => {}, warn: () => {}, error: () => {} },
+      recordUsage: () => {},
+      progress: () => {},
+      emitNextStepEvent: async () => {},
+      parentRunId: null,
+    };
+    const result = (await exec(
+      {
+        mode: 'guest_post',
+        siteId: FAKE_SITE.id,
+        targetDomain: 'example.com',
+        targetEditorEmail: 'editor@example.com',
+        pitchTopic: 'home maintenance',
+      },
+      c,
+    )) as { rowsSent: number };
+
+    expect(sendEmailZohoMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailResendMock).not.toHaveBeenCalled();
+    expect(result.rowsSent).toBe(1);
+    expect(recordSendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'zoho', status: 'sent' }),
+    );
+  });
+
+  it('guest_post mode with throttle remaining=0 skips send and writes pending row', async () => {
+    process.env.ZOHO_MCP_ENABLED = 'true';
+    process.env.ZOHO_DEFAULT_FROM = 'kyle@leadlandlord.example';
+    getRemainingSendsTodayMock.mockResolvedValueOnce({ remaining: 0, cap: 50, sentToday: 50 });
+
+    const { BacklinkBuilder } = await import('./index');
+    const agent = new BacklinkBuilder();
+    const exec = (
+      agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+    ).execute.bind(agent);
+    const c = {
+      runId: 'run-gp-3',
+      log: { info: () => {}, warn: () => {}, error: () => {} },
+      recordUsage: () => {},
+      progress: () => {},
+      emitNextStepEvent: async () => {},
+      parentRunId: null,
+    };
+    const result = (await exec(
+      {
+        mode: 'guest_post',
+        siteId: FAKE_SITE.id,
+        targetDomain: 'example.com',
+        targetEditorEmail: 'editor@example.com',
+        pitchTopic: 'home maintenance',
+      },
+      c,
+    )) as { rowsCreated: number; rowsSent: number };
+
+    expect(sendEmailZohoMock).not.toHaveBeenCalled();
+    expect(sendEmailResendMock).not.toHaveBeenCalled();
+    expect(result.rowsSent).toBe(0);
+    expect(result.rowsCreated).toBe(1);
+    expect(recordSendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'throttled' }),
+    );
+    const backlinkInserts = insertCalls.filter((c) => c.table === 'backlinks');
+    expect(backlinkInserts).toHaveLength(1);
+    expect(backlinkInserts[0]?.values.status).toBe('pending');
+    const md = backlinkInserts[0]?.values.metadata as Record<string, unknown>;
+    expect(md.throttled).toBe(true);
   });
 
   it('haro mode skips queries that do not match the site niche', async () => {
