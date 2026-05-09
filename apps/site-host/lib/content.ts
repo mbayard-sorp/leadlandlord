@@ -47,3 +47,26 @@ export type Page = z.infer<typeof PageSchema>;
 export function telHref(number: string): string {
   return `tel:${number.replace(/[^+\d]/g, '')}`;
 }
+
+/**
+ * Format a phone number for human display. Handles US/Canada E.164
+ * (`+17252403261`) and bare 10-digit (`7252403261`) inputs. Anything else
+ * passes through unchanged so non-US numbers remain visible.
+ *
+ * Examples:
+ *   formatPhone('+17252403261')   → '(725) 240-3261'
+ *   formatPhone('17252403261')    → '(725) 240-3261'
+ *   formatPhone('7252403261')     → '(725) 240-3261'
+ *   formatPhone('+447911123456')  → '+447911123456' (passthrough)
+ */
+export function formatPhone(input: string | null | undefined): string {
+  if (!input) return '';
+  const digits = input.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return input;
+}

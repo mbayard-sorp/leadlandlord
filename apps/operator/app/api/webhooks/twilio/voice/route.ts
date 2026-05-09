@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb, sites, calls } from '@leadlandlord/db';
 import {
   buildForwardingTwiml,
@@ -61,6 +61,9 @@ export async function POST(req: Request) {
   }
 
   // Record the call upfront so subsequent webhooks can correlate by CallSid.
+  // The unique index on twilio_call_sid is partial (WHERE twilio_call_sid IS NOT NULL),
+  // so ON CONFLICT must repeat the predicate or Postgres can't infer the
+  // arbiter index (error 42P10).
   await db
     .insert(calls)
     .values({
@@ -71,7 +74,10 @@ export async function POST(req: Request) {
       direction: 'inbound',
       startedAt: new Date(),
     })
-    .onConflictDoNothing({ target: calls.twilioCallSid });
+    .onConflictDoNothing({
+      target: calls.twilioCallSid,
+      where: sql`${calls.twilioCallSid} IS NOT NULL`,
+    });
 
   const baseUrl = process.env.OPERATOR_PUBLIC_URL ?? '';
   const recordingCallback = site.recordingEnabled
@@ -84,9 +90,14 @@ export async function POST(req: Request) {
   // No forwarding configured → straight to voicemail with optional transcription.
   if (!site.forwardingNumber) {
     const transcribeCb = `${baseUrl}/api/webhooks/twilio/transcription`;
+    // Use the AI-generated greeting MP3 if we've recorded one for this site
+    // (set during tracking-setup via ElevenLabs → Sanity assets). Fall back
+    // to plain text + Polly TTS if no audio URL is available.
+    const meta = (site.metadata ?? {}) as { voicemailGreetingUrl?: string };
     return new NextResponse(
       buildVoicemailTwiml({
         greeting: site.whisperMessage ?? `Thanks for calling. Please leave a message.`,
+        audioUrl: meta.voicemailGreetingUrl,
         recordingStatusCallback: recordingCallback,
         transcribeCallback: transcribeCb,
       }),

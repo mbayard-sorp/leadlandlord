@@ -10,5 +10,5 @@
 export { createReadClient, createWriteClient, siteDocId, pageDocId, themeDocId } from '@leadlandlord/sanity-schema';
 export type { SanityClientOptions, PageKind, ThemeName } from '@leadlandlord/sanity-schema';
 
-export { uploadHeroImage } from './asset-upload';
+export { uploadHeroImage, uploadFile } from './asset-upload';
 export type { UploadHeroImageResult } from './asset-upload';
