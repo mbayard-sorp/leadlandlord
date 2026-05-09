@@ -517,21 +517,32 @@ Tone: helpful expert, no marketing fluff. No links. No claims like "best in stat
     const model = process.env.BACKLINK_BUILDER_MODEL ?? 'claude-haiku-4-5';
     const postalAddress = process.env.LEADLANDLORD_POSTAL_ADDRESS
       ?? `LeadLandlord, [postal address not set], ${site.city}, ${site.state}`;
-    const userPrompt = `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
+    const userPrompt = `You are writing a one-to-one email from a real person — a small ${site.niche} business owner in ${site.city}, ${site.state} — to an editor at ${input.targetDomain}. Treat this as a single human reaching out, not a templated outreach blast. Avoid filler phrases ("I hope this email finds you well") and the boilerplate opener "I run a ${site.niche} business in ${site.city}".
 
-Sender: a ${site.niche} business in ${site.city}, ${site.state}.
 Pitch topic: ${input.pitchTopic}
 
-Constraints:
-- Subject line: <= 60 chars, specific.
-- Body: ~120 words, plain text.
-- Suggest 2 concrete article angles relevant to ${input.targetDomain}'s audience.
-- Include an unsubscribe line: "Reply with REMOVE if you'd rather not hear from me again."
-- Include a postal address line on its own line: "${postalAddress}".
-- Sign off "— ${site.niche} team in ${site.city}".
-- No fake credentials, no superlatives.
+Hard requirements.
 
-Return strictly JSON: {"subject": "...", "body": "..."}.`;
+SUBJECT
+- 35–60 characters.
+- Specific and concrete: name a topic, number, or noun an editor would actually click.
+- No emojis, no clickbait, no "Guest post idea for ${input.targetDomain}" style, no bracketed merge tags.
+- Do not use the literal phrase "guest post" or the target domain in the subject.
+
+BODY (110–150 words, plain text, no links, no markdown)
+- Open with one short, direct sentence. Skip pleasantries.
+- One or two sentences on why you're reaching out — what about this topic the sender actually has hands-on perspective on.
+- Propose exactly two article angles, each as its own short paragraph beginning "1)" and "2)". Each angle must include:
+    * a concrete working title under 70 characters, and
+    * one sentence naming the specific evidence, examples, anecdotes, or structure the piece would draw on (e.g. "five failure modes we keep seeing in 1970s Austin slab foundations" — not "tips for homeowners"). Vague angles like "home maintenance tips" are not acceptable.
+- Close with a soft ask, e.g. "Open to either, or something else if a different angle fits your calendar better?"
+- Sign-off line: "— ${site.niche} team in ${site.city}".
+- Then two final lines, each on its own line, in this order:
+    Reply with REMOVE if you'd rather not hear from me again.
+    ${postalAddress}
+- No fake credentials, no superlatives ("best", "leading", "#1", "top-rated"), no fabricated statistics, no fake licence numbers.
+
+Return strictly JSON, nothing else: {"subject": "...", "body": "..."}. Do not wrap in markdown fences. Do not include commentary before or after the JSON.`;
 
     const response = await client.messages.create({
       model,
@@ -551,32 +562,31 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
       .join('')
       .trim();
 
+    // Strip code fences if present, then require well-formed JSON with both
+    // fields. We deliberately throw rather than fall back to a generic
+    // template — a malformed model response is rare and a templated send is
+    // worse for deliverability than no send at all (the run can be retried).
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+    let parsed: { subject?: unknown; body?: unknown };
     try {
-      // Strip code fences if present.
-      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
-      const parsed = JSON.parse(cleaned) as { subject?: unknown; body?: unknown };
-      if (typeof parsed.subject === 'string' && typeof parsed.body === 'string') {
-        return { subject: parsed.subject, body: parsed.body };
-      }
-    } catch {
-      // fall through to fallback below
+      parsed = JSON.parse(cleaned) as { subject?: unknown; body?: unknown };
+    } catch (err) {
+      ctx.log.error(
+        { targetDomain: input.targetDomain, snippet: cleaned.slice(0, 200) },
+        'guest_post: Claude response was not valid JSON',
+      );
+      throw new Error(
+        `guest_post draft: Claude response was not valid JSON for ${input.targetDomain}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
-    ctx.log.warn({ targetDomain: input.targetDomain }, 'guest_post: Claude response not JSON, using fallback');
-    return {
-      subject: `Guest post idea for ${input.targetDomain}`,
-      body: [
-        `Hi,`,
-        ``,
-        `I run a ${site.niche} business in ${site.city}, ${site.state} and put together a quick angle on "${input.pitchTopic}" that I think would land with your readers.`,
-        ``,
-        `Happy to send a 700-word draft if you're open to a contributor piece.`,
-        ``,
-        `Reply with REMOVE if you'd rather not hear from me again.`,
-        ``,
-        `— ${site.niche} team in ${site.city}`,
-        postalAddress,
-      ].join('\n'),
-    };
+    if (typeof parsed.subject !== 'string' || typeof parsed.body !== 'string') {
+      throw new Error(
+        `guest_post draft: missing subject/body in Claude response for ${input.targetDomain}`,
+      );
+    }
+    return { subject: parsed.subject, body: parsed.body };
   }
 }
 
