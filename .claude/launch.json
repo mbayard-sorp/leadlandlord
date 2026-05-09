@@ -11,7 +11,8 @@
       "name": "operator-dev",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@leadlandlord/operator", "dev"],
-      "port": 3000
+      "port": 3000,
+      "autoPort": true
     },
     {
       "name": "site-host",

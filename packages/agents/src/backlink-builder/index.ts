@@ -1,10 +1,17 @@
 import { z } from 'zod';
-import { eq, and } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb, backlinks, sites, type Site } from '@leadlandlord/db';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
+import { findEditorByDomain } from '@leadlandlord/integrations/apollo';
+import {
+  getDomainIntersection,
+  getReferringDomains,
+  isBlockedProspectDomain,
+  type ProspectDomain,
+} from '@leadlandlord/integrations/dataforseo/backlinks';
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { CITATION_DIRECTORIES } from './directories';
@@ -73,16 +80,44 @@ export const BacklinkBuilderInput = z.discriminatedUnion('mode', [
     targetEditorEmail: z.string().email(),
     pitchTopic: z.string(),
   }),
+  z.object({
+    mode: z.literal('prospect'),
+    siteId: z.string().uuid(),
+    /**
+     * Override competitor seeds for this run. When omitted, falls back to
+     * `sites.competitor_seeds` for the row. If both are empty, the run
+     * aborts (prospect mode requires at least 2 competitor targets for
+     * domain_intersection).
+     */
+    competitorOverride: z.array(z.string()).optional(),
+    /** Max prospect domains to consider after DFS + filter (default 50). */
+    maxProspects: z.number().int().min(1).max(500).optional(),
+    /** Hard cap on Apollo enrichments — the dominant per-prospect cost (default 15). */
+    maxApolloEnrichments: z.number().int().min(1).max(100).optional(),
+    /** DFS rank floor 0–1000 (default 250). Per-call override of env default. */
+    minDomainRank: z.number().int().min(0).max(1000).optional(),
+    /**
+     * Auto-send drafted pitches via the existing guest_post send pipeline.
+     * Default false: prospect runs always queue rows as `pending` for
+     * operator review. Flip to true (or per-niche later) once acceptance-
+     * rate data justifies removing training wheels.
+     */
+    autoSend: z.boolean().optional(),
+  }),
 ]);
 
 export type BacklinkBuilderInput = z.infer<typeof BacklinkBuilderInput>;
 
 export const BacklinkBuilderOutput = z.object({
-  mode: z.enum(['citations', 'haro', 'guest_post']),
+  mode: z.enum(['citations', 'haro', 'guest_post', 'prospect']),
   siteId: z.string().uuid(),
   rowsCreated: z.number(),
   rowsRejected: z.number(),
   rowsSent: z.number(),
+  /** Prospect-only: domains DFS surfaced before our quality filter. */
+  prospectsDiscovered: z.number().optional(),
+  /** Prospect-only: domains for which Apollo returned a usable editor contact. */
+  prospectsEnriched: z.number().optional(),
 });
 export type BacklinkBuilderOutput = z.infer<typeof BacklinkBuilderOutput>;
 
@@ -111,6 +146,20 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
             return `haro:${i.siteId}:${i.queries.map((q) => q.id).sort().join(',')}`;
           case 'guest_post':
             return `guest_post:${i.siteId}:${i.targetDomain.toLowerCase()}`;
+          case 'prospect': {
+            // Dedupe per (site, date, competitor-set). Including the seed
+            // hash means an operator who fixes a typo or swaps competitors
+            // gets a fresh run rather than the cached zero-result.
+            const now = new Date();
+            const ymd = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+            const seeds = (i.competitorOverride ?? [])
+              .map((s) => s.toLowerCase().trim())
+              .filter(Boolean)
+              .sort()
+              .join(',');
+            const seedTag = seeds ? `:${shortHash(seeds)}` : '';
+            return `prospect:${i.siteId}:${ymd}${seedTag}`;
+          }
         }
       },
       defaultDailyCapUsd: 5,
@@ -132,6 +181,8 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
         return this.runHaro(input, site, ctx);
       case 'guest_post':
         return this.runGuestPost(input, site, ctx);
+      case 'prospect':
+        return this.runProspect(input, site, ctx);
     }
   }
 
@@ -176,7 +227,10 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
               ym,
             },
           })
-          .onConflictDoNothing({ target: backlinks.dedupeKey })
+          .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        })
           .returning({ id: backlinks.id });
         if (inserted.length > 0) created += 1;
       } catch (err) {
@@ -263,7 +317,10 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
             complianceViolations: compliance.violations,
           },
         })
-        .onConflictDoNothing({ target: backlinks.dedupeKey })
+        .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        })
         .returning({ id: backlinks.id });
 
       if (inserted.length > 0) {
@@ -289,9 +346,11 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
     input: Extract<BacklinkBuilderInput, { mode: 'guest_post' }>,
     site: Site,
     ctx: AgentContext,
+    opts?: { queueOnly?: boolean; extraMetadata?: Record<string, unknown>; dedupeKey?: string },
   ): Promise<BacklinkBuilderOutput> {
     const db = getDb();
-    const dedupeKey = `guest_post:${input.siteId}:${input.targetDomain.toLowerCase()}`;
+    const dedupeKey = opts?.dedupeKey ?? `guest_post:${input.siteId}:${input.targetDomain.toLowerCase()}`;
+    const queueOnly = opts?.queueOnly === true;
 
     const { subject, body } = await this.draftGuestPostEmail(input, site, ctx);
 
@@ -326,14 +385,55 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
             targetEditorEmail: input.targetEditorEmail,
             pitchTopic: input.pitchTopic,
             complianceViolations: compliance.violations,
+            ...(opts?.extraMetadata ?? {}),
           },
         })
-        .onConflictDoNothing({ target: backlinks.dedupeKey });
+        .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        });
       return {
         mode: 'guest_post',
         siteId: input.siteId,
         rowsCreated: 0,
         rowsRejected: 1,
+        rowsSent: 0,
+      };
+    }
+
+    // Queue-only path — used by prospect mode and any caller that wants
+    // operator review before sending. Drafts and compliance still ran
+    // above; we just write a `pending` row instead of dispatching the
+    // email. The operator UI sends from the queue.
+    if (queueOnly) {
+      await db
+        .insert(backlinks)
+        .values({
+          siteId: input.siteId,
+          sourceDomain: input.targetDomain.toLowerCase(),
+          targetUrl: null,
+          type: 'guest_post',
+          status: 'pending',
+          dedupeKey,
+          pitchDraft: body,
+          subjectLine: subject,
+          rejectionReason: null,
+          metadata: {
+            targetEditorEmail: input.targetEditorEmail,
+            pitchTopic: input.pitchTopic,
+            queueOnly: true,
+            ...(opts?.extraMetadata ?? {}),
+          },
+        })
+        .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        });
+      return {
+        mode: 'guest_post',
+        siteId: input.siteId,
+        rowsCreated: 1,
+        rowsRejected: 0,
         rowsSent: 0,
       };
     }
@@ -383,9 +483,13 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
             targetEditorEmail: input.targetEditorEmail,
             pitchTopic: input.pitchTopic,
             throttled: true,
+            ...(opts?.extraMetadata ?? {}),
           },
         })
-        .onConflictDoNothing({ target: backlinks.dedupeKey });
+        .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        });
       return {
         mode: 'guest_post',
         siteId: input.siteId,
@@ -451,9 +555,13 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
           pitchTopic: input.pitchTopic,
           externalId: externalId ?? null,
           sendError: sendError ?? null,
+          ...(opts?.extraMetadata ?? {}),
         },
       })
-      .onConflictDoNothing({ target: backlinks.dedupeKey });
+      .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        });
 
     return {
       mode: 'guest_post',
@@ -578,6 +686,400 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
       ].join('\n'),
     };
   }
+
+  // ────────────────────────────────────────────────────────────
+  // Prospect (DataForSEO discovery → Apollo enrichment → guest_post queue)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Mine guest-post prospects for a site:
+   *   1. Pull competitor seeds (override → site.competitor_seeds).
+   *   2. DataForSEO `domain_intersection` (or `referring_domains` fallback
+   *      when only 1 seed) returns referring-domain candidates.
+   *   3. Apply blocklist + already-seen filter, cap to maxProspects.
+   *   4. For each survivor, Apollo `findEditorByDomain` (capped at
+   *      maxApolloEnrichments — the dominant variable cost).
+   *   5. Each enriched prospect → existing `runGuestPost` with queueOnly
+   *      (default) or auto-send (when input.autoSend === true).
+   *
+   * Provenance is stamped into `backlinks.metadata.prospect` so the
+   * operator UI can compute acceptance rates by rank-band, editor title,
+   * niche etc. — the signals we need to graduate to full autonomy.
+   */
+  private async runProspect(
+    input: Extract<BacklinkBuilderInput, { mode: 'prospect' }>,
+    site: Site,
+    ctx: AgentContext,
+  ): Promise<BacklinkBuilderOutput> {
+    const seeds = (input.competitorOverride ?? site.competitorSeeds ?? []).filter(
+      (d): d is string => typeof d === 'string' && d.trim().length > 0,
+    );
+    if (seeds.length === 0) {
+      ctx.log.warn({ siteId: site.id }, 'prospect: no competitor seeds, aborting');
+      return {
+        mode: 'prospect',
+        siteId: input.siteId,
+        rowsCreated: 0,
+        rowsRejected: 0,
+        rowsSent: 0,
+        prospectsDiscovered: 0,
+        prospectsEnriched: 0,
+      };
+    }
+
+    const minRank =
+      input.minDomainRank ?? Number(process.env.PROSPECT_MIN_DOMAIN_RANK ?? '50');
+    const maxProspects = input.maxProspects ?? 50;
+    const requestedApolloMax = input.maxApolloEnrichments ?? 15;
+    const autoSend = input.autoSend === true;
+
+    // Apollo monthly cap enforcement (defence-in-depth — operator UI also
+    // pre-checks). Each prospect-stamped backlinks row this month consumed
+    // one Apollo person-reveal. Free tier is 75/month.
+    const apolloCap = Number(process.env.APOLLO_MONTHLY_CAP ?? '75');
+    const apolloUsed = await countApolloEnrichmentsThisMonth();
+    const apolloRemaining = Math.max(0, apolloCap - apolloUsed);
+    if (apolloRemaining <= 0) {
+      ctx.log.warn(
+        { siteId: site.id, apolloUsed, apolloCap },
+        'prospect: Apollo monthly cap reached, aborting',
+      );
+      return {
+        mode: 'prospect',
+        siteId: input.siteId,
+        rowsCreated: 0,
+        rowsRejected: 0,
+        rowsSent: 0,
+        prospectsDiscovered: 0,
+        prospectsEnriched: 0,
+      };
+    }
+    const maxApolloEnrichments = Math.min(requestedApolloMax, apolloRemaining);
+
+    // 1. Discovery.
+    let candidates: ProspectDomain[] = [];
+    try {
+      if (seeds.length >= 2) {
+        candidates = await getDomainIntersection({
+          targets: seeds,
+          exclude: site.domain ? [site.domain] : [],
+          minRank,
+          // Over-fetch so the blocklist + dedupe filter still leaves
+          // enough headroom to reach maxProspects.
+          limit: maxProspects * 3,
+        });
+      } else {
+        candidates = await getReferringDomains({
+          target: seeds[0]!,
+          minRank,
+          limit: maxProspects * 3,
+        });
+      }
+    } catch (err) {
+      ctx.log.error(
+        { err: err instanceof Error ? err.message : String(err), seeds: seeds.length },
+        'prospect: DFS discovery failed',
+      );
+      throw err;
+    }
+
+    const discovered = candidates.length;
+    ctx.log.info({ siteId: site.id, discovered, minRank }, 'prospect: DFS returned candidates');
+
+    // 2. Filter — blocklist, own domain, already-seen.
+    const ownDomain = site.domain?.toLowerCase() ?? null;
+    const seenKeys = new Set(
+      (
+        await getDb()
+          .select({ k: backlinks.dedupeKey })
+          .from(backlinks)
+          .where(eq(backlinks.siteId, input.siteId))
+      )
+        .map((r) => r.k)
+        .filter((k): k is string => !!k),
+    );
+
+    const filtered: ProspectDomain[] = [];
+    for (const c of candidates) {
+      if (filtered.length >= maxProspects) break;
+      if (ownDomain && c.domain === ownDomain) continue;
+      if (isBlockedProspectDomain(c.domain)) continue;
+      const guestPostKey = `guest_post:${input.siteId}:${c.domain}`;
+      if (seenKeys.has(guestPostKey)) continue;
+      filtered.push(c);
+    }
+    ctx.log.info(
+      { siteId: site.id, filtered: filtered.length, dropped: discovered - filtered.length },
+      'prospect: post-filter survivors',
+    );
+
+    // 3. Enrich (capped — Apollo is the dominant per-prospect cost).
+    let enriched = 0;
+    let rowsCreated = 0;
+    let rowsRejected = 0;
+    let rowsSent = 0;
+    const pitchTopic = `Guide to ${site.niche} for homeowners in ${site.city}`;
+
+    for (const c of filtered) {
+      // Apollo cap stops further reveals — but we still queue *unenriched*
+      // rows below so the operator can do manual editor lookup.
+      const apolloBudgetRemaining = enriched < maxApolloEnrichments;
+
+      let editor: Awaited<ReturnType<typeof findEditorByDomain>> = null;
+      let apolloError: string | null = null;
+      if (apolloBudgetRemaining) {
+        try {
+          editor = await findEditorByDomain(c.domain);
+        } catch (err) {
+          apolloError = err instanceof Error ? err.message : String(err);
+          ctx.log.warn(
+            { domain: c.domain, err: apolloError },
+            'prospect: Apollo enrichment failed — queueing for manual editor lookup',
+          );
+        }
+      }
+
+      // Mask check: Apollo lower tiers return placeholder emails.
+      const rawEmail = editor?.person.email?.toLowerCase() ?? '';
+      const usableEmail =
+        editor?.person.email &&
+        !rawEmail.includes('email_not_unlocked') &&
+        !rawEmail.includes('domain.com')
+          ? editor.person.email
+          : null;
+
+      if (editor && usableEmail) {
+        enriched += 1;
+      }
+
+      // Path A — Apollo found a usable editor: route through existing
+      // runGuestPost which drafts the pitch and queues (or sends).
+      if (editor && usableEmail) {
+        const guestPostInput: Extract<BacklinkBuilderInput, { mode: 'guest_post' }> = {
+          mode: 'guest_post',
+          siteId: input.siteId,
+          targetDomain: c.domain,
+          targetEditorEmail: usableEmail,
+          pitchTopic,
+        };
+
+        const extraMetadata = {
+          prospect: {
+            run: true,
+            dfsRank: c.rank,
+            referringDomainsToCompetitors: c.referringDomains,
+            backlinksCount: c.backlinksCount,
+            firstSeen: c.firstSeen,
+            editorTitle: editor.person.title ?? null,
+            editorEmailStatus: editor.person.email_status ?? null,
+            apolloOrgId: editor.org.id ?? null,
+            apolloPersonId: editor.person.id ?? null,
+            niche: site.niche,
+            minDomainRank: minRank,
+            seeds,
+          },
+        };
+
+        try {
+          const result = await this.runGuestPost(guestPostInput, site, ctx, {
+            queueOnly: !autoSend,
+            extraMetadata,
+          });
+          rowsCreated += result.rowsCreated;
+          rowsRejected += result.rowsRejected;
+          rowsSent += result.rowsSent;
+        } catch (err) {
+          ctx.log.warn(
+            { domain: c.domain, err: err instanceof Error ? err.message : String(err) },
+            'prospect: guest_post sub-run failed',
+          );
+        }
+        continue;
+      }
+
+      // Path B — Apollo had no usable record (404, masked email, no people,
+      // or Apollo budget exhausted). Queue the prospect for manual editor
+      // lookup so the operator can fill in `targetEditorEmail` via Hunter,
+      // LinkedIn, or the site's contact page. No pitch draft yet — that
+      // happens once the operator supplies the email.
+      const manualDedupeKey = `prospect:${input.siteId}:${c.domain}`;
+      const seenAlready = (
+        await getDb()
+          .select({ id: backlinks.id })
+          .from(backlinks)
+          .where(eq(backlinks.dedupeKey, manualDedupeKey))
+      ).length > 0;
+      if (seenAlready) continue;
+
+      try {
+        await getDb()
+          .insert(backlinks)
+          .values({
+            siteId: input.siteId,
+            sourceDomain: c.domain,
+            targetUrl: null,
+            type: 'guest_post',
+            status: 'pending',
+            dedupeKey: manualDedupeKey,
+            pitchDraft: null,
+            subjectLine: null,
+            rejectionReason: null,
+            metadata: {
+              targetEditorEmail: null,
+              pitchTopic,
+              prospect: {
+                run: true,
+                dfsRank: c.rank,
+                referringDomainsToCompetitors: c.referringDomains,
+                backlinksCount: c.backlinksCount,
+                firstSeen: c.firstSeen,
+                editorTitle: null,
+                editorEmailStatus: null,
+                apolloOrgId: editor?.org.id ?? null,
+                apolloPersonId: null,
+                niche: site.niche,
+                minDomainRank: minRank,
+                seeds,
+                needsManualEditor: true,
+                apolloError,
+                apolloBudgetExhausted: !apolloBudgetRemaining,
+              },
+            },
+          })
+          .onConflictDoNothing({
+          target: backlinks.dedupeKey,
+          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
+        });
+        rowsCreated += 1;
+      } catch (err) {
+        ctx.log.warn(
+          { domain: c.domain, err: err instanceof Error ? err.message : String(err) },
+          'prospect: manual-lookup row insert failed',
+        );
+      }
+    }
+
+    ctx.log.info(
+      { siteId: site.id, discovered, enriched, rowsCreated, rowsRejected, rowsSent },
+      'prospect: run complete',
+    );
+    return {
+      mode: 'prospect',
+      siteId: input.siteId,
+      rowsCreated,
+      rowsRejected,
+      rowsSent,
+      prospectsDiscovered: discovered,
+      prospectsEnriched: enriched,
+    };
+  }
+}
+
+/**
+ * Stable 8-char hash for dedupe keys. Not cryptographic — just a fast
+ * collision-resistant tag so different competitor seed sets dedupe
+ * independently within the same (site, day) bucket.
+ */
+function shortHash(input: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Count Apollo person-reveals consumed this calendar month, by scanning
+ * `backlinks` rows whose metadata carries a prospect.apolloPersonId.
+ * Each such row represents exactly one successful findEditorByDomain call.
+ * Used by runProspect to gate against the Apollo monthly cap (free tier 75).
+ */
+async function countApolloEnrichmentsThisMonth(): Promise<number> {
+  const db = getDb();
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const rows = await db
+    .select({ metadata: backlinks.metadata, createdAt: backlinks.createdAt })
+    .from(backlinks);
+  let count = 0;
+  for (const r of rows) {
+    if (!r.createdAt || new Date(r.createdAt) < monthStart) continue;
+    const md = (r.metadata ?? {}) as Record<string, unknown>;
+    const p = md.prospect as Record<string, unknown> | undefined;
+    if (p && p.apolloPersonId) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Standalone guest-post draft helper. Same prompt as the agent's internal
+ * `draftGuestPostEmail`, but callable from the operator UI when an
+ * operator manually supplies an editor email for a manual-lookup row.
+ * No agent context — usage is tracked at call site if needed.
+ */
+export async function draftGuestPostPitch(args: {
+  targetDomain: string;
+  pitchTopic: string;
+  niche: string;
+  city: string;
+  state: string;
+}): Promise<{ subject: string; body: string }> {
+  const client = getAnthropicClient();
+  const model = process.env.BACKLINK_BUILDER_MODEL ?? 'claude-haiku-4-5';
+  const postalAddress =
+    process.env.LEADLANDLORD_POSTAL_ADDRESS
+    ?? `LeadLandlord, [postal address not set], ${args.city}, ${args.state}`;
+  const userPrompt = `Draft a short, sincere guest-post pitch email to the editor of ${args.targetDomain}.
+
+Sender: a ${args.niche} business in ${args.city}, ${args.state}.
+Pitch topic: ${args.pitchTopic}
+
+Constraints:
+- Subject line: <= 60 chars, specific.
+- Body: ~120 words, plain text.
+- Suggest 2 concrete article angles relevant to ${args.targetDomain}'s audience.
+- Include an unsubscribe line: "Reply with REMOVE if you'd rather not hear from me again."
+- Include a postal address line on its own line: "${postalAddress}".
+- Sign off "— ${args.niche} team in ${args.city}".
+- No fake credentials, no superlatives.
+
+Return strictly JSON: {"subject": "...", "body": "..."}.`;
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 800,
+    temperature: 0.5,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+  const text = response.content
+    .map((b) => (b.type === 'text' ? b.text : ''))
+    .join('')
+    .trim();
+  try {
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+    const parsed = JSON.parse(cleaned) as { subject?: unknown; body?: unknown };
+    if (typeof parsed.subject === 'string' && typeof parsed.body === 'string') {
+      return { subject: parsed.subject, body: parsed.body };
+    }
+  } catch {
+    // fall through to fallback
+  }
+  return {
+    subject: `Guest post idea for ${args.targetDomain}`,
+    body: [
+      `Hi,`,
+      ``,
+      `I run a ${args.niche} business in ${args.city}, ${args.state} and put together a quick angle on "${args.pitchTopic}" that I think would land with your readers.`,
+      ``,
+      `Happy to send a 700-word draft if you're open to a contributor piece.`,
+      ``,
+      `Reply with REMOVE if you'd rather not hear from me again.`,
+      ``,
+      `— ${args.niche} team in ${args.city}`,
+      postalAddress,
+    ].join('\n'),
+  };
 }
 
 // Re-export for tests / external introspection.

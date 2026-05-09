@@ -18,6 +18,7 @@
     "./elevenlabs": "./src/elevenlabs/index.ts",
     "./stripe": "./src/stripe/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
+    "./dataforseo/backlinks": "./src/dataforseo/backlinks.ts",
     "./namecheap": "./src/namecheap/index.ts",
     "./imagen": "./src/imagen/index.ts",
     "./sanity": "./src/sanity/index.ts",

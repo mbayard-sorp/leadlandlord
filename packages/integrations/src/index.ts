@@ -9,6 +9,7 @@ export * as apollo from './apollo/index';
 export * as elevenlabs from './elevenlabs/index';
 export * as stripe from './stripe/index';
 export * as dataforseo from './dataforseo/index';
+export * as dataforseoBacklinks from './dataforseo/backlinks';
 export * as namecheap from './namecheap/index';
 export * as imagen from './imagen/index';
 export * as cloudflare from './cloudflare/index';

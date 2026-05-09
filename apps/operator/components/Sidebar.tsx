@@ -8,6 +8,7 @@ const links = [
   { href: '/operator/agents', label: 'Agents' },
   { href: '/operator/seo', label: 'SEO' },
   { href: '/operator/backlinks', label: 'Backlinks' },
+  { href: '/operator/backlinks/prospects', label: '↳ Prospects' },
   { href: '/operator/email-sends', label: 'Email Sends' },
   { href: '/operator/maintenance', label: 'Maintenance' },
   { href: '/operator/control', label: 'Control' },
