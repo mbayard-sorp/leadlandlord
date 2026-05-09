@@ -167,7 +167,15 @@ export function buildWhisperTwiml(message: string): string {
 
 /** TwiML for the case where no forwarding number is configured — go to voicemail. */
 export function buildVoicemailTwiml(opts: {
+  /** Plain text greeting — read by Twilio's Polly TTS when no audioUrl is set. */
   greeting?: string;
+  /**
+   * Public URL to a pre-rendered greeting MP3 (e.g. ElevenLabs synthesis
+   * uploaded to Sanity assets). When present we use `<Play>` instead of
+   * `<Say>` for a human-quality voice. Falls back to greeting text if the
+   * URL is undefined.
+   */
+  audioUrl?: string;
   recordingStatusCallback?: string;
   transcribeCallback?: string;
 }): string {
@@ -180,9 +188,12 @@ export function buildVoicemailTwiml(opts: {
   const recordingCb = opts.recordingStatusCallback
     ? ` recordingStatusCallback="${escape(opts.recordingStatusCallback)}"`
     : '';
+  const greetingTag = opts.audioUrl
+    ? `<Play>${escape(opts.audioUrl)}</Play>`
+    : `<Say voice="Polly.Joanna">${escape(greeting)}</Say>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${escape(greeting)}</Say>
+  ${greetingTag}
   <Record maxLength="180" playBeep="true"${recordingCb}${transcribe} />
   <Hangup />
 </Response>`;

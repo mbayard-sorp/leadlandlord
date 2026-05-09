@@ -27,3 +27,22 @@ export async function uploadHeroImage(
   const asset = await client.assets.upload('image', buffer, { filename, contentType });
   return { assetId: asset._id, url: asset.url, size: buffer.byteLength };
 }
+
+/**
+ * Upload an arbitrary file (audio, video, doc) to Sanity's file asset
+ * bucket. Used for voicemail greeting MP3s referenced by Twilio TwiML
+ * `<Play>` tags. Sanity's file CDN serves a public URL — Twilio fetches
+ * the audio at call time.
+ *
+ * Sanity content-addresses by SHA-256, so re-uploading the same buffer is
+ * a no-op.
+ */
+export async function uploadFile(
+  buffer: Buffer,
+  filename: string,
+  contentType: string,
+): Promise<UploadHeroImageResult> {
+  const client = createWriteClient();
+  const asset = await client.assets.upload('file', buffer, { filename, contentType });
+  return { assetId: asset._id, url: asset.url, size: buffer.byteLength };
+}

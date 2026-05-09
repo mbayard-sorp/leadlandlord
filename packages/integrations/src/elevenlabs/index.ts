@@ -171,3 +171,57 @@ export async function getConversation(conversationId: string): Promise<Conversat
     throw err;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Plain TTS (text-to-speech) — used for static voicemail greetings.
+// Distinct from the Conversational AI agents above. Returns raw MP3 bytes
+// the caller can persist (Sanity asset, Vercel Blob, etc.) and reference
+// from `<Play>` TwiML.
+//
+// Docs: https://elevenlabs.io/docs/api-reference/text-to-speech/convert
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface SynthesizeSpeechArgs {
+  text: string;
+  /** ElevenLabs voice id; defaults to ELEVENLABS_VOICE_ID env or "Rachel". */
+  voiceId?: string;
+  /** Model id; default `eleven_turbo_v2_5` (fast + cheap, suitable for greetings). */
+  modelId?: string;
+  /** Output format. Default `mp3_44100_128` (128kbps stereo MP3, Twilio-compatible). */
+  outputFormat?: string;
+}
+
+export async function synthesizeSpeech(args: SynthesizeSpeechArgs): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) throw new IntegrationError('elevenlabs', 'ELEVENLABS_API_KEY is not set');
+
+  const voiceId =
+    args.voiceId ?? process.env.ELEVENLABS_VOICE_ID ?? '21m00Tcm4TlvDq8ikWAM'; // Rachel
+  const modelId = args.modelId ?? 'eleven_turbo_v2_5';
+  const outputFormat = args.outputFormat ?? 'mp3_44100_128';
+
+  const res = await fetch(
+    `${ELEVENLABS_BASE}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
+      },
+      body: JSON.stringify({ text: args.text, model_id: modelId }),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new IntegrationError(
+      'elevenlabs',
+      `tts ${voiceId} → ${res.status} ${text.slice(0, 500)}`,
+      res.status,
+      text,
+    );
+  }
+  const arrayBuf = await res.arrayBuffer();
+  log.info({ voiceId, modelId, bytes: arrayBuf.byteLength }, 'elevenlabs.synthesizeSpeech ok');
+  return Buffer.from(arrayBuf);
+}
