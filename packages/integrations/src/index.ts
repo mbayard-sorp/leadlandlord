@@ -3,6 +3,7 @@ export * as vercel from './vercel/index';
 export * as twilio from './twilio/index';
 export * as klaviyo from './klaviyo/index';
 export * as resend from './resend/index';
+export * as zohoMcp from './zoho-mcp/index';
 export * as googlePlaces from './google-places/index';
 export * as apollo from './apollo/index';
 export * as elevenlabs from './elevenlabs/index';

@@ -31,7 +31,6 @@ const PhoneAssignmentSchema = z.object({
   whisper_message: z.string().optional(),
   recording_enabled: z.coerce.boolean().optional(),
   klaviyo_list_id: z.string().optional(),
-  ga_measurement_id: z.string().optional(),
 });
 
 export interface PhoneAssignmentResult {
@@ -55,7 +54,6 @@ export async function assignPhone(formData: FormData): Promise<PhoneAssignmentRe
     whisper_message: nullable(formData.get('whisper_message')),
     recording_enabled: nullable(formData.get('recording_enabled')),
     klaviyo_list_id: nullable(formData.get('klaviyo_list_id')),
-    ga_measurement_id: nullable(formData.get('ga_measurement_id')),
   });
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues.map((i) => i.message).join(', ') };
@@ -73,7 +71,6 @@ export async function assignPhone(formData: FormData): Promise<PhoneAssignmentRe
       whisperMessage: emptyToNull(v.whisper_message),
       recordingEnabled: v.recording_enabled ?? true,
       klaviyoListId: emptyToNull(v.klaviyo_list_id),
-      gaMeasurementId: emptyToNull(v.ga_measurement_id),
       updatedAt: new Date(),
     })
     .where(eq(sites.id, v.site_id));

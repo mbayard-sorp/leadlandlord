@@ -16,6 +16,7 @@
     "./tenant-prospector": "./src/tenant-prospector/index.ts",
     "./compliance-guard": "./src/compliance-guard/index.ts",
     "./outreach-agent": "./src/outreach-agent/index.ts",
+    "./backlink-builder": "./src/backlink-builder/index.ts",
     "./registry": "./src/registry.ts",
     "./error-classify": "./src/error-classify.ts",
     "./scheduler": "./src/scheduler/index.ts",

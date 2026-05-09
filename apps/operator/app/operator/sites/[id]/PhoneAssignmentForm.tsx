@@ -82,14 +82,6 @@ export function PhoneAssignmentForm({ site }: Props) {
             className="input font-mono text-xs"
           />
         </Field>
-        <Field label="GA4 measurement ID">
-          <input
-            name="ga_measurement_id"
-            defaultValue={site.gaMeasurementId ?? ''}
-            placeholder="G-XXXXXXXXXX"
-            className="input font-mono text-xs"
-          />
-        </Field>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-slate-200">

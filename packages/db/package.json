@@ -10,7 +10,8 @@
     "./schema": "./src/schema.ts",
     "./queue": "./src/queue.ts",
     "./client": "./src/client.ts",
-    "./suppression": "./src/suppression.ts"
+    "./suppression": "./src/suppression.ts",
+    "./email-throttle": "./src/email-throttle.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -18,6 +19,7 @@
     "migrate-recover": "tsx src/migrate-recover.ts",
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,6 +31,7 @@
     "@types/node": "^22.10.0",
     "drizzle-kit": "^0.28.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
   }
 }

@@ -22,6 +22,17 @@ const EnvSchema = z.object({
   /** Verified Resend sender — e.g. "LeadLandlord <leads@yourdomain.com>". */
   RESEND_FROM_ADDRESS: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
+  /** Zoho agentic email — MCP endpoint URL. */
+  ZOHO_MCP_URL: z.string().url().optional(),
+  ZOHO_ACCOUNT_ID: z.string().optional(),
+  ZOHO_DEFAULT_FROM: z.string().email().optional(),
+  /** Hard daily cap (used as a flat fallback when no warmup schedule applies). */
+  ZOHO_DAILY_SEND_CAP: z.coerce.number().int().positive().default(50),
+  /** Optional override for the warmup schedule — JSON array of { days, cap }. */
+  ZOHO_WARMUP_SCHEDULE_JSON: z.string().optional(),
+  ZOHO_MCP_ENABLED: z.coerce.boolean().default(false),
+  /** CAN-SPAM postal address used in agent-drafted outbound mail. */
+  LEADLANDLORD_POSTAL_ADDRESS: z.string().optional(),
   KLAVIYO_PRIVATE_API_KEY: z.string().optional(),
   /** Google Cloud API key with Places API (New) enabled. */
   GOOGLE_PLACES_API_KEY: z.string().optional(),
@@ -113,6 +124,13 @@ export function getEnvLoose() {
     OPERATOR_EMAIL: process.env.OPERATOR_EMAIL,
     RESEND_FROM_ADDRESS: process.env.RESEND_FROM_ADDRESS,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
+    ZOHO_MCP_URL: process.env.ZOHO_MCP_URL,
+    ZOHO_ACCOUNT_ID: process.env.ZOHO_ACCOUNT_ID,
+    ZOHO_DEFAULT_FROM: process.env.ZOHO_DEFAULT_FROM,
+    ZOHO_DAILY_SEND_CAP: Number.parseInt(process.env.ZOHO_DAILY_SEND_CAP ?? '50', 10),
+    ZOHO_WARMUP_SCHEDULE_JSON: process.env.ZOHO_WARMUP_SCHEDULE_JSON,
+    ZOHO_MCP_ENABLED: process.env.ZOHO_MCP_ENABLED === 'true',
+    LEADLANDLORD_POSTAL_ADDRESS: process.env.LEADLANDLORD_POSTAL_ADDRESS,
     KLAVIYO_PRIVATE_API_KEY: process.env.KLAVIYO_PRIVATE_API_KEY,
     GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
     APOLLO_API_KEY: process.env.APOLLO_API_KEY,
