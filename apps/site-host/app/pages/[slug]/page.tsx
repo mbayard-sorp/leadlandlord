@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
+import { breadcrumbsJsonLd, buildPageMetadata } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { telHref } from '../../../lib/content';
@@ -38,11 +39,20 @@ export default async function InfoPage({ params }: Params) {
     isPartOf: { '@type': 'WebSite', name: bundle.business_name },
   };
 
+  const breadcrumb = await breadcrumbsJsonLd([
+    { name: bundle.business_name, path: '/' },
+    { name: page.title, path: `/pages/${slug}/` },
+  ]);
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
 
       <article className="info-page">
@@ -99,23 +109,15 @@ export async function generateMetadata({ params }: Params) {
   const bundle = sanityToBundle(site);
   const page = bundle.info_pages.find((p) => slugFromUrl(p.slug) === slug);
   if (!page) return {};
-  const canonical = `/pages/${slug}/`;
-  return {
+  return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    alternates: { canonical },
-    openGraph: {
-      title: page.title,
-      description: page.meta_description,
-      type: 'article',
-      url: canonical,
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: page.title,
-      description: page.meta_description,
-    },
-  };
+    path: `/pages/${slug}/`,
+    ogType: 'article',
+    image: bundle.hero_image_url,
+    publishedTime: bundle.generated_at,
+    siteName: bundle.business_name,
+  });
 }
 
 function slugFromUrl(url: string): string {

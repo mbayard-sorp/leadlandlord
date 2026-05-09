@@ -61,6 +61,11 @@
   text-decoration: none;
 }
 @media (min-width: 640px) { [data-theme='modern'] .modern-phone-pill { display: inline-flex; align-items: center; } }
+[data-theme='modern'] .modern-header-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 /* hero */
 [data-theme='modern'] .modern-hero {
@@ -76,6 +81,49 @@
   pointer-events: none;
   z-index: 0;
 }
+/* hero image — placeholder fallback, shown over SVG on mobile, beside on desktop */
+[data-theme='modern'] .modern-hero-image {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  overflow: hidden;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--rule);
+  z-index: 1;
+}
+[data-theme='modern'] .modern-hero-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@media (min-width: 768px) {
+  /* desktop: hide image, let SVG decorate; image returns as decorative aside on wider screens */
+  [data-theme='modern'] .modern-hero-image { display: none; }
+}
+@media (min-width: 1200px) {
+  /* On very wide screens, layer image on the right behind the form-card area as a decorative aside */
+  [data-theme='modern'] .modern-hero-image {
+    display: block;
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 38%;
+    height: 100%;
+    border-bottom: none;
+    opacity: 0.85;
+    z-index: 0;
+  }
+}
+@media (max-width: 767px) {
+  /* mobile: image takes over, hide decorative SVG */
+  [data-theme='modern'] .modern-hero-svg { display: none; }
+}
+
 [data-theme='modern'] .modern-hero-grid {
   position: relative;
   z-index: 1;
@@ -388,11 +436,74 @@
   gap: 8px;
   padding: 14px 28px;
   background: var(--ink);
-  color: var(--paper) !important;
+  color: var(--paper);
   font-family: var(--font-display);
   font-weight: 700;
   border-radius: 999px;
   text-decoration: none;
+}
+
+/* trust band — light, on paper-2, between hero and services */
+[data-theme='modern'] .modern-trust-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 18px clamp(20px, 5vw, 56px);
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--rule);
+}
+[data-theme='modern'] .modern-trust-band-item {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  padding: 6px 22px;
+  border-right: 1px solid var(--rule);
+}
+[data-theme='modern'] .modern-trust-band-item:last-child { border-right: none; }
+@media (max-width: 639px) {
+  [data-theme='modern'] .modern-trust-band-item {
+    border-right: none;
+    padding: 4px 12px;
+  }
+}
+
+/* BIG phone block — light, between services and FAQ */
+[data-theme='modern'] .modern-phone-block {
+  text-align: center;
+  padding: clamp(40px, 6vw, 72px) clamp(20px, 5vw, 56px);
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+[data-theme='modern'] .modern-phone-block-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+[data-theme='modern'] .modern-phone-block-num {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(36px, 7vw, 72px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+[data-theme='modern'] .modern-phone-block-num:hover { color: var(--accent); }
+[data-theme='modern'] .modern-phone-block-sub {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  margin: 12px 0 0;
 }
 
 /* footer */
@@ -407,15 +518,11 @@
   gap: 16px;
   justify-content: space-between;
 }
-[data-theme='modern'] .modern-footer,
-[data-theme='modern'] .modern-footer * { color: var(--paper) !important; }
 [data-theme='modern'] .modern-footer-disclaimer { width: 100%; opacity: 0.6; font-size: 0.75rem; }
 
 /* sticky mobile bar */
 [data-theme='modern'] .sticky-mobile-bar { background: var(--ink); }
-[data-theme='modern'] .sticky-mobile-bar,
-[data-theme='modern'] .sticky-mobile-bar * { color: var(--paper) !important; }
-[data-theme='modern'] .sticky-mobile-bar .cta { background: var(--accent); color: var(--ink) !important; }
+[data-theme='modern'] .sticky-mobile-bar .cta { background: var(--accent); color: var(--ink); }
 
 [data-theme='modern'] .modern-mobile-spacer { height: 64px; }
 @media (min-width: 768px) { [data-theme='modern'] .modern-mobile-spacer { display: none; } }

@@ -27,6 +27,14 @@
 
   --section-pad-y: clamp(56px, 8vw, 96px);
   --container-max: 1180px;
+
+  --surface-fg: var(--ink);
+  --surface-bg: var(--paper);
+  --surface-muted-fg: var(--ink-2);
+  --surface-inverse-fg: var(--paper);
+  --surface-inverse-bg: var(--ink);
+  --surface-inverse-muted-fg: rgba(255, 247, 237, 0.65);
+  --surface-inverse-accent-fg: var(--accent);
 }
 
 /* Squiggle underline used on H1 keyword in Bright variant. */

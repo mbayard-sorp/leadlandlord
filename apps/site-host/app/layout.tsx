@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { allFontVars } from '../lib/fonts';
 import { resolveCurrentSite } from '../lib/site-context';
+import { currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
 import './globals.css';
 
@@ -19,8 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
     };
   }
   const bundle = sanityToBundle(site);
-  const primary = site.domains?.find((d) => d.isPrimary)?.host ?? site.domains?.[0]?.host;
-  const base = primary ? `https://${primary}` : 'http://localhost:3001';
+  const base = await currentRequestBaseUrl();
   const title = bundle.home.title || site.businessName;
   const description = bundle.home.meta_description;
   return {
@@ -55,6 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={allFontVars} data-theme={theme}>
       <body>
+        <a href="#main" className="skip-to-content">Skip to main content</a>
         {children}
         {ga ? (
           <>

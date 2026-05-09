@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../lib/site-context';
+import { buildPageMetadata } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { getTrackingNumber } from '../lib/tracking';
 import { ClassicHome } from '../components/variants/Classic';
@@ -32,9 +33,11 @@ export async function generateMetadata() {
   const site = await resolveCurrentSite();
   if (!site) return { robots: { index: false, follow: false } };
   const bundle = sanityToBundle(site);
-  return {
+  return buildPageMetadata({
     title: bundle.home.title || site.businessName,
     description: bundle.home.meta_description,
-    alternates: { canonical: '/' },
-  };
+    path: '/',
+    image: bundle.hero_image_url,
+    siteName: site.businessName,
+  });
 }

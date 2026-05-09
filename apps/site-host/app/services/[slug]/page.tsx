@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
+import { breadcrumbsJsonLd, buildPageMetadata, currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { telHref } from '../../../lib/content';
@@ -29,21 +30,46 @@ export default async function ServicePage({ params }: Params) {
 
   const phone = await getTrackingNumber(site.siteId);
   const tel = telHref(phone);
+  const base = await currentRequestBaseUrl();
+  const canonical = `/services/${slug}/`;
 
   const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {
     '@context': 'https://schema.org',
     '@type': 'Service',
     name: page.title,
     description: page.meta_description,
-    provider: { '@type': 'LocalBusiness', name: bundle.business_name },
+    url: `${base}${canonical}`,
+    ...(bundle.hero_image_url ? { image: bundle.hero_image_url } : {}),
+    provider: {
+      '@type': 'LocalBusiness',
+      name: bundle.business_name,
+      telephone: phone,
+      areaServed: `${bundle.city}, ${bundle.state}`,
+    },
     areaServed: `${bundle.city}, ${bundle.state}`,
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'USD',
+      availability: 'https://schema.org/InStock',
+      url: `${base}${canonical}`,
+    },
   };
+
+  const breadcrumb = await breadcrumbsJsonLd([
+    { name: bundle.business_name, path: '/' },
+    { name: 'Services', path: '/services/' },
+    { name: page.title, path: canonical },
+  ]);
 
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
 
       <article className="info-page">
@@ -100,18 +126,13 @@ export async function generateMetadata({ params }: Params) {
   const bundle = sanityToBundle(site);
   const page = bundle.services.find((p) => slugFromUrl(p.slug) === slug);
   if (!page) return {};
-  const canonical = `/services/${slug}/`;
-  return {
+  return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    alternates: { canonical },
-    openGraph: {
-      title: page.title,
-      description: page.meta_description,
-      type: 'website',
-      url: canonical,
-    },
-  };
+    path: `/services/${slug}/`,
+    image: bundle.hero_image_url,
+    siteName: bundle.business_name,
+  });
 }
 
 function slugFromUrl(url: string): string {

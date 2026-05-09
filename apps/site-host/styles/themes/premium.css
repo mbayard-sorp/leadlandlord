@@ -26,4 +26,12 @@
 
   --section-pad-y: clamp(80px, 11vw, 140px);
   --container-max: 1100px;
+
+  --surface-fg: var(--ink);
+  --surface-bg: var(--paper);
+  --surface-muted-fg: var(--ink-2);
+  --surface-inverse-fg: var(--paper);
+  --surface-inverse-bg: var(--ink);
+  --surface-inverse-muted-fg: rgba(244, 236, 224, 0.65);
+  --surface-inverse-accent-fg: var(--paper);
 }
