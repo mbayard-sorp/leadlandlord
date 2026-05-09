@@ -166,6 +166,62 @@ function hasOwnerTitle(title: string | null | undefined): boolean {
   return OWNER_TITLE_TOKENS.some((t) => lower.includes(t));
 }
 
+const EDITOR_TITLE_TOKENS = [
+  'editor',
+  'editorial',
+  'managing editor',
+  'content',
+  'contributor',
+  'contributing',
+  'writer',
+  'staff writer',
+  'columnist',
+  'community manager',
+  'blog',
+  'features',
+  'outreach',
+];
+
+function hasEditorTitle(title: string | null | undefined): boolean {
+  if (!title) return false;
+  const lower = title.toLowerCase();
+  return EDITOR_TITLE_TOKENS.some((t) => lower.includes(t));
+}
+
+/**
+ * Editor-tier variant of `findOwnerByDomain`. Used by Backlink Builder's
+ * prospect mode to find an editor / content manager / contributor at a
+ * media or blog domain to pitch a guest post to.
+ *
+ * Preference order:
+ *   1. verified email + editor-style title
+ *   2. verified email (any title)
+ *   3. first person Apollo ranks (email may be masked)
+ *
+ * Returns null when Apollo has no record for the domain — caller should
+ * skip this prospect rather than error.
+ */
+export async function findEditorByDomain(domain: string): Promise<{
+  org: ApolloOrganization;
+  person: ApolloPerson;
+} | null> {
+  const org = await enrichOrganization(domain);
+  if (!org?.id) return null;
+  const people = await getOrganizationTopPeople(org.id);
+  if (people.length === 0) return null;
+
+  const verifiedEditor = people.find(
+    (p) =>
+      p.email_status === 'verified' && hasEditorTitle(p.title) && hasUsableEmail(p.email),
+  );
+  if (verifiedEditor) return { org, person: verifiedEditor };
+
+  const verified = people.find((p) => p.email_status === 'verified' && hasUsableEmail(p.email));
+  if (verified) return { org, person: verified };
+
+  return { org, person: people[0]! };
+}
+
 /** Apollo masks emails on cheaper plans — detect the placeholder. */
 function hasUsableEmail(email: string | null | undefined): boolean {
   if (!email) return false;

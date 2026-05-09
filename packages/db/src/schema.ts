@@ -157,6 +157,13 @@ export const sites = pgTable(
     gaMeasurementId: text('ga_measurement_id'),
     /** One Klaviyo list per niche × city for lead-form submissions. */
     klaviyoListId: text('klaviyo_list_id'),
+    /**
+     * Competitor domains seeded by Niche Hunter (or operator-curated). Used
+     * by Backlink Builder's prospect mode as targets for DataForSEO domain
+     * intersection queries. Bare hosts, no protocol. May be null until the
+     * niche has been mined.
+     */
+    competitorSeeds: jsonb('competitor_seeds').$type<string[]>(),
     deployedAt: timestamp('deployed_at', { withTimezone: true }),
     currentRank: integer('current_rank'),
     calls30d: integer('calls_30d').notNull().default(0),

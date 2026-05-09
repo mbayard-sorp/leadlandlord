@@ -15,14 +15,24 @@ function makeFakeDb(siteRow: Record<string, unknown> | null) {
   return {
     execute: async () => undefined,
     select: () => ({
-      from: (table: { __table?: string }) => ({
-        where: () => ({
-          limit: async () => {
-            if (table?.__table === 'sites') return siteRow ? [siteRow] : [];
-            return [];
-          },
-        }),
-      }),
+      from: (table: { __table?: string }) => {
+        const resolveAll = () => {
+          if (table?.__table === 'sites') return siteRow ? [siteRow] : [];
+          return [];
+        };
+        // Supports three call shapes:
+        //   await db.select().from(t)                     — bare await
+        //   await db.select().from(t).where(...)          — where alone
+        //   await db.select().from(t).where(...).limit(N) — chained
+        const fromObj = {
+          where: () => ({
+            limit: async () => resolveAll(),
+            then: (resolve: (v: unknown) => void) => resolve(resolveAll()),
+          }),
+          then: (resolve: (v: unknown) => void) => resolve(resolveAll()),
+        };
+        return fromObj;
+      },
     }),
     insert: (table: { __table?: string }) => ({
       values: (values: Record<string, unknown>) => {
@@ -84,12 +94,27 @@ const FAKE_SITE = {
 
 vi.mock('@leadlandlord/db', () => ({
   getDb: () => makeFakeDb(FAKE_SITE),
-  backlinks: { __table: 'backlinks', dedupeKey: 'dedupe_key' },
+  backlinks: { __table: 'backlinks', dedupeKey: 'dedupe_key', siteId: 'site_id' },
   sites: { __table: 'sites', id: 'id' },
   agentRuns: {},
   agentBudgets: {},
   agentEvents: {},
   getSystemState: async () => ({ killSwitch: false, killSwitchReason: null }),
+}));
+
+const findEditorByDomainMock = vi.fn();
+vi.mock('@leadlandlord/integrations/apollo', () => ({
+  findEditorByDomain: findEditorByDomainMock,
+}));
+
+const getDomainIntersectionMock = vi.fn();
+const getReferringDomainsMock = vi.fn();
+vi.mock('@leadlandlord/integrations/dataforseo/backlinks', () => ({
+  getDomainIntersection: getDomainIntersectionMock,
+  getReferringDomains: getReferringDomainsMock,
+  isBlockedProspectDomain: (d: string) =>
+    /^(facebook|twitter|x|instagram|linkedin|yelp|google|wikipedia)\.com$/.test(d) ||
+    /\.(xyz|tk)$/.test(d),
 }));
 
 vi.mock('@leadlandlord/db/suppression', () => ({
@@ -149,9 +174,13 @@ describe('backlink-builder', () => {
     getRemainingSendsTodayMock.mockClear();
     getRemainingSendsTodayMock.mockResolvedValue({ remaining: 50, cap: 50, sentToday: 0 });
     recordSendMock.mockClear();
+    findEditorByDomainMock.mockReset();
+    getDomainIntersectionMock.mockReset();
+    getReferringDomainsMock.mockReset();
     delete process.env.ZOHO_MCP_ENABLED;
     delete process.env.ZOHO_DEFAULT_FROM;
     delete process.env.RESEND_FROM_ADDRESS;
+    delete process.env.PROSPECT_MIN_DOMAIN_RANK;
   });
 
   afterEach(() => {
@@ -459,5 +488,274 @@ describe('backlink-builder', () => {
     )) as { rowsCreated: number };
     expect(result.rowsCreated).toBe(0);
     expect(fakeAnthropic.messages.create).not.toHaveBeenCalled();
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // Prospect mode
+  // ────────────────────────────────────────────────────────────
+
+  describe('prospect mode', () => {
+    /**
+     * Site row variant with competitor seeds populated. The default
+     * FAKE_SITE deliberately has none, so we override per-test via the
+     * `competitorOverride` input field — exercising the per-call override
+     * path of the hybrid seeding strategy.
+     */
+    const PROSPECT_CTX = () => ({
+      runId: 'prospect-run',
+      log: { info: () => {}, warn: () => {}, error: () => {} },
+      recordUsage: () => {},
+      progress: () => {},
+      emitNextStepEvent: async () => {},
+      parentRunId: null,
+    });
+
+    it('input schema validates prospect mode', async () => {
+      const { BacklinkBuilderInput } = await import('./index');
+      expect(() =>
+        BacklinkBuilderInput.parse({
+          mode: 'prospect',
+          siteId: '11111111-1111-1111-1111-111111111111',
+          competitorOverride: ['competitor-a.com', 'competitor-b.com'],
+        }),
+      ).not.toThrow();
+      expect(() =>
+        BacklinkBuilderInput.parse({
+          mode: 'prospect',
+          siteId: '11111111-1111-1111-1111-111111111111',
+          minDomainRank: 1500, // out of range
+        }),
+      ).toThrow();
+    });
+
+    it('aborts with empty result when no competitor seeds available', async () => {
+      const { BacklinkBuilder } = await import('./index');
+      const agent = new BacklinkBuilder();
+      const exec = (
+        agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+      ).execute.bind(agent);
+      const result = (await exec(
+        { mode: 'prospect', siteId: FAKE_SITE.id },
+        PROSPECT_CTX(),
+      )) as { rowsCreated: number; prospectsDiscovered: number };
+      expect(result.rowsCreated).toBe(0);
+      expect(result.prospectsDiscovered).toBe(0);
+      expect(getDomainIntersectionMock).not.toHaveBeenCalled();
+    });
+
+    it('queues pending guest_post rows by default (queue-only training-wheels mode)', async () => {
+      process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+      getDomainIntersectionMock.mockResolvedValue([
+        { domain: 'goodblog.com', rank: 400, backlinksCount: 5, referringPagesCount: 5, referringDomains: 50, firstSeen: null },
+        { domain: 'facebook.com', rank: 900, backlinksCount: 0, referringPagesCount: 0, referringDomains: 9999, firstSeen: null }, // blocklisted
+        { domain: 'spamfarm.xyz', rank: 800, backlinksCount: 0, referringPagesCount: 0, referringDomains: 0, firstSeen: null }, // blocklisted TLD
+      ]);
+      findEditorByDomainMock.mockResolvedValue({
+        org: { id: 'org-1', name: 'GoodBlog' },
+        person: {
+          id: 'person-1',
+          name: 'Jane Editor',
+          title: 'Managing Editor',
+          email: 'jane@goodblog.com',
+          email_status: 'verified',
+        },
+      });
+
+      const { BacklinkBuilder } = await import('./index');
+      const agent = new BacklinkBuilder();
+      const exec = (
+        agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+      ).execute.bind(agent);
+      const result = (await exec(
+        {
+          mode: 'prospect',
+          siteId: FAKE_SITE.id,
+          competitorOverride: ['compA.com', 'compB.com'],
+        },
+        PROSPECT_CTX(),
+      )) as {
+        rowsCreated: number;
+        rowsSent: number;
+        prospectsDiscovered: number;
+        prospectsEnriched: number;
+      };
+
+      // Only goodblog.com survives blocklist. Default autoSend=false → queue only.
+      expect(result.prospectsDiscovered).toBe(3);
+      expect(result.prospectsEnriched).toBe(1);
+      expect(result.rowsCreated).toBe(1);
+      expect(result.rowsSent).toBe(0);
+      expect(sendEmailResendMock).not.toHaveBeenCalled();
+      expect(sendEmailZohoMock).not.toHaveBeenCalled();
+
+      const backlinkInserts = insertCalls.filter((c) => c.table === 'backlinks');
+      expect(backlinkInserts).toHaveLength(1);
+      const row = backlinkInserts[0]!.values;
+      expect(row.status).toBe('pending');
+      expect(row.type).toBe('guest_post');
+      expect(row.sourceDomain).toBe('goodblog.com');
+      const md = row.metadata as Record<string, unknown>;
+      expect(md.queueOnly).toBe(true);
+      expect(md.targetEditorEmail).toBe('jane@goodblog.com');
+      const provenance = md.prospect as Record<string, unknown>;
+      expect(provenance.run).toBe(true);
+      expect(provenance.dfsRank).toBe(400);
+      expect(provenance.editorTitle).toBe('Managing Editor');
+      expect(provenance.editorEmailStatus).toBe('verified');
+    });
+
+    it('queues prospects with masked Apollo emails for manual editor lookup', async () => {
+      process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+      getDomainIntersectionMock.mockResolvedValue([
+        { domain: 'masked.com', rank: 500, backlinksCount: 1, referringPagesCount: 1, referringDomains: 10, firstSeen: null },
+      ]);
+      findEditorByDomainMock.mockResolvedValue({
+        org: { id: 'org-2', name: 'Masked' },
+        person: {
+          id: 'person-2',
+          title: 'Editor',
+          email: 'email_not_unlocked@masked.com',
+          email_status: 'unverified',
+        },
+      });
+      const { BacklinkBuilder } = await import('./index');
+      const agent = new BacklinkBuilder();
+      const exec = (
+        agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+      ).execute.bind(agent);
+      const result = (await exec(
+        {
+          mode: 'prospect',
+          siteId: FAKE_SITE.id,
+          competitorOverride: ['compA.com', 'compB.com'],
+        },
+        PROSPECT_CTX(),
+      )) as { prospectsEnriched: number; rowsCreated: number };
+      // Apollo returned a masked email → no enrichment counted, but the
+      // prospect is still queued with needsManualEditor=true so the
+      // operator can fill in the email manually (Hunter, LinkedIn, etc).
+      expect(result.prospectsEnriched).toBe(0);
+      expect(result.rowsCreated).toBe(1);
+      const backlinkInserts = insertCalls.filter((c) => c.table === 'backlinks');
+      const row = backlinkInserts.at(-1)!.values;
+      expect(row.status).toBe('pending');
+      expect(row.pitchDraft).toBeNull();
+      const md = row.metadata as Record<string, unknown>;
+      expect(md.targetEditorEmail).toBeNull();
+      const provenance = md.prospect as Record<string, unknown>;
+      expect(provenance.needsManualEditor).toBe(true);
+    });
+
+    it('uses referring_domains fallback when only one competitor seed', async () => {
+      process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+      getReferringDomainsMock.mockResolvedValue([
+        { domain: 'soloblog.com', rank: 350, backlinksCount: 2, referringPagesCount: 2, referringDomains: 20, firstSeen: null },
+      ]);
+      findEditorByDomainMock.mockResolvedValue({
+        org: { id: 'org-3' },
+        person: {
+          id: 'person-3',
+          title: 'Content Lead',
+          email: 'editor@soloblog.com',
+          email_status: 'verified',
+        },
+      });
+      const { BacklinkBuilder } = await import('./index');
+      const agent = new BacklinkBuilder();
+      const exec = (
+        agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+      ).execute.bind(agent);
+      await exec(
+        { mode: 'prospect', siteId: FAKE_SITE.id, competitorOverride: ['onlycomp.com'] },
+        PROSPECT_CTX(),
+      );
+      expect(getReferringDomainsMock).toHaveBeenCalledTimes(1);
+      expect(getDomainIntersectionMock).not.toHaveBeenCalled();
+    });
+
+    it('caps Apollo enrichments at maxApolloEnrichments to bound cost', async () => {
+      process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+      const candidates = Array.from({ length: 20 }, (_, i) => ({
+        domain: `blog${i}.com`,
+        rank: 400 + i,
+        backlinksCount: 1,
+        referringPagesCount: 1,
+        referringDomains: 10,
+        firstSeen: null,
+      }));
+      getDomainIntersectionMock.mockResolvedValue(candidates);
+      findEditorByDomainMock.mockImplementation(async (d: string) => ({
+        org: { id: `org-${d}` },
+        person: {
+          id: `p-${d}`,
+          title: 'Editor',
+          email: `editor@${d}`,
+          email_status: 'verified',
+        },
+      }));
+      const { BacklinkBuilder } = await import('./index');
+      const agent = new BacklinkBuilder();
+      const exec = (
+        agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+      ).execute.bind(agent);
+      const result = (await exec(
+        {
+          mode: 'prospect',
+          siteId: FAKE_SITE.id,
+          competitorOverride: ['compA.com', 'compB.com'],
+          maxApolloEnrichments: 3,
+        },
+        PROSPECT_CTX(),
+      )) as { prospectsEnriched: number };
+      expect(result.prospectsEnriched).toBe(3);
+      expect(findEditorByDomainMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('autoSend=true routes through real send pipeline', async () => {
+      process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+      getDomainIntersectionMock.mockResolvedValue([
+        { domain: 'live.com', rank: 500, backlinksCount: 1, referringPagesCount: 1, referringDomains: 10, firstSeen: null },
+      ]);
+      findEditorByDomainMock.mockResolvedValue({
+        org: { id: 'org-5' },
+        person: {
+          id: 'p-5',
+          title: 'Editor',
+          email: 'editor@live.com',
+          email_status: 'verified',
+        },
+      });
+      // Anthropic returns valid JSON for guest_post drafting
+      fakeAnthropic.messages.create.mockResolvedValueOnce({
+        usage: { input_tokens: 100, output_tokens: 50 },
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              subject: 'Guest post idea',
+              body:
+                'Hi — pitch body. Reply with REMOVE if you would rather not hear from me again. ' +
+                'LeadLandlord, [postal address not set], Austin, TX',
+            }),
+          },
+        ],
+      });
+      const { BacklinkBuilder } = await import('./index');
+      const agent = new BacklinkBuilder();
+      const exec = (
+        agent as unknown as { execute: (i: unknown, ctx: unknown) => Promise<unknown> }
+      ).execute.bind(agent);
+      const result = (await exec(
+        {
+          mode: 'prospect',
+          siteId: FAKE_SITE.id,
+          competitorOverride: ['compA.com', 'compB.com'],
+          autoSend: true,
+        },
+        PROSPECT_CTX(),
+      )) as { rowsSent: number; rowsCreated: number };
+      expect(result.rowsSent).toBe(1);
+      expect(sendEmailResendMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

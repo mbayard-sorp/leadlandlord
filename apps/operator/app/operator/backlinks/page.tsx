@@ -52,12 +52,20 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold">Backlinks</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Citation queue, HARO pitches, and guest-post outreach. Manual queue — operator actions
-          each row.
-        </p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Backlinks</h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Citation queue, HARO pitches, and guest-post outreach. Manual queue — operator actions
+            each row.
+          </p>
+        </div>
+        <Link
+          href="/operator/backlinks/prospects"
+          className="text-xs px-3 py-1.5 rounded border border-sky-700/60 bg-sky-900/30 text-sky-200 hover:bg-sky-900/50 self-start"
+        >
+          Prospects →
+        </Link>
       </header>
 
       <nav className="flex flex-wrap gap-2 text-xs">

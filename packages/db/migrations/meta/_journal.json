@@ -113,6 +113,13 @@
       "when": 1778346379730,
       "tag": "0015_gray_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778400000000,
+      "tag": "0016_sites_competitor_seeds",
+      "breakpoints": true
     }
   ]
 }

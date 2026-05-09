@@ -1,74 +1,15 @@
-import { IntegrationError } from '@leadlandlord/shared/errors';
 import { stableKey, withDataForSeoCache } from './cache';
+import { dfsPost } from './client';
 
 /**
- * DataForSEO REST client.
- *
- * Auth: HTTP Basic. The `DATAFORSEO_AUTH` env var holds either a raw
- * `login:password` string OR a pre-encoded `base64(login:password)`. We
- * normalize both cases at fetch time.
+ * DataForSEO REST client — keyword/SERP endpoints.
  *
  * Used by niche-hunter (Phase 0) to score 50 candidate niche × city pairs
  * with real Google search volume, keyword difficulty, and competition.
+ * Backlinks endpoints live in ./backlinks.ts.
  *
  * API docs: https://docs.dataforseo.com/v3/
  */
-
-const BASE = 'https://api.dataforseo.com/v3';
-
-function authHeader(): string {
-  const raw = process.env.DATAFORSEO_AUTH;
-  if (!raw) throw new IntegrationError('dataforseo', 'DATAFORSEO_AUTH is not set');
-  // If it contains a colon, it's `login:password` and needs base64. Otherwise
-  // assume it's already base64.
-  const encoded = raw.includes(':') ? Buffer.from(raw, 'utf-8').toString('base64') : raw;
-  return `Basic ${encoded}`;
-}
-
-interface DataForSeoResponse<T> {
-  status_code: number;
-  status_message: string;
-  tasks?: Array<{
-    status_code: number;
-    status_message: string;
-    result: T[] | null;
-  }>;
-}
-
-async function dfsPost<TaskResult>(
-  path: string,
-  body: unknown,
-): Promise<TaskResult[]> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: authHeader(),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '<no body>');
-    throw new IntegrationError(
-      'dataforseo',
-      `${path} → ${res.status} ${text.slice(0, 300)}`,
-      res.status,
-    );
-  }
-  const json = (await res.json()) as DataForSeoResponse<TaskResult>;
-  if (json.status_code >= 40000) {
-    throw new IntegrationError('dataforseo', `${path} → ${json.status_code} ${json.status_message}`);
-  }
-  const task = json.tasks?.[0];
-  if (!task) return [];
-  if (task.status_code >= 40000) {
-    throw new IntegrationError(
-      'dataforseo',
-      `${path} task → ${task.status_code} ${task.status_message}`,
-    );
-  }
-  return task.result ?? [];
-}
 
 // ---------- Keyword search volume + CPC + competition ----------------------
 
