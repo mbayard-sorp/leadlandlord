@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
+import { breadcrumbsJsonLd, buildPageMetadata } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { telHref } from '../../../lib/content';
@@ -34,11 +35,21 @@ export default async function ServiceAreaPage({ params }: Params) {
     areaServed: page.title,
   };
 
+  const breadcrumb = await breadcrumbsJsonLd([
+    { name: bundle.business_name, path: '/' },
+    { name: 'Service Areas', path: '/service-areas/' },
+    { name: page.title, path: `/service-areas/${slug}/` },
+  ]);
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
       />
 
       <article className="info-page">
@@ -95,18 +106,13 @@ export async function generateMetadata({ params }: Params) {
   const bundle = sanityToBundle(site);
   const page = bundle.service_areas.find((p) => slugFromUrl(p.slug) === slug);
   if (!page) return {};
-  const canonical = `/service-areas/${slug}/`;
-  return {
+  return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    alternates: { canonical },
-    openGraph: {
-      title: page.title,
-      description: page.meta_description,
-      type: 'website',
-      url: canonical,
-    },
-  };
+    path: `/service-areas/${slug}/`,
+    image: bundle.hero_image_url,
+    siteName: bundle.business_name,
+  });
 }
 
 function slugFromUrl(url: string): string {

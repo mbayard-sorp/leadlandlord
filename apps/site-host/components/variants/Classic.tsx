@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
@@ -46,7 +47,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
 
       <div className="classic-shell">
         {/* utility bar */}
-        <div className="classic-utility">
+        <div className="classic-utility surface-inverse">
           <span>★ Family-owned · {bundle.city}, {bundle.state}</span>
           <span className="hidden sm:inline">Open 7am – 9pm · 7 days</span>
         </div>
@@ -87,10 +88,13 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </div>
           <div className="classic-hero-image">
             {bundle.hero_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={bundle.hero_image_url}
                 alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 50vw"
+                style={{ objectFit: 'cover' }}
               />
             ) : (
               <div className="classic-hero-placeholder">[hero photo]</div>
@@ -106,7 +110,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </section>
 
         {/* trust strip on dark */}
-        <section className="classic-trust-strip" aria-label="Trust signals">
+        <section className="classic-trust-strip surface-inverse" aria-label="Trust signals">
           {trust.slice(0, 4).map((t, i) => (
             <div key={t}>
               <div className="classic-trust-eyebrow">{['Licensed & insured', 'Same-week service', 'Free quotes', 'We answer'][i] ?? t}</div>
@@ -183,10 +187,10 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
 
         {/* contact + form */}
         <section className="classic-contact" id="contact">
-          <div className="classic-contact-info">
-            <p className="classic-section-eyebrow">Get in touch</p>
+          <div className="classic-contact-info surface-inverse">
+            <p className="classic-section-eyebrow" data-accent>Get in touch</p>
             <h2 className="classic-h2">Call us — we pick up.</h2>
-            <a href={tel} className="classic-phone-block-inline num">{phone}</a>
+            <a href={tel} className="classic-phone-block-inline num" data-accent>{phone}</a>
             <p>Open 7am – 9pm, 7 days a week.</p>
             <p className="classic-contact-areas">
               Serving {areas.slice(0, 6).join(' · ')}
@@ -205,7 +209,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </section>
 
         {/* footer */}
-        <footer className="classic-footer">
+        <footer className="classic-footer surface-inverse">
           <div>© {new Date().getFullYear()} {bundle.business_name} · Licensed & insured · [LICENSE #]</div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
           <div className="classic-footer-disclaimer">
@@ -214,7 +218,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </footer>
 
         {/* sticky mobile bar */}
-        <div className="sticky-mobile-bar" aria-hidden="false">
+        <div className="sticky-mobile-bar surface-inverse" aria-hidden="false">
           <a href={tel} className="phone num">☎ {phone}</a>
           <a href="#contact" className="cta">Get quote</a>
         </div>

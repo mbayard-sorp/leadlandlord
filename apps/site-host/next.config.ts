@@ -32,6 +32,17 @@ const config: NextConfig = {
     '@leadlandlord/shared',
   ],
   serverExternalPackages: ['pino', '@neondatabase/serverless', '@sanity/client'],
+  // Hero images come from controlled sources (Vercel Blob, Sanity CDN, Imagen).
+  // Allow them through next/image so we get auto width/srcset/lazy loading.
+  // URLs are operator-supplied via Sanity, never end-user input.
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.public.blob.vercel-storage.com' },
+      { protocol: 'https', hostname: 'cdn.sanity.io' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'storage.googleapis.com' },
+    ],
+  },
   // Cache Components stays OFF for site-host: every page is per-host and
   // depends on `headers()` at the top of the layout, which Cache Components
   // requires to be inside <Suspense>. The architecture pivot for Cache

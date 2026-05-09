@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
@@ -52,7 +53,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             <span className="modern-mark" aria-hidden />
             <span className="modern-brand-name">{bundle.business_name}</span>
           </a>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="modern-header-cta">
             <a href={tel} className="modern-phone-pill num">
               ☎ {phone}
             </a>
@@ -90,6 +91,21 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             <line x1="0" y1="240" x2="880" y2="240" stroke="var(--rule)" strokeWidth="1" />
           </svg>
 
+          <div className="modern-hero-image">
+            {bundle.hero_image_url ? (
+              <Image
+                src={bundle.hero_image_url}
+                alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 50vw"
+                style={{ objectFit: 'cover' }}
+              />
+            ) : (
+              <div className="modern-hero-placeholder">[hero photo]</div>
+            )}
+          </div>
+
           <div className="modern-hero-grid">
             <div>
               <p className="modern-eyebrow">
@@ -125,6 +141,13 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </div>
         </section>
 
+        {/* trust band — light surface, paper-2 */}
+        <section className="modern-trust-band" aria-label="Trust signals">
+          {trust.slice(0, 4).map((t) => (
+            <div key={t} className="modern-trust-band-item">{t}</div>
+          ))}
+        </section>
+
         <section className="modern-services" id="services">
           <header className="modern-section-head">
             <p className="modern-eyebrow">What we install</p>
@@ -142,6 +165,13 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
               </a>
             ))}
           </div>
+        </section>
+
+        {/* BIG phone block */}
+        <section className="modern-phone-block">
+          <p className="modern-phone-block-eyebrow">{bundle.niche} specialists</p>
+          <a href={tel} className="modern-phone-block-num num">{phone}</a>
+          <p className="modern-phone-block-sub">Tap to call · same-day response · free quotes</p>
         </section>
 
         {(faqs.length > 0 || areas.length > 0) && (
@@ -199,7 +229,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </a>
         </section>
 
-        <footer className="modern-footer">
+        <footer className="modern-footer surface-inverse">
           <div>
             © {new Date().getFullYear()} {bundle.business_name} · Licensed & insured
           </div>
@@ -209,7 +239,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </div>
         </footer>
 
-        <div className="sticky-mobile-bar">
+        <div className="sticky-mobile-bar surface-inverse">
           <a href={tel} className="phone num">
             ☎ {phone}
           </a>

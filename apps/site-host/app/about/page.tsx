@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../lib/site-context';
+import { buildPageMetadata } from '../../lib/seo-meta';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
 import { SiteShell } from '../../components/SiteShell';
@@ -27,15 +28,11 @@ export async function generateMetadata() {
   const site = await resolveCurrentSite();
   if (!site) return { robots: { index: false, follow: false } };
   const bundle = sanityToBundle(site);
-  return {
+  return buildPageMetadata({
     title: bundle.about.title,
     description: bundle.about.meta_description,
-    alternates: { canonical: '/about/' },
-    openGraph: {
-      title: bundle.about.title,
-      description: bundle.about.meta_description,
-      type: 'website',
-      url: '/about/',
-    },
-  };
+    path: '/about/',
+    image: bundle.hero_image_url,
+    siteName: bundle.business_name,
+  });
 }

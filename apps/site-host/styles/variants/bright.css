@@ -215,6 +215,47 @@
   box-shadow: 2px 4px 0 rgba(0, 0, 0, 0.08);
 }
 
+/* trust band — pastel mint, rounded chips, "neighbor with a crew" tone */
+[data-theme='bright'] .bright-trust-band {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: clamp(28px, 4vw, 44px) clamp(20px, 5vw, 56px);
+  background: var(--mint);
+  border-top: 1.5px dashed var(--ink);
+  border-bottom: 1.5px dashed var(--ink);
+  text-align: center;
+}
+[data-theme='bright'] .bright-trust-band-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin: 0;
+}
+[data-theme='bright'] .bright-trust-band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+[data-theme='bright'] .bright-trust-band-chips li {
+  padding: 8px 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--ink);
+}
+
 /* services — rotating pastel cards */
 [data-theme='bright'] .bright-services {
   padding: var(--section-pad-y) clamp(20px, 5vw, 56px);
@@ -299,6 +340,112 @@
   font-weight: 700;
   font-size: 0.9375rem;
   color: var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+}
+
+/* FAQ — friendly accordion */
+[data-theme='bright'] .bright-faq {
+  padding: var(--section-pad-y) clamp(20px, 5vw, 56px);
+  border-top: 1.5px dashed var(--ink);
+  background: var(--paper-2);
+}
+[data-theme='bright'] .bright-faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+[data-theme='bright'] .bright-faq-item {
+  padding: 18px 22px;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-card);
+}
+[data-theme='bright'] .bright-faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+[data-theme='bright'] .bright-faq-item summary::-webkit-details-marker { display: none; }
+[data-theme='bright'] .bright-faq-item summary::after {
+  content: '+';
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--accent);
+}
+[data-theme='bright'] .bright-faq-item[open] summary::after { content: '−'; }
+[data-theme='bright'] .bright-faq-item p {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 12px 0 0;
+}
+
+/* mid-page phone strip — friendly */
+[data-theme='bright'] .bright-phone-strip {
+  padding: clamp(40px, 6vw, 64px) clamp(20px, 5vw, 56px);
+  background: var(--sun);
+  border-top: 1.5px dashed var(--ink);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+[data-theme='bright'] .bright-phone-strip-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin: 0;
+}
+[data-theme='bright'] .bright-phone-strip-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(36px, 6vw, 64px);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1;
+}
+[data-theme='bright'] .bright-phone-strip-sub {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+/* CTA card form helper bits */
+[data-theme='bright'] .bright-cta-or {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1.5px dashed var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+[data-theme='bright'] .bright-cta-phone {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--ink);
+  text-decoration: none;
   border-bottom: 1.5px solid var(--ink);
 }
 
@@ -402,15 +549,11 @@
   gap: 16px;
   justify-content: space-between;
 }
-[data-theme='bright'] .bright-footer,
-[data-theme='bright'] .bright-footer * { color: var(--paper) !important; }
 [data-theme='bright'] .bright-footer-disclaimer { width: 100%; opacity: 0.65; font-size: 0.75rem; }
 
 /* sticky mobile bar */
 [data-theme='bright'] .sticky-mobile-bar { background: var(--ink); }
-[data-theme='bright'] .sticky-mobile-bar,
-[data-theme='bright'] .sticky-mobile-bar * { color: var(--paper) !important; }
-[data-theme='bright'] .sticky-mobile-bar .cta { background: var(--accent); color: var(--ink) !important; }
+[data-theme='bright'] .sticky-mobile-bar .cta { background: var(--accent); color: var(--ink); }
 
 [data-theme='bright'] .bright-mobile-spacer { height: 64px; }
 @media (min-width: 768px) { [data-theme='bright'] .bright-mobile-spacer { display: none; } }

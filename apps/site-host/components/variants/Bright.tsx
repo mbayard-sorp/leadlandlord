@@ -1,16 +1,26 @@
+import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { telHref } from '../../lib/content';
+import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 
 interface Props {
   bundle: Bundle;
   /** Tracking number resolved by the catch-all server component (Postgres). */
   phone: string;
+  /** Postgres sites.id — passed through to LeadForm for attribution. */
+  siteId: string;
+  /** Optional secondary slug — passed through to LeadForm. */
+  siteSlug?: string;
   /** Absolute URL of the page, used for canonical + JSON-LD. */
   pageUrl?: string;
 }
 
 const SERVICE_BG = ['bg-coral', 'bg-sun', 'bg-mint', 'bg-sky'] as const;
+// Deliberate: emoji + unicode glyphs are kept as Bright's "illustration spots"
+// per the design brief. They render fine on iOS/Android (the 70% mobile audience).
+// Replacing with inline SVG is a separate design exercise — do not swap to SVG
+// without a paired design pass.
 const SERVICE_ICONS = ['🏡', '✦', '⌂', '◐', '☘', '◇'];
 
 /**
@@ -19,7 +29,13 @@ const SERVICE_ICONS = ['🏡', '✦', '⌂', '◐', '☘', '◇'];
  * squiggle SVG underline on hero keyword, sticky-note callout, dashed dividers.
  * For cleaning, junk removal, pest, lawn care, dog walking, mobile detail.
  */
-export function BrightHome({ bundle, phone, pageUrl = 'https://example.com' }: Props) {
+export function BrightHome({
+  bundle,
+  phone,
+  siteId,
+  siteSlug,
+  pageUrl = 'https://example.com',
+}: Props) {
   const tel = telHref(phone);
   const trust =
     bundle.trust_signals.length > 0
@@ -150,10 +166,14 @@ export function BrightHome({ bundle, phone, pageUrl = 'https://example.com' }: P
             <div className="bright-hero-image-wrap">
               <div className="bright-hero-image">
                 {bundle.hero_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     src={bundle.hero_image_url}
                     alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
+                    width={280}
+                    height={280}
+                    priority
+                    sizes="280px"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
                   <div className="bright-hero-placeholder">[hero]</div>
@@ -164,6 +184,18 @@ export function BrightHome({ bundle, phone, pageUrl = 'https://example.com' }: P
               </div>
             </div>
           </div>
+        </section>
+
+        {/* trust band — neighbor-with-a-crew tone, pastel chips */}
+        <section className="bright-trust-band" aria-label="Trust signals">
+          <p className="bright-trust-band-eyebrow">neighbor with a crew —</p>
+          <ul className="bright-trust-band-chips">
+            {trust.slice(0, 4).map((t, i) => (
+              <li key={t}>
+                <span aria-hidden>{['★', '♥', '✿', '☻'][i % 4]}</span> {t}
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="bright-services" id="services">
@@ -194,17 +226,51 @@ export function BrightHome({ bundle, phone, pageUrl = 'https://example.com' }: P
           </div>
         </section>
 
+        {faqs.length > 0 && (
+          <section className="bright-faq" aria-label="Frequently asked questions">
+            <div className="bright-section-head">
+              <div>
+                <p className="bright-eyebrow">good questions</p>
+                <h2 className="bright-h2">Glad you asked</h2>
+              </div>
+              <span className="bright-section-aside">still curious? just call →</span>
+            </div>
+            <div className="bright-faq-list">
+              {faqs.map((f, i) => (
+                <details key={i} className="bright-faq-item" open={i === 0}>
+                  <summary>{f.q}</summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* mid-page phone moment — friendly framing */}
+        <section className="bright-phone-strip" aria-label="Call us">
+          <p className="bright-phone-strip-eyebrow">prefer to talk? we get it</p>
+          <a href={tel} className="bright-phone-strip-num num">
+            ☎ {phone}
+          </a>
+          <p className="bright-phone-strip-sub">usually answered in a few rings ♥</p>
+        </section>
+
         <section className="bright-cta-row" id="contact">
           <div className="bright-cta-card">
             <h2 className="bright-cta-h2">Ready when you are.</h2>
             <p className="bright-cta-sub">
-              Most weeks we have same-week openings. Book online or call — whichever's easier.
+              Most weeks we have same-week openings. Drop your details — we'll text or call back same day.
             </p>
-            <div className="bright-hero-buttons" style={{ marginTop: 0 }}>
-              <a href="/contact/" className="bright-btn bright-btn-secondary">
-                Book online ✦
-              </a>
-              <a href={tel} className="bright-btn bright-btn-secondary num">
+            <LeadForm
+              variant="bright"
+              submit="Book it ✦"
+              source="home-cta"
+              siteId={siteId}
+              siteSlug={siteSlug}
+            />
+            <div className="bright-cta-or">
+              <span>or just call —</span>
+              <a href={tel} className="bright-cta-phone num">
                 ☎ {phone}
               </a>
             </div>
@@ -234,7 +300,7 @@ export function BrightHome({ bundle, phone, pageUrl = 'https://example.com' }: P
           </section>
         )}
 
-        <footer className="bright-footer">
+        <footer className="bright-footer surface-inverse">
           <div>
             © {new Date().getFullYear()} {bundle.business_name} · Bonded & insured
           </div>
@@ -244,7 +310,7 @@ export function BrightHome({ bundle, phone, pageUrl = 'https://example.com' }: P
           </div>
         </footer>
 
-        <div className="sticky-mobile-bar">
+        <div className="sticky-mobile-bar surface-inverse">
           <a href={tel} className="phone num">
             ☎ {phone}
           </a>
