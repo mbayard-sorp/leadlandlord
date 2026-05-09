@@ -132,14 +132,14 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </header>
           <div className="modern-services-grid">
             {bundle.services.map((s, i) => (
-              <article key={s.slug} className="modern-service-card">
+              <a key={s.slug} href={s.slug} className="modern-service-card">
                 <span className="modern-service-icon" aria-hidden>
                   {SERVICE_ICONS[i % SERVICE_ICONS.length]}
                 </span>
                 <h3 className="modern-service-title">{s.title}</h3>
                 <p className="modern-service-blurb">{s.meta_description}</p>
                 <span className="modern-service-link">Learn more →</span>
-              </article>
+              </a>
             ))}
           </div>
         </section>
