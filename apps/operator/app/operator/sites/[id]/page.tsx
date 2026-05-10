@@ -29,6 +29,8 @@ import { RegenerateButtons } from './RegenerateButtons';
 import { KeywordsPanel } from './KeywordsPanel';
 import { AgentActivityPanel } from './AgentActivityPanel';
 import { CollapsibleSection } from './CollapsibleSection';
+import { GoLiveChecklist, type GoLiveItem } from './GoLiveChecklist';
+import type { GoLiveManualFlags } from './go-live-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,6 +154,16 @@ export default async function SiteDetailPage({ params }: Params) {
         <ThemePicker siteId={site.id} current={sanity?.theme ?? null} />
       </section>
 
+      {/* 3b. Go-live checklist — collapses to a summary once site.status='live' */}
+      <section>
+        <GoLiveChecklist
+          siteId={site.id}
+          status={site.status}
+          items={buildGoLiveItems({ site, sanity })}
+          manualFlags={readGoLiveFlags(site.metadata)}
+        />
+      </section>
+
       {/* 4. Domains + Custom domains */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
@@ -266,6 +278,91 @@ function Pill({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   );
+}
+
+interface SiteMetadataShape {
+  goLive?: GoLiveManualFlags;
+  [key: string]: unknown;
+}
+
+function readGoLiveFlags(metadata: unknown): GoLiveManualFlags {
+  const meta = (metadata as SiteMetadataShape | null) ?? {};
+  return meta.goLive ?? { gscSubmittedAt: null, gbpClaimedAt: null };
+}
+
+/**
+ * Auto-derived go-live items + the two manual flags. Order = the workflow we
+ * want operators to follow: build first, then domain, then crawl-readiness,
+ * then external listings.
+ */
+function buildGoLiveItems({
+  site,
+  sanity,
+}: {
+  site: Site;
+  sanity: SanitySiteDetail | null;
+}): GoLiveItem[] {
+  const manual = readGoLiveFlags(site.metadata);
+  const hasDeployedAt = !!site.deployedAt;
+  const hasHero = !!sanity?.heroImageUrl;
+  const hasPhone = !!site.trackingNumber || !!site.twilioPhoneSid;
+  const hasDomain = (sanity?.domains?.length ?? 0) > 0;
+  const robotsCrawlable = sanity?.robotsDisallow === false;
+  const hasGa =
+    !!sanity?.gaMeasurementId ||
+    !!process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  return [
+    {
+      key: 'deployed',
+      label: 'Site built & deployed',
+      hint: 'site-builder + content-engine completed; deployedAt is set.',
+      done: hasDeployedAt,
+    },
+    {
+      key: 'hero',
+      label: 'Hero image generated',
+      hint: 'Imagen produced a hero asset and Sanity has the URL.',
+      done: hasHero,
+    },
+    {
+      key: 'phone',
+      label: 'Tracking phone provisioned',
+      hint: 'Twilio number assigned (see Phone & integrations).',
+      done: hasPhone,
+    },
+    {
+      key: 'domain',
+      label: 'Real domain attached',
+      hint: 'At least one host in the Sanity domains[] array (set via Custom domains).',
+      done: hasDomain,
+    },
+    {
+      key: 'ga',
+      label: 'GA4 wired',
+      hint: 'Either NEXT_PUBLIC_GA_MEASUREMENT_ID is set globally or a per-tenant override is configured.',
+      done: hasGa,
+    },
+    {
+      key: 'robots',
+      label: 'Robots crawlable',
+      hint: 'robotsDisallow=false in Site config so Google can index.',
+      done: robotsCrawlable,
+    },
+    {
+      key: 'gsc',
+      label: 'Submitted to Google Search Console',
+      hint: 'Manual: verify the property + submit the sitemap in search.google.com/search-console.',
+      done: !!manual.gscSubmittedAt,
+      manual: 'gscSubmittedAt',
+    },
+    {
+      key: 'gbp',
+      label: 'Google Business Profile claimed',
+      hint: 'Manual: create + verify a GBP listing for the tracking phone + service area.',
+      done: !!manual.gbpClaimedAt,
+      manual: 'gbpClaimedAt',
+    },
+  ];
 }
 
 function CallsTable({ rows }: { rows: Call[] }) {
