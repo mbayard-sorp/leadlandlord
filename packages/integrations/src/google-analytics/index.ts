@@ -97,6 +97,29 @@ function mockMetrics(): Ga4Metrics[] {
   return out;
 }
 
+/**
+ * Lightweight connectivity probe — fetches the GA4 metadata endpoint for the
+ * given property. Returns `{ ok: true }` on success, throws `IntegrationError`
+ * on auth/permission/network failure. Honors `GOOGLE_DRY_RUN`.
+ */
+export async function testConnection(propertyId: string): Promise<{ ok: true }> {
+  if (process.env.GOOGLE_DRY_RUN === 'true') {
+    return { ok: true };
+  }
+  const url = `${BASE}/properties/${encodeURIComponent(propertyId)}/metadata`;
+  const res = await authedFetch(url, { method: 'GET' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new IntegrationError(
+      'google-analytics',
+      `metadata probe failed: ${res.status} ${res.statusText}`,
+      res.status,
+      text,
+    );
+  }
+  return { ok: true };
+}
+
 export async function getGa4Metrics(args: GetGa4MetricsArgs): Promise<Ga4Metrics[]> {
   if (process.env.GOOGLE_DRY_RUN === 'true') {
     return mockMetrics();

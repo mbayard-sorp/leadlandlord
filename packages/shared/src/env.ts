@@ -64,6 +64,21 @@ const EnvSchema = z.object({
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-6'),
   AI_GATEWAY_API_KEY: z.string().optional(),
   IMAGEN_MODEL: z.string().default('google/imagen-3-fast'),
+  /** Central GA4 measurement ID (G-XXXXXXX). Optional in non-production. */
+  NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().regex(/^G-/).optional(),
+  /**
+   * Google service-account credentials JSON — either raw JSON or base64-encoded
+   * JSON. Used by Google Search Console + GA4 Data API integrations. Optional
+   * because dry-run mode bypasses it.
+   */
+  GOOGLE_SERVICE_ACCOUNT_KEY_JSON: z.string().optional(),
+  /** Path to a service-account JSON key file on disk. Alternative to KEY_JSON. */
+  GOOGLE_SERVICE_ACCOUNT_KEY_PATH: z.string().optional(),
+  /** When 'true', GSC + GA4 wrappers return synthetic data without calling the API. */
+  GOOGLE_DRY_RUN: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
@@ -147,6 +162,9 @@ export function getEnvLoose() {
     ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
     AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
     IMAGEN_MODEL: process.env.IMAGEN_MODEL ?? 'google/imagen-3-fast',
+    GOOGLE_SERVICE_ACCOUNT_KEY_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_JSON,
+    GOOGLE_SERVICE_ACCOUNT_KEY_PATH: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
+    GOOGLE_DRY_RUN: process.env.GOOGLE_DRY_RUN === 'true',
     NODE_ENV: process.env.NODE_ENV ?? 'development',
   };
 }

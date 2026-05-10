@@ -763,6 +763,101 @@ export async function setVercelDns(domain: string): Promise<{ recordCount: numbe
   return { recordCount: 2 };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// getHosts / addTxtRecord — additive DNS edits
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface NamecheapHostRecord {
+  name: string;
+  type: string;
+  address: string;
+  ttl: string;
+  mxPref?: string;
+}
+
+/**
+ * Read all current host records on a Namecheap-managed domain via
+ * `namecheap.domains.dns.getHosts`. Used as the read half of the
+ * read-merge-write cycle required for additive edits, since `setHosts`
+ * is destructive (replaces the entire host list).
+ */
+export async function getHosts(domain: string): Promise<NamecheapHostRecord[]> {
+  if (isMock()) {
+    log.info({ domain, mock: true }, 'namecheap.getHosts mock');
+    return [];
+  }
+  const [sld, ...tldParts] = domain.split('.');
+  const tld = tldParts.join('.');
+  if (!sld || !tld) {
+    throw new IntegrationError('namecheap', `getHosts: invalid domain "${domain}"`);
+  }
+  const xml = await ncRequest('namecheap.domains.dns.getHosts', { SLD: sld, TLD: tld });
+  return findAll(xml, 'host').map((node) => ({
+    name: attr(node, 'host', 'Name') ?? '',
+    type: attr(node, 'host', 'Type') ?? '',
+    address: decodeEntities(attr(node, 'host', 'Address') ?? ''),
+    ttl: attr(node, 'host', 'TTL') ?? '1800',
+    mxPref: attr(node, 'host', 'MXPref') ?? undefined,
+  }));
+}
+
+/**
+ * Additively add (or replace by name+type) a TXT record on a
+ * Namecheap-hosted domain. Performs the read-merge-write cycle so
+ * existing A/CNAME/MX/etc. records are preserved.
+ *
+ * If a TXT record with the same hostName already exists, its value is
+ * replaced. Otherwise the record is appended.
+ *
+ * Returns the full record list after the write so callers can log /
+ * verify what's now on the domain.
+ */
+export async function addTxtRecord(args: {
+  domain: string;
+  hostName: string;
+  value: string;
+  ttl?: string;
+}): Promise<{ replaced: boolean; records: NamecheapHostRecord[] }> {
+  const ttl = args.ttl ?? '1800';
+  if (isMock()) {
+    log.info(
+      { domain: args.domain, hostName: args.hostName, mock: true },
+      'namecheap.addTxtRecord mock',
+    );
+    return {
+      replaced: false,
+      records: [{ name: args.hostName, type: 'TXT', address: args.value, ttl }],
+    };
+  }
+  const [sld, ...tldParts] = args.domain.split('.');
+  const tld = tldParts.join('.');
+  if (!sld || !tld) {
+    throw new IntegrationError('namecheap', `addTxtRecord: invalid domain "${args.domain}"`);
+  }
+
+  const existing = await getHosts(args.domain);
+  const replaced = existing.some((h) => h.name === args.hostName && h.type === 'TXT');
+  const next: NamecheapHostRecord[] = replaced
+    ? existing.map((h) =>
+        h.name === args.hostName && h.type === 'TXT'
+          ? { ...h, address: args.value, ttl }
+          : h,
+      )
+    : [...existing, { name: args.hostName, type: 'TXT', address: args.value, ttl }];
+
+  const params: Record<string, string> = { SLD: sld, TLD: tld };
+  next.forEach((h, i) => {
+    const idx = i + 1;
+    params[`HostName${idx}`] = h.name;
+    params[`RecordType${idx}`] = h.type;
+    params[`Address${idx}`] = h.address;
+    params[`TTL${idx}`] = h.ttl;
+    if (h.mxPref && h.type === 'MX') params[`MXPref${idx}`] = h.mxPref;
+  });
+  await ncRequest('namecheap.domains.dns.setHosts', params);
+  return { replaced, records: next };
+}
+
 /**
  * Switch the domain back to Namecheap BasicDNS (default for new domains).
  * Useful only if a previous step accidentally set custom nameservers.

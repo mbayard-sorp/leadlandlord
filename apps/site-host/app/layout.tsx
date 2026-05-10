@@ -50,7 +50,11 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const site = await resolveCurrentSite();
   const theme = site?.theme ?? 'classic';
-  const ga = site?.gaMeasurementId ?? undefined;
+  // Central GA4 by default — every tenant feeds the shared property tagged
+  // with `site_id`. Per-tenant `gaMeasurementId` on a Sanity site doc
+  // overrides for tenants who want their own analytics (rare; mostly for
+  // white-label-future). If neither is set, skip injection entirely.
+  const ga = site?.gaMeasurementId ?? process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? undefined;
   const siteId = site?.siteId;
   return (
     <html lang="en" className={allFontVars} data-theme={theme}>

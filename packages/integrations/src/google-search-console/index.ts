@@ -161,6 +161,16 @@ export async function getSearchAnalytics(
   });
 }
 
+/**
+ * Lightweight connectivity probe — calls `sites.list` (cheapest authed
+ * endpoint) and returns `{ ok: true, siteCount }`. Throws `IntegrationError`
+ * on auth/permission/network failure. Honors `GOOGLE_DRY_RUN`.
+ */
+export async function testConnection(): Promise<{ ok: true; siteCount: number }> {
+  const sites = await listSites();
+  return { ok: true, siteCount: sites.length };
+}
+
 export async function listSites(): Promise<
   { siteUrl: string; permissionLevel: string }[]
 > {

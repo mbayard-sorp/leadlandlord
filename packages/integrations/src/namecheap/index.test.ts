@@ -5,6 +5,7 @@ import {
   registerDomain,
   setVercelDns,
   checkAvailability,
+  addTxtRecord,
   DomainCandidateSchema,
 } from './index';
 
@@ -265,6 +266,75 @@ describe('namecheap integration', () => {
       expect(url).toContain('HostName2=www');
       expect(url).toContain('RecordType2=CNAME');
       expect(url).toContain('Address2=cname.vercel-dns.com');
+    });
+  });
+
+  describe('addTxtRecord (read-merge-write)', () => {
+    it('preserves existing records and appends a new TXT at @', async () => {
+      Object.assign(process.env, VALID_CREDS);
+      const getXml = `<ApiResponse Status="OK"><CommandResponse>
+        <DomainDNSGetHostsResult Domain="plumbingaustin.com" IsUsingOurDNS="true">
+          <host HostId="1" Name="@" Type="A" Address="76.76.21.21" TTL="1800"/>
+          <host HostId="2" Name="www" Type="CNAME" Address="cname.vercel-dns.com" TTL="1800"/>
+        </DomainDNSGetHostsResult>
+      </CommandResponse></ApiResponse>`;
+      const setXml = `<ApiResponse Status="OK"><CommandResponse><DomainDNSSetHostsResult Domain="plumbingaustin.com" IsSuccess="true"/></CommandResponse></ApiResponse>`;
+
+      const fetchMock = vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+        const body = url.includes('getHosts') ? getXml : setXml;
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/xml' } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const out = await addTxtRecord({
+        domain: 'plumbingaustin.com',
+        hostName: '@',
+        value: 'google-site-verification=abc123',
+      });
+      expect(out.replaced).toBe(false);
+      expect(out.records).toHaveLength(3);
+
+      // Second call is the setHosts write — verify it carries the existing
+      // A and CNAME records plus the new TXT, so we don't blow away DNS.
+      const setUrl = String(fetchMock.mock.calls[1]![0]);
+      expect(setUrl).toContain('Command=namecheap.domains.dns.setHosts');
+      expect(setUrl).toContain('RecordType1=A');
+      expect(setUrl).toContain('Address1=76.76.21.21');
+      expect(setUrl).toContain('RecordType2=CNAME');
+      expect(setUrl).toContain('Address2=cname.vercel-dns.com');
+      expect(setUrl).toContain('RecordType3=TXT');
+      expect(setUrl).toContain('Address3=google-site-verification%3Dabc123');
+    });
+
+    it('replaces an existing TXT at the same name+type rather than duplicating', async () => {
+      Object.assign(process.env, VALID_CREDS);
+      const getXml = `<ApiResponse Status="OK"><CommandResponse>
+        <DomainDNSGetHostsResult Domain="plumbingaustin.com" IsUsingOurDNS="true">
+          <host HostId="1" Name="@" Type="A" Address="76.76.21.21" TTL="1800"/>
+          <host HostId="2" Name="@" Type="TXT" Address="google-site-verification=OLD" TTL="1800"/>
+        </DomainDNSGetHostsResult>
+      </CommandResponse></ApiResponse>`;
+      const setXml = `<ApiResponse Status="OK"><CommandResponse><DomainDNSSetHostsResult Domain="plumbingaustin.com" IsSuccess="true"/></CommandResponse></ApiResponse>`;
+
+      const fetchMock = vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+        const body = url.includes('getHosts') ? getXml : setXml;
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/xml' } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const out = await addTxtRecord({
+        domain: 'plumbingaustin.com',
+        hostName: '@',
+        value: 'google-site-verification=NEW',
+      });
+      expect(out.replaced).toBe(true);
+      expect(out.records).toHaveLength(2);
+
+      const setUrl = String(fetchMock.mock.calls[1]![0]);
+      expect(setUrl).toContain('Address2=google-site-verification%3DNEW');
+      expect(setUrl).not.toContain('OLD');
     });
   });
 });
