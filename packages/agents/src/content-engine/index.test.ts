@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadNicheOverlay, composeSystemPrompt } from './index';
+import { loadNicheOverlay, composeSystemPrompt, decorateSchemaWithClusterEnum } from './index';
 
 describe('content-engine niche overlays', () => {
   it('loadNicheOverlay returns non-empty content with Terminology section for classic', () => {
@@ -58,5 +58,105 @@ describe('content-engine niche overlays', () => {
     const premium = composeSystemPrompt('premium');
     const bright = composeSystemPrompt('bright');
     expect(new Set([classic, modern, premium, bright]).size).toBe(4);
+  });
+});
+
+describe('decorateSchemaWithClusterEnum', () => {
+  const slugs = ['cluster-a', 'cluster-b', 'cluster-c'];
+
+  it('injects enum on cluster_key fields nested under page arrays', () => {
+    const schema: Record<string, unknown> = {
+      type: 'object',
+      properties: {
+        home: {
+          type: 'object',
+          properties: {
+            cluster_key: { type: 'string' },
+            slug: { type: 'string' },
+          },
+        },
+        services: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              cluster_key: { type: 'string' },
+              title: { type: 'string' },
+            },
+          },
+        },
+        blog_posts: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              cluster_key: { type: 'string' },
+            },
+          },
+        },
+      },
+    };
+    decorateSchemaWithClusterEnum(schema, slugs);
+    const get = (path: string): Record<string, unknown> => {
+      let cur: unknown = schema;
+      for (const key of path.split('.')) cur = (cur as Record<string, unknown>)[key];
+      return cur as Record<string, unknown>;
+    };
+    expect(get('properties.home.properties.cluster_key').enum).toEqual(slugs);
+    expect(get('properties.services.items.properties.cluster_key').enum).toEqual(slugs);
+    expect(get('properties.blog_posts.items.properties.cluster_key').enum).toEqual(slugs);
+    // Sibling field untouched.
+    expect(get('properties.home.properties.slug').enum).toBeUndefined();
+  });
+
+  it('is a no-op when cluster slug list is empty', () => {
+    const schema: Record<string, unknown> = {
+      type: 'object',
+      properties: {
+        home: {
+          type: 'object',
+          properties: { cluster_key: { type: 'string' } },
+        },
+      },
+    };
+    decorateSchemaWithClusterEnum(schema, []);
+    const props = schema.properties as Record<string, { properties: Record<string, Record<string, unknown>> }>;
+    expect(props.home!.properties.cluster_key!.enum).toBeUndefined();
+  });
+
+  it('leaves a schema without cluster_key fields unchanged', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        home: { type: 'object', properties: { title: { type: 'string' } } },
+      },
+    };
+    const before = JSON.stringify(schema);
+    decorateSchemaWithClusterEnum(schema, slugs);
+    expect(JSON.stringify(schema)).toBe(before);
+  });
+
+  it('handles anyOf/oneOf branches', () => {
+    const schema: Record<string, unknown> = {
+      anyOf: [
+        { type: 'object', properties: { cluster_key: { type: 'string' } } },
+        { type: 'object', properties: { other: { type: 'string' } } },
+      ],
+    };
+    decorateSchemaWithClusterEnum(schema, slugs);
+    const branches = schema.anyOf as Array<{ properties: Record<string, Record<string, unknown>> }>;
+    expect(branches[0]!.properties.cluster_key!.enum).toEqual(slugs);
+  });
+});
+
+describe('content-engine theme passthrough (Fix 1.5)', () => {
+  it('classic theme produces a system prompt that contains the trades overlay text', () => {
+    const composed = composeSystemPrompt('classic');
+    // The trades overlay (loaded for theme=classic) carries terminology not
+    // present in the base system prompt — proving the overlay was actually
+    // loaded into the system param. If site-builder ever drops `theme` again,
+    // this string disappears from the system prompt.
+    expect(composed).toContain('Trade-Classic Overlay');
+    expect(composed.length).toBeGreaterThan(composeSystemPrompt(undefined).length);
   });
 });

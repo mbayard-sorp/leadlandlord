@@ -208,6 +208,24 @@ contract:
   service clusters but you'd normally emit 5), emit MORE services to cover
   every cluster. Coverage > round-number page counts.
 
+## CRITICAL: cluster_key values are fixed — copy them verbatim
+
+The keyword_clusters table in the user prompt lists exactly N clusters with
+FIXED `cluster_key` slugs (lowercase, kebab-case, deterministic). For every
+page in your bundle:
+
+1. Set `cluster_key` to a value copy-pasted EXACTLY from the input table.
+2. Do NOT abbreviate, paraphrase, shorten, normalize, or invent new slugs.
+   Example of a forbidden change: input `blog-foundation-repair-cost-austin`
+   → output `blog-foundation-repair` (this WILL be rejected).
+3. Each input cluster_key must appear on exactly one page. Each output
+   cluster_key must exist verbatim in the input list.
+4. Coverage validation rejects the entire bundle if any cluster_key is
+   missing OR any output cluster_key is not in the input list. There is no
+   partial credit and no fuzzy matching.
+5. If a cluster's primary_keyword feels low-value, you must STILL create a
+   page targeting it — pick page_kind from cluster.page_kind.
+
 When **no clusters are provided** (legacy / niche-hunter-only flow), you
 MAY omit `cluster_key`, `primary_keyword`, and `targeted_keywords` —
 generate copy with best-practice local SEO patterns instead.

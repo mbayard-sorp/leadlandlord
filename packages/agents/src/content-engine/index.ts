@@ -74,6 +74,46 @@ const TOOL_INPUT_SCHEMA = zodToJsonSchema(ContentBundle, {
   $refStrategy: 'none', // inline refs — Anthropic's tool schema doesn't follow $ref reliably
 }) as Record<string, unknown>;
 
+/**
+ * Recursively walk a JSON Schema object and inject `enum: clusterSlugs` on
+ * every string property named `cluster_key`. Used to constrain Claude's
+ * tool-use output so it can only emit cluster_key values that exist in the
+ * runtime input table — closing the paraphrasing gap that historically
+ * caused cluster-coverage rejections (see docs/cluster-coverage-fix-plan.md
+ * Fix 1). Pure / mutates the schema object in place.
+ *
+ * No-op when `clusterSlugs` is empty (an empty `enum` is invalid JSON Schema
+ * and the niche may legitimately have zero clusters in legacy flows).
+ */
+export function decorateSchemaWithClusterEnum(
+  schema: unknown,
+  clusterSlugs: readonly string[],
+): void {
+  if (clusterSlugs.length === 0) return;
+  if (schema == null || typeof schema !== 'object') return;
+  if (Array.isArray(schema)) {
+    for (const item of schema) decorateSchemaWithClusterEnum(item, clusterSlugs);
+    return;
+  }
+  const obj = schema as Record<string, unknown>;
+  const properties = obj.properties;
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    const props = properties as Record<string, unknown>;
+    const ck = props.cluster_key;
+    if (ck && typeof ck === 'object' && !Array.isArray(ck)) {
+      const ckObj = ck as Record<string, unknown>;
+      if (ckObj.type === 'string') {
+        ckObj.enum = [...clusterSlugs];
+      }
+    }
+  }
+  // Recurse into every value so we hit nested objects, items, anyOf/oneOf,
+  // additionalProperties, etc. without enumerating JSON Schema keywords.
+  for (const value of Object.values(obj)) {
+    decorateSchemaWithClusterEnum(value, clusterSlugs);
+  }
+}
+
 const OUTPUT_TOOL_NAME = 'output_content_bundle';
 
 export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof ContentEngineOutput> {
@@ -96,6 +136,17 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
 
     const userPrompt = buildUserPrompt(input);
     const systemPrompt = composeSystemPrompt(input.theme);
+
+    // Per-call clone of the tool schema with cluster_key enum constraints
+    // injected. Anthropic enforces enum on string fields server-side, so a
+    // paraphrased slug like `blog-foundation-repair` (when the input had
+    // `blog-foundation-repair-cost-austin`) will be rejected before the
+    // tool_use block is even emitted — the model is forced to pick from the
+    // input list. Deep-clone the prebuilt base schema so we don't mutate the
+    // module-level constant across calls.
+    const clusterSlugs = (input.keyword_clusters ?? []).map((c) => c.cluster_key);
+    const toolInputSchema = JSON.parse(JSON.stringify(TOOL_INPUT_SCHEMA)) as Record<string, unknown>;
+    decorateSchemaWithClusterEnum(toolInputSchema, clusterSlugs);
 
     ctx.log.info(
       { model, fast_mode: !!input.fast_mode, theme: input.theme ?? null, overlay: input.theme ? !!loadNicheOverlay(input.theme) : false },
@@ -125,7 +176,7 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
           name: OUTPUT_TOOL_NAME,
           description:
             'Output the complete content bundle for the website. Call this exactly once with the full bundle.',
-          input_schema: TOOL_INPUT_SCHEMA as never,
+          input_schema: toolInputSchema as never,
         },
       ],
       tool_choice: { type: 'tool', name: OUTPUT_TOOL_NAME },
@@ -192,6 +243,15 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
       // Hard fail when miss rate is too high — Claude likely misunderstood
       // the contract; retry-with-context would help, deferred to Phase 2.
       if (missRate > 0.2) {
+        ctx.log.warn(
+          {
+            rejectedBundle: parsed,
+            missing: coverage.missing,
+            covered: coverage.covered.length,
+            total: input.keyword_clusters.length,
+          },
+          'cluster coverage rejection — bundle persisted to log',
+        );
         throw new Error(
           `cluster coverage too low: ${coverage.missing.length}/${input.keyword_clusters.length} clusters not covered. Missing: ${coverage.missing.slice(0, 5).join(', ')}`,
         );
