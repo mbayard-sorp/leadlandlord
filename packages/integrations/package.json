@@ -10,6 +10,7 @@
     "./anthropic": "./src/anthropic.ts",
     "./vercel": "./src/vercel/index.ts",
     "./twilio": "./src/twilio/index.ts",
+    "./twilio/available-numbers": "./src/twilio/available-numbers.ts",
     "./klaviyo": "./src/klaviyo/index.ts",
     "./resend": "./src/resend/index.ts",
     "./zoho-mcp": "./src/zoho-mcp/index.ts",

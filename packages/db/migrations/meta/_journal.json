@@ -120,6 +120,13 @@
       "when": 1778400000000,
       "tag": "0016_sites_competitor_seeds",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778430300554,
+      "tag": "0017_pretty_patriot",
+      "breakpoints": true
     }
   ]
 }

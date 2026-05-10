@@ -18,7 +18,8 @@ import {
   type SanitySiteDetail,
   type SanityKeywordClusterSummary,
 } from '@/lib/sanity-read';
-import { PhoneAssignmentForm } from './PhoneAssignmentForm';
+import { BuildProgressBar } from './BuildProgressBar';
+import { PhoneProvisionPanel } from './PhoneProvisionPanel';
 import { ManualCallForm } from './ManualCallForm';
 import { ThemePicker } from './ThemePicker';
 import { DomainAttachForm } from './DomainAttachForm';
@@ -27,6 +28,7 @@ import { SiteConfigPanel } from './SiteConfigPanel';
 import { RegenerateButtons } from './RegenerateButtons';
 import { KeywordsPanel } from './KeywordsPanel';
 import { AgentActivityPanel } from './AgentActivityPanel';
+import { CollapsibleSection } from './CollapsibleSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +82,7 @@ export default async function SiteDetailPage({ params }: Params) {
 
   return (
     <div className="space-y-8">
+      {/* 1. Header — business name + status pill + live-site link */}
       <header>
         <p className="text-xs uppercase tracking-wide text-slate-500">Site</p>
         <h1 className="text-2xl font-semibold mt-1">
@@ -113,6 +116,10 @@ export default async function SiteDetailPage({ params }: Params) {
         </div>
       </header>
 
+      {/* 2. Build progress stepper — hidden once live + >24h (server-side flag) */}
+      <BuildProgressBar siteId={site.id} />
+
+      {/* 3. Theme */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Theme
@@ -120,6 +127,7 @@ export default async function SiteDetailPage({ params }: Params) {
         <ThemePicker siteId={site.id} current={sanity?.theme ?? null} />
       </section>
 
+      {/* 4. Domains + Custom domains */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Domains
@@ -138,6 +146,7 @@ export default async function SiteDetailPage({ params }: Params) {
         <DomainAttachForm siteId={site.id} domains={sanity?.domains ?? []} />
       </section>
 
+      {/* 5. Site config */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Site config
@@ -153,50 +162,15 @@ export default async function SiteDetailPage({ params }: Params) {
         />
       </section>
 
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-          Regenerate
-        </h2>
-        <RegenerateButtons
-          siteId={site.id}
-          hasHeroPrompt={!!sanity?.heroImagePrompt}
-        />
-        {sanity?.heroImageUrl && (
-          <div className="mt-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-400 flex items-center gap-3">
-            <span>Current hero:</span>
-            <a
-              href={sanity.heroImageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sky-400 hover:text-sky-300 break-all"
-            >
-              {sanity.heroImageUrl} ↗
-            </a>
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-          SEO Keywords
-        </h2>
-        <KeywordsPanel siteId={site.id} clusters={keywordClusters} />
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-          Agent activity
-        </h2>
-        <AgentActivityPanel siteId={site.id} />
-      </section>
-
+      {/* 6. Phone & integrations — now hosts PhoneProvisionPanel with AI recommender */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Phone &amp; integrations
         </h2>
-        <PhoneAssignmentForm site={site} />
+        <PhoneProvisionPanel site={site} />
       </section>
 
+      {/* 7. Recent calls + Recent leads (2-col grid) */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <header className="flex items-center justify-between mb-2">
@@ -216,6 +190,47 @@ export default async function SiteDetailPage({ params }: Params) {
           <LeadsTable rows={recentLeads} />
         </div>
       </section>
+
+      {/* 8. Agent activity */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Agent activity
+        </h2>
+        <AgentActivityPanel siteId={site.id} />
+      </section>
+
+      {/* 9. Bottom drawer — collapsed by default */}
+      <CollapsibleSection title="SEO Keywords">
+        <KeywordsPanel siteId={site.id} clusters={keywordClusters} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Regenerate">
+        <RegenerateButtons
+          siteId={site.id}
+          hasHeroPrompt={!!sanity?.heroImagePrompt}
+        />
+        {sanity?.heroImageUrl && (
+          <div className="mt-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-400 flex items-center gap-3">
+            <span>Current hero:</span>
+            <a
+              href={sanity.heroImageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400 hover:text-sky-300 break-all"
+            >
+              {sanity.heroImageUrl} ↗
+            </a>
+          </div>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="History">
+        {/* TODO(QA): wire up a proper history view of older agent_runs / agent_events.
+            For now this is a stub. The AgentActivityPanel above already shows recent
+            inflight + completed runs; this section is reserved for older history
+            once a paginated view is built (post R3.5 scope). */}
+        <p className="text-sm text-slate-500">TBD — older agent runs</p>
+      </CollapsibleSection>
     </div>
   );
 }
