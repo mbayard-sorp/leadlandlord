@@ -80,6 +80,21 @@ export default async function SiteDetailPage({ params }: Params) {
     ?? null;
   const dataset = (process.env.SANITY_DATASET ?? 'production') as 'production' | 'development';
 
+  // Live-site link tiers: real attached host first, otherwise the warming
+  // preview URL on the shared sites Vercel project (`?site=<slug>`). Lets the
+  // operator click through to the rendered build before a domain is attached.
+  const sitesPreviewHost =
+    process.env.NEXT_PUBLIC_SITES_PREVIEW_HOST ?? 'leadlandlord-sites.vercel.app';
+  const liveSite: { href: string; label: string; isPreview: boolean } | null = primaryHost
+    ? { href: `https://${primaryHost}`, label: primaryHost, isPreview: false }
+    : sanity?.slug
+    ? {
+        href: `https://${sitesPreviewHost}/?site=${sanity.slug}`,
+        label: `${sitesPreviewHost}/?site=${sanity.slug}`,
+        isPreview: true,
+      }
+    : null;
+
   return (
     <div className="space-y-8">
       {/* 1. Header — business name + status pill + live-site link */}
@@ -91,14 +106,24 @@ export default async function SiteDetailPage({ params }: Params) {
         <div className="flex flex-wrap gap-3 mt-3 text-sm text-slate-400">
           <Pill>{site.status}</Pill>
           {site.deployedAt && <span>Deployed {new Date(site.deployedAt).toLocaleString()}</span>}
-          {primaryHost && (
+          {liveSite && (
             <a
-              href={`https://${primaryHost}`}
+              href={liveSite.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sky-400 hover:text-sky-300"
+              className={
+                liveSite.isPreview
+                  ? 'text-amber-300 hover:text-amber-200'
+                  : 'text-sky-400 hover:text-sky-300'
+              }
+              title={
+                liveSite.isPreview
+                  ? 'Preview URL — no real domain attached yet. Will swap to the real domain once added.'
+                  : 'Live site'
+              }
             >
-              {primaryHost} ↗
+              {liveSite.isPreview ? '⚠ ' : ''}
+              {liveSite.label} ↗
             </a>
           )}
           {sanity ? (

@@ -38,6 +38,7 @@ export async function fetchPortfolioFromSanity(): Promise<SanityPortfolioRow[]> 
 export interface SanitySiteDetail {
   _id: string;
   siteId: string;
+  slug: string | null;
   businessName: string | null;
   niche: string | null;
   city: string | null;
@@ -52,7 +53,7 @@ export interface SanitySiteDetail {
 }
 
 const SITE_DETAIL_QUERY = `*[_type=="site" && siteId==$siteId][0]{
-  _id, siteId, businessName, niche, city, state, gaMeasurementId, robotsDisallow,
+  _id, siteId, "slug": slug.current, businessName, niche, city, state, gaMeasurementId, robotsDisallow,
   heroImagePrompt, "heroImageUrl": heroImage.asset->url,
   "theme": theme->name,
   "domains": domains[]{ host, isPrimary, verified, attachedAt },
