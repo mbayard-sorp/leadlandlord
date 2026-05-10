@@ -3,6 +3,7 @@ import type { Bundle } from '../../lib/content';
 import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { MapEmbed } from '../shared/MapEmbed';
 
 interface Props {
   bundle: Bundle;
@@ -137,13 +138,17 @@ export function PremiumHome({
           </div>
         </section>
 
-        <section className="premium-quote surface-inverse">
-          <blockquote className="premium-quote-text">
-            [TESTIMONIAL — REPLACE]
-          </blockquote>
-          <p className="premium-quote-attribution" data-muted>
-            — [CLIENT — REPLACE], {bundle.city}
-          </p>
+        <section className="premium-map" aria-label={`Map of ${bundle.city}, ${bundle.state}`}>
+          <div>
+            <p className="premium-roman">{ROMAN[1]}½. Place</p>
+            <h2 className="premium-h2">{bundle.city}, {bundle.state}</h2>
+          </div>
+          <MapEmbed
+            className="premium-map-frame"
+            city={bundle.city}
+            state={bundle.state}
+            height={420}
+          />
         </section>
 
         <section className="premium-areas" id="where">

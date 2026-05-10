@@ -557,3 +557,6 @@
 
 [data-theme='bright'] .bright-mobile-spacer { height: 64px; }
 @media (min-width: 768px) { [data-theme='bright'] .bright-mobile-spacer { display: none; } }
+
+/* map */
+[data-theme='bright'] .bright-map-frame { width: 100%; margin-top: 16px; border-radius: 16px; overflow: hidden; border: 2px solid var(--ink); }

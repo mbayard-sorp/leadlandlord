@@ -3,6 +3,7 @@ import type { Bundle } from '../../lib/content';
 import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { MapEmbed } from '../shared/MapEmbed';
 
 interface Props {
   bundle: Bundle;
@@ -282,6 +283,12 @@ export function BrightHome({
                 <li key={c}>{c}</li>
               ))}
             </ul>
+            <MapEmbed
+              className="bright-map-frame"
+              city={bundle.city}
+              state={bundle.state}
+              height={280}
+            />
           </div>
         </section>
 

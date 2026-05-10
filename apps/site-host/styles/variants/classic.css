@@ -334,3 +334,6 @@
 
 [data-theme='classic'] .classic-mobile-spacer { height: 64px; }
 @media (min-width: 768px) { [data-theme='classic'] .classic-mobile-spacer { display: none; } }
+
+/* map */
+[data-theme='classic'] .classic-map-frame { width: 100%; margin-top: 24px; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }

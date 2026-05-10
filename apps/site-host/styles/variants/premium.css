@@ -220,30 +220,18 @@
   align-self: center;
 }
 
-/* pull quote on ink */
-[data-theme='premium'] .premium-quote {
-  background: var(--ink);
-  color: var(--paper);
-  padding: clamp(64px, 10vw, 128px) clamp(24px, 5vw, 64px);
-  text-align: center;
+/* map section */
+[data-theme='premium'] .premium-map {
+  padding: clamp(56px, 8vw, 96px) clamp(24px, 5vw, 64px);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+  border-bottom: var(--hairline, 0.5px) solid var(--rule);
 }
-[data-theme='premium'] .premium-quote-text {
-  font-family: var(--font-display-italic);
-  font-style: italic;
-  font-weight: 400;
-  font-size: clamp(24px, 3.4vw, 40px);
-  line-height: 1.3;
-  max-width: 48ch;
-  margin: 0 auto;
-  color: var(--paper);
-}
-[data-theme='premium'] .premium-quote-attribution {
-  margin-top: 24px;
-  font-family: var(--font-body);
-  font-size: 11px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--surface-inverse-muted-fg);
+[data-theme='premium'] .premium-map-frame {
+  width: 100%;
+  border: var(--hairline, 0.5px) solid var(--rule);
+  filter: grayscale(0.15) contrast(1.02);
 }
 
 /* areas */

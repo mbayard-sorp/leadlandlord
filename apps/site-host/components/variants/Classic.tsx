@@ -3,6 +3,7 @@ import type { Bundle } from '../../lib/content';
 import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { MapEmbed } from '../shared/MapEmbed';
 
 interface Props {
   bundle: Bundle;
@@ -146,6 +147,12 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
               <li key={c}>{c}</li>
             ))}
           </ul>
+          <MapEmbed
+            className="classic-map-frame"
+            city={bundle.city}
+            state={bundle.state}
+            height={320}
+          />
         </section>
 
         {/* FAQ */}
