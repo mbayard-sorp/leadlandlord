@@ -93,11 +93,23 @@ Search Console requires DNS-level ownership proof for domain properties. Use the
    This reads existing Namecheap host records, appends the TXT record at `@`, and rewrites via `setHosts` (read-merge-write — won't nuke the live A record).
 4. Wait 5–60 min for DNS propagation, then click **Verify** in GSC.
 
-### 4b. Grant the service account on GSC
+### 4b. Grant the service account on GSC ⚠️ DEFERRED TO R5
 
-GSC → Settings → Users and permissions → Add user:
-- Email: `leadlandlord-seo-reader@leadlandlord-XXXX.iam.gserviceaccount.com` (from Step 3)
-- Permission: **Restricted** (read-only is enough for the SEO Expert agent)
+**Status:** GSC's Users-and-permissions UI rejects service-account email addresses for both `sc-domain:` and URL-prefix property types. This was confirmed live on 2026-05-09 against `junk-removal-vegas.com` with the email `leadlandlord-agent@leadlandlord.iam.gserviceaccount.com` — form validation says "Enter a valid Google account email" and won't accept the submit. Domain properties also don't expose "Add an owner" so the verified-owner UI workaround doesn't apply.
+
+This is a known Google constraint for personal (non-Workspace) Google accounts — there is no UI path to grant a service account on a property owned by a personal account.
+
+**The R5 fix:** when SEO Expert continuous-loop work begins, pick one of:
+
+- **Option A — Site Verification API claim flow** (recommended, ~30 min). Build a one-time `scripts/claim-gsc-ownership.ts`:
+  1. Service account calls `siteVerification.tokens.getToken({ site: { identifier: 'sc-domain:<domain>', type: 'INET_DOMAIN' }, verificationMethod: 'DNS_TXT' })` → Google returns a TXT token unique to this service account.
+  2. Plant the TXT via the existing `addTxtRecord()` helper in `packages/integrations/src/namecheap/`.
+  3. Service account calls `siteVerification.webResources.insert` to claim ownership.
+  Service account becomes a verified owner and can query the property. One CLI run per new tenant. Reuses existing `GOOGLE_SERVICE_ACCOUNT_KEY_JSON` env var.
+
+- **Option B — OAuth refresh-token pivot** (~1 hr). Refactor `packages/integrations/src/google-auth/index.ts` to support both service-account and OAuth-refresh-token modes. Create an OAuth 2.0 Client ID in GCP, run a one-time browser flow that captures a refresh token, store it in env. Subsequent GSC + GA4 calls run as the operator's personal account, inheriting all property access without per-tenant grants.
+
+**Until then:** GSC API access from the SEO Expert agent is dormant. The integration code (committed in PR #29 + #30) is correct and will work as soon as one of the paths above is taken. R3 (fleet expansion) and R6 (lead capture) don't depend on this.
 
 ### 4c. Grant the service account on GA4
 
