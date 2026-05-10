@@ -17,8 +17,8 @@ vi.mock('google-auth-library', () => {
         this.key = opts.key;
         this.scopes = opts.scopes;
       }
-      async getAccessToken(): Promise<string> {
-        return 'mock-access-token';
+      async getAccessToken(): Promise<{ token: string }> {
+        return { token: 'mock-access-token' };
       }
     },
   };

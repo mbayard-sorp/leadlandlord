@@ -53,7 +53,7 @@ const METRIC_NAMES = [
 
 async function authedFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const auth = getServiceAccountAuth([SCOPE]);
-  const token = await auth.getAccessToken();
+  const { token } = await auth.getAccessToken();
   if (!token) {
     throw new IntegrationError('google-analytics', 'Failed to acquire access token');
   }
