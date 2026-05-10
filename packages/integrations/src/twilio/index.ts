@@ -14,6 +14,12 @@ const IncomingNumberSchema = z.object({
 
 export interface ProvisionNumberArgs {
   siteId: string;
+  /**
+   * Exact E.164 to provision (e.g. "+15205550100"). When set, Twilio is
+   * asked for this specific number and `areaCodeHint` is ignored.
+   * Mutually exclusive with `areaCodeHint` per the Twilio API.
+   */
+  phoneNumber?: string;
   areaCodeHint?: string;
   forwardingNumber?: string;
   whisperMessage?: string;
@@ -48,7 +54,13 @@ export async function provisionNumber(args: ProvisionNumberArgs): Promise<Tracki
 
   const auth = Buffer.from(`${sid}:${token}`).toString('base64');
   const body = new URLSearchParams();
-  if (args.areaCodeHint) body.set('AreaCode', args.areaCodeHint);
+  // `PhoneNumber` and `AreaCode` are mutually exclusive per Twilio docs.
+  // When the operator has chosen a specific number, send that exact E.164.
+  if (args.phoneNumber) {
+    body.set('PhoneNumber', args.phoneNumber);
+  } else if (args.areaCodeHint) {
+    body.set('AreaCode', args.areaCodeHint);
+  }
   body.set('FriendlyName', `LeadLandlord-${args.siteId.slice(0, 8)}`);
   if (args.voiceUrl) {
     body.set('VoiceUrl', args.voiceUrl);
@@ -279,6 +291,16 @@ export function verifyWebhookSignature(args: {
 }
 
 function mockNumber(args: ProvisionNumberArgs): TrackingNumber {
+  // If an explicit E.164 was chosen, honour it exactly (no fake number).
+  if (args.phoneNumber) {
+    return {
+      number: args.phoneNumber,
+      provider: 'mock',
+      twilio_sid: undefined,
+      whisper: args.whisperMessage ?? 'Call from LeadLandlord (MOCK)',
+      recording_enabled: false,
+    };
+  }
   const hash = simpleHash(args.siteId);
   const npa = String(200 + (hash % 700)).padStart(3, '0');
   const nxx = String(200 + ((hash >> 8) % 700)).padStart(3, '0');

@@ -18,7 +18,8 @@ import {
   type SanitySiteDetail,
   type SanityKeywordClusterSummary,
 } from '@/lib/sanity-read';
-import { PhoneAssignmentForm } from './PhoneAssignmentForm';
+import { BuildProgressBar } from './BuildProgressBar';
+import { PhoneProvisionPanel } from './PhoneProvisionPanel';
 import { ManualCallForm } from './ManualCallForm';
 import { ThemePicker } from './ThemePicker';
 import { DomainAttachForm } from './DomainAttachForm';
@@ -27,6 +28,9 @@ import { SiteConfigPanel } from './SiteConfigPanel';
 import { RegenerateButtons } from './RegenerateButtons';
 import { KeywordsPanel } from './KeywordsPanel';
 import { AgentActivityPanel } from './AgentActivityPanel';
+import { CollapsibleSection } from './CollapsibleSection';
+import { GoLiveChecklist, type GoLiveItem } from './GoLiveChecklist';
+import type { GoLiveManualFlags } from './go-live-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,8 +82,24 @@ export default async function SiteDetailPage({ params }: Params) {
     ?? null;
   const dataset = (process.env.SANITY_DATASET ?? 'production') as 'production' | 'development';
 
+  // Live-site link tiers: real attached host first, otherwise the warming
+  // preview URL on the shared sites Vercel project (`?site=<slug>`). Lets the
+  // operator click through to the rendered build before a domain is attached.
+  const sitesPreviewHost =
+    process.env.NEXT_PUBLIC_SITES_PREVIEW_HOST ?? 'leadlandlord-sites.vercel.app';
+  const liveSite: { href: string; label: string; isPreview: boolean } | null = primaryHost
+    ? { href: `https://${primaryHost}`, label: primaryHost, isPreview: false }
+    : sanity?.slug
+    ? {
+        href: `https://${sitesPreviewHost}/?site=${sanity.slug}`,
+        label: `${sitesPreviewHost}/?site=${sanity.slug}`,
+        isPreview: true,
+      }
+    : null;
+
   return (
     <div className="space-y-8">
+      {/* 1. Header — business name + status pill + live-site link */}
       <header>
         <p className="text-xs uppercase tracking-wide text-slate-500">Site</p>
         <h1 className="text-2xl font-semibold mt-1">
@@ -88,14 +108,24 @@ export default async function SiteDetailPage({ params }: Params) {
         <div className="flex flex-wrap gap-3 mt-3 text-sm text-slate-400">
           <Pill>{site.status}</Pill>
           {site.deployedAt && <span>Deployed {new Date(site.deployedAt).toLocaleString()}</span>}
-          {primaryHost && (
+          {liveSite && (
             <a
-              href={`https://${primaryHost}`}
+              href={liveSite.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sky-400 hover:text-sky-300"
+              className={
+                liveSite.isPreview
+                  ? 'text-amber-300 hover:text-amber-200'
+                  : 'text-sky-400 hover:text-sky-300'
+              }
+              title={
+                liveSite.isPreview
+                  ? 'Preview URL — no real domain attached yet. Will swap to the real domain once added.'
+                  : 'Live site'
+              }
             >
-              {primaryHost} ↗
+              {liveSite.isPreview ? '⚠ ' : ''}
+              {liveSite.label} ↗
             </a>
           )}
           {sanity ? (
@@ -113,6 +143,10 @@ export default async function SiteDetailPage({ params }: Params) {
         </div>
       </header>
 
+      {/* 2. Build progress stepper — hidden once live + >24h (server-side flag) */}
+      <BuildProgressBar siteId={site.id} />
+
+      {/* 3. Theme */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Theme
@@ -120,6 +154,17 @@ export default async function SiteDetailPage({ params }: Params) {
         <ThemePicker siteId={site.id} current={sanity?.theme ?? null} />
       </section>
 
+      {/* 3b. Go-live checklist — collapses to a summary once site.status='live' */}
+      <section>
+        <GoLiveChecklist
+          siteId={site.id}
+          status={site.status}
+          items={buildGoLiveItems({ site, sanity })}
+          manualFlags={readGoLiveFlags(site.metadata)}
+        />
+      </section>
+
+      {/* 4. Domains + Custom domains */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Domains
@@ -138,6 +183,7 @@ export default async function SiteDetailPage({ params }: Params) {
         <DomainAttachForm siteId={site.id} domains={sanity?.domains ?? []} />
       </section>
 
+      {/* 5. Site config */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Site config
@@ -153,50 +199,15 @@ export default async function SiteDetailPage({ params }: Params) {
         />
       </section>
 
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-          Regenerate
-        </h2>
-        <RegenerateButtons
-          siteId={site.id}
-          hasHeroPrompt={!!sanity?.heroImagePrompt}
-        />
-        {sanity?.heroImageUrl && (
-          <div className="mt-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-400 flex items-center gap-3">
-            <span>Current hero:</span>
-            <a
-              href={sanity.heroImageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sky-400 hover:text-sky-300 break-all"
-            >
-              {sanity.heroImageUrl} ↗
-            </a>
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-          SEO Keywords
-        </h2>
-        <KeywordsPanel siteId={site.id} clusters={keywordClusters} />
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-          Agent activity
-        </h2>
-        <AgentActivityPanel siteId={site.id} />
-      </section>
-
+      {/* 6. Phone & integrations — now hosts PhoneProvisionPanel with AI recommender */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
           Phone &amp; integrations
         </h2>
-        <PhoneAssignmentForm site={site} />
+        <PhoneProvisionPanel site={site} />
       </section>
 
+      {/* 7. Recent calls + Recent leads (2-col grid) */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <header className="flex items-center justify-between mb-2">
@@ -216,6 +227,47 @@ export default async function SiteDetailPage({ params }: Params) {
           <LeadsTable rows={recentLeads} />
         </div>
       </section>
+
+      {/* 8. Agent activity */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Agent activity
+        </h2>
+        <AgentActivityPanel siteId={site.id} />
+      </section>
+
+      {/* 9. Bottom drawer — collapsed by default */}
+      <CollapsibleSection title="SEO Keywords">
+        <KeywordsPanel siteId={site.id} clusters={keywordClusters} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Regenerate">
+        <RegenerateButtons
+          siteId={site.id}
+          hasHeroPrompt={!!sanity?.heroImagePrompt}
+        />
+        {sanity?.heroImageUrl && (
+          <div className="mt-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-400 flex items-center gap-3">
+            <span>Current hero:</span>
+            <a
+              href={sanity.heroImageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400 hover:text-sky-300 break-all"
+            >
+              {sanity.heroImageUrl} ↗
+            </a>
+          </div>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="History">
+        {/* TODO(QA): wire up a proper history view of older agent_runs / agent_events.
+            For now this is a stub. The AgentActivityPanel above already shows recent
+            inflight + completed runs; this section is reserved for older history
+            once a paginated view is built (post R3.5 scope). */}
+        <p className="text-sm text-slate-500">TBD — older agent runs</p>
+      </CollapsibleSection>
     </div>
   );
 }
@@ -226,6 +278,91 @@ function Pill({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   );
+}
+
+interface SiteMetadataShape {
+  goLive?: GoLiveManualFlags;
+  [key: string]: unknown;
+}
+
+function readGoLiveFlags(metadata: unknown): GoLiveManualFlags {
+  const meta = (metadata as SiteMetadataShape | null) ?? {};
+  return meta.goLive ?? { gscSubmittedAt: null, gbpClaimedAt: null };
+}
+
+/**
+ * Auto-derived go-live items + the two manual flags. Order = the workflow we
+ * want operators to follow: build first, then domain, then crawl-readiness,
+ * then external listings.
+ */
+function buildGoLiveItems({
+  site,
+  sanity,
+}: {
+  site: Site;
+  sanity: SanitySiteDetail | null;
+}): GoLiveItem[] {
+  const manual = readGoLiveFlags(site.metadata);
+  const hasDeployedAt = !!site.deployedAt;
+  const hasHero = !!sanity?.heroImageUrl;
+  const hasPhone = !!site.trackingNumber || !!site.twilioPhoneSid;
+  const hasDomain = (sanity?.domains?.length ?? 0) > 0;
+  const robotsCrawlable = sanity?.robotsDisallow === false;
+  const hasGa =
+    !!sanity?.gaMeasurementId ||
+    !!process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  return [
+    {
+      key: 'deployed',
+      label: 'Site built & deployed',
+      hint: 'site-builder + content-engine completed; deployedAt is set.',
+      done: hasDeployedAt,
+    },
+    {
+      key: 'hero',
+      label: 'Hero image generated',
+      hint: 'Imagen produced a hero asset and Sanity has the URL.',
+      done: hasHero,
+    },
+    {
+      key: 'phone',
+      label: 'Tracking phone provisioned',
+      hint: 'Twilio number assigned (see Phone & integrations).',
+      done: hasPhone,
+    },
+    {
+      key: 'domain',
+      label: 'Real domain attached',
+      hint: 'At least one host in the Sanity domains[] array (set via Custom domains).',
+      done: hasDomain,
+    },
+    {
+      key: 'ga',
+      label: 'GA4 wired',
+      hint: 'Either NEXT_PUBLIC_GA_MEASUREMENT_ID is set globally or a per-tenant override is configured.',
+      done: hasGa,
+    },
+    {
+      key: 'robots',
+      label: 'Robots crawlable',
+      hint: 'robotsDisallow=false in Site config so Google can index.',
+      done: robotsCrawlable,
+    },
+    {
+      key: 'gsc',
+      label: 'Submitted to Google Search Console',
+      hint: 'Manual: verify the property + submit the sitemap in search.google.com/search-console.',
+      done: !!manual.gscSubmittedAt,
+      manual: 'gscSubmittedAt',
+    },
+    {
+      key: 'gbp',
+      label: 'Google Business Profile claimed',
+      hint: 'Manual: create + verify a GBP listing for the tracking phone + service area.',
+      done: !!manual.gbpClaimedAt,
+      manual: 'gbpClaimedAt',
+    },
+  ];
 }
 
 function CallsTable({ rows }: { rows: Call[] }) {

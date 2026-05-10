@@ -923,6 +923,44 @@ export const alertEvents = pgTable(
 );
 
 // ────────────────────────────────────────────────────────────
+// Phone provisioning audit log (R3.5)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Audit log for the Twilio phone-number provisioning flow.
+ * One batch of rows per "Find phone numbers" request (up to 5 candidates).
+ * The live-state column is sites.twilio_phone_sid — this table is history only.
+ */
+export const phoneProvisions = pgTable(
+  'phone_provisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** E.164 format, e.g. +15205550100 */
+    candidateE164: text('candidate_e164').notNull(),
+    /** Twilio AvailablePhoneNumber SID (before actual provisioning). */
+    twilioNumberSid: text('twilio_number_sid'),
+    locality: text('locality'),
+    region: text('region'),
+    /** { voice: boolean, sms: boolean, mms: boolean } */
+    capabilities: jsonb('capabilities').$type<{ voice: boolean; sms: boolean; mms: boolean }>(),
+    /** True for the Haiku-recommended candidate. */
+    recommended: boolean('recommended').notNull().default(false),
+    /** Haiku one-sentence rationale. Null for runners-up. */
+    rationale: text('rationale'),
+    /** True once the operator clicked "Provision this number". */
+    chosen: boolean('chosen').notNull().default(false),
+    provisionedAt: timestamp('provisioned_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteCreatedIdx: index('phone_provisions_site_created_idx').on(t.siteId, t.createdAt.desc()),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
 
@@ -971,3 +1009,5 @@ export type MaintenanceFinding = typeof maintenanceFindings.$inferSelect;
 export type NewMaintenanceFinding = typeof maintenanceFindings.$inferInsert;
 export type EmailSend = typeof emailSends.$inferSelect;
 export type NewEmailSend = typeof emailSends.$inferInsert;
+export type PhoneProvision = typeof phoneProvisions.$inferSelect;
+export type NewPhoneProvision = typeof phoneProvisions.$inferInsert;

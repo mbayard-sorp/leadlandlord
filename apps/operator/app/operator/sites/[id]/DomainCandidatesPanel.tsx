@@ -1,11 +1,27 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import { usePolledFetch } from '../../../../lib/use-polled-fetch';
 import {
   approveDomainCandidate,
   searchDomainsForSite,
   type DomainCandidateRow,
 } from './domain-actions';
+
+interface PolledResponse {
+  ok: true;
+  searching: boolean;
+  lastError: string | null;
+  candidates: Array<{
+    id: string;
+    domain: string;
+    rank: number | null;
+    matchType: string | null;
+    priceUsd: string | null;
+    registrar: string;
+    status: DomainCandidateRow['status'];
+  }>;
+}
 
 interface Props {
   siteId: string;
@@ -13,15 +29,63 @@ interface Props {
   registeredDomain: string | null;
 }
 
-export function DomainCandidatesPanel({ siteId, candidates, registeredDomain }: Props) {
+const POLL_MS = 3000;
+// Hard cap so we don't poll forever if the agent crashes silently.
+const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
+
+export function DomainCandidatesPanel({ siteId, candidates: initial, registeredDomain }: Props) {
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
+
+  const { data } = usePolledFetch<PolledResponse>(
+    `/api/operator/sites/${siteId}/domain-candidates`,
+    { intervalMs: POLL_MS, enabled: pollEnabled },
+  );
+
+  // Server-rendered initial list; once polling starts, the live list takes over.
+  const candidates = data?.candidates ?? initial;
+  const searching = data?.searching ?? false;
+
+  // Start polling when the operator clicks Search; stop once the agent finishes
+  // (searching=false), regardless of whether candidates were found. A finished
+  // run with zero candidates is either a real "no available domains" outcome
+  // or an agent failure — `lastError` distinguishes those. Also stops on a
+  // hard timeout so we don't drain the dev server forever.
+  useEffect(() => {
+    if (!pollEnabled || pollStartedAt == null || !data) return;
+    const elapsed = Date.now() - pollStartedAt;
+    if (elapsed > MAX_POLL_DURATION_MS) {
+      setPollEnabled(false);
+      setMsg('Search timed out. Refresh to see latest state.');
+      return;
+    }
+    if (!data.searching) {
+      setPollEnabled(false);
+      if (data.candidates.length > 0) {
+        setMsg(
+          `Found ${data.candidates.length} candidate${data.candidates.length === 1 ? '' : 's'}.`,
+        );
+      } else if (data.lastError) {
+        setMsg(`Domain Procurer failed: ${data.lastError}`);
+      } else {
+        setMsg('No candidates found.');
+      }
+    }
+  }, [data, pollEnabled, pollStartedAt]);
 
   function search() {
     setMsg(null);
     startTransition(async () => {
       const r = await searchDomainsForSite(siteId);
-      setMsg(r.ok ? 'Domain search enqueued. Refresh in ~1 min.' : r.message ?? 'search failed');
+      if (r.ok) {
+        setPollStartedAt(Date.now());
+        setPollEnabled(true);
+        setMsg('Searching domains…');
+      } else {
+        setMsg(r.message ?? 'search failed');
+      }
     });
   }
 
@@ -33,22 +97,29 @@ export function DomainCandidatesPanel({ siteId, candidates, registeredDomain }: 
     });
   }
 
+  const showSpinner = pending || pollEnabled || searching;
+
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5 space-y-4">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-200">Domain candidates</h3>
+          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            Domain candidates
+            {showSpinner && <Spinner />}
+          </h3>
           <p className="text-xs text-slate-500 mt-1">
-            Domain Procurer searches for available domains and queues them here for one-click registration.
+            {showSpinner && pollEnabled
+              ? 'Domain Procurer is searching… results stream in below.'
+              : 'Domain Procurer searches for available domains and queues them here for one-click registration.'}
           </p>
         </div>
         <button
           type="button"
           onClick={search}
-          disabled={pending}
+          disabled={pending || pollEnabled}
           className="text-xs px-3 py-1.5 rounded bg-sky-700/40 hover:bg-sky-700/60 text-sky-200 disabled:opacity-50 whitespace-nowrap"
         >
-          Search domains
+          {pollEnabled ? 'Searching…' : 'Search domains'}
         </button>
       </header>
 
@@ -63,7 +134,11 @@ export function DomainCandidatesPanel({ siteId, candidates, registeredDomain }: 
 
       {candidates.length === 0 ? (
         <div className="rounded border border-dashed border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-500">
-          No candidates yet. Click <strong>Search domains</strong> to dispatch the Domain Procurer.
+          {pollEnabled
+            ? 'Waiting for the first results…'
+            : (
+              <>No candidates yet. Click <strong>Search domains</strong> to dispatch the Domain Procurer.</>
+            )}
         </div>
       ) : (
         <div className="rounded border border-slate-800 overflow-hidden">
@@ -121,5 +196,24 @@ export function DomainCandidatesPanel({ siteId, candidates, registeredDomain }: 
 
       {msg && <p className="text-xs text-amber-300">{msg}</p>}
     </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin h-3.5 w-3.5 text-sky-400"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-label="Loading"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
   );
 }
