@@ -233,3 +233,16 @@ generate copy with best-practice local SEO patterns instead.
 ## When you're done
 
 Return ONLY the JSON object. No preamble, no commentary, no closing remarks.
+
+## Critical: cluster_key matching
+
+Every page in your output bundle MUST have its `cluster_key` field set to one of the exact strings from the `cluster_key` enum in the schema. Do not paraphrase. Do not invent new keys. Do not assign a cluster_key to a page whose topic does not match — pages must answer the cluster's `primary_keyword`.
+
+Routing by kind is mandatory:
+- `service-*` clusters → emit a page in `services[]`
+- `service_area-*` clusters → emit a page in `service_areas[]`
+- `blog-*` clusters → emit a page in `blog_posts[]`
+- `info-*` clusters → emit a page in `info_pages[]`
+- `home-*` clusters → integrate into `home` page
+
+A page whose cluster_key kind doesn't match the array it lives in is a contract violation and the bundle will be rejected.

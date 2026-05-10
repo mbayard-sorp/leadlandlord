@@ -243,15 +243,21 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     ctx.progress({ label: `clustering ${filtered.length} candidates with Claude` });
     const clusters = await this.clusterWithClaude(input, filtered, ctx);
 
-    // 5. Match each cluster's primary + supporting back to fetched candidate
-    //    metrics so we persist real numbers (not Claude's hallucinated stats).
-    const enriched = clusters.map((c) => enrichClusterWithMetrics(c, fetched));
+    // 5. Deduplicate clusters before enrichment. Claude sometimes emits
+    //    structurally redundant clusters (e.g. 4 near-identical "cost" blog
+    //    pages). Pure string dedup on a 3-token topic fingerprint — no
+    //    embeddings, no semantic similarity, just normalization + match.
+    const deduped = deduplicateClusters(clusters, ctx);
 
-    // 6. Persist to Sanity. createOrReplace so re-runs overwrite.
+    // 6. Match each cluster's primary + supporting back to fetched candidate
+    //    metrics so we persist real numbers (not Claude's hallucinated stats).
+    const enriched = deduped.map((c) => enrichClusterWithMetrics(c, fetched));
+
+    // 7. Persist to Sanity. createOrReplace so re-runs overwrite.
     ctx.progress({ label: `persisting ${enriched.length} clusters to Sanity` });
     const persisted = await this.persistClusters(input.site_id, enriched);
 
-    // 7. Emit cluster.ready for downstream re-targeting flows (operator clicks
+    // 8. Emit cluster.ready for downstream re-targeting flows (operator clicks
     //    "re-pull keywords" on an existing site). The helper auto-suppresses
     //    when running as a sub-agent inside site-builder's pipeline — the
     //    orchestrator chains directly to content-engine in-process. Without
@@ -399,6 +405,121 @@ Cluster these into ${input.target_clusters} (±5) page-mapped keyword clusters p
 }
 
 // ---- helpers --------------------------------------------------------------
+
+/**
+ * The type emitted by clusterWithClaude — a parsed, schema-validated cluster
+ * row before metric enrichment. Re-aliased here for clarity in dedup logic.
+ */
+type ParsedCluster = z.infer<typeof ClusterSchema>;
+
+/**
+ * Stop-words stripped when building a topic fingerprint. City/state tokens
+ * are stripped dynamically at call site; these are structural English words
+ * that shouldn't distinguish clusters from each other.
+ */
+const FINGERPRINT_STOP_WORDS = new Set([
+  'the', 'of', 'a', 'for', 'near', 'me', 'in', 'with',
+]);
+
+/**
+ * Build a 3-token topic fingerprint from a primary_keyword string. Strips
+ * city/state tokens plus the FINGERPRINT_STOP_WORDS set, then takes the
+ * first 3 surviving tokens lowercased. Two clusters with the same fingerprint
+ * and same page_kind are considered duplicates.
+ *
+ * Conservative: 3-token match is strict enough to avoid false positives while
+ * catching the "cost guide / cost calculator / cost estimator" family.
+ */
+function topicFingerprint(
+  primaryKeyword: string,
+  cityTokens: Set<string>,
+): string {
+  const tokens = primaryKeyword
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(
+      (t) =>
+        t.length > 0 &&
+        !FINGERPRINT_STOP_WORDS.has(t) &&
+        !cityTokens.has(t),
+    );
+  return tokens.slice(0, 3).join(' ');
+}
+
+/**
+ * Deduplicate Claude-emitted clusters before metric enrichment and Sanity
+ * persist. Groups clusters by page_kind, then within each group drops
+ * lower-volume duplicates with the same 3-token topic fingerprint. Keeps the
+ * highest-volume cluster (by supporting_keywords proxy — we don't have
+ * volume yet, but Claude tends to put more supporting keywords on the
+ * higher-value cluster; ties go to the first occurrence in Claude's output).
+ *
+ * Logs each dropped cluster at INFO so prod logs show exactly what was culled.
+ */
+export function deduplicateClusters(
+  clusters: ParsedCluster[],
+  ctx: Pick<AgentContext, 'log'>,
+): ParsedCluster[] {
+  if (clusters.length === 0) return clusters;
+
+  // Build a set of single-token city/state fragments to strip from
+  // fingerprints. We don't have the original input here, so derive from the
+  // cluster keys — cluster_key prefixes like "service_area-owensboro" reveal
+  // locality tokens. Also catch common two-letter state abbreviations implicitly
+  // via the stop-word list.
+  const cityTokens = new Set<string>();
+  for (const c of clusters) {
+    // Extract locality from service_area keys: "service_area-owensboro-ky" → ["owensboro", "ky"]
+    const match = c.cluster_key.match(/^service_area-(.+)$/);
+    if (match) {
+      for (const t of match[1]!.split('-')) cityTokens.add(t);
+    }
+  }
+
+  // Group by page_kind.
+  const byKind = new Map<string, ParsedCluster[]>();
+  for (const c of clusters) {
+    const list = byKind.get(c.page_kind) ?? [];
+    list.push(c);
+    byKind.set(c.page_kind, list);
+  }
+
+  const kept: ParsedCluster[] = [];
+  for (const [, group] of byKind) {
+    const seenFingerprints = new Map<string, ParsedCluster>(); // fingerprint → kept cluster
+    for (const c of group) {
+      const fp = topicFingerprint(c.primary_keyword, cityTokens);
+      const existing = seenFingerprints.get(fp);
+      if (!existing) {
+        seenFingerprints.set(fp, c);
+        kept.push(c);
+      } else {
+        // Drop the duplicate with fewer supporting keywords (proxy for volume).
+        // If tie, the first one (already kept) wins.
+        const incomingScore = c.supporting_keywords.length;
+        const existingScore = existing.supporting_keywords.length;
+        if (incomingScore > existingScore) {
+          // New cluster wins — swap it in.
+          const idx = kept.indexOf(existing);
+          if (idx !== -1) kept.splice(idx, 1);
+          kept.push(c);
+          seenFingerprints.set(fp, c);
+          ctx.log.info(
+            { dropped: existing.cluster_key, fingerprint: fp, kept: c.cluster_key },
+            'keyword-planner dedup',
+          );
+        } else {
+          ctx.log.info(
+            { dropped: c.cluster_key, fingerprint: fp, kept: existing.cluster_key },
+            'keyword-planner dedup',
+          );
+        }
+      }
+    }
+  }
+
+  return kept;
+}
 
 interface EnrichedCluster {
   cluster_key: string;

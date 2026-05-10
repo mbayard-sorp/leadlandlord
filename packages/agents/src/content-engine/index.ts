@@ -6,6 +6,7 @@ import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { ContentBundle } from '@leadlandlord/shared/types';
+import { getDb, agentEvents } from '@leadlandlord/db';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -147,6 +148,10 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     const clusterSlugs = (input.keyword_clusters ?? []).map((c) => c.cluster_key);
     const toolInputSchema = JSON.parse(JSON.stringify(TOOL_INPUT_SCHEMA)) as Record<string, unknown>;
     decorateSchemaWithClusterEnum(toolInputSchema, clusterSlugs);
+    ctx.log.info(
+      { clusterEnumKeys: clusterSlugs.length },
+      `cluster enum injected, ${clusterSlugs.length} keys`,
+    );
 
     ctx.log.info(
       { model, fast_mode: !!input.fast_mode, theme: input.theme ?? null, overlay: input.theme ? !!loadNicheOverlay(input.theme) : false },
@@ -227,64 +232,196 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     const normalized = normalizeBundle(toolUse.input, input);
     const parsed = ContentBundle.parse(normalized);
 
-    // Coverage check — every input cluster must be claimed by some page.
+    // Kind-aware coverage gate — every input cluster must be claimed by a
+    // page in the correct array (service-* → services[], etc.). Two-level:
+    // hard fail for missing home/service/service_area; salvage for info/blog
+    // under 20% miss rate with a degraded event.
     const coverage = checkClusterCoverage(parsed, input.keyword_clusters ?? []);
-    if (coverage.missing.length > 0) {
-      const missRate = coverage.missing.length / input.keyword_clusters.length;
+    const totalClusters = input.keyword_clusters.length;
+
+    if (coverage.missing.length > 0 || coverage.kindDrift.length > 0) {
+      const missRate = totalClusters > 0 ? coverage.missing.length / totalClusters : 0;
+
       ctx.log.warn(
         {
-          total: input.keyword_clusters.length,
+          total: totalClusters,
           missing: coverage.missing.length,
+          kindDrift: coverage.kindDrift.length,
           missRate: Number(missRate.toFixed(2)),
           missingKeys: coverage.missing.slice(0, 10),
+          kindDriftDetails: coverage.kindDrift.slice(0, 5),
         },
         'cluster coverage gaps detected',
       );
-      // Hard fail when miss rate is too high — Claude likely misunderstood
-      // the contract; retry-with-context would help, deferred to Phase 2.
-      if (missRate > 0.2) {
+
+      // Outer guard: ≥20% miss rate is always a hard fail regardless of kind.
+      if (missRate >= 0.2) {
         ctx.log.warn(
           {
             rejectedBundle: parsed,
             missing: coverage.missing,
+            kindDrift: coverage.kindDrift,
             covered: coverage.covered.length,
-            total: input.keyword_clusters.length,
+            total: totalClusters,
           },
           'cluster coverage rejection — bundle persisted to log',
         );
         throw new Error(
-          `cluster coverage too low: ${coverage.missing.length}/${input.keyword_clusters.length} clusters not covered. Missing: ${coverage.missing.slice(0, 5).join(', ')}`,
+          `cluster coverage too low: ${coverage.missing.length}/${totalClusters} clusters not covered. Missing: ${coverage.missing.slice(0, 5).join(', ')}`,
         );
       }
+
+      // Level 1: any missing cluster whose page_kind is home/service/service_area
+      // is a hard fail — these are revenue-critical pages.
+      const HARD_FAIL_KINDS = new Set(['home', 'service', 'service_area']);
+      const kindInputMap = new Map(
+        (input.keyword_clusters ?? []).map((c) => [c.cluster_key, c.page_kind]),
+      );
+      const criticalMissing = coverage.missing.filter((key) => {
+        const kind = kindInputMap.get(key);
+        return kind !== undefined && HARD_FAIL_KINDS.has(kind);
+      });
+      if (criticalMissing.length > 0) {
+        ctx.log.warn(
+          {
+            rejectedBundle: parsed,
+            missing: coverage.missing,
+            kindDrift: coverage.kindDrift,
+            criticalMissing,
+            covered: coverage.covered.length,
+            total: totalClusters,
+          },
+          'cluster coverage rejection — bundle persisted to log',
+        );
+        throw new Error(
+          `cluster coverage missing critical pages (home/service/service_area): ${criticalMissing.join(', ')}`,
+        );
+      }
+
+      // Level 2: all missing are info/blog and miss rate < 20% — salvage.
+      // Emit a degraded event (non-blocking) so the alert-evaluator can act later.
+      try {
+        const db = getDb();
+        await db.insert(agentEvents).values({
+          agent: 'content-engine',
+          type: 'site.build.degraded',
+          targetAgent: null,
+          payload: {
+            siteId: input.site_id,
+            missing: coverage.missing,
+            kindDrift: coverage.kindDrift,
+            totalClusters,
+          },
+        });
+      } catch (eventErr) {
+        ctx.log.warn(
+          { err: eventErr instanceof Error ? eventErr.message : String(eventErr) },
+          'content-engine: failed to insert site.build.degraded event (non-fatal)',
+        );
+      }
+
+      ctx.log.warn(
+        {
+          missing: coverage.missing,
+          kindDrift: coverage.kindDrift,
+          siteId: input.site_id,
+        },
+        'content-engine: bundle accepted with degraded coverage (info/blog only)',
+      );
     }
+
     return parsed;
   }
 }
 
 interface CoverageReport {
-  covered: string[];
-  missing: string[];
+  covered: string[];          // cluster_keys present in any output array
+  missing: string[];          // cluster_keys absent everywhere
+  kindDrift: Array<{          // covered but in wrong array
+    cluster_key: string;
+    expected_kind: string;    // page_kind from input cluster
+    actual_array: string;     // 'blog_posts' | 'info_pages' | 'services' | etc.
+  }>;
 }
+
+/**
+ * Maps the array key in the ContentBundle to the expected page_kind prefix.
+ * Used to detect kind-drift: e.g. an info-* cluster that ended up in blog_posts.
+ */
+const ARRAY_TO_KIND: Record<string, string> = {
+  services: 'service',
+  service_areas: 'service_area',
+  blog_posts: 'blog',
+  info_pages: 'info',
+};
 
 function checkClusterCoverage(
   bundle: ContentBundle,
   clusters: ContentEngineInput['keyword_clusters'],
 ): CoverageReport {
   if (!clusters || clusters.length === 0) {
-    return { covered: [], missing: [] };
+    return { covered: [], missing: [], kindDrift: [] };
   }
-  const allPages = collectAllPages(bundle);
-  const claimed = new Set<string>();
-  for (const p of allPages) {
-    if (p.cluster_key) claimed.add(p.cluster_key);
+
+  // Build cluster_key → expected page_kind from the input.
+  const kindMap = new Map<string, string>();
+  for (const c of clusters) {
+    kindMap.set(c.cluster_key, c.page_kind);
   }
+
+  // Walk each output array, track which cluster_key landed where.
+  const claimedInArray = new Map<string, string>(); // cluster_key → array name
+
+  // Home, about, contact are singular pages; only home carries a cluster_key
+  // in practice. We still check to be safe.
+  for (const [pageName, page] of [
+    ['home', bundle.home],
+    ['about', bundle.about],
+    ['contact', bundle.contact],
+  ] as const) {
+    if (page && (page as { cluster_key?: string }).cluster_key) {
+      claimedInArray.set((page as { cluster_key: string }).cluster_key, pageName);
+    }
+  }
+
+  // Array pages.
+  for (const arrayName of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
+    const arr = bundle[arrayName];
+    if (Array.isArray(arr)) {
+      for (const page of arr) {
+        const ck = (page as { cluster_key?: string }).cluster_key;
+        if (ck) claimedInArray.set(ck, arrayName);
+      }
+    }
+  }
+
   const covered: string[] = [];
   const missing: string[] = [];
+  const kindDrift: CoverageReport['kindDrift'] = [];
+
   for (const c of clusters) {
-    if (claimed.has(c.cluster_key)) covered.push(c.cluster_key);
-    else missing.push(c.cluster_key);
+    const arrayName = claimedInArray.get(c.cluster_key);
+    if (!arrayName) {
+      missing.push(c.cluster_key);
+      continue;
+    }
+    covered.push(c.cluster_key);
+
+    // Kind-drift check: the array the page landed in must match the expected
+    // page_kind. Home clusters on the home object are always correct.
+    const expectedKind = c.page_kind;
+    const actualKind = ARRAY_TO_KIND[arrayName] ?? arrayName; // e.g. 'blog_posts' → 'blog'
+    const isHome = arrayName === 'home' && expectedKind === 'home';
+    if (!isHome && actualKind !== expectedKind) {
+      kindDrift.push({
+        cluster_key: c.cluster_key,
+        expected_kind: expectedKind,
+        actual_array: arrayName,
+      });
+    }
   }
-  return { covered, missing };
+
+  return { covered, missing, kindDrift };
 }
 
 function collectAllPages(bundle: ContentBundle): ContentBundle['home'][] {
