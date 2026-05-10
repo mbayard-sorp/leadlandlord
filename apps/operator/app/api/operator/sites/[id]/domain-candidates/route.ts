@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   getDb,
   agentEvents,
@@ -26,6 +26,13 @@ interface DomainCandidateRow {
 interface DomainCandidatesResponse {
   ok: true;
   searching: boolean;
+  /**
+   * Most recent failed `domain-procurer` run for this site, if any. Surfaced
+   * to the panel so a silent agent failure (e.g. missing Namecheap creds in
+   * dev) shows up to the operator instead of hanging until the poll timeout.
+   * Reset to null when a newer run succeeds.
+   */
+  lastError: string | null;
   candidates: DomainCandidateRow[];
 }
 
@@ -55,7 +62,7 @@ export async function GET(
   const db = getDb();
 
   try {
-    const [candidates, pendingEvents, runningRuns] = await Promise.all([
+    const [candidates, pendingEvents, runningRuns, latestRun] = await Promise.all([
       db
         .select()
         .from(domainCandidates)
@@ -90,11 +97,24 @@ export async function GET(
           ),
         )
         .limit(1),
+      db
+        .select({ status: agentRuns.status, error: agentRuns.error })
+        .from(agentRuns)
+        .where(and(eq(agentRuns.agent, 'domain-procurer'), eq(agentRuns.siteId, siteId)))
+        .orderBy(desc(agentRuns.startedAt))
+        .limit(1),
     ]);
+
+    const lastRun = latestRun[0] ?? null;
+    const lastError =
+      lastRun && (lastRun.status === 'failed' || lastRun.status === 'budget_exceeded')
+        ? lastRun.error ?? `domain-procurer ${lastRun.status}`
+        : null;
 
     const body: DomainCandidatesResponse = {
       ok: true,
       searching: pendingEvents.length > 0 || runningRuns.length > 0,
+      lastError,
       candidates: candidates.map((c) => ({
         id: c.id,
         domain: c.domain,

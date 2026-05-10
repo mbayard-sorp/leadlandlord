@@ -11,6 +11,7 @@ import {
 interface PolledResponse {
   ok: true;
   searching: boolean;
+  lastError: string | null;
   candidates: Array<{
     id: string;
     domain: string;
@@ -48,19 +49,29 @@ export function DomainCandidatesPanel({ siteId, candidates: initial, registeredD
   const searching = data?.searching ?? false;
 
   // Start polling when the operator clicks Search; stop once the agent finishes
-  // and we've received at least one fresh poll showing `searching=false`. Also
-  // stops on a hard timeout so we don't drain the dev server forever.
+  // (searching=false), regardless of whether candidates were found. A finished
+  // run with zero candidates is either a real "no available domains" outcome
+  // or an agent failure — `lastError` distinguishes those. Also stops on a
+  // hard timeout so we don't drain the dev server forever.
   useEffect(() => {
-    if (!pollEnabled || pollStartedAt == null) return;
+    if (!pollEnabled || pollStartedAt == null || !data) return;
     const elapsed = Date.now() - pollStartedAt;
     if (elapsed > MAX_POLL_DURATION_MS) {
       setPollEnabled(false);
       setMsg('Search timed out. Refresh to see latest state.');
       return;
     }
-    if (data && !data.searching && data.candidates.length > 0) {
+    if (!data.searching) {
       setPollEnabled(false);
-      setMsg(`Found ${data.candidates.length} candidate${data.candidates.length === 1 ? '' : 's'}.`);
+      if (data.candidates.length > 0) {
+        setMsg(
+          `Found ${data.candidates.length} candidate${data.candidates.length === 1 ? '' : 's'}.`,
+        );
+      } else if (data.lastError) {
+        setMsg(`Domain Procurer failed: ${data.lastError}`);
+      } else {
+        setMsg('No candidates found.');
+      }
     }
   }, [data, pollEnabled, pollStartedAt]);
 
