@@ -15,6 +15,7 @@ import { IntegrationError } from '@leadlandlord/shared/errors';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
+import { pickThemeForNiche } from './pick-theme';
 
 export type SiteBuilderProgressEvent =
   | { step: 'site_row_ready'; site_id: string }
@@ -144,6 +145,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         state: input.state.toUpperCase(),
         fast_mode: input.fast_mode ?? false,
         keyword_clusters: clusters,
+        theme: pickThemeForNiche(input.niche),
       },
       { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:content-engine` },
     );
