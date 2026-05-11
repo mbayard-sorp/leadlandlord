@@ -28,7 +28,8 @@
     "./google-search-console": "./src/google-search-console/index.ts",
     "./google-analytics": "./src/google-analytics/index.ts",
     "./brightlocal": "./src/brightlocal/index.ts",
-    "./pagerduty": "./src/pagerduty/index.ts"
+    "./pagerduty": "./src/pagerduty/index.ts",
+    "./firecrawl": "./src/firecrawl/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

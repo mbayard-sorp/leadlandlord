@@ -20,6 +20,7 @@ import { MaintenanceAgent } from './maintenance/index';
 import { ComplianceGuard } from './compliance-guard/index';
 import { CallClassifier } from './call-classifier/index';
 import { Operator } from './operator/index';
+import { MollyScorer } from './molly-scorer/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -47,6 +48,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'compliance-guard': () => new ComplianceGuard(),
   'call-classifier': () => new CallClassifier(),
   operator: () => new Operator(),
+  'molly-scorer': () => new MollyScorer(),
 };
 
 export function getAgent(name: string): AnyAgent {

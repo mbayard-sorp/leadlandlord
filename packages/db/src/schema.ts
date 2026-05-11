@@ -96,12 +96,49 @@ export const backlinkTypeEnum = pgEnum('backlink_type', [
   'other',
 ]);
 
+/**
+ * Backlink prospect status — pre-pitch pipeline for the Molly guest-post flow.
+ * Separate from `prospect_status` which is the tenant sales CRM enum.
+ */
+export const backlinkProspectStatusEnum = pgEnum('backlink_prospect_status', [
+  'prospected',
+  'scored',
+  'flagged_top5',
+  'approved',
+  'pitched',
+]);
+
+/**
+ * Backlink acquisition status.
+ *
+ * Convention on `live` vs `published`:
+ *   `live`      — citation/directory rows: the link is confirmed live.
+ *   `published` — guest-post rows: the post is confirmed published.
+ *   `verified`  — guest-post rows: GSC confirms the link is indexed.
+ * Do NOT use `live` for guest-post rows; use `published` → `verified` instead.
+ */
 export const backlinkStatusEnum = pgEnum('backlink_status', [
+  // Original five values — kept as-is for citations and directory rows.
   'pending',
   'submitted',
   'live',
   'rejected',
   'lost',
+  // R4.2: guest-post reply state machine (ADR-0006).
+  'awaiting_reply',
+  'reply_received',
+  'accepted',
+  'declined',
+  'silent',
+  'escalated',
+  'drafting',
+  'draft_pending_review',
+  'draft_approved',
+  'delivered',
+  'published',
+  'verified',
+  'dormant',
+  'manual_review',
 ]);
 
 // ────────────────────────────────────────────────────────────
@@ -410,6 +447,24 @@ export const backlinks = pgTable(
     responseAt: timestamp('response_at', { withTimezone: true }),
     responseSnippet: text('response_snippet'),
     acquiredAt: timestamp('acquired_at', { withTimezone: true }),
+    // R4.2 — Molly guest-post pipeline columns (ADR-0006).
+    /** Raw SMTP Message-ID of the outbound pitch email. Used by MollyInbox to
+     *  match inbound In-Reply-To headers. Indexed (partial). */
+    messageId: text('message_id'),
+    /** Anchor text bucket: 'branded' | 'naked' | 'generic' | 'partial'.
+     *  Enforced by CHECK constraint in migration 0018. */
+    anchorType: text('anchor_type'),
+    /** MollyCopywriter draft output (markdown). Stored here while
+     *  draft_pending_review; cleared after delivered. */
+    draftMarkdown: text('draft_markdown'),
+    /** Timestamp when the maintenance watcher confirmed the post is live. */
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    /** Canonical URL of the live guest post once published. */
+    publishedUrl: text('published_url'),
+    /** Number of nudge emails sent to this target (max 7 over 21 days). */
+    nudgeCount: integer('nudge_count').notNull().default(0),
+    /** Timestamp of the most recent nudge send. */
+    lastNudgeAt: timestamp('last_nudge_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     metadata: jsonb('metadata'),
   },
@@ -418,8 +473,68 @@ export const backlinks = pgTable(
     dedupeUniq: uniqueIndex('backlinks_dedupe_key_uniq')
       .on(t.dedupeKey)
       .where(sql`${t.dedupeKey} IS NOT NULL`),
+    messageIdIdx: index('backlinks_message_id_idx')
+      .on(t.messageId)
+      .where(sql`${t.messageId} IS NOT NULL`),
   }),
 );
+
+/**
+ * Backlink prospect candidates — domain-level pre-pitch records created by
+ * BacklinkBuilder's `prospect` mode (DFS discovery → Apollo enrichment).
+ *
+ * One row per (site, domain) pair. Separate from the `prospects` table which
+ * is the tenant sales CRM (tracks business owners as rental prospects).
+ *
+ * State machine (ADR-0006):
+ *   prospected → scored → flagged_top5 → approved → pitched
+ *
+ * When a row reaches `approved`, a `prospect.approved` agent event is emitted
+ * and BacklinkBuilder.guest_post creates the corresponding `backlinks` row
+ * (status=submitted), at which point `backlink_id` is set and status moves
+ * to `pitched`.
+ */
+export const backlinkProspects = pgTable(
+  'backlink_prospects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull(),
+    /** DataForSEO domain_rank at discovery time. DA filter: 25–60 in MollyScorer. */
+    domainRank: integer('domain_rank'),
+    status: backlinkProspectStatusEnum('status').notNull().default('prospected'),
+    /** MollyScorer score 0–100. */
+    score: numeric('score', { precision: 5, scale: 2 }),
+    /** MollyScorer one-sentence rationale (max 25 words). */
+    rationale: text('rationale'),
+    /** Set when MollyScorer selects this as a top-5 pick. */
+    flaggedTop5At: timestamp('flagged_top5_at', { withTimezone: true }),
+    /** Set when operator approves in the top-5 review UI. */
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    /** Set once BacklinkBuilder.guest_post creates the pitch backlinks row. */
+    backlinkId: uuid('backlink_id').references(() => backlinks.id, { onDelete: 'set null' }),
+    /** 'prospect:<siteId>:<domain>' — prevents re-discovering the same domain. */
+    dedupeKey: text('dedupe_key'),
+    /** DFS signals, Apollo enrichment, Firecrawl receptivity results. */
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteStatusIdx: index('backlink_prospects_site_status_idx').on(t.siteId, t.status),
+    flaggedTop5AtIdx: index('backlink_prospects_flagged_top5_at_idx')
+      .on(t.flaggedTop5At)
+      .where(sql`${t.flaggedTop5At} IS NOT NULL`),
+    dedupeUniq: uniqueIndex('backlink_prospects_dedupe_key_uniq')
+      .on(t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL`),
+  }),
+);
+
+export type BacklinkProspect = typeof backlinkProspects.$inferSelect;
+export type InsertBacklinkProspect = typeof backlinkProspects.$inferInsert;
 
 // ────────────────────────────────────────────────────────────
 // Email sends — outbound mail audit log + per-mailbox throttle source

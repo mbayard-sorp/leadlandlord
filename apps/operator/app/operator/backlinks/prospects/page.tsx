@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { desc, eq, inArray, and } from 'drizzle-orm';
-import { getDb, backlinks, sites, type Backlink, type Site } from '@leadlandlord/db';
+import { desc, eq, inArray, and, or } from 'drizzle-orm';
+import { getDb, backlinks, backlinkProspects, sites, type Backlink, type Site, type BacklinkProspect } from '@leadlandlord/db';
 import { getApolloMonthlyUsage } from '../actions';
 import { ProspectRowActions } from './ProspectActions';
 import { ProspectRunner } from './ProspectRunner';
+import { MollyTop5Section } from './MollyTop5';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,9 +21,10 @@ export const dynamic = 'force-dynamic';
 
 const ALL_STATUSES = ['pending', 'submitted', 'live', 'rejected', 'lost'] as const;
 type StatusFilter = (typeof ALL_STATUSES)[number] | 'all';
+type TabView = 'prospects' | 'molly';
 
 interface PageProps {
-  searchParams?: Promise<{ status?: string }>;
+  searchParams?: Promise<{ status?: string; tab?: string }>;
 }
 
 interface ProspectMetadata {
@@ -80,6 +82,20 @@ async function loadSitesByIds(ids: string[]): Promise<Map<string, Site>> {
   return new Map(rows.map((s) => [s.id, s]));
 }
 
+/**
+ * Load backlink_prospects rows with status='flagged_top5' or 'approved',
+ * ordered by flagged_top5_at desc so the most-recently-scored batch is at top.
+ */
+async function loadMollyTop5(): Promise<BacklinkProspect[]> {
+  const db = getDb();
+  return db
+    .select()
+    .from(backlinkProspects)
+    .where(or(eq(backlinkProspects.status, 'flagged_top5'), eq(backlinkProspects.status, 'approved')))
+    .orderBy(desc(backlinkProspects.flaggedTop5At))
+    .limit(50);
+}
+
 async function loadAllSitesForRunner(): Promise<
   { id: string; label: string; hasCompetitorSeeds: boolean }[]
 > {
@@ -134,15 +150,28 @@ function computeAcceptanceByRankBand(rows: Backlink[]): Record<string, Acceptanc
 export default async function ProspectsPage({ searchParams }: PageProps) {
   const params = (await searchParams) ?? {};
   const filter: StatusFilter = isStatus(params.status) ? params.status : 'pending';
+  const tab: TabView = params.tab === 'molly' ? 'molly' : 'prospects';
 
-  const [rows, allRows, runnerSites, apolloUsage] = await Promise.all([
+  const [rows, allRows, runnerSites, apolloUsage, mollyProspects] = await Promise.all([
     loadProspectRows(filter),
     loadProspectRows('all'),
     loadAllSitesForRunner(),
     getApolloMonthlyUsage(),
+    loadMollyTop5(),
   ]);
   const siteMap = await loadSitesByIds([...new Set(rows.map((r) => r.siteId))]);
   const acceptance = computeAcceptanceByRankBand(allRows);
+
+  // Build site label map for Molly top-5 cards.
+  const mollysSiteIds = [...new Set(mollyProspects.map((p) => p.siteId))];
+  const mollySiteRows =
+    mollysSiteIds.length > 0
+      ? await getDb().select().from(sites).where(inArray(sites.id, mollysSiteIds))
+      : [];
+  const mollySiteLabelMap: Record<string, string> = {};
+  for (const s of mollySiteRows) {
+    mollySiteLabelMap[s.id] = `${s.niche} — ${s.city}, ${s.state}`;
+  }
 
   const apolloPct = Math.round((apolloUsage.used / Math.max(1, apolloUsage.cap)) * 100);
   const apolloTone =
@@ -162,6 +191,39 @@ export default async function ProspectsPage({ searchParams }: PageProps) {
         </p>
       </header>
 
+      {/* Tab switcher */}
+      <nav className="flex gap-1 border-b border-slate-800 pb-0">
+        <Link
+          href="/operator/backlinks/prospects"
+          className={`px-4 py-2 text-sm rounded-t border-b-2 -mb-px ${
+            tab === 'prospects'
+              ? 'border-sky-500 text-sky-300 bg-slate-900/60'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          All prospects
+        </Link>
+        <Link
+          href="/operator/backlinks/prospects?tab=molly"
+          className={`px-4 py-2 text-sm rounded-t border-b-2 -mb-px flex items-center gap-2 ${
+            tab === 'molly'
+              ? 'border-violet-500 text-violet-300 bg-slate-900/60'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          Molly&apos;s top 5
+          {mollyProspects.filter((p) => p.status === 'flagged_top5').length > 0 && (
+            <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-violet-700/60 text-violet-200">
+              {mollyProspects.filter((p) => p.status === 'flagged_top5').length}
+            </span>
+          )}
+        </Link>
+      </nav>
+
+      {tab === 'molly' ? (
+        <MollyTop5Section prospects={mollyProspects} siteLabelMap={mollySiteLabelMap} />
+      ) : (
+        <>
       {/* Apollo cap surface */}
       <div className={`rounded-lg border p-4 ${apolloTone}`}>
         <div className="flex items-center justify-between text-sm">
@@ -335,6 +397,8 @@ export default async function ProspectsPage({ searchParams }: PageProps) {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   );
