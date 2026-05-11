@@ -529,3 +529,7 @@
 
 /* map */
 [data-theme='modern'] .modern-map-frame { width: 100%; margin-top: 20px; border-radius: 12px; overflow: hidden; }
+
+/* linked service-area chips inherit chip styling */
+[data-theme='modern'] .modern-area-chips li a { color: inherit; text-decoration: none; }
+[data-theme='modern'] .modern-area-chips li a:hover { text-decoration: underline; }

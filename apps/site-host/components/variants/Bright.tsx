@@ -47,6 +47,7 @@ export function BrightHome({
     ...bundle.nearby_cities,
     ...bundle.service_areas.map((a) => a.title),
   ]).slice(0, 10);
+  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
   const initials = bundle.business_name
     .split(/\s+/)
     .map((w) => w[0])
@@ -61,6 +62,7 @@ export function BrightHome({
     .filter((p) => /\?$/.test(p.title))
     .slice(0, 5)
     .map((p) => ({ q: p.title, a: p.meta_description }));
+  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
 
   // Underline the niche keyword in the hero headline with the squiggle.
   const renderHeroH1 = () => {
@@ -279,9 +281,10 @@ export function BrightHome({
           <div className="bright-areas-card">
             <h2 className="bright-h2">We come to —</h2>
             <ul className="bright-area-chips">
-              {areas.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
+              {areas.map((c) => {
+                const slug = areaSlugByTitle.get(c);
+                return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
+              })}
             </ul>
             <MapEmbed
               className="bright-map-frame"
@@ -298,6 +301,21 @@ export function BrightHome({
             <h2 className="bright-h2">Tips & guides</h2>
             <div className="bright-learn-grid">
               {bundle.info_pages.slice(0, 6).map((p) => (
+                <a key={p.slug} href={p.slug} className="bright-learn-card">
+                  <span className="bright-learn-title">{p.title}</span>
+                  <span className="bright-learn-blurb">{p.meta_description}</span>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {blogTeasers.length > 0 && (
+          <section className="bright-learn-more" aria-label="From the blog">
+            <p className="bright-eyebrow">From the blog</p>
+            <h2 className="bright-h2">Recent articles</h2>
+            <div className="bright-learn-grid">
+              {blogTeasers.map((p) => (
                 <a key={p.slug} href={p.slug} className="bright-learn-card">
                   <span className="bright-learn-title">{p.title}</span>
                   <span className="bright-learn-blurb">{p.meta_description}</span>

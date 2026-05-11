@@ -43,10 +43,12 @@ export function PremiumHome({
     ...bundle.nearby_cities,
     ...bundle.service_areas.map((a) => a.title),
   ]).slice(0, 8);
+  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
   const faqs = bundle.blog_posts
     .filter((p) => /\?$/.test(p.title))
     .slice(0, 6)
     .map((p) => ({ q: p.title, a: p.meta_description }));
+  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
   const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   return (
@@ -157,9 +159,10 @@ export function PremiumHome({
             <h2 className="premium-h2">Serving the {bundle.city} area</h2>
           </div>
           <ul className="premium-area-list">
-            {areas.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
+            {areas.map((c) => {
+              const slug = areaSlugByTitle.get(c);
+              return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
+            })}
           </ul>
         </section>
 
@@ -186,6 +189,24 @@ export function PremiumHome({
             <h2 className="premium-h2">Notes from the studio</h2>
             <ul className="premium-learn-list">
               {bundle.info_pages.slice(0, 6).map((p) => (
+                <li key={p.slug}>
+                  <a href={p.slug}>
+                    <span className="premium-learn-title">{p.title}</span>
+                    <span className="premium-service-arrow">→</span>
+                    <span className="premium-learn-blurb">{p.meta_description}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {blogTeasers.length > 0 && (
+          <section className="premium-learn-more" aria-label="From the blog">
+            <p className="premium-roman">{ROMAN[4]}½. Field notes</p>
+            <h2 className="premium-h2">Recent articles</h2>
+            <ul className="premium-learn-list">
+              {blogTeasers.map((p) => (
                 <li key={p.slug}>
                   <a href={p.slug}>
                     <span className="premium-learn-title">{p.title}</span>
