@@ -71,6 +71,100 @@
   max-width: 60ch;
 }
 
+/* Agent-authored markdown body (blog posts + info pages).
+ * Targets HTML emitted by marked. Theme-agnostic — uses CSS vars. */
+.prose-site { font-family: var(--font-body); color: var(--ink); font-size: 1.0625rem; line-height: 1.65; }
+.prose-site > * + * { margin-top: 1.1em; }
+.prose-site h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(22px, 3.2vw, 30px);
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+}
+.prose-site h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(18px, 2.4vw, 22px);
+  line-height: 1.25;
+  color: var(--ink);
+  margin-top: 1.6em;
+  margin-bottom: 0.4em;
+}
+.prose-site h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.0625rem;
+  color: var(--ink);
+  margin-top: 1.4em;
+  margin-bottom: 0.3em;
+}
+.prose-site p { margin: 0; color: var(--ink-2, var(--ink)); }
+.prose-site strong { color: var(--ink); font-weight: 700; }
+.prose-site em { font-style: italic; }
+.prose-site a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-site a:hover { text-decoration-thickness: 2px; }
+.prose-site ul, .prose-site ol { padding-left: 1.5em; margin: 0; }
+.prose-site ul { list-style: disc; }
+.prose-site ol { list-style: decimal; }
+.prose-site li { margin: 0.35em 0; color: var(--ink-2, var(--ink)); }
+.prose-site li > ul, .prose-site li > ol { margin-top: 0.35em; }
+.prose-site blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 0.25em 0 0.25em 1em;
+  color: var(--ink-2, var(--ink));
+  font-style: italic;
+}
+.prose-site code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--paper-2, rgba(0,0,0,0.06));
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+.prose-site pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--paper-2, rgba(0,0,0,0.06));
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.prose-site pre code { background: transparent; padding: 0; }
+.prose-site hr {
+  border: 0;
+  border-top: 1px solid var(--ink);
+  opacity: 0.15;
+  margin: 2em 0;
+}
+.prose-site table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+}
+.prose-site th, .prose-site td {
+  border: 1px solid var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 18%, transparent);
+  padding: 0.6em 0.8em;
+  text-align: left;
+  vertical-align: top;
+}
+.prose-site th {
+  background: var(--paper-2, color-mix(in srgb, var(--accent) 8%, var(--paper)));
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--ink);
+}
+
 /* In-article CTA card — appears below the prose body. */
 .info-page-cta {
   margin: 48px 0 0;

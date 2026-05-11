@@ -17,6 +17,7 @@
     "@sanity/image-url": "^1.1.0",
     "@sentry/nextjs": "^10.52.0",
     "drizzle-orm": "^0.36.4",
+    "marked": "^18.0.3",
     "next": "^16.0.0",
     "next-sanity": "^9.8.0",
     "react": "^19.0.0",
