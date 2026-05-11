@@ -7,8 +7,11 @@ const TWILIO_BASE = 'https://api.twilio.com/2010-04-01';
 export interface PhoneCandidate {
   /** E.164 format, e.g. +15205550100 */
   e164: string;
-  /** Twilio AvailablePhoneNumber SID */
-  sid: string;
+  /**
+   * Twilio IncomingPhoneNumber SID. Null until the number is purchased —
+   * the AvailablePhoneNumbers resource doesn't expose a SID.
+   */
+  sid: string | null;
   locality: string | null;
   region: string | null;
   capabilities: {
@@ -25,7 +28,6 @@ export interface PhoneCandidate {
 }
 
 const AvailableNumberSchema = z.object({
-  sid: z.string(),
   phone_number: z.string(),
   locality: z.string().nullable().optional(),
   region: z.string().nullable().optional(),
@@ -200,7 +202,7 @@ function toCandidate(
 
   return {
     e164: n.phone_number,
-    sid: n.sid,
+    sid: null,
     locality: n.locality ?? null,
     region: n.region ?? null,
     capabilities: {
