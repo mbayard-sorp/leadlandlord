@@ -214,16 +214,42 @@ async function ncRequest(
   params: Record<string, string>,
 ): Promise<string> {
   const { apiUser, apiKey, username, clientIp } = getCreds();
-  const qs = new URLSearchParams({
+  const commonParams: Record<string, string> = {
     ApiUser: apiUser,
     ApiKey: apiKey,
     UserName: username,
     ClientIp: clientIp,
-    Command: command,
     ...params,
-  });
-  const url = `${getBaseUrl()}?${qs.toString()}`;
-  const res = await fetch(url, { method: 'GET' });
+  };
+
+  const proxyUrl = process.env.NAMECHEAP_PROXY_URL;
+  const proxySecret = process.env.NAMECHEAP_PROXY_SECRET;
+
+  let res: Response;
+  if (proxyUrl) {
+    if (!proxySecret) {
+      throw new IntegrationError(
+        'namecheap',
+        'NAMECHEAP_PROXY_URL is set but NAMECHEAP_PROXY_SECRET is missing',
+      );
+    }
+    res = await fetch(`${proxyUrl.replace(/\/$/, '')}/forward`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-proxy-secret': proxySecret,
+      },
+      body: JSON.stringify({
+        command,
+        params: commonParams,
+        sandbox: isSandbox(),
+      }),
+    });
+  } else {
+    const qs = new URLSearchParams({ Command: command, ...commonParams });
+    res = await fetch(`${getBaseUrl()}?${qs.toString()}`, { method: 'GET' });
+  }
+
   const text = await res.text();
   if (!res.ok) {
     throw new IntegrationError(
@@ -238,9 +264,16 @@ async function ncRequest(
     const errors = findAll(text, 'Error')
       .map((e) => decodeEntities(tagText(e, 'Error') ?? '').trim())
       .filter(Boolean);
+    const joined = errors.join('; ') || 'unknown';
+    // Surface IP-whitelist mismatches with both the value we sent and the
+    // source IP Namecheap rejected so future drift is one log line away.
+    const ipMatch = /Invalid request IP[:\s]+([\d.]+)/i.exec(joined);
+    const ipDetail = ipMatch
+      ? ` [sent ClientIp=${clientIp}, source IP rejected by Namecheap=${ipMatch[1]}; whitelist this IP at ap.www.namecheap.com → Profile → Tools → API Access${proxyUrl ? ' (proxy egress IP)' : ''}]`
+      : '';
     throw new IntegrationError(
       'namecheap',
-      `${command} returned Status=ERROR: ${errors.join('; ') || 'unknown'}`,
+      `${command} returned Status=ERROR: ${joined}${ipDetail}`,
       res.status,
       text.slice(0, 1000),
     );
