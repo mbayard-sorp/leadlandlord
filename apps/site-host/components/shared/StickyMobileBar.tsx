@@ -31,8 +31,9 @@ export function StickyMobileBar({
       <a
         href={telHref(phone)}
         className="flex items-center gap-2 font-bold text-sm tabular-nums"
+        aria-label={`Call ${phone}`}
       >
-        <span>☎</span>
+        <span aria-hidden>☎</span>
         <span>{phone}</span>
       </a>
       <a

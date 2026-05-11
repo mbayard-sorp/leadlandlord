@@ -8,6 +8,16 @@ import { z } from 'zod';
  * components stay portable.
  */
 
+export const ReviewSchema = z.object({
+  author: z.string(),
+  rating: z.number().int().min(1).max(5),
+  text: z.string(),
+  source: z.enum(['google', 'yelp', 'bbb', 'facebook', 'direct']),
+  date: z.string(),
+  verified: z.boolean().default(false),
+});
+export type Review = z.infer<typeof ReviewSchema>;
+
 export const PageSchema = z.object({
   kind: z.string(),
   slug: z.string(),
@@ -15,6 +25,7 @@ export const PageSchema = z.object({
   meta_description: z.string(),
   mdx: z.string(),
   schema_org_jsonld: z.unknown().optional(),
+  og_image_url: z.string().url().optional(),
 });
 
 export const VariantSchema = z.enum(['classic', 'modern', 'premium', 'bright']);
@@ -38,6 +49,28 @@ export const BundleSchema = z.object({
   blog_posts: z.array(PageSchema),
   info_pages: z.array(PageSchema).default([]),
   generated_at: z.string(),
+  // Trust-signal fields — all optional with safe defaults (ADR 0001 + 0003)
+  reviews: z.array(ReviewSchema).default([]),
+  aggregate_rating: z.object({
+    rating_value: z.number(),
+    review_count: z.number().int(),
+    best_rating: z.number().default(5),
+  }).optional(),
+  license_number: z.string().optional(),
+  insurance_carrier: z.string().optional(),
+  years_in_business: z.number().int().optional(),
+  certifications: z.array(z.object({
+    name: z.string(),
+    issuer: z.string().optional(),
+    year: z.number().int().optional(),
+  })).default([]),
+  photo_gallery: z.array(z.object({
+    url: z.string().url(),
+    alt: z.string(),
+    caption: z.string().optional(),
+  })).default([]),
+  guarantees: z.array(z.string()).default([]),
+  response_time_promise: z.string().optional(),
 });
 
 export type Bundle = z.infer<typeof BundleSchema>;

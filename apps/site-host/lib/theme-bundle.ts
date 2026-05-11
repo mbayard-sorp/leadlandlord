@@ -26,6 +26,37 @@ export function sanityToBundle(site: SanitySite): Bundle {
     blog_posts: (site.blogPosts ?? []).map((p) => pageToBundlePage(p, 'blog')),
     info_pages: (site.infoPages ?? []).map((p) => pageToBundlePage(p, 'info')),
     generated_at: site.generatedAt ?? new Date().toISOString(),
+    // Trust-signal fields — safe defaults ensure existing tenants render identically (ADR 0003)
+    reviews: (site.reviews ?? []).map((r) => ({
+      author: r.author,
+      rating: r.rating,
+      text: r.text,
+      source: r.source,
+      date: r.date,
+      verified: r.verified ?? false,
+    })),
+    aggregate_rating: site.aggregateRating
+      ? {
+          rating_value: site.aggregateRating.ratingValue,
+          review_count: site.aggregateRating.reviewCount,
+          best_rating: site.aggregateRating.bestRating ?? 5,
+        }
+      : undefined,
+    license_number: site.licenseNumber ?? undefined,
+    insurance_carrier: site.insuranceCarrier ?? undefined,
+    years_in_business: site.yearsInBusiness ?? undefined,
+    response_time_promise: site.responseTimePromise ?? undefined,
+    certifications: (site.certifications ?? []).map((c) => ({
+      name: c.name,
+      issuer: c.issuer ?? undefined,
+      year: c.year ?? undefined,
+    })),
+    photo_gallery: (site.photoGallery ?? []).filter((g) => !!g.url).map((g) => ({
+      url: g.url,
+      alt: g.alt,
+      caption: g.caption ?? undefined,
+    })),
+    guarantees: site.guarantees ?? [],
   };
 }
 
@@ -46,6 +77,7 @@ function pageToBundlePage(p: SanitySitePage | undefined | null, fallbackKind: st
     meta_description: p.metaDescription ?? '',
     mdx: p.mdx ?? '',
     schema_org_jsonld: jsonLd,
+    og_image_url: p.pageOgImageUrl ?? undefined,
   };
 }
 

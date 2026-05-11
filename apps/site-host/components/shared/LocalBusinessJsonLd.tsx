@@ -45,9 +45,43 @@ interface Props {
 
 export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
   const subtype = subtypeFor(bundle.niche);
+  const canonicalUrl = url.replace(/\/$/, '');
+
+  // AggregateRating + Review JSON-LD — only emit when data meets threshold.
+  // Per ADR 0001: suppress aggregate if < 3 verified reviews (Google manual-action risk).
+  const verifiedReviews = bundle.reviews.filter(
+    (r) => r.verified && r.source !== 'direct',
+  );
+  const emitRating =
+    bundle.aggregate_rating != null && verifiedReviews.length >= 3;
+
+  const aggregateRating = emitRating
+    ? {
+        '@type': 'AggregateRating',
+        ratingValue: bundle.aggregate_rating!.rating_value,
+        reviewCount: bundle.aggregate_rating!.review_count,
+        bestRating: bundle.aggregate_rating!.best_rating,
+      }
+    : undefined;
+
+  const reviewNodes = emitRating
+    ? verifiedReviews.slice(0, 5).map((r) => ({
+        '@type': 'Review',
+        reviewRating: {
+          '@type': 'Rating',
+          ratingValue: r.rating,
+          bestRating: 5,
+        },
+        author: { '@type': 'Person', name: r.author },
+        datePublished: r.date,
+        reviewBody: r.text,
+      }))
+    : undefined;
+
   const json = {
     '@context': 'https://schema.org',
     '@type': subtype,
+    '@id': `${canonicalUrl}/#localbusiness`,
     name: bundle.business_name,
     description: bundle.home.meta_description,
     url,
@@ -75,6 +109,8 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
         closes: '21:00',
       },
     ],
+    aggregateRating,
+    review: reviewNodes,
   };
 
   return (

@@ -28,6 +28,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/`, lastModified, changeFrequency: 'weekly', priority: 1 },
     { url: `${base}/about/`, lastModified, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${base}/contact/`, lastModified, changeFrequency: 'monthly', priority: 0.7 },
+    // /blog index only when there are enough posts to avoid thin-content indexing
+    ...(bundle.blog_posts.length >= 2
+      ? [{ url: `${base}/blog/`, lastModified, changeFrequency: 'weekly' as const, priority: 0.6 }]
+      : []),
   ];
 
   const services: MetadataRoute.Sitemap = bundle.services.map((p) => ({

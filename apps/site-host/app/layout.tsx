@@ -4,6 +4,7 @@ import { allFontVars } from '../lib/fonts';
 import { resolveCurrentSite } from '../lib/site-context';
 import { currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
+import { WebSiteJsonLd } from '../components/shared/WebSiteJsonLd';
 import './globals.css';
 
 /**
@@ -56,10 +57,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // white-label-future). If neither is set, skip injection entirely.
   const ga = site?.gaMeasurementId ?? process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? undefined;
   const siteId = site?.siteId;
+  const bundle = site ? sanityToBundle(site) : null;
+  const baseUrl = await currentRequestBaseUrl();
   return (
     <html lang="en" className={allFontVars} data-theme={theme}>
+      <head>
+        <link rel="preconnect" href="https://cdn.sanity.io" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://cdn.sanity.io" />
+      </head>
       <body>
         <a href="#main" className="skip-to-content">Skip to main content</a>
+        {bundle && <WebSiteJsonLd name={bundle.business_name} url={baseUrl} />}
         {children}
         {ga ? (
           <>

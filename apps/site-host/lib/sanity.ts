@@ -25,6 +25,8 @@ export function urlForImage(source: SanityImageSource) {
  * gives the whole render bundle. Slicing arrays at [0...50] guards against
  * pathological page counts blowing the GROQ projection size.
  */
+const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, "pageOgImageUrl": pageOgImage.asset->url }`;
+
 const SITE_PROJECTION = `{
   _id, siteId, "slug": slug.current, businessName, niche, city, state,
   gaMeasurementId, robotsDisallow, generatedAt,
@@ -33,13 +35,19 @@ const SITE_PROJECTION = `{
   "heroImageUrl": heroImage.asset->url,
   "theme": theme->name,
   domains[]{ host, isPrimary, verified, attachedAt },
-  home->{ kind, slug, title, metaDescription, mdx, jsonLd },
-  about->{ kind, slug, title, metaDescription, mdx, jsonLd },
-  contact->{ kind, slug, title, metaDescription, mdx, jsonLd },
-  "services": services[0...50]->{ kind, slug, title, metaDescription, mdx, jsonLd },
-  "serviceAreas": serviceAreas[0...50]->{ kind, slug, title, metaDescription, mdx, jsonLd },
-  "blogPosts": blogPosts[0...50]->{ kind, slug, title, metaDescription, mdx, jsonLd },
-  "infoPages": infoPages[0...50]->{ kind, slug, title, metaDescription, mdx, jsonLd }
+  home->${PAGE_PROJECTION},
+  about->${PAGE_PROJECTION},
+  contact->${PAGE_PROJECTION},
+  "services": services[0...50]->${PAGE_PROJECTION},
+  "serviceAreas": serviceAreas[0...50]->${PAGE_PROJECTION},
+  "blogPosts": blogPosts[0...50]->${PAGE_PROJECTION},
+  "infoPages": infoPages[0...50]->${PAGE_PROJECTION},
+  "reviews": reviews[0...100]->{ author, rating, text, source, "date": date, verified },
+  aggregateRating{ ratingValue, reviewCount, bestRating },
+  licenseNumber, insuranceCarrier, yearsInBusiness, responseTimePromise,
+  certifications[]{ name, issuer, year },
+  "photoGallery": photoGallery[]{ "url": image.asset->url, alt, caption },
+  guarantees
 }`;
 
 const SITE_BY_HOST_QUERY = `*[_type=="site" && $host in domains[].host][0]${SITE_PROJECTION}`;
@@ -52,6 +60,7 @@ export interface SanitySitePage {
   metaDescription: string;
   mdx: string;
   jsonLd?: string | null;
+  pageOgImageUrl?: string | null;
 }
 
 export interface SanitySite {
@@ -78,6 +87,35 @@ export interface SanitySite {
   serviceAreas?: SanitySitePage[] | null;
   blogPosts?: SanitySitePage[] | null;
   infoPages?: SanitySitePage[] | null;
+  // Trust-signal fields (all optional — ADR 0001)
+  reviews?: Array<{
+    author: string;
+    rating: number;
+    text: string;
+    source: 'google' | 'yelp' | 'bbb' | 'facebook' | 'direct';
+    date: string;
+    verified: boolean;
+  }> | null;
+  aggregateRating?: {
+    ratingValue: number;
+    reviewCount: number;
+    bestRating?: number | null;
+  } | null;
+  licenseNumber?: string | null;
+  insuranceCarrier?: string | null;
+  yearsInBusiness?: number | null;
+  responseTimePromise?: string | null;
+  certifications?: Array<{
+    name: string;
+    issuer?: string | null;
+    year?: number | null;
+  }> | null;
+  photoGallery?: Array<{
+    url: string;
+    alt: string;
+    caption?: string | null;
+  }> | null;
+  guarantees?: string[] | null;
 }
 
 /**

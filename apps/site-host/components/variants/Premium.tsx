@@ -4,6 +4,13 @@ import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
+import { SiteNav } from '../shared/SiteNav';
+import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
+import { TrustStrip } from '../shared/TrustStrip';
+import { ReviewsSection } from '../shared/ReviewsSection';
+import { PhotoGallery } from '../shared/PhotoGallery';
+import { CertificationsRow } from '../shared/CertificationsRow';
+import { CallNowBadge } from '../shared/CallNowBadge';
 
 interface Props {
   bundle: Bundle;
@@ -33,6 +40,7 @@ export function PremiumHome({
   pageUrl = 'https://example.com',
 }: Props) {
   const tel = telHref(phone);
+  const baseUrl = pageUrl.replace(/\/$/, '');
   const heroImg = bundle.hero_image_url;
   const trust =
     bundle.trust_signals.length > 0
@@ -49,14 +57,12 @@ export function PremiumHome({
     .slice(0, 6)
     .map((p) => ({ q: p.title, a: p.meta_description }));
   const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
-  const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   return (
     <>
       <LocalBusinessJsonLd bundle={bundle} phone={phone} url={pageUrl} />
       <FaqJsonLd questions={faqs} />
-
-      <h1 className="sr-only">{literalH1}</h1>
+      <SiteNavigationJsonLd bundle={bundle} baseUrl={baseUrl} />
 
       <div className="premium-shell">
         <div className="premium-utility">
@@ -70,12 +76,8 @@ export function PremiumHome({
           <a href="/" className="premium-brand">
             {bundle.business_name}
           </a>
-          <nav className="premium-nav" aria-label="Primary">
-            <a href="#practice">Practice</a>
-            <a href="#where">Where</a>
-            <a href="/about/">Process</a>
-            <a href="/contact/">Visit</a>
-          </nav>
+          {/* SiteNav replaces the former inline .premium-nav; retains same CSS class */}
+          <SiteNav bundle={bundle} variant="premium" className="premium-nav" />
         </header>
 
         <section
@@ -88,7 +90,8 @@ export function PremiumHome({
               alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
               fill
               priority
-              sizes="100vw"
+              fetchPriority="high"
+              sizes="(max-width: 768px) 100vw, 1200px"
               style={{ objectFit: 'cover' }}
             />
           ) : (
@@ -99,18 +102,29 @@ export function PremiumHome({
               <p className="premium-hero-eyebrow">
                 {bundle.city}, {bundle.state}
               </p>
-              <h2 id="hero-h1" className="premium-h1">
+              {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+              <h1 id="hero-h1" className="premium-h1">
                 Considered <em>{bundle.niche}</em>
                 <br />
                 for {bundle.city} homes.
-              </h2>
-              <p className="premium-trust-line">{trust.join(' · ')}</p>
+              </h1>
+              {/* Trust line — license/insurance when fields present */}
+              {(bundle.license_number || bundle.insurance_carrier) ? (
+                <p className="premium-trust-line">
+                  By appointment
+                  {bundle.license_number ? ` · Licensed #${bundle.license_number}` : ''}
+                  {bundle.insurance_carrier ? ' · Insured' : ''}
+                </p>
+              ) : (
+                <p className="premium-trust-line">{trust.join(' · ')}</p>
+              )}
             </div>
           </div>
         </section>
 
         <section className="premium-lede-band" id="practice">
           <p className="premium-roman">{ROMAN[0]}. The Practice</p>
+          <CertificationsRow bundle={bundle} variant="premium" />
           <p className="premium-lede">{bundle.home.meta_description}</p>
           <div className="premium-lede-aside">
             <p className="premium-roman">Begin</p>
@@ -120,10 +134,11 @@ export function PremiumHome({
             <span className="num">
               ☎ <a href={tel}>{phone}</a>
             </span>
+            <CallNowBadge bundle={bundle} />
           </div>
         </section>
 
-        <section className="premium-services">
+        <section className="premium-services" id="services">
           <div>
             <p className="premium-roman">{ROMAN[1]}. Practice</p>
             <h2 className="premium-h2">What we do</h2>
@@ -139,6 +154,17 @@ export function PremiumHome({
             ))}
           </div>
         </section>
+
+        {/* PhotoGallery — Portfolio section between Practice and Where */}
+        {bundle.photo_gallery.length > 0 && (
+          <section className="premium-portfolio">
+            <div>
+              <p className="premium-roman">III. Portfolio</p>
+              <h2 className="premium-h2">Selected work</h2>
+            </div>
+            <PhotoGallery bundle={bundle} variant="premium" />
+          </section>
+        )}
 
         <section className="premium-map" aria-label={`Map of ${bundle.city}, ${bundle.state}`}>
           <div>
@@ -165,6 +191,9 @@ export function PremiumHome({
             })}
           </ul>
         </section>
+
+        {/* ReviewsSection — CSS scroll-snap horizontal testimonial slider (between Where and Reading) */}
+        <ReviewsSection bundle={bundle} variant="premium" title="Client notes" />
 
         {faqs.length > 0 && (
           <section className="premium-faq" aria-label="Frequently asked questions">
@@ -244,9 +273,11 @@ export function PremiumHome({
           <a href={tel} className="premium-cta-phone num">
             ☎ {phone}
           </a>
+          <CallNowBadge bundle={bundle} />
         </section>
 
         <footer className="premium-footer">
+          <TrustStrip bundle={bundle} variant="premium" style="inline" />
           <div>
             © {new Date().getFullYear()} {bundle.business_name} · Licensed & insured
           </div>
@@ -257,7 +288,7 @@ export function PremiumHome({
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">
-          <a href={tel} className="phone num">
+          <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
             ☎ {phone}
           </a>
           <a href="/contact/" className="cta">

@@ -564,3 +564,61 @@
 /* linked service-area chips inherit chip styling */
 [data-theme='bright'] .bright-area-chips li a { color: inherit; text-decoration: none; }
 [data-theme='bright'] .bright-area-chips li a:hover { text-decoration: underline; }
+
+/* ─── SiteNav / bright-nav ─────────────────────────────────────────────────── */
+[data-theme='bright'] .bright-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 20px;
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  overflow-x: auto;
+}
+[data-theme='bright'] .bright-nav a {
+  display: inline-block;
+  padding: 5px 13px;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  white-space: nowrap;
+}
+[data-theme='bright'] .bright-nav a:hover { background: var(--ink); color: var(--paper); }
+
+/* ── Bright trust-signal overrides ─────────────────────────────────────── */
+[data-theme='bright'] .trust-strip-pills {
+  padding: 16px clamp(20px, 4vw, 48px);
+  border-top: 1.5px dashed var(--ink);
+  border-bottom: 1.5px dashed var(--ink);
+}
+[data-theme='bright'] .trust-strip-pills-item {
+  border-radius: 999px;
+  font-family: var(--font-display);
+}
+[data-theme='bright'] .certifications-badge {
+  border-radius: 999px;
+  border-color: var(--ink);
+  font-family: var(--font-body);
+}
+[data-theme='bright'] .review-card {
+  border-radius: var(--radius-card, 22px);
+  border-color: var(--ink);
+}
+/* Rotate pastel backgrounds for Bright review cards */
+[data-theme='bright'] .reviews-grid .review-card:nth-child(4n+1) { background: var(--coral-50); }
+[data-theme='bright'] .reviews-grid .review-card:nth-child(4n+2) { background: var(--sun); }
+[data-theme='bright'] .reviews-grid .review-card:nth-child(4n+3) { background: var(--mint); }
+[data-theme='bright'] .reviews-grid .review-card:nth-child(4n+4) { background: var(--sky); }
+[data-theme='bright'] .photo-gallery-item {
+  border-radius: var(--radius-card, 22px);
+  border: 1.5px solid var(--ink);
+}
+[data-theme='bright'] .call-now-badge {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
