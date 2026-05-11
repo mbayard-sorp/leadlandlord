@@ -9,21 +9,6 @@ import { provisionNumber } from '@leadlandlord/integrations/twilio';
 import { getAnthropicClient } from '@leadlandlord/integrations/anthropic';
 import { log } from '@leadlandlord/shared/log';
 
-// ─── City → area-code map (minimal set covering current tenant cities) ─────────
-const CITY_AREA_CODE: Record<string, string> = {
-  tucson: '520',
-  'las vegas': '702',
-  austin: '512',
-  boulder: '303',
-  scottsdale: '480',
-  phoenix: '602',
-};
-
-function areaCodeForCity(city: string): string {
-  const normalised = city.toLowerCase().trim();
-  return CITY_AREA_CODE[normalised] ?? '520'; // fall back to Tucson area code
-}
-
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PhoneCandidateRow extends PhoneProvision {
@@ -68,21 +53,26 @@ export async function findPhoneCandidates(siteId: string): Promise<FindCandidate
   const site = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
   if (!site) return { ok: false, message: 'site not found' };
 
-  const areaCode = areaCodeForCity(site.city);
-
   let availableNumbers;
   try {
-    availableNumbers = await listAvailableNumbers(areaCode, 5);
+    availableNumbers = await listAvailableNumbers({
+      city: site.city,
+      state: site.state,
+      limit: 5,
+    });
   } catch (err) {
     log.error(
-      { siteId, areaCode, err: err instanceof Error ? err.message : err },
+      { siteId, city: site.city, state: site.state, err: err instanceof Error ? err.message : err },
       'listAvailableNumbers failed',
     );
     return { ok: false, message: err instanceof Error ? err.message : 'Twilio lookup failed' };
   }
 
   if (availableNumbers.length === 0) {
-    return { ok: false, message: 'No numbers available for this area code. Use manual override.' };
+    return {
+      ok: false,
+      message: `No numbers available for ${site.city}, ${site.state}. Use manual override.`,
+    };
   }
 
   // Insert all candidates as audit rows
@@ -102,7 +92,10 @@ export async function findPhoneCandidates(siteId: string): Promise<FindCandidate
     )
     .returning();
 
-  log.info({ siteId, count: inserted.length, areaCode }, 'phone candidates inserted');
+  log.info(
+    { siteId, count: inserted.length, city: site.city, state: site.state },
+    'phone candidates inserted',
+  );
   revalidatePath(`/operator/sites/${siteId}`);
   return { ok: true, candidates: inserted };
 }

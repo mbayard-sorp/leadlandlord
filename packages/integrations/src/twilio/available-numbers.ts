@@ -44,8 +44,23 @@ const ListResponseSchema = z.object({
   available_phone_numbers: z.array(AvailableNumberSchema),
 });
 
+export interface ListAvailableNumbersInput {
+  /** City, e.g. "Tucson". Used as Twilio's `InLocality` filter. */
+  city?: string;
+  /** Two-letter US state, e.g. "AZ". Used as Twilio's `InRegion` filter. */
+  state?: string;
+  /** Optional area-code fallback / explicit override. */
+  areaCode?: string;
+  limit?: number;
+}
+
 /**
- * Fetch available Twilio local phone numbers for a given area code.
+ * Fetch available Twilio local phone numbers for a site's locale.
+ *
+ * Query strategy (in order, first non-empty result wins):
+ *   1. InLocality + InRegion (city-scoped, ideal)
+ *   2. InRegion only (state-scoped, covers cities with no local pool)
+ *   3. AreaCode (only if explicitly supplied)
  *
  * Falls back to deterministic mock when:
  *   - TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN not set, OR
@@ -54,50 +69,68 @@ const ListResponseSchema = z.object({
  * Docs: https://www.twilio.com/docs/phone-numbers/api/availablephonenumberlocal-resource
  */
 export async function listAvailableNumbers(
-  areaCode: string,
-  limit = 5,
+  input: ListAvailableNumbersInput,
 ): Promise<PhoneCandidate[]> {
+  const { city, state, areaCode, limit = 5 } = input;
+  if (!city && !state && !areaCode) {
+    throw new IntegrationError(
+      'twilio',
+      'listAvailableNumbers requires at least one of: city, state, areaCode',
+      400,
+    );
+  }
+
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const useMock = !sid || !token || process.env.MOCK_TELEPHONY === 'true';
 
   if (useMock) {
-    log.info({ areaCode, limit, provider: 'mock' }, 'listAvailableNumbers: using mock');
-    return mockCandidates(areaCode, limit);
+    log.info({ city, state, areaCode, limit, provider: 'mock' }, 'listAvailableNumbers: using mock');
+    return mockCandidates({ city, state, areaCode, limit });
   }
 
   const auth = Buffer.from(`${sid}:${token}`).toString('base64');
-  const params = new URLSearchParams({
-    AreaCode: areaCode,
-    PageSize: String(limit),
-    VoiceEnabled: 'true',
-  });
 
-  const res = await fetch(
-    `${TWILIO_BASE}/Accounts/${sid}/AvailablePhoneNumbers/US/Local.json?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
-    },
-  );
+  const attempts: Array<Record<string, string>> = [];
+  if (city && state) attempts.push({ InLocality: city, InRegion: state });
+  if (state) attempts.push({ InRegion: state });
+  if (areaCode) attempts.push({ AreaCode: areaCode });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new IntegrationError(
-      'twilio',
-      `listAvailableNumbers failed: ${res.status} ${text}`,
-      res.status,
-      text,
+  for (const filters of attempts) {
+    const params = new URLSearchParams({
+      ...filters,
+      PageSize: String(limit),
+      VoiceEnabled: 'true',
+    });
+
+    const res = await fetch(
+      `${TWILIO_BASE}/Accounts/${sid}/AvailablePhoneNumbers/US/Local.json?${params.toString()}`,
+      { headers: { Authorization: `Basic ${auth}` } },
     );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new IntegrationError(
+        'twilio',
+        `listAvailableNumbers failed: ${res.status} ${text}`,
+        res.status,
+        text,
+      );
+    }
+
+    const json = await res.json();
+    const parsed = ListResponseSchema.parse(json);
+    if (parsed.available_phone_numbers.length > 0) {
+      log.info(
+        { filters, count: parsed.available_phone_numbers.length },
+        'listAvailableNumbers: results',
+      );
+      return parsed.available_phone_numbers.map(toCandidate);
+    }
+    log.info({ filters }, 'listAvailableNumbers: empty result, trying next filter');
   }
 
-  const json = await res.json();
-  const parsed = ListResponseSchema.parse(json);
-
-  return parsed.available_phone_numbers.map((n) =>
-    toCandidate(n, areaCode),
-  );
+  return [];
 }
 
 // ─── Vanity scoring ────────────────────────────────────────────────────────────
@@ -194,7 +227,6 @@ export function computeVanityScore(e164: string): number {
 
 function toCandidate(
   n: z.infer<typeof AvailableNumberSchema>,
-  _areaCode: string,
 ): PhoneCandidate {
   const caps = n.capabilities ?? {};
   const boolCap = (v: boolean | string | undefined): boolean =>
@@ -214,19 +246,32 @@ function toCandidate(
   };
 }
 
-// Deterministic mock: seed from area code + index so results are stable
-function mockCandidates(areaCode: string, limit: number): PhoneCandidate[] {
-  const base = parseInt(areaCode, 10) || 520;
+// Deterministic mock seeded by city/state/areaCode so results are stable.
+// Generates a plausible 3-digit area-code prefix from the seed inputs when
+// no explicit areaCode is supplied — keeps mock numbers self-consistent without
+// pretending to know real geography.
+function mockCandidates(opts: {
+  city?: string;
+  state?: string;
+  areaCode?: string;
+  limit: number;
+}): PhoneCandidate[] {
+  const { city, state, areaCode, limit } = opts;
+  const seed = `${city ?? ''}|${state ?? ''}|${areaCode ?? ''}`;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  const ac = areaCode ?? String(200 + (hash % 700));
+  const base = parseInt(ac, 10) || 520;
   const candidates: PhoneCandidate[] = [];
   for (let i = 0; i < limit; i++) {
     const nxx = String(200 + ((base + i * 17) % 700)).padStart(3, '0');
     const xxxx = String((base * 31 + i * 137) % 10000).padStart(4, '0');
-    const e164 = `+1${areaCode}${nxx}${xxxx}`;
+    const e164 = `+1${ac}${nxx}${xxxx}`;
     candidates.push({
       e164,
-      sid: `PN_MOCK_${areaCode}_${i}`,
-      locality: 'Mock City',
-      region: 'AZ',
+      sid: `PN_MOCK_${ac}_${i}`,
+      locality: city ?? 'Mock City',
+      region: state ?? 'US',
       capabilities: { voice: true, sms: true, mms: false },
       vanityScore: computeVanityScore(e164),
     });
