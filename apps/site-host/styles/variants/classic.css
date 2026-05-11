@@ -337,3 +337,7 @@
 
 /* map */
 [data-theme='classic'] .classic-map-frame { width: 100%; margin-top: 24px; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+
+/* linked service-area chips inherit chip styling */
+[data-theme='classic'] .classic-area-chips li a { color: inherit; text-decoration: none; }
+[data-theme='classic'] .classic-area-chips li a:hover { text-decoration: underline; }
