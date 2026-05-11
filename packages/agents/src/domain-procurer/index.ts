@@ -4,7 +4,19 @@ import { BaseAgent, type AgentContext } from '../base';
 import { getDb, sites, domainCandidates } from '@leadlandlord/db';
 import { namecheap } from '@leadlandlord/integrations';
 import { attachDomain } from '@leadlandlord/integrations/vercel';
+import { createWriteClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { IntegrationError } from '@leadlandlord/shared/errors';
+
+interface SanityDomainEntry {
+  host: string;
+  isPrimary?: boolean;
+  verified?: boolean;
+  attachedAt?: string;
+}
+
+function hostKey(host: string): string {
+  return host.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 63);
+}
 
 /**
  * Domain Procurer (Phase A2).
@@ -221,10 +233,12 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
     // Idempotent — Vercel returns the existing config if the domain is already
     // attached.
     const vercelProjectId = process.env.VERCEL_SITES_PROJECT_ID;
+    let vercelVerified = false;
     if (vercelProjectId) {
       try {
-        await attachDomain(vercelProjectId, domain);
-        ctx.log.info({ domain, vercelProjectId }, 'attached domain to vercel project');
+        const attached = await attachDomain(vercelProjectId, domain);
+        vercelVerified = attached.verified;
+        ctx.log.info({ domain, vercelProjectId, verified: attached.verified }, 'attached domain to vercel project');
       } catch (err) {
         ctx.log.error(
           { domain, vercelProjectId, err: err instanceof Error ? err.message : err },
@@ -240,6 +254,40 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
       );
     }
 
+    // Record the domain on the Sanity site doc's `domains[]`. Without this,
+    // site-host's `fetchSiteByHost` GROQ returns null and the new host 404s
+    // even though DNS + Vercel attach succeeded. Mirrors the shape used by
+    // the operator's manual attachDomain server action.
+    try {
+      const client = createWriteClient();
+      const current = await client.fetch<SanityDomainEntry[] | null>(
+        `*[_id==$id][0].domains`,
+        { id: siteDocId(input.site_id) },
+      );
+      const filtered = (current ?? []).filter((d) => d.host !== domain);
+      const isPrimary = filtered.length === 0;
+      const newEntry = {
+        _key: hostKey(domain),
+        _type: 'siteDomain' as const,
+        host: domain,
+        isPrimary,
+        verified: vercelVerified,
+        attachedAt: new Date().toISOString(),
+      };
+      const next = [
+        ...filtered.map((d) => ({ ...d, _key: hostKey(d.host), _type: 'siteDomain' as const })),
+        newEntry,
+      ];
+      await client.patch(siteDocId(input.site_id)).set({ domains: next }).commit({ visibility: 'sync' });
+      ctx.log.info({ site_id: input.site_id, domain, isPrimary }, 'recorded domain on sanity site doc');
+    } catch (err) {
+      ctx.log.error(
+        { domain, site_id: input.site_id, err: err instanceof Error ? err.message : err },
+        'sanity domains[] write failed — site-host will 404 until operator re-attaches via dashboard',
+      );
+      // Do NOT throw — same reason as Vercel attach: registration already spent.
+    }
+
     // Persist on the site row + flip candidate status.
     const now = new Date();
     await db
@@ -252,11 +300,6 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
       .set({ status: 'registered', registeredAt: registered.registeredAt ?? now })
       .where(eq(domainCandidates.id, input.candidate_id));
 
-    // TODO(phase-A): site-builder currently does not handle `domain.registered`
-    // — it should pick this up to (a) update the Sanity site doc's domain field
-    // and (b) attach the domain to the Vercel project's domain list. For now we
-    // emit the event so the wiring is in place; site-builder will gain a
-    // handler in a follow-up commit.
     await ctx.emitNextStepEvent({
       type: 'domain.registered',
       targetAgent: 'site-builder',
