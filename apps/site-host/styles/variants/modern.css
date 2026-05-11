@@ -526,3 +526,6 @@
 
 [data-theme='modern'] .modern-mobile-spacer { height: 64px; }
 @media (min-width: 768px) { [data-theme='modern'] .modern-mobile-spacer { display: none; } }
+
+/* map */
+[data-theme='modern'] .modern-map-frame { width: 100%; margin-top: 20px; border-radius: 12px; overflow: hidden; }
