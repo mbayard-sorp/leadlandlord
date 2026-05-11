@@ -15,6 +15,7 @@ import {
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { CITATION_DIRECTORIES } from './directories';
+import { MOLLY_PERSONA } from '../molly/persona';
 
 /**
  * Backlink Builder — three modes, all writing to the `backlinks` table:
@@ -441,9 +442,14 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
     // Provider selection: Zoho MCP behind a feature flag, otherwise Resend.
     // Read env on each invocation (no module-level caching).
     const useZoho = process.env.ZOHO_MCP_ENABLED === 'true';
-    const mailbox = useZoho
-      ? (process.env.ZOHO_DEFAULT_FROM ?? '')
-      : (process.env.RESEND_FROM_ADDRESS ?? '');
+    const useMolly = process.env.ZOHO_MOLLY_ENABLED === 'true';
+    // Molly's mailbox is isolated from the generic mailbox so the per-mailbox
+    // throttle in email_sends tracks her sends separately from any other sender.
+    const mailbox = useMolly
+      ? (process.env.ZOHO_MOLLY_FROM ?? MOLLY_PERSONA.mailbox)
+      : useZoho
+        ? (process.env.ZOHO_DEFAULT_FROM ?? '')
+        : (process.env.RESEND_FROM_ADDRESS ?? '');
     if (!mailbox) {
       throw new Error(useZoho ? 'ZOHO_DEFAULT_FROM not set' : 'RESEND_FROM_ADDRESS not set');
     }
@@ -502,11 +508,18 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
     // Send.
     let externalId: string | undefined;
     let sendError: string | undefined;
+    // When Molly is active, encode the display name in the From field using
+    // RFC 5322 "Display Name <addr>" format. Zoho Mail accepts this in the
+    // fromAddress parameter. When the flag is off the mailbox string is used
+    // as-is (no display name), which matches the existing behavior.
+    const fromField = useMolly
+      ? `${MOLLY_PERSONA.displayName} <${mailbox}>`
+      : mailbox;
     try {
-      if (useZoho) {
+      if (useZoho || useMolly) {
         const res = await sendEmailZoho({
           to: input.targetEditorEmail,
-          from: mailbox,
+          from: fromField,
           subject,
           text: body,
         });
@@ -531,7 +544,7 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       toAddress: input.targetEditorEmail,
       subject,
       purpose: 'guest_post',
-      provider: useZoho ? 'zoho' : 'resend',
+      provider: (useZoho || useMolly) ? 'zoho' : 'resend',
       externalId: externalId ?? null,
       status: sendError ? 'failed' : 'sent',
       errorMessage: sendError ?? null,
@@ -625,7 +638,28 @@ Tone: helpful expert, no marketing fluff. No links. No claims like "best in stat
     const model = process.env.BACKLINK_BUILDER_MODEL ?? 'claude-haiku-4-5';
     const postalAddress = process.env.LEADLANDLORD_POSTAL_ADDRESS
       ?? `LeadLandlord, [postal address not set], ${site.city}, ${site.state}`;
-    const userPrompt = `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
+    const useMolly = process.env.ZOHO_MOLLY_ENABLED === 'true';
+
+    const userPrompt = useMolly
+      ? `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
+
+You are writing as Molly Matthews, Sr. Outreach Manager at LeadLandlord.
+The business you are pitching on behalf of: a ${site.niche} business in ${site.city}, ${site.state}.
+Pitch topic: ${input.pitchTopic}
+
+Constraints:
+- Subject line: <= 60 chars, specific to the pitch angle.
+- Body: 100-130 words, plain text only.
+- Opening line must reference a specific recent post or topic from ${input.targetDomain} — if you do not know one, say "I have been following your site" rather than fabricating a post title.
+- Suggest 1-2 concrete article angles relevant to ${input.targetDomain}'s audience.
+- Unsubscribe line (required, exact text): "Reply REMOVE if you'd rather not hear from me."
+- Postal address line (required, on its own line): "${postalAddress}"
+- Signature (required, exact text, last line of body): "${MOLLY_PERSONA.signatureLine}"
+- No fake credentials, no superlatives, no marketing buzzwords.
+- Write as "I" (Molly speaking), not as "we" or a team.
+
+Return strictly JSON: {"subject": "...", "body": "..."}.`
+      : `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
 
 Sender: a ${site.niche} business in ${site.city}, ${site.state}.
 Pitch topic: ${input.pitchTopic}
@@ -641,11 +675,25 @@ Constraints:
 
 Return strictly JSON: {"subject": "...", "body": "..."}.`;
 
+    // When Molly is active, prepend her voice system prompt and inject few-shot
+    // examples. The system prompt encodes tone rules; the few-shots show Claude
+    // what Molly's output actually looks like for concrete scenarios.
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = useMolly
+      ? [
+          ...MOLLY_PERSONA.fewShot.flatMap((ex) => [
+            { role: 'user' as const, content: ex.userMsg },
+            { role: 'assistant' as const, content: ex.assistantMsg },
+          ]),
+          { role: 'user', content: userPrompt },
+        ]
+      : [{ role: 'user', content: userPrompt }];
+
     const response = await client.messages.create({
       model,
       max_tokens: 800,
       temperature: 0.5,
-      messages: [{ role: 'user', content: userPrompt }],
+      ...(useMolly ? { system: MOLLY_PERSONA.voiceSystemPrompt } : {}),
+      messages,
     });
     const usage = {
       input_tokens: response.usage.input_tokens,
@@ -670,19 +718,29 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
       // fall through to fallback below
     }
     ctx.log.warn({ targetDomain: input.targetDomain }, 'guest_post: Claude response not JSON, using fallback');
+    const fallbackSignoff = useMolly
+      ? [
+          `Reply REMOVE if you'd rather not hear from me.`,
+          ``,
+          MOLLY_PERSONA.signatureLine,
+          postalAddress,
+        ]
+      : [
+          `Reply with REMOVE if you'd rather not hear from me again.`,
+          ``,
+          `— ${site.niche} team in ${site.city}`,
+          postalAddress,
+        ];
     return {
       subject: `Guest post idea for ${input.targetDomain}`,
       body: [
         `Hi,`,
         ``,
-        `I run a ${site.niche} business in ${site.city}, ${site.state} and put together a quick angle on "${input.pitchTopic}" that I think would land with your readers.`,
+        `I run outreach for a ${site.niche} business in ${site.city}, ${site.state} and put together a quick angle on "${input.pitchTopic}" that I think would land with your readers.`,
         ``,
-        `Happy to send a 700-word draft if you're open to a contributor piece.`,
+        `Happy to send a 900-word draft if you're open to a contributor piece.`,
         ``,
-        `Reply with REMOVE if you'd rather not hear from me again.`,
-        ``,
-        `— ${site.niche} team in ${site.city}`,
-        postalAddress,
+        ...fallbackSignoff,
       ].join('\n'),
     };
   }
