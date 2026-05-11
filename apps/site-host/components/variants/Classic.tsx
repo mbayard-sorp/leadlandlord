@@ -33,10 +33,12 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
       ? bundle.trust_signals
       : ['Licensed & insured', 'Same-week service', 'Free quotes', 'We answer the phone'];
   const areas = uniq([bundle.city, ...bundle.nearby_cities, ...bundle.service_areas.map((a) => a.title)]).slice(0, 12);
+  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
   const faqs = bundle.blog_posts
     .filter((p) => /\?$/.test(p.title))
     .slice(0, 6)
     .map((p) => ({ q: p.title, a: p.meta_description }));
+  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
   const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   return (
@@ -143,9 +145,10 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           <p className="classic-section-eyebrow">Where we work</p>
           <h2 className="classic-h2">{bundle.city} & nearby towns</h2>
           <ul className="classic-area-chips">
-            {areas.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
+            {areas.map((c) => {
+              const slug = areaSlugByTitle.get(c);
+              return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
+            })}
           </ul>
           <MapEmbed
             className="classic-map-frame"
@@ -180,6 +183,25 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             <h2 className="classic-h2">Local guides & info</h2>
             <ul className="classic-learn-list">
               {bundle.info_pages.slice(0, 6).map((p) => (
+                <li key={p.slug}>
+                  <a href={p.slug}>
+                    <span className="classic-learn-title">{p.title}</span>
+                    <span className="classic-learn-arrow">→</span>
+                    <span className="classic-learn-blurb">{p.meta_description}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* From the blog — links to /blog/[slug] */}
+        {blogTeasers.length > 0 && (
+          <section className="classic-learn-more" aria-label="From the blog">
+            <p className="classic-section-eyebrow">From the blog</p>
+            <h2 className="classic-h2">Recent articles</h2>
+            <ul className="classic-learn-list">
+              {blogTeasers.map((p) => (
                 <li key={p.slug}>
                   <a href={p.slug}>
                     <span className="classic-learn-title">{p.title}</span>

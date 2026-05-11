@@ -35,10 +35,12 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
     ...bundle.nearby_cities,
     ...bundle.service_areas.map((a) => a.title),
   ]).slice(0, 12);
+  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
   const faqs = bundle.blog_posts
     .filter((p) => /\?$/.test(p.title))
     .slice(0, 6)
     .map((p) => ({ q: p.title, a: p.meta_description }));
+  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
   const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   return (
@@ -199,9 +201,10 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
               <p className="modern-eyebrow">Service areas</p>
               <h2 className="modern-h2">Where we work</h2>
               <ul className="modern-area-chips">
-                {areas.map((c) => (
-                  <li key={c}>{c}</li>
-                ))}
+                {areas.map((c) => {
+                  const slug = areaSlugByTitle.get(c);
+                  return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
+                })}
               </ul>
               <MapEmbed
                 className="modern-map-frame"
@@ -219,6 +222,21 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             <h2 className="modern-h2">Local guides</h2>
             <div className="modern-learn-grid">
               {bundle.info_pages.slice(0, 6).map((p) => (
+                <a key={p.slug} href={p.slug} className="modern-learn-card">
+                  <span className="modern-learn-title">{p.title}</span>
+                  <span className="modern-learn-blurb">{p.meta_description}</span>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {blogTeasers.length > 0 && (
+          <section className="modern-learn-more" aria-label="From the blog">
+            <p className="modern-eyebrow">From the blog</p>
+            <h2 className="modern-h2">Recent articles</h2>
+            <div className="modern-learn-grid">
+              {blogTeasers.map((p) => (
                 <a key={p.slug} href={p.slug} className="modern-learn-card">
                   <span className="modern-learn-title">{p.title}</span>
                   <span className="modern-learn-blurb">{p.meta_description}</span>
