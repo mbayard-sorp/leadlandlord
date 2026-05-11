@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IntegrationError } from '@leadlandlord/shared/errors';
 import { vercelFetch } from './client';
 
 /**
@@ -49,18 +50,30 @@ const DomainConfigSchema = z.object({
 export type DomainConfig = z.infer<typeof DomainConfigSchema>;
 
 /**
- * Attach a domain to a Vercel project. Idempotent: if the same name is
- * already attached to the same project, Vercel returns the existing record.
- * If it's attached to a *different* project (within the same scope) Vercel
- * returns 409 — we surface that as a normal error (operator must detach
- * from the other project first).
+ * Attach a domain to a Vercel project. Idempotent: Vercel's POST returns 409
+ * if the domain is already attached anywhere (same project OR different
+ * project). We disambiguate by GET-ing the project's domain record — if it
+ * belongs to *this* project, return it as success; otherwise re-throw the
+ * 409 (operator must detach from the other project first).
  */
 export async function attachDomain(projectId: string, host: string): Promise<ProjectDomain> {
-  const res = await vercelFetch<unknown>(`/v10/projects/${encodeURIComponent(projectId)}/domains`, {
-    method: 'POST',
-    body: { name: host },
-  });
-  return ProjectDomainSchema.parse(res);
+  try {
+    const res = await vercelFetch<unknown>(
+      `/v10/projects/${encodeURIComponent(projectId)}/domains`,
+      { method: 'POST', body: { name: host } },
+    );
+    return ProjectDomainSchema.parse(res);
+  } catch (err) {
+    if (err instanceof IntegrationError && err.status === 409) {
+      try {
+        return await getDomainStatus(projectId, host);
+      } catch {
+        // GET failed → domain is attached elsewhere; surface the original 409.
+        throw err;
+      }
+    }
+    throw err;
+  }
 }
 
 /**
