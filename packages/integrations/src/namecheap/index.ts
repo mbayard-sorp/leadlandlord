@@ -222,8 +222,27 @@ async function ncRequest(
     ...params,
   };
 
-  const proxyUrl = process.env.NAMECHEAP_PROXY_URL;
-  const proxySecret = process.env.NAMECHEAP_PROXY_SECRET;
+  const proxyUrlRaw = process.env.NAMECHEAP_PROXY_URL;
+  const proxySecretRaw = process.env.NAMECHEAP_PROXY_SECRET;
+  const proxyUrl = proxyUrlRaw?.trim() || undefined;
+  const proxySecret = proxySecretRaw?.trim() || undefined;
+
+  // Fail loud on half-configured proxy. An empty NAMECHEAP_PROXY_URL would
+  // otherwise silently fall through to direct calls from the platform's
+  // egress IPs, which Namecheap rejects (IP whitelist mismatch) — and the
+  // failure mode looks like a generic credential problem.
+  if (proxyUrlRaw !== undefined && !proxyUrl) {
+    throw new IntegrationError(
+      'namecheap',
+      'NAMECHEAP_PROXY_URL is set but empty — unset it to use direct calls, or set a real URL',
+    );
+  }
+  if (proxySecret && !proxyUrl) {
+    throw new IntegrationError(
+      'namecheap',
+      'NAMECHEAP_PROXY_SECRET is set but NAMECHEAP_PROXY_URL is missing',
+    );
+  }
 
   let res: Response;
   if (proxyUrl) {
