@@ -6,8 +6,9 @@ import { siteDomain } from './site-domain';
 import { corporateSite } from './corporate-site';
 import { corporatePage } from './corporate-page';
 import { keywordCluster } from './keyword-cluster';
+import { review } from './review';
 
-export { site, page, theme, siteDomain, corporateSite, corporatePage, keywordCluster };
+export { site, page, theme, siteDomain, corporateSite, corporatePage, keywordCluster, review };
 
 export const schemaTypes: SchemaTypeDefinition[] = [
   site,
@@ -17,4 +18,5 @@ export const schemaTypes: SchemaTypeDefinition[] = [
   corporateSite,
   corporatePage,
   keywordCluster,
+  review,
 ];

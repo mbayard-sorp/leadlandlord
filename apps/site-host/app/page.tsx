@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../lib/site-context';
-import { buildPageMetadata } from '../lib/seo-meta';
+import { buildPageMetadata, currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { getTrackingNumber } from '../lib/tracking';
 import { ClassicHome } from '../components/variants/Classic';
@@ -11,11 +11,12 @@ import { BrightHome } from '../components/variants/Bright';
 export default async function Home() {
   const site = await resolveCurrentSite();
   if (!site) notFound();
-  const [phone, bundle] = await Promise.all([
+  const [phone, bundle, pageUrl] = await Promise.all([
     getTrackingNumber(site.siteId),
     Promise.resolve(sanityToBundle(site)),
+    currentRequestBaseUrl(),
   ]);
-  const props = { bundle, phone, siteId: site.siteId, siteSlug: site.slug };
+  const props = { bundle, phone, siteId: site.siteId, siteSlug: site.slug, pageUrl };
   switch (site.theme) {
     case 'modern':
       return <ModernHome {...props} />;

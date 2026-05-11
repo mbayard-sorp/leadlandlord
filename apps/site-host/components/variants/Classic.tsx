@@ -4,6 +4,14 @@ import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
+import { SiteNav } from '../shared/SiteNav';
+import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
+import { TrustStrip } from '../shared/TrustStrip';
+import { CertificationsRow } from '../shared/CertificationsRow';
+import { ReviewsSection } from '../shared/ReviewsSection';
+import { PhotoGallery } from '../shared/PhotoGallery';
+import { GuaranteesList } from '../shared/GuaranteesList';
+import { CallNowBadge } from '../shared/CallNowBadge';
 
 interface Props {
   bundle: Bundle;
@@ -24,10 +32,11 @@ interface Props {
  *
  * Type: Oswald 700 uppercase display + Public Sans body.
  * Color: Ink #0F1620 + Paper #FBFAF6 + Accent safety-orange #E85D10.
- * Borders: 2px Ink, 2-4px radius. No shadows. No top-nav.
+ * Borders: 2px Ink, 2-4px radius. No shadows.
  */
 export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https://example.com' }: Props) {
   const tel = telHref(phone);
+  const baseUrl = pageUrl.replace(/\/$/, '');
   const trust =
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
@@ -39,14 +48,12 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
     .slice(0, 6)
     .map((p) => ({ q: p.title, a: p.meta_description }));
   const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
-  const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   return (
     <>
       <LocalBusinessJsonLd bundle={bundle} phone={phone} url={pageUrl} />
       <FaqJsonLd questions={faqs} />
-
-      <h1 className="sr-only">{literalH1}</h1>
+      <SiteNavigationJsonLd bundle={bundle} baseUrl={baseUrl} />
 
       <div className="classic-shell">
         {/* utility bar */}
@@ -55,7 +62,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           <span className="hidden sm:inline">Open 7am – 9pm · 7 days</span>
         </div>
 
-        {/* header — brand wordmark + phone pill, no nav */}
+        {/* header — brand wordmark + phone pill */}
         <header className="classic-header">
           <a href="/" className="classic-brand">
             <span className="classic-mark" aria-hidden />
@@ -64,17 +71,21 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           <a href={tel} className="classic-phone-pill num">☎ {phone}</a>
         </header>
 
+        {/* top nav */}
+        <SiteNav bundle={bundle} variant="classic" />
+
         {/* hero */}
         <section className="classic-hero" aria-labelledby="hero-h1">
           <div className="classic-hero-text">
             <p className="classic-eyebrow">
               {bundle.city}, {bundle.state} · Family-owned
             </p>
-            <h2 id="hero-h1" className="classic-h1">
+            {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+            <h1 id="hero-h1" className="classic-h1">
               {bundle.niche.toUpperCase()}
               <br />
               IN {bundle.city.toUpperCase()},<br className="hidden sm:block" /> {bundle.state}.
-            </h2>
+            </h1>
             <div className="classic-hero-rule" aria-hidden />
             <p className="classic-lede">
               {bundle.home.meta_description}
@@ -83,6 +94,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
               <a href={tel} className="classic-btn classic-btn-primary">☎ Call {phone}</a>
               <a href="#contact" className="classic-btn classic-btn-secondary">Get free quote →</a>
             </div>
+            <CallNowBadge bundle={bundle} />
             <ul className="classic-hero-trust">
               {trust.slice(0, 3).map((t) => (
                 <li key={t}>✓ {t}</li>
@@ -96,7 +108,8 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
                 alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
                 fill
                 priority
-                sizes="(max-width: 768px) 100vw, 50vw"
+                fetchPriority="high"
+                sizes="(max-width: 768px) 100vw, 1200px"
                 style={{ objectFit: 'cover' }}
               />
             ) : (
@@ -105,10 +118,17 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </div>
         </section>
 
+        {/* TrustStrip (chips) — right under hero, before BIG phone block */}
+        <TrustStrip bundle={bundle} variant="classic" />
+
+        {/* CertificationsRow — below TrustStrip */}
+        <CertificationsRow bundle={bundle} variant="classic" />
+
         {/* BIG phone block */}
         <section className="classic-phone-block">
           <p className="classic-phone-eyebrow">We answer the phone.</p>
           <a href={tel} className="classic-phone-big num">{phone}</a>
+          <CallNowBadge bundle={bundle} />
           <p className="classic-phone-sub">Tap to call · 7am – 9pm, 7 days · free quotes</p>
         </section>
 
@@ -120,6 +140,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
               <div className="classic-trust-detail">{t}</div>
             </div>
           ))}
+          <GuaranteesList bundle={bundle} />
         </section>
 
         {/* numbered services */}
@@ -140,8 +161,11 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </div>
         </section>
 
+        {/* PhotoGallery — below services grid */}
+        <PhotoGallery bundle={bundle} variant="classic" />
+
         {/* service areas */}
-        <section className="classic-areas">
+        <section className="classic-areas" id="where">
           <p className="classic-section-eyebrow">Where we work</p>
           <h2 className="classic-h2">{bundle.city} & nearby towns</h2>
           <ul className="classic-area-chips">
@@ -214,12 +238,16 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </section>
         )}
 
+        {/* ReviewsSection — above the LeadForm contact section */}
+        <ReviewsSection bundle={bundle} variant="classic" />
+
         {/* contact + form */}
         <section className="classic-contact" id="contact">
           <div className="classic-contact-info surface-inverse">
             <p className="classic-section-eyebrow" data-accent>Get in touch</p>
             <h2 className="classic-h2">Call us — we pick up.</h2>
             <a href={tel} className="classic-phone-block-inline num" data-accent>{phone}</a>
+            <CallNowBadge bundle={bundle} />
             <p>Open 7am – 9pm, 7 days a week.</p>
             <p className="classic-contact-areas">
               Serving {areas.slice(0, 6).join(' · ')}
@@ -239,7 +267,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
 
         {/* footer */}
         <footer className="classic-footer surface-inverse">
-          <div>© {new Date().getFullYear()} {bundle.business_name} · Licensed & insured · [LICENSE #]</div>
+          <div>© {new Date().getFullYear()} {bundle.business_name} · Licensed & insured{bundle.license_number ? ` · Licensed #${bundle.license_number}` : ''}</div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
           <div className="classic-footer-disclaimer">
             This site connects callers with a partnered local provider.
@@ -248,7 +276,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
 
         {/* sticky mobile bar */}
         <div className="sticky-mobile-bar surface-inverse" aria-hidden="false">
-          <a href={tel} className="phone num">☎ {phone}</a>
+          <a href={tel} className="phone num" aria-label={`Call ${phone}`}>☎ {phone}</a>
           <a href="#contact" className="cta">Get quote</a>
         </div>
         <div className="classic-mobile-spacer" aria-hidden />

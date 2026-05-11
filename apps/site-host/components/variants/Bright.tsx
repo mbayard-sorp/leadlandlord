@@ -4,6 +4,14 @@ import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
+import { SiteNav } from '../shared/SiteNav';
+import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
+import { TrustStrip } from '../shared/TrustStrip';
+import { ReviewsSection } from '../shared/ReviewsSection';
+import { PhotoGallery } from '../shared/PhotoGallery';
+import { CertificationsRow } from '../shared/CertificationsRow';
+import { GuaranteesList } from '../shared/GuaranteesList';
+import { CallNowBadge } from '../shared/CallNowBadge';
 
 interface Props {
   bundle: Bundle;
@@ -38,6 +46,7 @@ export function BrightHome({
   pageUrl = 'https://example.com',
 }: Props) {
   const tel = telHref(phone);
+  const baseUrl = pageUrl.replace(/\/$/, '');
   const trust =
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
@@ -55,7 +64,6 @@ export function BrightHome({
     .join('')
     .slice(0, 2)
     .toLowerCase();
-  const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   // Pull FAQ from blog posts shaped as questions.
   const faqs = bundle.blog_posts
@@ -88,8 +96,7 @@ export function BrightHome({
     <>
       <LocalBusinessJsonLd bundle={bundle} phone={phone} url={pageUrl} />
       <FaqJsonLd questions={faqs} />
-
-      <h1 className="sr-only">{literalH1}</h1>
+      <SiteNavigationJsonLd bundle={bundle} baseUrl={baseUrl} />
 
       <div className="bright-shell">
         <header className="bright-header">
@@ -108,11 +115,15 @@ export function BrightHome({
             <a href={tel} className="bright-phone-pill num">
               ☎ {phone}
             </a>
+            <CallNowBadge bundle={bundle} />
             <a href="#contact" className="bright-cta-pill">
               Book online ✦
             </a>
           </div>
         </header>
+
+        {/* top nav — inserted immediately after header */}
+        <SiteNav bundle={bundle} variant="bright" />
 
         <section className="bright-hero" aria-labelledby="hero-h1">
           <svg
@@ -145,9 +156,10 @@ export function BrightHome({
               <p className="bright-eyebrow">
                 {bundle.niche} · {bundle.city}, {bundle.state}
               </p>
-              <h2 id="hero-h1" className="bright-h1">
+              {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+              <h1 id="hero-h1" className="bright-h1">
                 {renderHeroH1()}
-              </h2>
+              </h1>
               <p className="bright-lede">{bundle.home.meta_description}</p>
               <div className="bright-hero-buttons">
                 <a href="#contact" className="bright-btn bright-btn-primary">
@@ -175,7 +187,8 @@ export function BrightHome({
                     width={280}
                     height={280}
                     priority
-                    sizes="280px"
+                    fetchPriority="high"
+                    sizes="(max-width: 768px) 100vw, 1200px"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
@@ -200,6 +213,9 @@ export function BrightHome({
             ))}
           </ul>
         </section>
+
+        {/* TrustStrip (pills) — below hero */}
+        <TrustStrip bundle={bundle} variant="bright" />
 
         <section className="bright-services" id="services">
           <div className="bright-section-head">
@@ -228,6 +244,9 @@ export function BrightHome({
             ))}
           </div>
         </section>
+
+        {/* PhotoGallery — below services */}
+        <PhotoGallery bundle={bundle} variant="bright" />
 
         {faqs.length > 0 && (
           <section className="bright-faq" aria-label="Frequently asked questions">
@@ -258,6 +277,9 @@ export function BrightHome({
           <p className="bright-phone-strip-sub">usually answered in a few rings ♥</p>
         </section>
 
+        {/* ReviewsSection — above CTA row */}
+        <ReviewsSection bundle={bundle} variant="bright" title="What our neighbors say" />
+
         <section className="bright-cta-row" id="contact">
           <div className="bright-cta-card">
             <h2 className="bright-cta-h2">Ready when you are.</h2>
@@ -276,10 +298,13 @@ export function BrightHome({
               <a href={tel} className="bright-cta-phone num">
                 ☎ {phone}
               </a>
+              <CallNowBadge bundle={bundle} />
             </div>
           </div>
-          <div className="bright-areas-card">
+          <div className="bright-areas-card" id="where">
             <h2 className="bright-h2">We come to —</h2>
+            <CertificationsRow bundle={bundle} variant="bright" />
+            <GuaranteesList bundle={bundle} />
             <ul className="bright-area-chips">
               {areas.map((c) => {
                 const slug = areaSlugByTitle.get(c);
@@ -336,7 +361,7 @@ export function BrightHome({
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">
-          <a href={tel} className="phone num">
+          <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
             ☎ {phone}
           </a>
           <a href="#contact" className="cta">

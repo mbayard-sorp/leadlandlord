@@ -7,6 +7,7 @@ export {
   corporateSite,
   corporatePage,
   keywordCluster,
+  review,
 } from './types/index';
 export {
   siteDocId,

@@ -302,3 +302,331 @@
 .surface-inverse [data-muted] { color: var(--surface-inverse-muted-fg); }
 .surface-inverse .accent,
 .surface-inverse [data-accent] { color: var(--surface-inverse-accent-fg); }
+
+/* ── Breadcrumbs ────────────────────────────────────────────────────────────── */
+.breadcrumbs {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--ink-3, var(--ink));
+  margin: 0 0 16px;
+}
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.breadcrumbs li { display: flex; align-items: center; }
+.breadcrumbs a { color: var(--ink-2, var(--ink)); text-decoration: none; }
+.breadcrumbs a:hover { text-decoration: underline; }
+.breadcrumbs-sep { color: var(--ink-3, var(--ink)); opacity: 0.5; }
+.breadcrumbs [aria-current='page'] { color: var(--ink); }
+
+/* ── Blog index ─────────────────────────────────────────────────────────────── */
+.blog-index-list { list-style: none; padding: 0; margin: 24px 0 0; }
+.blog-index-item { border-bottom: 1px solid var(--rule); padding: 20px 0; }
+.blog-index-link { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--ink); }
+.blog-index-title { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; }
+.blog-index-blurb { font-size: 0.9375rem; color: var(--ink-2, var(--ink)); line-height: 1.5; }
+.blog-index-read { font-size: 0.8125rem; font-weight: 600; color: var(--accent); margin-top: 4px; }
+.blog-index-link:hover .blog-index-title { text-decoration: underline; }
+
+/* ── CallNowBadge ──────────────────────────────────────────────────────────── */
+.call-now-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--ink-2, var(--ink));
+  font-weight: 500;
+}
+.call-now-badge-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── GuaranteesList ────────────────────────────────────────────────────────── */
+.guarantees-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.guarantees-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.guarantees-check {
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── CertificationsRow ─────────────────────────────────────────────────────── */
+.certifications-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 0;
+}
+.certifications-badge {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: var(--border-card, 1.5px) solid var(--ink);
+  border-radius: var(--radius-card, 4px);
+  background: var(--paper-2, var(--paper));
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+}
+.certifications-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.certifications-issuer {
+  color: var(--ink-2, var(--ink));
+}
+.certifications-issuer::before { content: '·'; margin-right: 4px; }
+.certifications-year {
+  color: var(--ink-3, var(--ink-2));
+  font-size: 0.75rem;
+}
+.certifications-year::before { content: '·'; margin-right: 4px; }
+
+/* ── TrustStrip ────────────────────────────────────────────────────────────── */
+.trust-strip {
+  width: 100%;
+  max-width: var(--container-max, 1200px);
+  margin: 0 auto;
+  padding: 20px clamp(20px, 4vw, 48px);
+}
+
+/* Chips (Classic default) */
+.trust-strip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.trust-strip-chips-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: var(--border-card, 2px) solid var(--ink);
+  border-radius: var(--radius-pill, 4px);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+}
+.trust-strip-chip-check {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Pills (Bright default) */
+.trust-strip-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.trust-strip-pills-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border: var(--border-card, 1.5px) solid var(--accent);
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--paper);
+}
+
+/* Counters (Modern default) */
+.trust-strip-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 40px;
+  align-items: flex-start;
+}
+.trust-strip-counter-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.trust-strip-counter-value {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.trust-strip-counter-label {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--ink-2, var(--ink));
+  text-transform: lowercase;
+}
+
+/* Inline (Premium default) */
+.trust-strip-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: center;
+}
+.trust-strip-inline-item {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--ink-2, var(--ink));
+}
+.trust-strip-inline-item + .trust-strip-inline-item::before {
+  content: ' · ';
+  white-space: pre;
+}
+
+/* ── ReviewsSection ────────────────────────────────────────────────────────── */
+.reviews-section {
+  width: 100%;
+  max-width: var(--container-max, 1200px);
+  margin: 0 auto;
+  padding: var(--section-pad-y, 56px) clamp(20px, 4vw, 48px);
+}
+.reviews-heading {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 32px;
+}
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+/* Premium carousel — horizontal scroll-snap, no JS */
+.reviews-carousel {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 16px;
+  /* hide scrollbar visually but keep accessible */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+.review-card {
+  border: var(--border-card, 1.5px) solid var(--rule, var(--ink));
+  border-radius: var(--radius-card, 8px);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--paper-2, var(--paper));
+}
+.reviews-carousel .review-card {
+  flex: 0 0 min(320px, 85vw);
+  scroll-snap-align: start;
+}
+.review-stars {
+  display: inline-flex;
+  gap: 2px;
+}
+.review-star-filled {
+  color: var(--accent);
+}
+.review-star-empty {
+  color: var(--ink-3, #ccc);
+}
+.review-text {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ink);
+  font-style: italic;
+}
+.review-text p { margin: 0; }
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: baseline;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--ink-2, var(--ink));
+}
+.review-author {
+  font-weight: 600;
+  color: var(--ink);
+}
+.review-source {
+  color: var(--ink-3, var(--ink-2));
+}
+.review-date {
+  color: var(--ink-3, var(--ink-2));
+}
+
+/* ── PhotoGallery ──────────────────────────────────────────────────────────── */
+.photo-gallery {
+  width: 100%;
+  max-width: var(--container-max, 1200px);
+  margin: 0 auto;
+  padding: var(--section-pad-y, 56px) clamp(20px, 4vw, 48px);
+}
+.photo-gallery-heading {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 24px;
+}
+.photo-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.photo-gallery-item {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-card, 4px);
+  overflow: hidden;
+  background: var(--paper-2, #eee);
+}
+.photo-gallery-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}

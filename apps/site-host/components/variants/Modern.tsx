@@ -4,6 +4,14 @@ import { telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
+import { SiteNav } from '../shared/SiteNav';
+import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
+import { TrustStrip } from '../shared/TrustStrip';
+import { ReviewsSection } from '../shared/ReviewsSection';
+import { PhotoGallery } from '../shared/PhotoGallery';
+import { CertificationsRow } from '../shared/CertificationsRow';
+import { GuaranteesList } from '../shared/GuaranteesList';
+import { CallNowBadge } from '../shared/CallNowBadge';
 
 interface Props {
   bundle: Bundle;
@@ -26,6 +34,7 @@ const SERVICE_ICONS = ['◉', '▦', '⌁', '◈', '◐', '◇', '✦', '◆'];
  */
 export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https://example.com' }: Props) {
   const tel = telHref(phone);
+  const baseUrl = pageUrl.replace(/\/$/, '');
   const trust =
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
@@ -41,14 +50,12 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
     .slice(0, 6)
     .map((p) => ({ q: p.title, a: p.meta_description }));
   const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
-  const literalH1 = `${cap(bundle.niche)} in ${bundle.city}, ${bundle.state}`;
 
   return (
     <>
       <LocalBusinessJsonLd bundle={bundle} phone={phone} url={pageUrl} />
       <FaqJsonLd questions={faqs} />
-
-      <h1 className="sr-only">{literalH1}</h1>
+      <SiteNavigationJsonLd bundle={bundle} baseUrl={baseUrl} />
 
       <div className="modern-shell">
         <header className="modern-header">
@@ -60,11 +67,15 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             <a href={tel} className="modern-phone-pill num">
               ☎ {phone}
             </a>
+            <CallNowBadge bundle={bundle} />
             <a href="#contact" className="modern-cta-pill">
               Get quote
             </a>
           </div>
         </header>
+
+        {/* top nav — inserted immediately after header */}
+        <SiteNav bundle={bundle} variant="modern" />
 
         <section className="modern-hero" aria-labelledby="hero-h1">
           <svg
@@ -101,7 +112,8 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
                 alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
                 fill
                 priority
-                sizes="(max-width: 768px) 100vw, 50vw"
+                fetchPriority="high"
+                sizes="(max-width: 768px) 100vw, 1200px"
                 style={{ objectFit: 'cover' }}
               />
             ) : (
@@ -114,9 +126,10 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
               <p className="modern-eyebrow">
                 {bundle.city}, {bundle.state}
               </p>
-              <h2 id="hero-h1" className="modern-h1">
+              {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+              <h1 id="hero-h1" className="modern-h1">
                 {bundle.home.title}
-              </h2>
+              </h1>
               <p className="modern-lede">{bundle.home.meta_description}</p>
               <div className="modern-hero-buttons">
                 <a href="#contact" className="modern-btn modern-btn-primary">
@@ -151,6 +164,9 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           ))}
         </section>
 
+        {/* TrustStrip (counters) — below hero/trust band */}
+        <TrustStrip bundle={bundle} variant="modern" />
+
         <section className="modern-services" id="services">
           <header className="modern-section-head">
             <p className="modern-eyebrow">What we install</p>
@@ -170,15 +186,22 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </div>
         </section>
 
+        {/* ReviewsSection — grid between services and FAQ/areas */}
+        <ReviewsSection bundle={bundle} variant="modern" />
+
+        {/* PhotoGallery — below ReviewsSection */}
+        <PhotoGallery bundle={bundle} variant="modern" />
+
         {/* BIG phone block */}
         <section className="modern-phone-block">
           <p className="modern-phone-block-eyebrow">{bundle.niche} specialists</p>
           <a href={tel} className="modern-phone-block-num num">{phone}</a>
+          <CallNowBadge bundle={bundle} />
           <p className="modern-phone-block-sub">Tap to call · same-day response · free quotes</p>
         </section>
 
         {(faqs.length > 0 || areas.length > 0) && (
-          <section className="modern-faq-areas">
+          <section className="modern-faq-areas" id="where">
             <div className="modern-faq">
               <p className="modern-eyebrow">Common questions</p>
               <h2 className="modern-h2">FAQ</h2>
@@ -216,6 +239,11 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </section>
         )}
 
+        {/* fallback #where anchor when the combined section is absent */}
+        {faqs.length === 0 && areas.length === 0 && (
+          <span id="where" aria-hidden style={{ display: 'none' }} />
+        )}
+
         {bundle.info_pages.length > 0 && (
           <section className="modern-learn-more" aria-label="Resources">
             <p className="modern-eyebrow">Learn more</p>
@@ -246,12 +274,19 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </section>
         )}
 
+        {/* CertificationsRow + GuaranteesList in footer-adjacent block */}
+        <div className="modern-trust-footer-block">
+          <CertificationsRow bundle={bundle} variant="modern" />
+          <GuaranteesList bundle={bundle} />
+        </div>
+
         <section className="modern-cta" id="contact">
           <h2 className="modern-cta-h2">Ready for a quote?</h2>
           <p className="modern-cta-sub">15-min phone call, no pressure.</p>
           <a href={tel} className="modern-cta-phone num">
             ☎ {phone}
           </a>
+          <CallNowBadge bundle={bundle} />
         </section>
 
         <footer className="modern-footer surface-inverse">
@@ -265,7 +300,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">
-          <a href={tel} className="phone num">
+          <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
             ☎ {phone}
           </a>
           <a href="#contact" className="cta">

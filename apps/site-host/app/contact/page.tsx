@@ -1,18 +1,25 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../lib/site-context';
-import { buildPageMetadata } from '../../lib/seo-meta';
+import { buildPageMetadata, breadcrumbsJsonLd } from '../../lib/seo-meta';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
 import { telHref } from '../../lib/content';
 import { SiteShell } from '../../components/SiteShell';
 import { PageBody } from '../../components/PageBody';
 import { LeadForm } from '../../components/shared/LeadForm';
+import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
 
 export default async function Contact() {
   const site = await resolveCurrentSite();
   if (!site) notFound();
   const phone = await getTrackingNumber(site.siteId);
   const bundle = sanityToBundle(site);
+
+  const breadcrumb = await breadcrumbsJsonLd([
+    { name: bundle.business_name, path: '/' },
+    { name: 'Contact', path: '/contact/' },
+  ]);
+
   return (
     <SiteShell
       businessName={bundle.business_name}
@@ -21,6 +28,14 @@ export default async function Contact() {
       state={bundle.state}
       phone={phone}
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+      />
+      <Breadcrumbs items={[
+        { name: bundle.business_name, url: '/' },
+        { name: 'Contact', url: '/contact/' },
+      ]} />
       <PageBody page={bundle.contact} />
       <div className="site-contact-cta">
         <h2>

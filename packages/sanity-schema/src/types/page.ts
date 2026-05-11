@@ -61,6 +61,13 @@ export const page = defineType({
       rows: 8,
     }),
     defineField({
+      name: 'pageOgImage',
+      title: 'OG Image Override',
+      type: 'image',
+      options: { hotspot: true },
+      description: 'Per-page Open Graph image. Falls back to site hero image when absent.',
+    }),
+    defineField({
       name: 'primaryKeyword',
       title: 'Primary Keyword',
       type: 'string',

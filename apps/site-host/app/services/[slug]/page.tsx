@@ -6,6 +6,7 @@ import { getTrackingNumber } from '../../../lib/tracking';
 import { telHref } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
 import { Markdown } from '../../../components/shared/Markdown';
+import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -86,6 +87,11 @@ export default async function ServicePage({ params }: Params) {
           <p className="info-page-eyebrow">
             {bundle.niche} · {bundle.city}, {bundle.state}
           </p>
+          <Breadcrumbs items={[
+            { name: bundle.business_name, url: '/' },
+            { name: 'Services', url: '/services/' },
+            { name: page.title, url: canonical },
+          ]} />
           <h1 className="info-page-h1">{page.title}</h1>
           {page.meta_description && (
             <p className="info-page-lede">{page.meta_description}</p>
@@ -130,7 +136,7 @@ export async function generateMetadata({ params }: Params) {
     title: page.title,
     description: page.meta_description,
     path: `/services/${slug}/`,
-    image: bundle.hero_image_url,
+    image: page.og_image_url ?? bundle.hero_image_url,
     siteName: bundle.business_name,
   });
 }

@@ -23,7 +23,13 @@ interface PageMetaInput {
   path: string;
   /** OG type. Defaults to 'website'; use 'article' for blog/info pages. */
   ogType?: 'website' | 'article';
-  /** Absolute or relative image URL. Falls back to bundle hero in callers. */
+  /**
+   * Absolute or relative image URL.
+   * Prefer page.og_image_url when present (Phase 1 adds this field to
+   * PageSchema). Callers should pass:
+   *   image: (page as any).og_image_url ?? bundle.hero_image_url
+   * so this works whether Phase 1 has merged yet.
+   */
   image?: string | null;
   /** ISO timestamp for OG article publishedTime. */
   publishedTime?: string;
