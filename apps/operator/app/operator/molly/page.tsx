@@ -1,7 +1,61 @@
-import { eq } from 'drizzle-orm';
-import { getDb, bccGraduation, type BccGraduation } from '@leadlandlord/db';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { getDb, bccGraduation, agentRuns, type BccGraduation } from '@leadlandlord/db';
 import { MOLLY_PERSONA } from '@leadlandlord/agents/molly/persona';
 import { toggleManualOverride, setBccAddress } from './actions';
+
+interface InboxStats {
+  lastPollAt: Date | null;
+  lastPollScanned: number | null;
+  lastPollMatched: number | null;
+  accepted24h: number;
+  declined24h: number;
+  silent24h: number;
+  escalated24h: number;
+}
+
+async function loadInboxStats(): Promise<InboxStats> {
+  const db = getDb();
+  const lastRun = (
+    await db
+      .select({
+        startedAt: agentRuns.startedAt,
+        output: agentRuns.output,
+      })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.agent, 'molly-inbox'), eq(agentRuns.status, 'succeeded')))
+      .orderBy(desc(agentRuns.startedAt))
+      .limit(1)
+  )[0];
+  const lastOutput = (lastRun?.output ?? null) as { scanned?: number; matched?: number } | null;
+
+  const counts = (await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'accepted')  AS accepted,
+      COUNT(*) FILTER (WHERE status = 'declined')  AS declined,
+      COUNT(*) FILTER (WHERE status = 'silent')    AS silent,
+      COUNT(*) FILTER (WHERE status = 'escalated') AS escalated
+    FROM backlinks
+    WHERE type = 'guest_post'
+      AND response_at >= NOW() - INTERVAL '24 hours'
+  `)) as unknown as
+    | { rows: Array<{ accepted: number; declined: number; silent: number; escalated: number }> }
+    | Array<{ accepted: number; declined: number; silent: number; escalated: number }>;
+  const row = (Array.isArray(counts) ? counts[0] : counts.rows[0]) ?? {
+    accepted: 0,
+    declined: 0,
+    silent: 0,
+    escalated: 0,
+  };
+  return {
+    lastPollAt: lastRun?.startedAt ?? null,
+    lastPollScanned: lastOutput?.scanned ?? null,
+    lastPollMatched: lastOutput?.matched ?? null,
+    accepted24h: Number(row.accepted ?? 0),
+    declined24h: Number(row.declined ?? 0),
+    silent24h: Number(row.silent ?? 0),
+    escalated24h: Number(row.escalated ?? 0),
+  };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +74,7 @@ async function loadMollyState(): Promise<BccGraduation | null> {
 }
 
 export default async function MollyPage() {
-  const row = await loadMollyState();
+  const [row, inbox] = await Promise.all([loadMollyState(), loadInboxStats()]);
   const envFallback = process.env.MOLLY_BCC_ADDRESS ?? null;
   const flagEnabled = process.env.ZOHO_MOLLY_ENABLED === 'true';
 
@@ -104,6 +158,35 @@ export default async function MollyPage() {
               Leave blank to fall through to the <code>MOLLY_BCC_ADDRESS</code> env var.
             </p>
           </>
+        )}
+      </section>
+
+      <section className="rounded border border-slate-800 bg-slate-900/40 p-5 space-y-3">
+        <h2 className="text-base font-semibold">Inbox activity (last 24h)</h2>
+        <dl className="grid grid-cols-[180px_1fr] gap-y-2 text-sm">
+          <dt className="text-slate-400">Last poll</dt>
+          <dd>
+            {inbox.lastPollAt
+              ? `${new Date(inbox.lastPollAt).toLocaleString()} (scanned ${inbox.lastPollScanned ?? 0}, matched ${inbox.lastPollMatched ?? 0})`
+              : <span className="text-slate-500">no successful run yet</span>}
+          </dd>
+          <dt className="text-slate-400">Accepted</dt>
+          <dd className="font-mono text-emerald-300">{inbox.accepted24h}</dd>
+          <dt className="text-slate-400">Declined</dt>
+          <dd className="font-mono text-red-300">{inbox.declined24h}</dd>
+          <dt className="text-slate-400">Silent / auto-reply</dt>
+          <dd className="font-mono text-slate-300">{inbox.silent24h}</dd>
+          <dt className="text-slate-400">Escalated (needs review)</dt>
+          <dd className="font-mono text-fuchsia-300">{inbox.escalated24h}</dd>
+        </dl>
+        {inbox.escalated24h > 0 && (
+          <p className="text-xs text-fuchsia-300/80">
+            Escalated rows are visible in{' '}
+            <a className="underline hover:text-fuchsia-200" href="/operator/backlinks?status=escalated">
+              backlinks → escalated
+            </a>
+            .
+          </p>
         )}
       </section>
 
