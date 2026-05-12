@@ -97,6 +97,14 @@ export function PhoneProvisionPanel({ site }: Props) {
         </div>
       )}
 
+      {/* Inline config editor for an already-provisioned number.
+          During setup/testing operators want to tweak forwarding number,
+          whisper message, recording toggle, and Klaviyo list without
+          digging through a "Manual override" toggle. */}
+      {alreadyProvisioned && panelState !== 'done' && (
+        <PhoneAssignmentForm site={site} />
+      )}
+
       {panelState === 'done' && provisionedNumber && (
         <div className="rounded border border-emerald-700/50 bg-emerald-900/20 px-4 py-3 text-sm text-emerald-300">
           Provisioned: <span className="font-mono">{provisionedNumber}</span>

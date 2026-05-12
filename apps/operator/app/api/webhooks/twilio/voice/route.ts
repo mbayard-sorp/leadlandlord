@@ -92,11 +92,14 @@ export async function POST(req: Request) {
     const transcribeCb = `${baseUrl}/api/webhooks/twilio/transcription`;
     // Use the AI-generated greeting MP3 if we've recorded one for this site
     // (set during tracking-setup via ElevenLabs → Sanity assets). Fall back
-    // to plain text + Polly TTS if no audio URL is available.
+    // to inbound_greeting / whisper text + Polly TTS if no audio URL is available.
     const meta = (site.metadata ?? {}) as { voicemailGreetingUrl?: string };
     return new NextResponse(
       buildVoicemailTwiml({
-        greeting: site.whisperMessage ?? `Thanks for calling. Please leave a message.`,
+        greeting:
+          site.inboundGreeting ??
+          site.whisperMessage ??
+          `Thanks for calling. Please leave a message.`,
         audioUrl: meta.voicemailGreetingUrl,
         recordingStatusCallback: recordingCallback,
         transcribeCallback: transcribeCb,
@@ -110,6 +113,7 @@ export async function POST(req: Request) {
       forwardingNumber: site.forwardingNumber,
       whisperUrl,
       recordingStatusCallback: recordingCallback,
+      inboundGreeting: site.inboundGreeting ?? undefined,
     }),
     { status: 200, headers: { 'content-type': 'text/xml' } },
   );
