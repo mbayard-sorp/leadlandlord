@@ -5,7 +5,18 @@ import { BacklinkActions } from './BacklinkActions';
 
 export const dynamic = 'force-dynamic';
 
-const ALL_STATUSES = ['pending', 'submitted', 'live', 'rejected', 'lost'] as const;
+const ALL_STATUSES = [
+  'pending',
+  'submitted',
+  'awaiting_reply',
+  'accepted',
+  'declined',
+  'silent',
+  'escalated',
+  'live',
+  'rejected',
+  'lost',
+] as const;
 type StatusFilter = (typeof ALL_STATUSES)[number] | 'all';
 
 interface PageProps {
@@ -69,7 +80,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
       </header>
 
       <nav className="flex flex-wrap gap-2 text-xs">
-        {(['pending', 'submitted', 'live', 'rejected', 'lost', 'all'] as const).map((s) => (
+        {([...ALL_STATUSES, 'all'] as const).map((s) => (
           <Link
             key={s}
             href={`/operator/backlinks?status=${s}`}
@@ -111,6 +122,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                         <th className="text-left px-3 py-2">Source domain</th>
                         <th className="text-left px-3 py-2">Status</th>
                         <th className="text-left px-3 py-2">Subject / Pitch</th>
+                        <th className="text-left px-3 py-2">Nudges</th>
                         <th className="text-left px-3 py-2">Action</th>
                         <th className="text-left px-3 py-2">Created</th>
                         <th className="text-left px-3 py-2"></th>
@@ -144,6 +156,20 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                                   reason: {truncate(r.rejectionReason, 160)}
                                 </div>
                               ) : null}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">
+                              {r.nudgeCount > 0 ? (
+                                <div>
+                                  <div className="font-mono text-slate-300">{r.nudgeCount}/7</div>
+                                  {r.lastNudgeAt ? (
+                                    <div className="text-slate-500">
+                                      {new Date(r.lastNudgeAt).toLocaleDateString()}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-slate-600">—</span>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-xs">
                               {submitUrl ? (
@@ -186,12 +212,14 @@ function truncate(s: string, n: number): string {
 
 function StatusBadge({ status }: { status: string }) {
   const tone =
-    status === 'live' || status === 'submitted'
+    status === 'live' || status === 'submitted' || status === 'accepted' || status === 'verified' || status === 'published'
       ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/50'
-      : status === 'pending'
+      : status === 'pending' || status === 'awaiting_reply' || status === 'drafting' || status === 'draft_pending_review'
       ? 'bg-amber-900/30 text-amber-300 border-amber-700/50'
-      : status === 'rejected' || status === 'lost'
+      : status === 'rejected' || status === 'lost' || status === 'declined' || status === 'dormant'
       ? 'bg-red-900/40 text-red-300 border-red-700/50'
+      : status === 'escalated' || status === 'manual_review'
+      ? 'bg-fuchsia-900/40 text-fuchsia-200 border-fuchsia-700/50'
       : 'bg-slate-800/60 text-slate-300 border-slate-700';
   return (
     <span className={`inline-block px-2 py-0.5 rounded border text-xs ${tone}`}>{status}</span>
