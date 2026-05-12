@@ -9,6 +9,7 @@ CREATE TYPE backlink_prospect_status AS ENUM (
   'approved',
   'pitched'
 );
+--> statement-breakpoint
 
 -- ── 2. New table: backlink_prospects ────────────────────────────────────────
 --
@@ -33,13 +34,16 @@ CREATE TABLE backlink_prospects (
   created_at      timestamptz NOT NULL DEFAULT NOW(),
   updated_at      timestamptz NOT NULL DEFAULT NOW()
 );
+--> statement-breakpoint
 
 CREATE INDEX backlink_prospects_site_status_idx
   ON backlink_prospects (site_id, status);
+--> statement-breakpoint
 
 CREATE INDEX backlink_prospects_flagged_top5_at_idx
   ON backlink_prospects (flagged_top5_at DESC)
   WHERE flagged_top5_at IS NOT NULL;
+--> statement-breakpoint
 
 -- ── 3. Extend backlink_status enum ──────────────────────────────────────────
 --
@@ -54,19 +58,33 @@ CREATE INDEX backlink_prospects_flagged_top5_at_idx
 -- Do NOT use `live` for guest-post rows; use `published` → `verified`.
 --
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'awaiting_reply'      AFTER 'submitted';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'reply_received'      AFTER 'awaiting_reply';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'accepted'            AFTER 'reply_received';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'declined'            AFTER 'accepted';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'silent'              AFTER 'declined';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'escalated'           AFTER 'silent';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'drafting'            AFTER 'escalated';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'draft_pending_review' AFTER 'drafting';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'draft_approved'      AFTER 'draft_pending_review';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'delivered'           AFTER 'draft_approved';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'published'           AFTER 'delivered';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'verified'            AFTER 'published';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'dormant'             AFTER 'verified';
+--> statement-breakpoint
 ALTER TYPE backlink_status ADD VALUE IF NOT EXISTS 'manual_review'       AFTER 'dormant';
+--> statement-breakpoint
 
 -- ── 4. New columns on backlinks ─────────────────────────────────────────────
 ALTER TABLE backlinks
@@ -79,6 +97,7 @@ ALTER TABLE backlinks
   ADD COLUMN IF NOT EXISTS published_url  text,
   ADD COLUMN IF NOT EXISTS nudge_count    integer NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS last_nudge_at  timestamptz;
+--> statement-breakpoint
 
 -- ── 5. Index: backlinks.message_id ──────────────────────────────────────────
 --
