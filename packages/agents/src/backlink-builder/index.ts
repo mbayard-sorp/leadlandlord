@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
-import { getDb, backlinks, sites, type Site } from '@leadlandlord/db';
+import { getDb, backlinks, backlinkProspects, sites, type Site } from '@leadlandlord/db';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
@@ -15,6 +15,8 @@ import {
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { CITATION_DIRECTORIES } from './directories';
+import { MOLLY_PERSONA } from '../molly/persona';
+import { decideBcc, recordBccSend } from '../molly/bcc';
 
 /**
  * Backlink Builder — three modes, all writing to the `backlinks` table:
@@ -104,12 +106,24 @@ export const BacklinkBuilderInput = z.discriminatedUnion('mode', [
      */
     autoSend: z.boolean().optional(),
   }),
+  z.object({
+    /**
+     * Operator-driven path: an operator approved a Molly top-5 pick. We
+     * load the prospect row, resolve editor email (prospect metadata or
+     * fresh Apollo lookup), derive pitchTopic, and dispatch through the
+     * existing runGuestPost pipeline. On success the prospect row is
+     * advanced to status='pitched' with backlink_id wired in.
+     */
+    mode: z.literal('prospect_approved'),
+    siteId: z.string().uuid(),
+    prospectId: z.string().uuid(),
+  }),
 ]);
 
 export type BacklinkBuilderInput = z.infer<typeof BacklinkBuilderInput>;
 
 export const BacklinkBuilderOutput = z.object({
-  mode: z.enum(['citations', 'haro', 'guest_post', 'prospect']),
+  mode: z.enum(['citations', 'haro', 'guest_post', 'prospect', 'prospect_approved']),
   siteId: z.string().uuid(),
   rowsCreated: z.number(),
   rowsRejected: z.number(),
@@ -146,6 +160,12 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
             return `haro:${i.siteId}:${i.queries.map((q) => q.id).sort().join(',')}`;
           case 'guest_post':
             return `guest_post:${i.siteId}:${i.targetDomain.toLowerCase()}`;
+          case 'prospect_approved':
+            // Dedupe at the event level. The underlying runGuestPost call
+            // still produces its own `guest_post:${siteId}:${domain}` key on
+            // the backlinks row, so a duplicate prospect_approved event
+            // collapses to a no-op via the backlinks dedupe_key index.
+            return `prospect_approved:${i.siteId}:${i.prospectId}`;
           case 'prospect': {
             // Dedupe per (site, date, competitor-set). Including the seed
             // hash means an operator who fixes a typo or swaps competitors
@@ -183,6 +203,8 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
         return this.runGuestPost(input, site, ctx);
       case 'prospect':
         return this.runProspect(input, site, ctx);
+      case 'prospect_approved':
+        return this.runProspectApproved(input, site, ctx);
     }
   }
 
@@ -346,7 +368,18 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
     input: Extract<BacklinkBuilderInput, { mode: 'guest_post' }>,
     site: Site,
     ctx: AgentContext,
-    opts?: { queueOnly?: boolean; extraMetadata?: Record<string, unknown>; dedupeKey?: string },
+    opts?: {
+      queueOnly?: boolean;
+      extraMetadata?: Record<string, unknown>;
+      dedupeKey?: string;
+      /**
+       * Invoked once the success-path `backlinks` row is inserted (after a
+       * successful send). Receives the new row id so callers can wire
+       * downstream rows (e.g. `backlink_prospects.backlink_id`). Not called
+       * on conflict-skip, throttle, queueOnly, compliance-block, or send error.
+       */
+      onSubmitted?: (backlinkId: string, externalId: string) => Promise<void>;
+    },
   ): Promise<BacklinkBuilderOutput> {
     const db = getDb();
     const dedupeKey = opts?.dedupeKey ?? `guest_post:${input.siteId}:${input.targetDomain.toLowerCase()}`;
@@ -441,9 +474,14 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
     // Provider selection: Zoho MCP behind a feature flag, otherwise Resend.
     // Read env on each invocation (no module-level caching).
     const useZoho = process.env.ZOHO_MCP_ENABLED === 'true';
-    const mailbox = useZoho
-      ? (process.env.ZOHO_DEFAULT_FROM ?? '')
-      : (process.env.RESEND_FROM_ADDRESS ?? '');
+    const useMolly = process.env.ZOHO_MOLLY_ENABLED === 'true';
+    // Molly's mailbox is isolated from the generic mailbox so the per-mailbox
+    // throttle in email_sends tracks her sends separately from any other sender.
+    const mailbox = useMolly
+      ? (process.env.ZOHO_MOLLY_FROM ?? MOLLY_PERSONA.mailbox)
+      : useZoho
+        ? (process.env.ZOHO_DEFAULT_FROM ?? '')
+        : (process.env.RESEND_FROM_ADDRESS ?? '');
     if (!mailbox) {
       throw new Error(useZoho ? 'ZOHO_DEFAULT_FROM not set' : 'RESEND_FROM_ADDRESS not set');
     }
@@ -499,16 +537,31 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       };
     }
 
+    // BCC graduation policy (R4.3). Molly's first 20 globally-outbound
+    // sends are BCC'd to a human reviewer so we can spot-check tone before
+    // the agent runs unsupervised. After graduation BCC stops unless the
+    // operator flips manual_override in the UI. Non-Molly sends never BCC.
+    const bccDecision = useMolly ? await decideBcc('molly') : null;
+    const bcc = bccDecision?.bcc ?? undefined;
+
     // Send.
     let externalId: string | undefined;
     let sendError: string | undefined;
+    // When Molly is active, encode the display name in the From field using
+    // RFC 5322 "Display Name <addr>" format. Zoho Mail accepts this in the
+    // fromAddress parameter. When the flag is off the mailbox string is used
+    // as-is (no display name), which matches the existing behavior.
+    const fromField = useMolly
+      ? `${MOLLY_PERSONA.displayName} <${mailbox}>`
+      : mailbox;
     try {
-      if (useZoho) {
+      if (useZoho || useMolly) {
         const res = await sendEmailZoho({
           to: input.targetEditorEmail,
-          from: mailbox,
+          from: fromField,
           subject,
           text: body,
+          ...(bcc ? { bcc } : {}),
         });
         externalId = res.messageId;
       } else {
@@ -531,14 +584,28 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       toAddress: input.targetEditorEmail,
       subject,
       purpose: 'guest_post',
-      provider: useZoho ? 'zoho' : 'resend',
+      provider: (useZoho || useMolly) ? 'zoho' : 'resend',
       externalId: externalId ?? null,
       status: sendError ? 'failed' : 'sent',
       errorMessage: sendError ?? null,
+      metadata: bcc ? { bcc } : undefined,
     });
 
+    // Advance the BCC graduation counter only after a confirmed successful
+    // send. Failed sends, throttle skips, and queueOnly drafts do not count.
+    if (useMolly && !sendError) {
+      try {
+        await recordBccSend('molly');
+      } catch (err) {
+        ctx.log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'guest_post: BCC graduation counter update failed (send already succeeded)',
+        );
+      }
+    }
+
     const status = sendError ? 'pending' : 'submitted';
-    await db
+    const inserted = await db
       .insert(backlinks)
       .values({
         siteId: input.siteId,
@@ -547,6 +614,10 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
         type: 'guest_post',
         status,
         dedupeKey,
+        // R4.2 added a top-level `message_id` column for inbox correlation;
+        // store the provider id there in addition to metadata so MollyInbox
+        // can filter replies by In-Reply-To without a JSONB scan.
+        messageId: externalId ?? null,
         pitchDraft: body,
         subjectLine: subject,
         rejectionReason: sendError ? `send_failed: ${sendError}` : null,
@@ -561,7 +632,19 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       .onConflictDoNothing({
           target: backlinks.dedupeKey,
           where: sql`${backlinks.dedupeKey} IS NOT NULL`,
-        });
+        })
+      .returning({ id: backlinks.id });
+
+    if (!sendError && externalId && opts?.onSubmitted && inserted[0]?.id) {
+      try {
+        await opts.onSubmitted(inserted[0].id, externalId);
+      } catch (err) {
+        ctx.log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'guest_post: onSubmitted callback failed (send already succeeded)',
+        );
+      }
+    }
 
     return {
       mode: 'guest_post',
@@ -569,6 +652,139 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       rowsCreated: sendError ? 1 : 0,
       rowsRejected: 0,
       rowsSent: sendError ? 0 : 1,
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Prospect approved (operator-triggered guest_post)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Handle the `prospect.approved` event emitted by the operator UI when
+   * a Molly top-5 pick is approved. Loads the prospect, resolves an editor
+   * email (prospect metadata first, then a fresh Apollo lookup as fallback),
+   * derives a default pitchTopic, dispatches the existing runGuestPost
+   * pipeline, and on success advances the prospect row to status='pitched'
+   * with its backlink_id wired.
+   *
+   * Idempotency: the event-level dedupeKey is `prospect_approved:<siteId>:<prospectId>`.
+   * Re-runs after a successful pitch are no-ops because the prospect status
+   * has moved past `approved`. The underlying backlinks insert dedupes on
+   * `guest_post:<siteId>:<domain>`.
+   */
+  private async runProspectApproved(
+    input: Extract<BacklinkBuilderInput, { mode: 'prospect_approved' }>,
+    site: Site,
+    ctx: AgentContext,
+  ): Promise<BacklinkBuilderOutput> {
+    const db = getDb();
+    const prospect = (
+      await db
+        .select()
+        .from(backlinkProspects)
+        .where(eq(backlinkProspects.id, input.prospectId))
+        .limit(1)
+    )[0];
+
+    if (!prospect) {
+      ctx.log.warn({ prospectId: input.prospectId }, 'prospect_approved: prospect not found');
+      return {
+        mode: 'prospect_approved',
+        siteId: input.siteId,
+        rowsCreated: 0,
+        rowsRejected: 0,
+        rowsSent: 0,
+      };
+    }
+
+    if (prospect.status !== 'approved') {
+      ctx.log.info(
+        { prospectId: prospect.id, status: prospect.status },
+        'prospect_approved: skipping — prospect not in approved status',
+      );
+      return {
+        mode: 'prospect_approved',
+        siteId: input.siteId,
+        rowsCreated: 0,
+        rowsRejected: 0,
+        rowsSent: 0,
+      };
+    }
+
+    // Resolve editor email. Prefer cached value on the prospect row; fall
+    // back to a fresh Apollo lookup. If both fail, mark the prospect
+    // back to approved (no-op) and let the operator supply an email later.
+    const metadata = (prospect.metadata ?? {}) as Record<string, unknown>;
+    const cachedEmail = typeof metadata.editorEmail === 'string' ? metadata.editorEmail : null;
+
+    let editorEmail = cachedEmail;
+    if (!editorEmail) {
+      try {
+        const editor = await findEditorByDomain(prospect.domain);
+        const raw = editor?.person.email?.toLowerCase() ?? '';
+        const usable =
+          editor?.person.email &&
+          !raw.includes('email_not_unlocked') &&
+          !raw.includes('domain.com')
+            ? editor.person.email
+            : null;
+        editorEmail = usable;
+      } catch (err) {
+        ctx.log.warn(
+          {
+            prospectId: prospect.id,
+            domain: prospect.domain,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'prospect_approved: Apollo lookup failed',
+        );
+      }
+    }
+
+    if (!editorEmail) {
+      ctx.log.warn(
+        { prospectId: prospect.id, domain: prospect.domain },
+        'prospect_approved: no editor email available — leaving prospect in approved state for manual intervention',
+      );
+      return {
+        mode: 'prospect_approved',
+        siteId: input.siteId,
+        rowsCreated: 0,
+        rowsRejected: 0,
+        rowsSent: 0,
+      };
+    }
+
+    const pitchTopic = `Guide to ${site.niche} for homeowners in ${site.city}`;
+
+    const guestPostInput: Extract<BacklinkBuilderInput, { mode: 'guest_post' }> = {
+      mode: 'guest_post',
+      siteId: input.siteId,
+      targetDomain: prospect.domain,
+      targetEditorEmail: editorEmail,
+      pitchTopic,
+    };
+
+    const result = await this.runGuestPost(guestPostInput, site, ctx, {
+      extraMetadata: { prospectId: prospect.id },
+      onSubmitted: async (backlinkId) => {
+        await db
+          .update(backlinkProspects)
+          .set({
+            status: 'pitched',
+            backlinkId,
+            updatedAt: new Date(),
+          })
+          .where(eq(backlinkProspects.id, prospect.id));
+      },
+    });
+
+    return {
+      mode: 'prospect_approved',
+      siteId: input.siteId,
+      rowsCreated: result.rowsCreated,
+      rowsRejected: result.rowsRejected,
+      rowsSent: result.rowsSent,
     };
   }
 
@@ -625,7 +841,28 @@ Tone: helpful expert, no marketing fluff. No links. No claims like "best in stat
     const model = process.env.BACKLINK_BUILDER_MODEL ?? 'claude-haiku-4-5';
     const postalAddress = process.env.LEADLANDLORD_POSTAL_ADDRESS
       ?? `LeadLandlord, [postal address not set], ${site.city}, ${site.state}`;
-    const userPrompt = `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
+    const useMolly = process.env.ZOHO_MOLLY_ENABLED === 'true';
+
+    const userPrompt = useMolly
+      ? `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
+
+You are writing as Molly Matthews, Sr. Outreach Manager at LeadLandlord.
+The business you are pitching on behalf of: a ${site.niche} business in ${site.city}, ${site.state}.
+Pitch topic: ${input.pitchTopic}
+
+Constraints:
+- Subject line: <= 60 chars, specific to the pitch angle.
+- Body: 100-130 words, plain text only.
+- Opening line must reference a specific recent post or topic from ${input.targetDomain} — if you do not know one, say "I have been following your site" rather than fabricating a post title.
+- Suggest 1-2 concrete article angles relevant to ${input.targetDomain}'s audience.
+- Unsubscribe line (required, exact text): "Reply REMOVE if you'd rather not hear from me."
+- Postal address line (required, on its own line): "${postalAddress}"
+- Signature (required, exact text, last line of body): "${MOLLY_PERSONA.signatureLine}"
+- No fake credentials, no superlatives, no marketing buzzwords.
+- Write as "I" (Molly speaking), not as "we" or a team.
+
+Return strictly JSON: {"subject": "...", "body": "..."}.`
+      : `Draft a short, sincere guest-post pitch email to the editor of ${input.targetDomain}.
 
 Sender: a ${site.niche} business in ${site.city}, ${site.state}.
 Pitch topic: ${input.pitchTopic}
@@ -641,11 +878,25 @@ Constraints:
 
 Return strictly JSON: {"subject": "...", "body": "..."}.`;
 
+    // When Molly is active, prepend her voice system prompt and inject few-shot
+    // examples. The system prompt encodes tone rules; the few-shots show Claude
+    // what Molly's output actually looks like for concrete scenarios.
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = useMolly
+      ? [
+          ...MOLLY_PERSONA.fewShot.flatMap((ex) => [
+            { role: 'user' as const, content: ex.userMsg },
+            { role: 'assistant' as const, content: ex.assistantMsg },
+          ]),
+          { role: 'user', content: userPrompt },
+        ]
+      : [{ role: 'user', content: userPrompt }];
+
     const response = await client.messages.create({
       model,
       max_tokens: 800,
       temperature: 0.5,
-      messages: [{ role: 'user', content: userPrompt }],
+      ...(useMolly ? { system: MOLLY_PERSONA.voiceSystemPrompt } : {}),
+      messages,
     });
     const usage = {
       input_tokens: response.usage.input_tokens,
@@ -670,19 +921,29 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
       // fall through to fallback below
     }
     ctx.log.warn({ targetDomain: input.targetDomain }, 'guest_post: Claude response not JSON, using fallback');
+    const fallbackSignoff = useMolly
+      ? [
+          `Reply REMOVE if you'd rather not hear from me.`,
+          ``,
+          MOLLY_PERSONA.signatureLine,
+          postalAddress,
+        ]
+      : [
+          `Reply with REMOVE if you'd rather not hear from me again.`,
+          ``,
+          `— ${site.niche} team in ${site.city}`,
+          postalAddress,
+        ];
     return {
       subject: `Guest post idea for ${input.targetDomain}`,
       body: [
         `Hi,`,
         ``,
-        `I run a ${site.niche} business in ${site.city}, ${site.state} and put together a quick angle on "${input.pitchTopic}" that I think would land with your readers.`,
+        `I run outreach for a ${site.niche} business in ${site.city}, ${site.state} and put together a quick angle on "${input.pitchTopic}" that I think would land with your readers.`,
         ``,
-        `Happy to send a 700-word draft if you're open to a contributor piece.`,
+        `Happy to send a 900-word draft if you're open to a contributor piece.`,
         ``,
-        `Reply with REMOVE if you'd rather not hear from me again.`,
-        ``,
-        `— ${site.niche} team in ${site.city}`,
-        postalAddress,
+        ...fallbackSignoff,
       ].join('\n'),
     };
   }
