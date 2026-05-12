@@ -156,14 +156,19 @@ export function buildForwardingTwiml(opts: {
   /** URL that returns TwiML to play to the answering party as a whisper. */
   whisperUrl?: string;
   recordingStatusCallback?: string;
+  /** Plain text greeting played to the caller (Polly TTS) before the dial. */
+  inboundGreeting?: string;
 }): string {
   const recordAttrs = opts.recordingStatusCallback
     ? ` record="record-from-answer-dual" recordingStatusCallback="${escape(opts.recordingStatusCallback)}" recordingStatusCallbackEvent="completed"`
     : '';
   const numberAttrs = opts.whisperUrl ? ` url="${escape(opts.whisperUrl)}"` : '';
+  const greetingTag = opts.inboundGreeting
+    ? `<Say voice="Polly.Joanna">${escape(opts.inboundGreeting)}</Say>\n  `
+    : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial${recordAttrs} answerOnBridge="true">
+  ${greetingTag}<Dial${recordAttrs} answerOnBridge="true">
     <Number${numberAttrs}>${escape(opts.forwardingNumber)}</Number>
   </Dial>
 </Response>`;

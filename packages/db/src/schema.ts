@@ -151,6 +151,8 @@ export const sites = pgTable(
     forwardingNumber: text('forwarding_number'),
     /** Whisper announcement played to the answering party so they know it's a tracking number. */
     whisperMessage: text('whisper_message'),
+    /** Greeting played to the inbound caller (via Polly TTS) before the call is forwarded or sent to voicemail. */
+    inboundGreeting: text('inbound_greeting'),
     /** Whether to record + transcribe inbound calls. */
     recordingEnabled: boolean('recording_enabled').notNull().default(true),
     /** GA4 measurement ID baked into the site's NEXT_PUBLIC_GA_MEASUREMENT_ID. */

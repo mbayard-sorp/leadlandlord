@@ -75,6 +75,14 @@ export function PhoneAssignmentForm({ site }: Props) {
             className="input"
           />
         </Field>
+        <Field label="Inbound greeting (caller hears)">
+          <input
+            name="inbound_greeting"
+            defaultValue={site.inboundGreeting ?? ''}
+            placeholder={`Thanks for calling ${site.niche} ${site.city}. Connecting you now.`}
+            className="input"
+          />
+        </Field>
         <Field label="Klaviyo list ID">
           <input
             name="klaviyo_list_id"

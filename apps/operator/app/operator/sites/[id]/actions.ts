@@ -29,6 +29,7 @@ const PhoneAssignmentSchema = z.object({
   twilio_phone_sid: z.string().optional(),
   forwarding_number: z.string().optional(),
   whisper_message: z.string().optional(),
+  inbound_greeting: z.string().optional(),
   recording_enabled: z.coerce.boolean().optional(),
   klaviyo_list_id: z.string().optional(),
 });
@@ -52,6 +53,7 @@ export async function assignPhone(formData: FormData): Promise<PhoneAssignmentRe
     twilio_phone_sid: nullable(formData.get('twilio_phone_sid')),
     forwarding_number: nullable(formData.get('forwarding_number')),
     whisper_message: nullable(formData.get('whisper_message')),
+    inbound_greeting: nullable(formData.get('inbound_greeting')),
     recording_enabled: nullable(formData.get('recording_enabled')),
     klaviyo_list_id: nullable(formData.get('klaviyo_list_id')),
   });
@@ -69,6 +71,7 @@ export async function assignPhone(formData: FormData): Promise<PhoneAssignmentRe
       trackingProvider: v.twilio_phone_sid ? 'twilio' : v.tracking_number ? 'mock' : null,
       forwardingNumber: emptyToNull(v.forwarding_number),
       whisperMessage: emptyToNull(v.whisper_message),
+      inboundGreeting: emptyToNull(v.inbound_greeting),
       recordingEnabled: v.recording_enabled ?? true,
       klaviyoListId: emptyToNull(v.klaviyo_list_id),
       updatedAt: new Date(),

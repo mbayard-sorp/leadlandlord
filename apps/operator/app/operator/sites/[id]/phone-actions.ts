@@ -238,12 +238,18 @@ export async function provisionChosenNumber(
   const site = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
   if (!site) return { ok: false, message: 'site not found' };
 
-  // Call existing provisionNumber (handles MOCK_TELEPHONY guard)
+  // Call existing provisionNumber (handles MOCK_TELEPHONY guard).
+  // Pass voice + status webhook URLs so Twilio wires them up at buy time —
+  // otherwise the IncomingPhoneNumber resource has no VoiceUrl and inbound
+  // calls go nowhere until the operator hits the manual-override "Save" path.
+  const baseUrl = process.env.OPERATOR_PUBLIC_URL ?? '';
   let tracking;
   try {
     tracking = await provisionNumber({
       siteId,
       phoneNumber: e164, // provision the exact number the operator selected
+      voiceUrl: baseUrl ? `${baseUrl}/api/webhooks/twilio/voice` : undefined,
+      statusCallbackUrl: baseUrl ? `${baseUrl}/api/webhooks/twilio/status` : undefined,
     });
   } catch (err) {
     log.error(
