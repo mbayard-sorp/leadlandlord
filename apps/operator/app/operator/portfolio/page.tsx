@@ -10,6 +10,12 @@ import {
 } from '@leadlandlord/db';
 import { fetchPortfolioFromSanity, type SanityPortfolioRow } from '@/lib/sanity-read';
 
+// Render on demand — this is the live operator dashboard. Prerendering
+// at build time couples the build to DB schema state (e.g. a new column
+// landing in code before its migration is applied to the build's DB),
+// which has bitten us once already. ISR/unstable_cache below still
+// dedupes within a 30s window.
+export const dynamic = 'force-dynamic';
 export const revalidate = 30;
 
 const loadPortfolio = unstable_cache(
