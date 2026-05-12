@@ -570,6 +570,31 @@ export const emailSends = pgTable(
 );
 
 // ────────────────────────────────────────────────────────────
+// BCC graduation — first-N-sends safety net per outbound agent
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Single-row-per-agent state machine controlling whether outbound emails are
+ * BCC'd to a human reviewer. Used by Molly: the first 20 globally-outbound
+ * pitches are BCC'd to `bcc_address`, then the agent "graduates" and BCC
+ * stops. `manual_override = true` re-enables BCC indefinitely.
+ *
+ * Seeded with one row `agent_name='molly'` in migration 0019.
+ */
+export const bccGraduation = pgTable('bcc_graduation', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  agentName: text('agent_name').notNull().unique(),
+  outboundCount: integer('outbound_count').notNull().default(0),
+  graduatedAt: timestamp('graduated_at', { withTimezone: true }),
+  manualOverride: boolean('manual_override').notNull().default(false),
+  bccAddress: text('bcc_address'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BccGraduation = typeof bccGraduation.$inferSelect;
+
+// ────────────────────────────────────────────────────────────
 // Agent runtime tables
 // ────────────────────────────────────────────────────────────
 

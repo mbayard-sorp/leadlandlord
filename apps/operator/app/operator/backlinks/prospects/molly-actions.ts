@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb, backlinkProspects, agentEvents } from '@leadlandlord/db';
 
 export interface MollyActionResult {
@@ -43,38 +43,21 @@ export async function approveProspect(prospectId: string): Promise<MollyActionRe
     .set({ status: 'approved', approvedAt: now, updatedAt: now })
     .where(eq(backlinkProspects.id, prospectId));
 
-  // Emit prospect.approved event for BacklinkBuilder.guest_post (R4.3).
-  // Check if an event for this prospect already exists to stay idempotent.
-  const existingEvents = await db
-    .select({ id: agentEvents.id })
-    .from(agentEvents)
-    .where(
-      and(
-        eq(agentEvents.type, 'prospect.approved'),
-        eq(agentEvents.targetAgent, 'backlink-builder'),
-      ),
-    )
-    .limit(100);
-
-  const alreadyEmitted = existingEvents.some((e) => {
-    // agentEvents.payload is jsonb — check for matching prospectId in payload
-    // at the application layer since we don't have a payload uniqueness index.
-    return false; // placeholder: will be replaced by real payload check when R4.3 lands
+  // Emit prospect.approved event. Payload validates against the
+  // BacklinkBuilder `prospect_approved` mode (R4.3). The agent run's own
+  // dedupeKey (`prospect_approved:<siteId>:<prospectId>`) collapses duplicate
+  // emits at execution time, so a double-click is safe without an
+  // application-layer payload check here.
+  await db.insert(agentEvents).values({
+    agent: 'operator-ui',
+    type: 'prospect.approved',
+    targetAgent: 'backlink-builder',
+    payload: {
+      mode: 'prospect_approved',
+      siteId: row.siteId,
+      prospectId,
+    },
   });
-
-  if (!alreadyEmitted) {
-    await db.insert(agentEvents).values({
-      agent: 'operator-ui',
-      type: 'prospect.approved',
-      targetAgent: 'backlink-builder',
-      payload: {
-        prospectId,
-        siteId: row.siteId,
-        domain: row.domain,
-        approvedAt: now.toISOString(),
-      },
-    });
-  }
 
   revalidatePath('/operator/backlinks/prospects');
   return { ok: true };

@@ -22,7 +22,8 @@
     "./scheduler": "./src/scheduler/index.ts",
     "./niche-hunter": "./src/niche-hunter/index.ts",
     "./keyword-planner": "./src/keyword-planner/index.ts",
-    "./alert-evaluator": "./src/alert-evaluator/index.ts"
+    "./alert-evaluator": "./src/alert-evaluator/index.ts",
+    "./molly/persona": "./src/molly/persona.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
