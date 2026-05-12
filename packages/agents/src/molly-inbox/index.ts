@@ -279,6 +279,18 @@ export class MollyInbox extends BaseAgent<typeof MollyInboxInput, typeof MollyIn
           },
           'molly-inbox: transitioned backlink',
         );
+
+        // R4.5: hand off to MollyCopywriter when an editor said yes.
+        // The agent's per-backlink dedupe key collapses duplicate emits.
+        // MollyInbox always runs standalone (cron-driven), so the
+        // sub-agent suppression in emitNextStepEvent won't trigger.
+        if (toStatus === 'accepted') {
+          await ctx.emitNextStepEvent({
+            type: 'guest_post.accepted',
+            targetAgent: 'molly-copywriter',
+            payload: { backlinkId: row.id, site_id: row.siteId },
+          });
+        }
       } catch (err) {
         ctx.log.warn(
           { messageId: m.messageId, err: err instanceof Error ? err.message : String(err) },

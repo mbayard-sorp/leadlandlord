@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
-import { getDb, backlinks, sites } from '@leadlandlord/db';
+import { getDb, backlinks, sites, agentEvents } from '@leadlandlord/db';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { recordSend } from '@leadlandlord/db/email-throttle';
@@ -341,4 +341,126 @@ function nextMonthLabel(): string {
   const d = new Date();
   d.setUTCMonth(d.getUTCMonth() + 1, 1);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Operator manually marks a backlink as `accepted` (e.g. an editor said yes
+ * outside the Zoho inbox flow). Emits the same `guest_post.accepted` event
+ * MollyInbox emits so MollyCopywriter picks the row up on the next
+ * operator-tick. Without this, manually-flipped rows would sit at `accepted`
+ * indefinitely.
+ */
+export async function manuallyAcceptBacklink(id: string): Promise<ActionResult> {
+  const db = getDb();
+  const row = (await db.select().from(backlinks).where(eq(backlinks.id, id)).limit(1))[0];
+  if (!row) return { ok: false, message: 'backlink not found' };
+  await db.update(backlinks).set({ status: 'accepted' }).where(eq(backlinks.id, id));
+  await db.insert(agentEvents).values({
+    agent: 'operator',
+    type: 'guest_post.accepted',
+    targetAgent: 'molly-copywriter',
+    payload: { backlinkId: row.id, site_id: row.siteId },
+  });
+  revalidatePath('/operator/backlinks');
+  return { ok: true };
+}
+
+/**
+ * Operator approves a MollyCopywriter draft. Flips `draft_pending_review`
+ * → `draft_approved`. Delivery is R4.7 — no send happens here.
+ */
+export async function approveDraft(id: string): Promise<ActionResult> {
+  const db = getDb();
+  const row = (await db.select().from(backlinks).where(eq(backlinks.id, id)).limit(1))[0];
+  if (!row) return { ok: false, message: 'backlink not found' };
+  if (row.status !== 'draft_pending_review') {
+    return { ok: false, message: `cannot approve row with status=${row.status}` };
+  }
+  const md = (row.metadata ?? {}) as Record<string, unknown>;
+  await db
+    .update(backlinks)
+    .set({
+      status: 'draft_approved',
+      metadata: { ...md, draftApprovedAt: new Date().toISOString() },
+    })
+    .where(eq(backlinks.id, id));
+  revalidatePath('/operator/backlinks');
+  revalidatePath(`/operator/backlinks/${id}/draft`);
+  return { ok: true };
+}
+
+/**
+ * Operator rejects a MollyCopywriter draft. Returns the row to `accepted`
+ * with the rejection reason stamped on metadata.draftRejection so a
+ * follow-up regenerate can incorporate it (R4.6 will auto-retry; for R4.5
+ * the operator clicks Regenerate explicitly).
+ *
+ * Clears `draft_markdown` and `anchor_type` so the agent re-runs cleanly.
+ */
+export async function rejectDraft(id: string, reason: string): Promise<ActionResult> {
+  const trimmed = reason.trim();
+  if (trimmed.length === 0) return { ok: false, message: 'rejection reason required' };
+  const db = getDb();
+  const row = (await db.select().from(backlinks).where(eq(backlinks.id, id)).limit(1))[0];
+  if (!row) return { ok: false, message: 'backlink not found' };
+  if (row.status !== 'draft_pending_review') {
+    return { ok: false, message: `cannot reject row with status=${row.status}` };
+  }
+  const md = (row.metadata ?? {}) as Record<string, unknown>;
+  const history = Array.isArray(md.draftRejectionHistory)
+    ? (md.draftRejectionHistory as unknown[])
+    : [];
+  await db
+    .update(backlinks)
+    .set({
+      status: 'accepted',
+      draftMarkdown: null,
+      anchorType: null,
+      metadata: {
+        ...md,
+        draftRejection: { reason: trimmed, at: new Date().toISOString() },
+        draftRejectionHistory: [
+          ...history,
+          { reason: trimmed, at: new Date().toISOString() },
+        ].slice(-10),
+      },
+    })
+    .where(eq(backlinks.id, id));
+  revalidatePath('/operator/backlinks');
+  revalidatePath(`/operator/backlinks/${id}/draft`);
+  return { ok: true };
+}
+
+/**
+ * Operator re-enqueues MollyCopywriter for an `accepted` row whose previous
+ * draft was rejected. Inserts a fresh `guest_post.accepted` event — the
+ * agent's per-backlink dedupe key already collapses duplicate events, but
+ * the cached-run short-circuit checks `findExistingSuccess` against the
+ * dedupe key. To force a regenerate, we override the dedupe key with a
+ * timestamped variant via a wrapper run. Easier path: directly invoke the
+ * agent here with an explicit dedupe override.
+ */
+export async function regenerateDraft(id: string): Promise<ActionResult> {
+  const db = getDb();
+  const row = (await db.select().from(backlinks).where(eq(backlinks.id, id)).limit(1))[0];
+  if (!row) return { ok: false, message: 'backlink not found' };
+  if (row.status !== 'accepted') {
+    return { ok: false, message: `cannot regenerate from status=${row.status}` };
+  }
+  try {
+    const { MollyCopywriter } = await import('@leadlandlord/agents/molly-copywriter');
+    const agent = new MollyCopywriter();
+    await agent.run(
+      { backlinkId: id },
+      {
+        siteId: row.siteId,
+        dedupeKey: `molly-copywriter:${id}:regen:${Date.now()}`,
+      },
+    );
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+  revalidatePath('/operator/backlinks');
+  revalidatePath(`/operator/backlinks/${id}/draft`);
+  return { ok: true };
 }

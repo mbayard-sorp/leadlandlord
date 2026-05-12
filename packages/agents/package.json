@@ -23,7 +23,9 @@
     "./niche-hunter": "./src/niche-hunter/index.ts",
     "./keyword-planner": "./src/keyword-planner/index.ts",
     "./alert-evaluator": "./src/alert-evaluator/index.ts",
-    "./molly/persona": "./src/molly/persona.ts"
+    "./molly/persona": "./src/molly/persona.ts",
+    "./molly-copywriter": "./src/molly-copywriter/index.ts",
+    "./seo-expert/anchor-policy": "./src/seo-expert/anchor-policy.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

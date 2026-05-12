@@ -10,6 +10,9 @@ const ALL_STATUSES = [
   'submitted',
   'awaiting_reply',
   'accepted',
+  'drafting',
+  'draft_pending_review',
+  'draft_approved',
   'declined',
   'silent',
   'escalated',
@@ -189,7 +192,23 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                               {r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}
                             </td>
                             <td className="px-3 py-2">
-                              {r.status === 'pending' ? <BacklinkActions id={r.id} /> : null}
+                              {r.status === 'pending' ? (
+                                <BacklinkActions id={r.id} />
+                              ) : r.status === 'draft_pending_review' ||
+                                r.status === 'drafting' ||
+                                r.status === 'draft_approved' ||
+                                (r.status === 'accepted' && r.type === 'guest_post') ? (
+                                <Link
+                                  href={`/operator/backlinks/${r.id}/draft`}
+                                  className="text-xs text-sky-400 hover:text-sky-300"
+                                >
+                                  {r.status === 'accepted'
+                                    ? 'Generate draft'
+                                    : r.status === 'drafting'
+                                      ? 'In progress…'
+                                      : 'Review draft →'}
+                                </Link>
+                              ) : null}
                             </td>
                           </tr>
                         );

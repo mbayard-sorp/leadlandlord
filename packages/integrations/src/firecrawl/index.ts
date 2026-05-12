@@ -122,3 +122,53 @@ export async function scrapeReceptivity(domain: string): Promise<ReceptivityResu
     sampledUrls,
   };
 }
+
+/**
+ * Fetch a single URL and return its main-content markdown.
+ *
+ * Used by MollyCopywriter (R4.5) to pull voice samples from a target
+ * blog before generating a guest-post draft. Returns null on any failure
+ * (404, timeout, integration error) — caller is expected to fall back to
+ * "no voice signal" rather than throw.
+ *
+ * Caps content at 10 000 chars so a single huge page doesn't blow the
+ * downstream Haiku input budget.
+ */
+export async function scrapeUrlMarkdown(url: string): Promise<string | null> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) {
+    throw new IntegrationError('firecrawl', 'FIRECRAWL_API_KEY is not set');
+  }
+  try {
+    const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        includeTags: ['p', 'h1', 'h2', 'h3', 'h4', 'li', 'blockquote'],
+        excludeTags: ['nav', 'footer', 'script', 'style', 'aside'],
+        onlyMainContent: true,
+        timeout: 15000,
+      }),
+    });
+    if (!res.ok) {
+      if (res.status !== 404) {
+        log.warn({ url, status: res.status }, 'firecrawl scrapeUrlMarkdown non-ok');
+      }
+      return null;
+    }
+    const json = (await res.json()) as { success?: boolean; data?: { markdown?: string } };
+    if (!json.success || !json.data?.markdown) return null;
+    return json.data.markdown.slice(0, 10000);
+  } catch (err) {
+    log.warn(
+      { url, err: err instanceof Error ? err.message : err },
+      'firecrawl scrapeUrlMarkdown error',
+    );
+    return null;
+  }
+}
