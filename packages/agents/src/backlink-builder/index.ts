@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { getDb, backlinks, backlinkProspects, sites, type Site } from '@leadlandlord/db';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
-import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
+import { sendEmail as sendEmailZoho, sendReply as sendReplyZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { findEditorByDomain } from '@leadlandlord/integrations/apollo';
@@ -118,12 +118,32 @@ export const BacklinkBuilderInput = z.discriminatedUnion('mode', [
     siteId: z.string().uuid(),
     prospectId: z.string().uuid(),
   }),
+  z.object({
+    /**
+     * Day-N follow-up nudge for an unanswered guest_post pitch. The MollyNudge
+     * scheduler emits one event per qualifying backlink; this mode drafts a
+     * short Molly-voice follow-up, sends it via Zoho `sendReplyEmail` so it
+     * threads with the original pitch in the editor's inbox, and bumps
+     * `backlinks.nudge_count` / `last_nudge_at`. BCC graduation still applies.
+     */
+    mode: z.literal('nudge'),
+    siteId: z.string().uuid(),
+    backlinkId: z.string().uuid(),
+    /**
+     * Current `backlinks.nudge_count` at the moment the scheduler chose this
+     * row. Included so the agent-run dedupe key is `nudge:<id>:<n>` —
+     * unique per cadence step, never "permanently cached." The agent
+     * re-reads the live count inside execute() and bails if it has since
+     * advanced (concurrent scheduler tick already nudged this row).
+     */
+    expectedNudgeCount: z.number().int().min(0).max(7),
+  }),
 ]);
 
 export type BacklinkBuilderInput = z.infer<typeof BacklinkBuilderInput>;
 
 export const BacklinkBuilderOutput = z.object({
-  mode: z.enum(['citations', 'haro', 'guest_post', 'prospect', 'prospect_approved']),
+  mode: z.enum(['citations', 'haro', 'guest_post', 'prospect', 'prospect_approved', 'nudge']),
   siteId: z.string().uuid(),
   rowsCreated: z.number(),
   rowsRejected: z.number(),
@@ -166,6 +186,13 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
             // the backlinks row, so a duplicate prospect_approved event
             // collapses to a no-op via the backlinks dedupe_key index.
             return `prospect_approved:${i.siteId}:${i.prospectId}`;
+          case 'nudge':
+            // Dedupe per (backlinkId, nudge step). expectedNudgeCount is the
+            // count the scheduler observed; agent_runs uniqueness on
+            // (agent, dedupe_key) WHERE status='succeeded' means a duplicate
+            // event for the same step short-circuits to the cached output
+            // (no extra send), but the next cadence step has a fresh key.
+            return `nudge:${i.backlinkId}:${i.expectedNudgeCount}`;
           case 'prospect': {
             // Dedupe per (site, date, competitor-set). Including the seed
             // hash means an operator who fixes a typo or swaps competitors
@@ -205,6 +232,8 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
         return this.runProspect(input, site, ctx);
       case 'prospect_approved':
         return this.runProspectApproved(input, site, ctx);
+      case 'nudge':
+        return this.runNudge(input, site, ctx);
     }
   }
 
@@ -786,6 +815,265 @@ export class BacklinkBuilder extends BaseAgent<typeof BacklinkBuilderInput, type
       rowsRejected: result.rowsRejected,
       rowsSent: result.rowsSent,
     };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Nudge (day-N follow-up on an unanswered guest_post pitch)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Day-N follow-up nudge. Loads the existing backlink, drafts a 60–80 word
+   * follow-up in Molly's voice using the original pitch as anchoring context,
+   * sends via Zoho `sendReplyEmail` so it threads with the original outbound
+   * message, and bumps nudge_count / last_nudge_at.
+   *
+   * Guards:
+   *   - Skips if the backlink is no longer in {submitted, awaiting_reply}.
+   *   - Skips if the persisted nudge_count has advanced past the count the
+   *     scheduler observed (another tick already nudged this row).
+   *   - Skips if nudge_count is already >= 7 (final nudge already sent).
+   *   - Skips if the backlink has no `message_id` (no parent to thread to).
+   */
+  private async runNudge(
+    input: Extract<BacklinkBuilderInput, { mode: 'nudge' }>,
+    site: Site,
+    ctx: AgentContext,
+  ): Promise<BacklinkBuilderOutput> {
+    const db = getDb();
+    const row = (
+      await db.select().from(backlinks).where(eq(backlinks.id, input.backlinkId)).limit(1)
+    )[0];
+
+    const empty: BacklinkBuilderOutput = {
+      mode: 'nudge',
+      siteId: input.siteId,
+      rowsCreated: 0,
+      rowsRejected: 0,
+      rowsSent: 0,
+    };
+
+    if (!row) {
+      ctx.log.warn({ backlinkId: input.backlinkId }, 'nudge: backlink not found');
+      return empty;
+    }
+    if (row.type !== 'guest_post') {
+      ctx.log.info({ backlinkId: row.id, type: row.type }, 'nudge: not a guest_post row, skipping');
+      return empty;
+    }
+    if (row.status !== 'submitted' && row.status !== 'awaiting_reply') {
+      ctx.log.info({ backlinkId: row.id, status: row.status }, 'nudge: not in submitted/awaiting_reply, skipping');
+      return empty;
+    }
+    if (row.nudgeCount !== input.expectedNudgeCount) {
+      ctx.log.info(
+        { backlinkId: row.id, expected: input.expectedNudgeCount, actual: row.nudgeCount },
+        'nudge: count advanced — another tick already nudged this row',
+      );
+      return empty;
+    }
+    if (row.nudgeCount >= 7) {
+      ctx.log.info({ backlinkId: row.id }, 'nudge: cadence cap reached, skipping');
+      return empty;
+    }
+    if (!row.messageId) {
+      ctx.log.warn({ backlinkId: row.id }, 'nudge: no parent message_id, cannot thread');
+      return empty;
+    }
+
+    const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+    const targetEditorEmail = typeof metadata.targetEditorEmail === 'string' ? metadata.targetEditorEmail : null;
+    if (!targetEditorEmail) {
+      ctx.log.warn({ backlinkId: row.id }, 'nudge: no targetEditorEmail in metadata, skipping');
+      return empty;
+    }
+
+    // Provider + persona — must mirror runGuestPost's logic so nudges align
+    // with the initial pitch's voice and BCC graduation policy.
+    const useMolly = process.env.ZOHO_MOLLY_ENABLED === 'true';
+    if (!useMolly) {
+      ctx.log.info({ backlinkId: row.id }, 'nudge: ZOHO_MOLLY_ENABLED not set, skipping');
+      return empty;
+    }
+    const mailbox = process.env.ZOHO_MOLLY_FROM ?? MOLLY_PERSONA.mailbox;
+    const fromField = `${MOLLY_PERSONA.displayName} <${mailbox}>`;
+
+    // Throttle (per-mailbox daily cap).
+    const { remaining } = await getRemainingSendsToday(mailbox);
+    if (remaining <= 0) {
+      ctx.log.info({ backlinkId: row.id, mailbox }, 'nudge: daily cap reached, skipping');
+      return empty;
+    }
+
+    const stepNumber = row.nudgeCount + 1; // 1-indexed for prompts/subjects
+    const draft = await this.draftNudgeEmail(
+      {
+        site,
+        targetDomain: row.sourceDomain,
+        originalSubject: row.subjectLine ?? `guest post for ${row.sourceDomain}`,
+        originalBody: row.pitchDraft ?? '',
+        stepNumber,
+      },
+      ctx,
+    );
+    const subject = row.subjectLine?.toLowerCase().startsWith('re:')
+      ? row.subjectLine
+      : `Re: ${row.subjectLine ?? `Guest post idea for ${row.sourceDomain}`}`;
+
+    // BCC graduation still applies. The counter is global per agent so nudges
+    // count toward the same 20-send graduation budget as initial pitches.
+    const bccDecision = await decideBcc('molly');
+    const bcc = bccDecision?.bcc ?? undefined;
+
+    let externalId: string | undefined;
+    let sendError: string | undefined;
+    try {
+      const res = await sendReplyZoho({
+        inReplyToMessageId: row.messageId,
+        to: targetEditorEmail,
+        from: fromField,
+        subject,
+        text: draft,
+        ...(bcc ? { bcc } : {}),
+      });
+      externalId = res.messageId;
+    } catch (err) {
+      sendError = err instanceof Error ? err.message : String(err);
+      ctx.log.error({ backlinkId: row.id, err: sendError }, 'nudge: send failed');
+    }
+
+    await recordSend({
+      siteId: input.siteId,
+      mailbox,
+      toAddress: targetEditorEmail,
+      subject,
+      purpose: 'guest_post',
+      provider: 'zoho',
+      externalId: externalId ?? null,
+      status: sendError ? 'failed' : 'sent',
+      errorMessage: sendError ?? null,
+      metadata: {
+        nudge: { backlinkId: row.id, step: stepNumber },
+        ...(bcc ? { bcc } : {}),
+      },
+    });
+
+    if (sendError) {
+      return { ...empty, rowsCreated: 0 };
+    }
+
+    try {
+      await recordBccSend('molly');
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'nudge: BCC graduation counter update failed (send already succeeded)',
+      );
+    }
+
+    const nudgeHistory = Array.isArray(metadata.nudgeHistory) ? (metadata.nudgeHistory as unknown[]) : [];
+    await db
+      .update(backlinks)
+      .set({
+        nudgeCount: stepNumber,
+        lastNudgeAt: new Date(),
+        // Promote `submitted` → `awaiting_reply` on the first nudge so the
+        // operator UI can distinguish "we sent the pitch" from "we sent the
+        // pitch and started chasing." Subsequent nudges leave status alone.
+        status: row.status === 'submitted' ? 'awaiting_reply' : row.status,
+        metadata: {
+          ...metadata,
+          nudgeHistory: [
+            ...nudgeHistory,
+            {
+              step: stepNumber,
+              externalId,
+              sentAt: new Date().toISOString(),
+            },
+          ].slice(-20),
+        },
+      })
+      .where(eq(backlinks.id, row.id));
+
+    ctx.log.info(
+      { backlinkId: row.id, step: stepNumber, externalId },
+      'nudge: sent',
+    );
+
+    return { ...empty, rowsSent: 1 };
+  }
+
+  private async draftNudgeEmail(
+    args: {
+      site: Site;
+      targetDomain: string;
+      originalSubject: string;
+      originalBody: string;
+      stepNumber: number;
+    },
+    ctx: AgentContext,
+  ): Promise<string> {
+    const client = getAnthropicClient();
+    const model = process.env.BACKLINK_BUILDER_MODEL ?? 'claude-haiku-4-5';
+
+    const userPrompt = `Write nudge #${args.stepNumber} (a brief follow-up) to an unanswered guest-post pitch you (Molly) sent to the editor of ${args.targetDomain}.
+
+Original subject: ${args.originalSubject}
+Original pitch:
+"""
+${args.originalBody.slice(0, 1200)}
+"""
+
+Constraints:
+- 60-80 words MAX. Plain text only.
+- Do NOT repeat the original pitch verbatim. Reference it briefly.
+- For nudge 1-2, offer to adjust the angle or word count.
+- For nudge 3-4, briefly offer one different angle.
+- For nudge 5+, say this is your last check-in and you will not follow up again.
+- Unsubscribe line (exact text): "Reply REMOVE if you'd rather not hear from me."
+- Signature (exact text, final line): "${MOLLY_PERSONA.signatureLine}"
+- No subject line in the output — only the body.
+
+Return only the body as plain text, no JSON wrapper.`;
+
+    const response = await client.messages.create({
+      model,
+      max_tokens: 350,
+      temperature: 0.5,
+      system: MOLLY_PERSONA.voiceSystemPrompt,
+      messages: [
+        ...MOLLY_PERSONA.fewShot.flatMap((ex) => [
+          { role: 'user' as const, content: ex.userMsg },
+          { role: 'assistant' as const, content: ex.assistantMsg },
+        ]),
+        { role: 'user' as const, content: userPrompt },
+      ],
+    });
+
+    const usage = {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+      cache_read_input_tokens: response.usage.cache_read_input_tokens ?? undefined,
+      cache_creation_input_tokens: response.usage.cache_creation_input_tokens ?? undefined,
+    };
+    ctx.recordUsage({ model, ...usage, cost_usd: estimateCostUsd(model, usage) });
+
+    const text = response.content
+      .map((b) => (b.type === 'text' ? b.text : ''))
+      .join('')
+      .trim();
+
+    if (text.length > 0) return text;
+
+    // Fallback when Claude returned nothing useful.
+    return [
+      `Hi,`,
+      ``,
+      `Just bumping this in case it got buried. Happy to adjust the angle or word count if that helps it fit better.`,
+      ``,
+      `Reply REMOVE if you'd rather not hear from me.`,
+      ``,
+      MOLLY_PERSONA.signatureLine,
+    ].join('\n');
   }
 
   // ────────────────────────────────────────────────────────────
