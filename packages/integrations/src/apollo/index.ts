@@ -105,13 +105,32 @@ const TopPeopleResponseSchema = z.object({
  * to detect verified vs masked.
  */
 export async function getOrganizationTopPeople(orgId: string): Promise<ApolloPerson[]> {
-  const json = await apolloFetch<unknown>(
-    `/mixed_people/organization_top_people?organization_id=${encodeURIComponent(orgId)}`,
-    { method: 'POST' },
-  );
-  const parsed = TopPeopleResponseSchema.parse(json);
-  log.info({ orgId, count: parsed.people.length }, 'apollo top_people');
-  return parsed.people;
+  try {
+    const json = await apolloFetch<unknown>(
+      `/mixed_people/organization_top_people?organization_id=${encodeURIComponent(orgId)}`,
+      { method: 'POST' },
+    );
+    const parsed = TopPeopleResponseSchema.parse(json);
+    log.info({ orgId, count: parsed.people.length }, 'apollo top_people');
+    return parsed.people;
+  } catch (err) {
+    // Apollo returns 404 here in two real cases:
+    //  1. The org exists but has no people indexed (small businesses).
+    //  2. The caller's API plan/key tier doesn't include this endpoint
+    //     (restricted-key tier saw blanket 404s in May 2026).
+    // Either way, "no editors" is the correct downstream behavior — let
+    // findEditorByDomain return null and the agent take its Path B
+    // (queue unenriched, operator pastes editor email manually). Without
+    // this catch the error bubbles up to BacklinkBuilder.runProspect's
+    // try/catch and surfaces in the operator UI as "Apollo: 404" on
+    // every prospect row, which reads as a broken integration when it's
+    // really expected behavior.
+    if (err instanceof IntegrationError && err.status === 404) {
+      log.info({ orgId }, 'apollo top_people: 404 — treating as no editors');
+      return [];
+    }
+    throw err;
+  }
 }
 
 /**
