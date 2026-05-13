@@ -1367,6 +1367,7 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
     let rowsCreated = 0;
     let rowsRejected = 0;
     let rowsSent = 0;
+    let prospectsQueued = 0;
     const pitchTopic = `Guide to ${site.niche} for homeowners in ${site.city}`;
 
     for (const c of filtered) {
@@ -1447,65 +1448,66 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
       }
 
       // Path B — Apollo had no usable record (404, masked email, no people,
-      // or Apollo budget exhausted). Queue the prospect for manual editor
-      // lookup so the operator can fill in `targetEditorEmail` via Hunter,
-      // LinkedIn, or the site's contact page. No pitch draft yet — that
-      // happens once the operator supplies the email.
-      const manualDedupeKey = `prospect:${input.siteId}:${c.domain}`;
-      const seenAlready = (
-        await getDb()
-          .select({ id: backlinks.id })
-          .from(backlinks)
-          .where(eq(backlinks.dedupeKey, manualDedupeKey))
-      ).length > 0;
-      if (seenAlready) continue;
+      // or Apollo budget exhausted). Land the candidate in the
+      // `backlink_prospects` triage queue (ADR-0006) so MollyScorer can
+      // score it and the operator can review it via the top-5 UI. The
+      // `backlinks` row is only created later, after `prospect.approved`
+      // flows through `runProspectApproved` → `runGuestPost`.
+      const prospectDedupeKey = `prospect:${input.siteId}:${c.domain}`;
 
       try {
-        await getDb()
-          .insert(backlinks)
+        const inserted = await getDb()
+          .insert(backlinkProspects)
           .values({
             siteId: input.siteId,
-            sourceDomain: c.domain,
-            targetUrl: null,
-            type: 'guest_post',
-            status: 'pending',
-            dedupeKey: manualDedupeKey,
-            pitchDraft: null,
-            subjectLine: null,
-            rejectionReason: null,
+            domain: c.domain,
+            domainRank: c.rank,
+            status: 'prospected',
+            dedupeKey: prospectDedupeKey,
             metadata: {
-              targetEditorEmail: null,
               pitchTopic,
-              prospect: {
-                run: true,
-                dfsRank: c.rank,
-                referringDomainsToCompetitors: c.referringDomains,
-                backlinksCount: c.backlinksCount,
-                firstSeen: c.firstSeen,
-                editorTitle: null,
-                editorEmailStatus: null,
-                apolloOrgId: editor?.org.id ?? null,
-                apolloPersonId: null,
-                niche: site.niche,
-                minDomainRank: minRank,
-                seeds,
-                needsManualEditor: true,
-                apolloError,
-                apolloBudgetExhausted: !apolloBudgetRemaining,
-              },
+              referringDomainsToCompetitors: c.referringDomains,
+              backlinksCount: c.backlinksCount,
+              firstSeen: c.firstSeen,
+              apolloOrgId: editor?.org.id ?? null,
+              apolloPersonId: null,
+              editorTitle: null,
+              editorEmailStatus: null,
+              editorEmail: null,
+              niche: site.niche,
+              minDomainRank: minRank,
+              seeds,
+              needsManualEditor: true,
+              apolloError,
+              apolloBudgetExhausted: !apolloBudgetRemaining,
             },
           })
           .onConflictDoNothing({
-          target: backlinks.dedupeKey,
-          where: sql`${backlinks.dedupeKey} IS NOT NULL`,
-        });
-        rowsCreated += 1;
+            target: backlinkProspects.dedupeKey,
+            where: sql`${backlinkProspects.dedupeKey} IS NOT NULL`,
+          })
+          .returning({ id: backlinkProspects.id });
+        if (inserted.length > 0) {
+          prospectsQueued += 1;
+          rowsCreated += 1;
+        }
       } catch (err) {
         ctx.log.warn(
           { domain: c.domain, err: err instanceof Error ? err.message : String(err) },
-          'prospect: manual-lookup row insert failed',
+          'prospect: backlink_prospects insert failed',
         );
       }
+    }
+
+    // Wake MollyScorer on the next operator tick so the freshly-discovered
+    // `prospected` rows get scored and surface to the top-5 UI. Suppressed
+    // automatically when running as a sub-agent (parentRunId set).
+    if (prospectsQueued > 0) {
+      await ctx.emitNextStepEvent({
+        type: 'prospect.discovered',
+        targetAgent: 'molly-scorer',
+        payload: { siteId: input.siteId },
+      });
     }
 
     ctx.log.info(

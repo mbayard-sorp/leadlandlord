@@ -95,6 +95,7 @@ const FAKE_SITE = {
 vi.mock('@leadlandlord/db', () => ({
   getDb: () => makeFakeDb(FAKE_SITE),
   backlinks: { __table: 'backlinks', dedupeKey: 'dedupe_key', siteId: 'site_id' },
+  backlinkProspects: { __table: 'backlink_prospects', dedupeKey: 'dedupe_key', siteId: 'site_id' },
   sites: { __table: 'sites', id: 'id' },
   agentRuns: {},
   agentBudgets: {},
@@ -604,8 +605,9 @@ describe('backlink-builder', () => {
       expect(provenance.editorEmailStatus).toBe('verified');
     });
 
-    it('queues prospects with masked Apollo emails for manual editor lookup', async () => {
+    it('queues prospects with masked Apollo emails into backlink_prospects for triage', async () => {
       process.env.RESEND_FROM_ADDRESS = 'sender@example.com';
+      const emitMock = vi.fn(async () => {});
       getDomainIntersectionMock.mockResolvedValue([
         { domain: 'masked.com', rank: 500, backlinksCount: 1, referringPagesCount: 1, referringDomains: 10, firstSeen: null },
       ]);
@@ -629,21 +631,40 @@ describe('backlink-builder', () => {
           siteId: FAKE_SITE.id,
           competitorOverride: ['compA.com', 'compB.com'],
         },
-        PROSPECT_CTX(),
+        { ...PROSPECT_CTX(), emitNextStepEvent: emitMock },
       )) as { prospectsEnriched: number; rowsCreated: number };
       // Apollo returned a masked email → no enrichment counted, but the
-      // prospect is still queued with needsManualEditor=true so the
-      // operator can fill in the email manually (Hunter, LinkedIn, etc).
+      // candidate is queued into `backlink_prospects` (status='prospected')
+      // so MollyScorer can score it and the operator can review it via
+      // the top-5 UI. The `backlinks` row is created later, after
+      // prospect.approved flows through runProspectApproved.
       expect(result.prospectsEnriched).toBe(0);
       expect(result.rowsCreated).toBe(1);
+
+      // No `backlinks` insert from Path B — only the prospect queue.
       const backlinkInserts = insertCalls.filter((c) => c.table === 'backlinks');
-      const row = backlinkInserts.at(-1)!.values;
-      expect(row.status).toBe('pending');
-      expect(row.pitchDraft).toBeNull();
+      expect(backlinkInserts).toHaveLength(0);
+
+      const prospectInserts = insertCalls.filter((c) => c.table === 'backlink_prospects');
+      expect(prospectInserts).toHaveLength(1);
+      const row = prospectInserts[0]!.values;
+      expect(row.status).toBe('prospected');
+      expect(row.domain).toBe('masked.com');
+      expect(row.domainRank).toBe(500);
+      expect(row.dedupeKey).toBe(`prospect:${FAKE_SITE.id}:masked.com`);
       const md = row.metadata as Record<string, unknown>;
-      expect(md.targetEditorEmail).toBeNull();
-      const provenance = md.prospect as Record<string, unknown>;
-      expect(provenance.needsManualEditor).toBe(true);
+      expect(md.editorEmail).toBeNull();
+      expect(md.needsManualEditor).toBe(true);
+      expect(md.pitchTopic).toEqual(expect.stringContaining('plumbing'));
+
+      // MollyScorer must be woken so the new `prospected` row gets scored.
+      expect(emitMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'prospect.discovered',
+          targetAgent: 'molly-scorer',
+          payload: { siteId: FAKE_SITE.id },
+        }),
+      );
     });
 
     it('uses referring_domains fallback when only one competitor seed', async () => {
