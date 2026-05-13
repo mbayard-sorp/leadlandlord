@@ -104,9 +104,15 @@ async function callTool<T>(toolName: string, args: unknown): Promise<T> {
   try {
     return JSON.parse(innerText) as T;
   } catch (err) {
+    // Zoho occasionally returns a plaintext error (e.g. "You cannot access this
+    // mailbox", rate-limit notices, expired-token messages) instead of JSON.
+    // Surface the raw body in the message itself so the real signal isn't
+    // hidden behind a generic parser error in agent_runs logs.
+    const snippet = innerText.trim().slice(0, 300);
+    const parserMsg = (err as Error).message;
     throw new IntegrationError(
       'zoho-mcp',
-      `${toolName}: failed to parse inner response: ${(err as Error).message}`,
+      `${toolName}: non-JSON response (${parserMsg}): ${snippet}`,
       undefined,
       innerText,
     );
