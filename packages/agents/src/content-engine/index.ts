@@ -9,7 +9,21 @@ import { ContentBundle } from '@leadlandlord/shared/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SYSTEM_PROMPT = readFileSync(resolve(__dirname, 'system.md'), 'utf-8');
+
+/**
+ * Lazy-load the base system prompt. Reading at module-load time would crash
+ * any route that transitively imports this file when Vercel's nft hasn't
+ * traced `system.md` into the function bundle — including pages that don't
+ * actually invoke the agent (e.g. server actions that statically reference
+ * the agent registry).
+ */
+let _systemPrompt: string | null = null;
+function getSystemPrompt(): string {
+  if (_systemPrompt === null) {
+    _systemPrompt = readFileSync(resolve(__dirname, 'system.md'), 'utf-8');
+  }
+  return _systemPrompt;
+}
 
 /**
  * Maps theme keys to overlay markdown filenames in `niches/`. The overlay is
@@ -54,10 +68,11 @@ export function loadNicheOverlay(themeKey: string): string | null {
  * structure is unchanged — only the text content varies by theme.
  */
 export function composeSystemPrompt(themeKey: string | undefined): string {
-  if (!themeKey) return SYSTEM_PROMPT;
+  const base = getSystemPrompt();
+  if (!themeKey) return base;
   const overlay = loadNicheOverlay(themeKey);
-  if (!overlay) return SYSTEM_PROMPT;
-  return `${SYSTEM_PROMPT}\n\n---\n\n${overlay}`;
+  if (!overlay) return base;
+  return `${base}\n\n---\n\n${overlay}`;
 }
 
 /**
