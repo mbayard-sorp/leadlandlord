@@ -25,6 +25,7 @@
     "./alert-evaluator": "./src/alert-evaluator/index.ts",
     "./molly/persona": "./src/molly/persona.ts",
     "./molly-copywriter": "./src/molly-copywriter/index.ts",
+    "./molly-scorer": "./src/molly-scorer/index.ts",
     "./seo-expert/anchor-policy": "./src/seo-expert/anchor-policy.ts"
   },
   "scripts": {
