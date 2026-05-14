@@ -4,6 +4,8 @@ import { claimEvents, markEventProcessed, markEventFailed } from '@leadlandlord/
 import { getAgent } from '@leadlandlord/agents/registry';
 import { classifyAgentError } from '@leadlandlord/agents/error-classify';
 import { log } from '@leadlandlord/shared/log';
+import * as Sentry from '@sentry/nextjs';
+import { assertCronAuthorized } from '@/lib/cron-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,12 +33,8 @@ const BATCH_LIMIT = 5;
  * triggers, but Vercel Cron no longer dispatches through it.
  */
 export async function GET(req: Request) {
-  if (
-    process.env.CRON_SECRET &&
-    req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
-  }
+  const denied = assertCronAuthorized(req);
+  if (denied) return denied;
 
   // BUILD MARKER — printed every tick to verify which build is running.
   // Bumped 2026-05-08T00:30 with PR 12 + alias-fix verification.
@@ -117,6 +115,7 @@ export async function GET(req: Request) {
             { agent: targetAgent, event_id: ev.id, err: msg, kind },
             'agent invocation failed',
           );
+          Sentry.captureException(err, { tags: { agent: targetAgent, event_id: ev.id, kind } });
           try {
             await markEventFailed(ev.id, msg, kind);
           } catch (markErr) {

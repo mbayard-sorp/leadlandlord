@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { assertCronAuthorized } from '@/lib/cron-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,12 +25,8 @@ export const maxDuration = 300;
  * (visible via Vercel function logs) so an operator can pull it manually.
  */
 export async function GET(req: Request) {
-  if (
-    process.env.CRON_SECRET &&
-    req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
-  }
+  const denied = assertCronAuthorized(req);
+  if (denied) return denied;
   const today = new Date().toISOString().slice(0, 10);
   const isSunday = new Date().getUTCDay() === 0;
 

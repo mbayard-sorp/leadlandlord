@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ANTHROPIC_MODULE_VERSION, getAnthropicClient } from '@leadlandlord/integrations/anthropic';
+import { requireOperatorSession } from '../../../../lib/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export const dynamic = 'force-dynamic';
  *   - now: server timestamp
  */
 export async function GET() {
+  try { await requireOperatorSession(); } catch { return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 }); }
   // Actually invoke getAnthropicClient and inspect the result. Proves whether
   // the cron path's bundle has the same anthropic.ts that diag has.
   let clientType = 'unknown';

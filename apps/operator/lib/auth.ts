@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { cookies } from 'next/headers';
 
 const COOKIE_NAME = '__ll_session';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
@@ -42,6 +43,13 @@ export function verifySession(cookieValue: string | undefined): boolean {
 
 export function sessionCookieName(): string {
   return COOKIE_NAME;
+}
+
+export async function requireOperatorSession(): Promise<void> {
+  const cookie = (await cookies()).get(sessionCookieName())?.value;
+  if (!verifySession(cookie)) {
+    throw new Error('unauthorized');
+  }
 }
 
 export function checkPassword(provided: string): boolean {
