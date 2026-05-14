@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { eq, and } from 'drizzle-orm';
 import { getDb, niches, agentEvents } from '@leadlandlord/db';
-import { NicheHunter, type NicheHunterInput } from '@leadlandlord/agents/niche-hunter';
+import { NicheHunterInput } from '@leadlandlord/agents/niche-hunter';
 import { log } from '@leadlandlord/shared/log';
 import { requireOperatorSession } from '@/lib/auth';
 
@@ -31,7 +31,7 @@ export async function runNicheHunter(formData: FormData): Promise<ActionResult> 
   const popMin = formData.get('population_min') ? Number(formData.get('population_min')) : undefined;
   const popMax = formData.get('population_max') ? Number(formData.get('population_max')) : undefined;
 
-  const input: NicheHunterInput = {
+  const rawInput = {
     target_count: target,
     brainstorm_count: brainstorm,
     min_search_volume: minVol,
@@ -39,18 +39,23 @@ export async function runNicheHunter(formData: FormData): Promise<ActionResult> 
     min_avg_job_value_usd: minJob,
     allowed_categories: ['home_services'],
     geo_filter: states.length || popMin || popMax ? { states, population_min: popMin, population_max: popMax } : undefined,
-  } as NicheHunterInput;
+  };
 
-  try {
-    const out = await new NicheHunter().run(input);
-    log.info({ persisted: out.persisted, scored: out.scored }, 'niche-hunter run from /operator/niches');
-    revalidatePath('/operator/niches');
-    return { ok: true, message: `Brainstormed ${out.brainstormed}, scored ${out.scored}, persisted ${out.persisted}.` };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.error({ err: msg }, 'niche-hunter run failed');
-    return { ok: false, message: msg };
+  const parsed = NicheHunterInput.safeParse(rawInput);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues.map((i) => i.message).join('; ') };
   }
+
+  const db = getDb();
+  await db.insert(agentEvents).values({
+    agent: 'operator',
+    type: 'niche.run',
+    targetAgent: 'niche-hunter',
+    payload: parsed.data,
+  });
+  log.info({ payload: parsed.data }, 'niche-hunter run enqueued');
+  revalidatePath('/operator/niches');
+  return { ok: true, message: 'Queued — check the Activity panel for progress.' };
 }
 
 /**

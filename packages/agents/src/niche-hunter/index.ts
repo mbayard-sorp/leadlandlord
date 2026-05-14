@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, and, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
 import { getDb, niches } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
@@ -35,6 +35,16 @@ const CategoryEnum = z.enum([
   'event',
   'lifestyle',
 ]);
+
+export const ClaudeCandidateSchema = z.object({
+  niche: z.string().min(1).max(80),
+  city: z.string().min(1).max(80),
+  state: z.string().transform((s) => s.toUpperCase()).pipe(z.string().regex(/^[A-Z]{2}$/)),
+  category: CategoryEnum,
+  est_avg_job_value_usd: z.number().nonnegative().max(100_000),
+  est_close_rate: z.number().min(0).max(1),
+  rationale: z.string().min(1).max(400),
+});
 
 export const NicheHunterInput = z.object({
   target_count: z.number().int().positive().max(50).default(10),
@@ -95,8 +105,8 @@ const BRAINSTORM_SCHEMA = {
           state: { type: 'string', description: 'Two-letter US state code.' },
           category: {
             type: 'string',
-            description:
-              'High-level category. Must be one of: home_services, auto, health, professional, pet, event, lifestyle.',
+            enum: [...CategoryEnum.options],
+            description: 'High-level category.',
           },
           est_avg_job_value_usd: {
             type: 'number',
@@ -266,14 +276,29 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     if (!toolUse || toolUse.type !== 'tool_use' || toolUse.name !== BRAINSTORM_TOOL_NAME) {
       throw new Error('niche-hunter: Claude did not return tool_use');
     }
-    const out = toolUse.input as { candidates?: ClaudeCandidate[] };
-    return (out.candidates ?? []).filter(
-      (c) =>
-        input.allowed_categories.includes(c.category as typeof input.allowed_categories[number]) ||
-        // Be lenient if Claude returns an unfamiliar category — keep the row,
-        // let the operator review filter at the dashboard level.
-        true,
-    );
+    const out = toolUse.input as { candidates?: unknown[] };
+    const raw = (out.candidates ?? []) as unknown[];
+    const validated: ClaudeCandidate[] = [];
+    for (const item of raw) {
+      const parsedCandidate = ClaudeCandidateSchema.safeParse(item);
+      if (!parsedCandidate.success) {
+        ctx.log.warn(
+          { err: parsedCandidate.error.issues, item },
+          'niche-hunter: dropping invalid Claude candidate',
+        );
+        continue;
+      }
+      // Additional gate: respect operator's allowed_categories filter.
+      if (!input.allowed_categories.includes(parsedCandidate.data.category as typeof input.allowed_categories[number])) {
+        ctx.log.warn(
+          { category: parsedCandidate.data.category, allowed: input.allowed_categories },
+          'niche-hunter: dropping candidate with category outside allowed list',
+        );
+        continue;
+      }
+      validated.push(parsedCandidate.data);
+    }
+    return validated;
   }
 
   private async scoreCandidate(
@@ -299,28 +324,22 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     const db = getDb();
     let count = 0;
     for (const c of scored) {
-      // Skip if (niche, city, state) already exists in any decision state —
-      // operators don't need duplicate review work.
-      const existing = await db
-        .select({ id: niches.id })
-        .from(niches)
-        .where(
-          and(eq(niches.niche, c.niche), eq(niches.city, c.city), eq(niches.state, c.state)),
-        )
-        .limit(1);
-      if (existing[0]) continue;
-      await db.insert(niches).values({
-        niche: c.niche,
-        city: c.city,
-        state: c.state,
-        searchVolume: c.search_volume,
-        kd: Math.round(c.kd),
-        estAvgJobValueUsd: c.est_avg_job_value_usd.toFixed(2),
-        estCloseRate: c.est_close_rate.toFixed(4),
-        score: c.score.toFixed(2),
-        rationale: c.rationale,
-      });
-      count++;
+      const inserted = await db
+        .insert(niches)
+        .values({
+          niche: c.niche,
+          city: c.city,
+          state: c.state,
+          searchVolume: c.search_volume,
+          kd: Math.round(c.kd),
+          estAvgJobValueUsd: c.est_avg_job_value_usd.toFixed(2),
+          estCloseRate: c.est_close_rate.toFixed(4),
+          score: c.score.toFixed(2),
+          rationale: c.rationale,
+        })
+        .onConflictDoNothing({ target: [niches.niche, niches.city, niches.state] })
+        .returning({ id: niches.id });
+      if (inserted.length) count++;
     }
     return count;
   }
@@ -359,12 +378,12 @@ interface ScoreInputs {
  *
  * Calibrated so a "great" niche scores >= 100 and a "skip" scores < 20.
  */
-function computeScore(s: ScoreInputs): number {
+export function computeScore(s: ScoreInputs): number {
   const volumeFactor = Math.log10(Math.max(1, s.search_volume + 1)) * 30; // diminishing returns on volume
   const kdInverse = (100 - s.kd) / 100; // 0..1
   const competitionInverse = 1 - s.competition; // 0..1
-  const valueFactor = Math.min(2, s.est_avg_job_value_usd / 500); // capped at 2x for $1k+ jobs
-  const closeRateFactor = Math.max(0.1, Math.min(1, s.est_close_rate));
+  const valueFactor = Math.min(2, Math.max(0, s.est_avg_job_value_usd) / 500); // capped at 2x for $1k+ jobs; clamped to 0 for negative values
+  const closeRateFactor = Math.max(0.01, Math.min(1, s.est_close_rate));
   const raw = volumeFactor * kdInverse * competitionInverse * valueFactor * closeRateFactor;
   return Number(raw.toFixed(2));
 }
