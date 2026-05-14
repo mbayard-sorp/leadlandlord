@@ -34,7 +34,7 @@ export function RunForm() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white w-full"
+          className="inline-flex items-center justify-center min-h-[44px] rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 px-4 text-sm font-medium text-white w-full"
         >
           {pending ? 'Running…' : 'Run Niche Hunter'}
         </button>
@@ -61,6 +61,7 @@ function Field({
   defaultValue?: string;
   type?: string;
 }) {
+  const inputModeAttr = type === 'number' ? 'numeric' : undefined;
   return (
     <label className="text-xs text-slate-400 flex flex-col gap-1">
       {label}
@@ -68,7 +69,11 @@ function Field({
         name={name}
         defaultValue={defaultValue}
         type={type}
-        className="rounded bg-slate-950 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
+        inputMode={inputModeAttr}
+        autoCapitalize={type === 'text' ? 'characters' : 'off'}
+        autoCorrect="off"
+        spellCheck={false}
+        className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
       />
     </label>
   );

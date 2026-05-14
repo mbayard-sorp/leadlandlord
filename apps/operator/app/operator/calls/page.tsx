@@ -21,7 +21,7 @@ export default async function CallsPage({ searchParams }: SearchParams) {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Calls</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Calls</h1>
         <p className="text-sm text-slate-400 mt-1">
           Inbound call log across the entire portfolio. Filter by classification.
         </p>
@@ -34,26 +34,26 @@ export default async function CallsPage({ searchParams }: SearchParams) {
           No calls match the current filter.
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 overflow-hidden">
+        <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm [&_th]:text-left [&_th]:px-3 [&_th]:py-2 [&_th]:bg-slate-900 [&_th]:text-xs [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-slate-500 [&_td]:px-3 [&_td]:py-2 [&_tbody]:divide-y [&_tbody]:divide-slate-800">
             <thead>
               <tr>
                 <th>When</th>
                 <th>Site</th>
                 <th>From</th>
-                <th>Dur</th>
+                <th className="hidden md:table-cell">Dur</th>
                 <th>Class</th>
-                <th>Recording</th>
-                <th>Transcript</th>
+                <th className="hidden md:table-cell">Recording</th>
+                <th className="hidden lg:table-cell">Transcript</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-900/40">
-                  <td className="text-slate-400">
+                  <td className="text-slate-400 whitespace-nowrap">
                     {new Date(c.startedAt).toLocaleString()}
                   </td>
-                  <td>
+                  <td className="break-words">
                     <Link
                       href={`/operator/sites/${c.siteId}`}
                       className="text-sky-400 hover:text-sky-300"
@@ -64,24 +64,35 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                       {c.siteCity}, {c.siteState}
                     </div>
                   </td>
-                  <td className="font-mono text-xs">{c.callerNumber ?? '—'}</td>
-                  <td className="text-slate-400">{c.durationS ? `${c.durationS}s` : '—'}</td>
+                  <td className="font-mono text-xs">
+                    {c.callerNumber ? (
+                      <a
+                        href={`tel:${c.callerNumber}`}
+                        className="text-sky-400 hover:text-sky-300"
+                      >
+                        {c.callerNumber}
+                      </a>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="text-slate-400 hidden md:table-cell">{c.durationS ? `${c.durationS}s` : '—'}</td>
                   <td>
                     <ClassPill v={c.classification} />
                   </td>
-                  <td>
+                  <td className="hidden md:table-cell">
                     {c.recordingUrl ? (
                       <audio
                         src={c.recordingUrl}
                         controls
                         preload="none"
-                        className="h-8 max-w-[200px]"
+                        className="h-8 w-full sm:max-w-[200px]"
                       />
                     ) : (
                       <span className="text-slate-600">—</span>
                     )}
                   </td>
-                  <td className="text-xs text-slate-300 max-w-[280px]">
+                  <td className="text-xs text-slate-300 max-w-[280px] hidden lg:table-cell">
                     {c.transcript ? (
                       <details>
                         <summary className="cursor-pointer text-slate-400 hover:text-slate-200">
@@ -157,7 +168,7 @@ function FilterBar({ current }: { current: string | undefined }) {
           <Link
             key={c}
             href={href}
-            className={`px-3 py-1.5 rounded border text-xs uppercase tracking-wide ${
+            className={`inline-flex items-center min-h-[44px] px-3 rounded border text-xs uppercase tracking-wide ${
               active
                 ? 'border-sky-600 bg-sky-900/30 text-sky-200'
                 : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:text-slate-200'

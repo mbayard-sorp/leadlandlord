@@ -375,21 +375,32 @@ function CallsTable({ rows }: { rows: Call[] }) {
         <tr>
           <th>When</th>
           <th>From</th>
-          <th>Dur</th>
+          <th className="hidden md:table-cell">Dur</th>
           <th>Class</th>
-          <th>Recording</th>
+          <th className="hidden md:table-cell">Recording</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((c) => (
           <tr key={c.id} className="hover:bg-slate-900/40">
-            <td className="text-slate-400">{new Date(c.startedAt).toLocaleString()}</td>
-            <td className="font-mono text-xs">{c.callerNumber ?? '—'}</td>
-            <td className="text-slate-400">{c.durationS ? `${c.durationS}s` : '—'}</td>
+            <td className="text-slate-400 whitespace-nowrap">{new Date(c.startedAt).toLocaleString()}</td>
+            <td className="font-mono text-xs">
+              {c.callerNumber ? (
+                <a
+                  href={`tel:${c.callerNumber}`}
+                  className="text-sky-400 hover:text-sky-300"
+                >
+                  {c.callerNumber}
+                </a>
+              ) : (
+                '—'
+              )}
+            </td>
+            <td className="text-slate-400 hidden md:table-cell">{c.durationS ? `${c.durationS}s` : '—'}</td>
             <td>
               <ClassPill v={c.classification} />
             </td>
-            <td>
+            <td className="hidden md:table-cell">
               {c.recordingUrl ? (
                 <a
                   href={c.recordingUrl}
@@ -418,19 +429,28 @@ function LeadsTable({ rows }: { rows: Lead[] }) {
         <tr>
           <th>When</th>
           <th>Contact</th>
-          <th>Source</th>
+          <th className="hidden md:table-cell">Source</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((l) => (
           <tr key={l.id} className="hover:bg-slate-900/40">
-            <td className="text-slate-400">{new Date(l.createdAt).toLocaleString()}</td>
-            <td>
+            <td className="text-slate-400 whitespace-nowrap">{new Date(l.createdAt).toLocaleString()}</td>
+            <td className="break-words">
               <div>{l.name ?? '—'}</div>
-              <div className="text-xs text-slate-500 font-mono">{l.phone ?? l.email ?? ''}</div>
+              <div className="text-xs text-slate-500 font-mono">
+                {l.phone ? (
+                  <a href={`tel:${l.phone}`} className="text-sky-400 hover:text-sky-300">
+                    {l.phone}
+                  </a>
+                ) : (
+                  l.email ?? ''
+                )}
+              </div>
+              <div className="text-[10px] text-slate-500 md:hidden mt-0.5">{l.source}</div>
             </td>
-            <td className="text-slate-400">{l.source}</td>
+            <td className="text-slate-400 hidden md:table-cell">{l.source}</td>
             <td className="text-xs">
               <span className="text-slate-500">sms:</span> {pillTone(l.smsStatus)}{' '}
               <span className="text-slate-500 ml-1">email:</span> {pillTone(l.emailStatus)}{' '}
@@ -447,7 +467,7 @@ function LeadsTable({ rows }: { rows: Lead[] }) {
 
 function Table({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-800 overflow-hidden">
+    <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
       <table className="w-full text-sm [&_th]:text-left [&_th]:px-3 [&_th]:py-2 [&_th]:bg-slate-900 [&_th]:text-xs [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-slate-500 [&_td]:px-3 [&_td]:py-2 [&_tbody]:divide-y [&_tbody]:divide-slate-800">
         {children}
       </table>

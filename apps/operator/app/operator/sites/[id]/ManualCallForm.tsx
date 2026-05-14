@@ -34,10 +34,19 @@ export function ManualCallForm({ siteId }: Props) {
     >
       <p className="text-xs uppercase tracking-wide text-slate-500">Manual call entry (test)</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <input name="caller_number" placeholder="+15125550100" required className="cell" />
+        <input
+          name="caller_number"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          placeholder="+15125550100"
+          required
+          className="cell"
+        />
         <input
           name="duration_s"
           type="number"
+          inputMode="numeric"
           min="0"
           placeholder="seconds"
           className="cell"
@@ -55,6 +64,7 @@ export function ManualCallForm({ siteId }: Props) {
         name="transcript"
         rows={2}
         placeholder="Optional transcript…"
+        enterKeyHint="send"
         className="cell w-full"
       />
       {result && (
@@ -66,22 +76,11 @@ export function ManualCallForm({ siteId }: Props) {
         <button
           type="submit"
           disabled={isPending}
-          className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium disabled:opacity-50"
+          className="inline-flex items-center min-h-[44px] px-4 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium disabled:opacity-50"
         >
           {isPending ? 'Inserting…' : 'Insert call'}
         </button>
       </div>
-
-      <style jsx>{`
-        :global(.cell) {
-          background: rgb(15 23 42 / 0.6);
-          border: 1px solid rgb(51 65 85);
-          border-radius: 6px;
-          padding: 6px 10px;
-          color: rgb(226 232 240);
-          font-size: 0.8125rem;
-        }
-      `}</style>
     </form>
   );
 }

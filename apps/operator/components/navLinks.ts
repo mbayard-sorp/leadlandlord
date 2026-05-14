@@ -1,0 +1,24 @@
+export type NavLinkItem = {
+  href: string;
+  label: string;
+  disabled?: boolean;
+};
+
+export const navLinks: ReadonlyArray<NavLinkItem> = [
+  { href: '/operator', label: 'Overview' },
+  { href: '/operator/portfolio', label: 'Portfolio' },
+  { href: '/operator/build', label: 'Build site' },
+  { href: '/operator/calls', label: 'Calls' },
+  { href: '/operator/agents', label: 'Agents' },
+  { href: '/operator/seo', label: 'SEO' },
+  { href: '/operator/backlinks', label: 'Backlinks' },
+  { href: '/operator/backlinks/prospects', label: '↳ Prospects' },
+  { href: '/operator/molly', label: '↳ Molly' },
+  { href: '/operator/email-sends', label: 'Email Sends' },
+  { href: '/operator/maintenance', label: 'Maintenance' },
+  { href: '/operator/control', label: 'Control' },
+  { href: '/operator/pipeline', label: 'Pipeline', disabled: true },
+  { href: '/operator/tenants', label: 'Tenants', disabled: true },
+  { href: '/operator/niches', label: 'Niches' },
+  { href: '/operator/pnl', label: 'P&L', disabled: true },
+];

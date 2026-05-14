@@ -41,7 +41,7 @@ export default async function DraftReviewPage({ params }: PageProps) {
     <div className="space-y-6">
       <header className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Draft review</h1>
+          <h1 className="text-xl md:text-2xl font-semibold">Draft review</h1>
           <p className="text-sm text-slate-400 mt-1">
             Guest-post draft for{' '}
             <span className="font-mono text-slate-300">{row.sourceDomain}</span>

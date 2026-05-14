@@ -141,7 +141,9 @@ function ChecklistRow({
         type="button"
         onClick={toggle}
         disabled={!item.manual || pending}
-        className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border text-xs ${
+        className={`inline-flex items-center justify-center rounded border text-xs ${
+          item.manual ? 'min-h-[44px] min-w-[44px]' : 'h-5 w-5 mt-0.5'
+        } ${
           done
             ? 'bg-emerald-900/40 border-emerald-600/60 text-emerald-300'
             : 'bg-slate-900/60 border-slate-700 text-slate-600'
@@ -150,9 +152,9 @@ function ChecklistRow({
         }`}
         aria-label={item.manual ? `Toggle ${item.label}` : `${item.label} (auto-derived)`}
       >
-        {done ? '✓' : ''}
+        <span className={item.manual ? 'text-base' : ''}>{done ? '✓' : ''}</span>
       </button>
-      <div className="flex-1 text-sm">
+      <div className={`flex-1 text-sm ${item.manual ? 'pt-2.5' : ''}`}>
         <div className="text-slate-200 flex items-center gap-2">
           {item.label}
           {!item.manual && (
@@ -183,12 +185,12 @@ function PromoteButton({ siteId, disabled }: { siteId: string; disabled: boolean
   }
 
   return (
-    <div className="flex items-center gap-3 pt-2 border-t border-slate-800">
+    <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800">
       <button
         type="button"
         onClick={promote}
         disabled={disabled || pending}
-        className="text-xs px-3 py-1.5 rounded bg-emerald-700/50 hover:bg-emerald-700/70 text-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+        className="inline-flex items-center min-h-[44px] text-sm px-4 rounded bg-emerald-700/50 hover:bg-emerald-700/70 text-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
       >
         {pending ? 'Promoting…' : 'Mark site as live'}
       </button>

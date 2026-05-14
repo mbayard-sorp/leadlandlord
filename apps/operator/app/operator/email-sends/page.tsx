@@ -74,7 +74,7 @@ export default async function EmailSendsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Email sends</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Email sends</h1>
         <p className="text-sm text-slate-400 mt-1">
           Audit log of agent-sent emails. Daily caps follow the Zoho warmup schedule —
           throttled rows are recorded but do not count toward today&apos;s usage.
@@ -110,7 +110,7 @@ export default async function EmailSendsPage({ searchParams }: PageProps) {
           <Link
             key={s}
             href={buildHref({ status: s })}
-            className={`px-3 py-1 rounded border ${
+            className={`inline-flex items-center min-h-[44px] px-3 rounded border ${
               filter === s
                 ? 'border-sky-700 bg-sky-900/40 text-sky-200'
                 : 'border-slate-700 text-slate-300 hover:border-slate-500'
@@ -124,7 +124,7 @@ export default async function EmailSendsPage({ searchParams }: PageProps) {
             <span className="text-slate-500">mailbox:</span>
             <Link
               href={buildHref({ mailbox: null })}
-              className={`px-3 py-1 rounded border ${
+              className={`inline-flex items-center min-h-[44px] px-3 rounded border ${
                 mailboxFilter === null
                   ? 'border-sky-700 bg-sky-900/40 text-sky-200'
                   : 'border-slate-700 text-slate-300 hover:border-slate-500'
@@ -154,19 +154,19 @@ export default async function EmailSendsPage({ searchParams }: PageProps) {
           No emails matching status={filter} mailbox={mailboxFilter ?? 'any'}.
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 overflow-hidden">
+        <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm">
             <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2">Sent</th>
-                <th className="text-left px-3 py-2">Mailbox</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">Mailbox</th>
                 <th className="text-left px-3 py-2">To</th>
-                <th className="text-left px-3 py-2">Subject</th>
-                <th className="text-left px-3 py-2">Purpose</th>
-                <th className="text-left px-3 py-2">Provider</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Subject</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Purpose</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Provider</th>
                 <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2">External ID</th>
-                <th className="text-left px-3 py-2">Error</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">External ID</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">Error</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -180,31 +180,32 @@ export default async function EmailSendsPage({ searchParams }: PageProps) {
                     >
                       {sentAt ? formatRelative(sentAt) : '—'}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-300">
+                    <td className="px-3 py-2 font-mono text-xs text-slate-300 hidden md:table-cell">
                       {r.mailbox}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-300">
+                    <td className="px-3 py-2 font-mono text-xs text-slate-300 break-words">
                       {r.toAddress}
+                      <div className="text-[10px] text-slate-500 md:hidden">{r.mailbox}</div>
                     </td>
                     <td
-                      className="px-3 py-2 text-xs text-slate-200 max-w-sm"
+                      className="px-3 py-2 text-xs text-slate-200 max-w-sm hidden lg:table-cell"
                       title={r.subject}
                     >
                       {truncate(r.subject, 80)}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{r.purpose}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{r.provider}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 hidden lg:table-cell">{r.purpose}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 hidden lg:table-cell">{r.provider}</td>
                     <td className="px-3 py-2">
                       <StatusBadge status={r.status} />
                     </td>
                     <td
-                      className="px-3 py-2 font-mono text-xs text-slate-400 max-w-[12rem] truncate"
+                      className="px-3 py-2 font-mono text-xs text-slate-400 max-w-[12rem] truncate hidden lg:table-cell"
                       title={r.externalId ?? ''}
                     >
                       {r.externalId ? truncate(r.externalId, 24) : '—'}
                     </td>
                     <td
-                      className="px-3 py-2 text-xs text-red-300/80 max-w-xs"
+                      className="px-3 py-2 text-xs text-red-300/80 max-w-xs hidden md:table-cell"
                       title={r.errorMessage ?? ''}
                     >
                       {r.errorMessage ? truncate(r.errorMessage, 80) : '—'}

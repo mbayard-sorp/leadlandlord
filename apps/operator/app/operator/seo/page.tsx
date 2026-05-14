@@ -104,7 +104,7 @@ export default async function SeoDashboardPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold">SEO</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">SEO</h1>
         <p className="text-sm text-slate-400 mt-1">
           Recommendation queue, recent auto-applied changes, and per-site ranking.
         </p>

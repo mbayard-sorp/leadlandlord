@@ -96,7 +96,7 @@ export default async function OutreachPreviewPage({ params }: Params) {
           >
             ← back to site
           </Link>
-          <h1 className="text-2xl font-semibold">Outreach preview</h1>
+          <h1 className="text-xl md:text-2xl font-semibold">Outreach preview</h1>
         </div>
         <p className="text-sm text-slate-400 mt-1">
           {site.niche} — {site.city}, {site.state}. Dry-run renders the SMS/email/voice

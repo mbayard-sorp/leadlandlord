@@ -50,7 +50,7 @@ export default async function ControlPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold">Operator Control</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Operator Control</h1>
         <p className="text-sm text-slate-400 mt-1">
           Master switch, autonomy mode, and KPI targets for the orchestrator agent.
         </p>

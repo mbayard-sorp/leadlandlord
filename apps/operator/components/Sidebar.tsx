@@ -1,48 +1,18 @@
-import Link from 'next/link';
-
-const links = [
-  { href: '/operator', label: 'Overview' },
-  { href: '/operator/portfolio', label: 'Portfolio' },
-  { href: '/operator/build', label: 'Build site' },
-  { href: '/operator/calls', label: 'Calls' },
-  { href: '/operator/agents', label: 'Agents' },
-  { href: '/operator/seo', label: 'SEO' },
-  { href: '/operator/backlinks', label: 'Backlinks' },
-  { href: '/operator/backlinks/prospects', label: '↳ Prospects' },
-  { href: '/operator/molly', label: '↳ Molly' },
-  { href: '/operator/email-sends', label: 'Email Sends' },
-  { href: '/operator/maintenance', label: 'Maintenance' },
-  { href: '/operator/control', label: 'Control' },
-  { href: '/operator/pipeline', label: 'Pipeline', disabled: true },
-  { href: '/operator/tenants', label: 'Tenants', disabled: true },
-  { href: '/operator/niches', label: 'Niches' },
-  { href: '/operator/pnl', label: 'P&L', disabled: true },
-];
+import { navLinks } from './navLinks';
+import { DisabledNavLink, NavLink } from './NavLink';
 
 export function Sidebar() {
   return (
-    <aside className="w-56 shrink-0 border-r border-slate-800 bg-slate-900/40 px-4 py-6 flex flex-col gap-1 sticky top-0 h-screen">
+    <aside className="w-56 shrink-0 border-r border-slate-800 bg-slate-900/40 px-4 py-6 flex flex-col gap-1 sticky top-0 h-dvh">
       <div className="px-2 mb-4">
         <h2 className="text-sm font-semibold tracking-wide text-slate-300">LeadLandlord</h2>
         <p className="text-xs text-slate-500 mt-0.5">operator</p>
       </div>
-      {links.map((link) =>
+      {navLinks.map((link) =>
         link.disabled ? (
-          <span
-            key={link.href}
-            className="text-sm px-2 py-1.5 text-slate-600 cursor-not-allowed"
-            title="Coming in Phase 2+"
-          >
-            {link.label}
-          </span>
+          <DisabledNavLink key={link.href} label={link.label} />
         ) : (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="text-sm px-2 py-1.5 rounded text-slate-200 hover:bg-slate-800 hover:text-white"
-          >
-            {link.label}
-          </Link>
+          <NavLink key={link.href} href={link.href} label={link.label} />
         ),
       )}
       <form action="/api/auth/logout" method="post" className="mt-auto pt-4 border-t border-slate-800">
