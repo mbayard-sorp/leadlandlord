@@ -52,6 +52,7 @@ function StepCard({
   step,
   title,
   pill,
+  summary,
   open,
   onToggle,
   children,
@@ -60,6 +61,8 @@ function StepCard({
   step: number;
   title: string;
   pill?: React.ReactNode;
+  /** One-line recap of what was selected/done. Shown only when collapsed. */
+  summary?: React.ReactNode;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -87,6 +90,11 @@ function StepCard({
           <span className="text-slate-500 text-xs">{open ? '▲' : '▼'}</span>
         </div>
       </button>
+      {!open && summary && (
+        <div className="px-4 pb-3 -mt-1 pl-13 text-xs text-slate-400 border-t border-slate-800/40">
+          <div className="pt-2 pl-9">{summary}</div>
+        </div>
+      )}
       {open && <div className="px-4 pb-4 pt-2 border-t border-slate-800">{children}</div>}
     </div>
   );
@@ -95,12 +103,14 @@ function StepCard({
 export function ProspectWorkflow() {
   const router = useRouter();
   const [siteId, setSiteId] = useState<string>('');
+  const [siteLabel, setSiteLabel] = useState<string>('');
   const [openStep, setOpenStep] = useState<number>(1);
   const [step6Open, setStep6Open] = useState(false);
   const [maxApollo, setMaxApollo] = useState<number>(5);
 
   const [mollyPending, startMollyTransition] = useTransition();
   const [runPending, startRunTransition] = useTransition();
+  const [tickPending, startTickTransition] = useTransition();
   const [mollyMsg, setMollyMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [runMsg, setRunMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -133,8 +143,9 @@ export function ProspectWorkflow() {
     ? mollyLastRunAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
 
-  function handleSiteSelect(id: string) {
+  function handleSiteSelect(id: string, label: string) {
     setSiteId(id);
+    setSiteLabel(label);
     setOpenStep(2);
     setRunMsg(null);
     setMollyMsg(null);
@@ -155,6 +166,24 @@ export function ProspectWorkflow() {
         setOpenStep(3);
       } else {
         setRunMsg({ ok: false, text: r.message ?? 'run failed' });
+      }
+    });
+  }
+
+  function drainQueueNow() {
+    setRunMsg(null);
+    startTickTransition(async () => {
+      const { triggerOperatorTick } = await import('../actions');
+      const r = await triggerOperatorTick();
+      if (r.ok) {
+        setRunMsg({
+          ok: true,
+          text: r.claimed
+            ? `Drained ${r.claimed} event${r.claimed === 1 ? '' : 's'} — agent running in background…`
+            : 'Queue empty (no pending events to drain)',
+        });
+      } else {
+        setRunMsg({ ok: false, text: r.message ?? 'drain failed' });
       }
     });
   }
@@ -181,6 +210,14 @@ export function ProspectWorkflow() {
         open={openStep === 1}
         onToggle={() => toggleStep(1)}
         pill={siteId ? <span className="text-xs text-emerald-400">selected</span> : undefined}
+        summary={
+          siteLabel ? (
+            <span>
+              <span className="text-slate-500">Site:</span>{' '}
+              <span className="text-slate-200 font-medium">{siteLabel}</span>
+            </span>
+          ) : undefined
+        }
         allowOverflow
       >
         <div className="mt-2 max-w-sm">
@@ -199,6 +236,25 @@ export function ProspectWorkflow() {
             <span className="text-xs text-slate-500">select a site first</span>
           ) : seeds.length > 0 ? (
             <span className="text-xs text-slate-400">{seeds.length} seeds</span>
+          ) : undefined
+        }
+        summary={
+          seeds.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {seeds.slice(0, 6).map((s) => (
+                <span
+                  key={s}
+                  className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[11px] text-slate-300"
+                >
+                  {s}
+                </span>
+              ))}
+              {seeds.length > 6 && (
+                <span className="text-slate-500">+{seeds.length - 6} more</span>
+              )}
+            </div>
+          ) : siteId ? (
+            <span className="text-amber-400">No seeds yet</span>
           ) : undefined
         }
       >
@@ -232,6 +288,20 @@ export function ProspectWorkflow() {
             />
           ) : undefined
         }
+        summary={
+          prospectRun?.status === 'succeeded' && prospectRun.discovered != null ? (
+            <span>
+              <span className="text-slate-500">Last run:</span>{' '}
+              <span className="text-slate-200">
+                {prospectRun.discovered} discovered, {prospectRun.enriched ?? 0} enriched,{' '}
+                {prospectRun.created ?? 0} created
+              </span>{' '}
+              <span className="text-slate-500">· max apollo {maxApollo}</span>
+            </span>
+          ) : siteId ? (
+            <span className="text-slate-500">Max Apollo enrichments: {maxApollo}</span>
+          ) : undefined
+        }
       >
         <div className="mt-2 space-y-3">
           <div className="flex items-end gap-3">
@@ -263,7 +333,19 @@ export function ProspectWorkflow() {
                 ? 'Running…'
                 : 'Run'}
             </button>
+            <button
+              type="button"
+              onClick={drainQueueNow}
+              disabled={tickPending}
+              title="Run the operator-tick dispatcher now instead of waiting up to 60s for the next cron firing"
+              className="text-xs px-3 py-1.5 rounded bg-slate-700/60 hover:bg-slate-700/80 text-slate-200 disabled:opacity-50"
+            >
+              {tickPending ? 'Draining…' : 'Drain queue now'}
+            </button>
           </div>
+          <p className="text-[11px] text-slate-500">
+            Operator-tick drains the queue every minute. Click <span className="text-slate-400">Drain queue now</span> to skip the wait.
+          </p>
           {runMsg && (
             <p className={`text-xs ${runMsg.ok ? 'text-emerald-300' : 'text-amber-300'}`}>
               {runMsg.text}
@@ -288,6 +370,16 @@ export function ProspectWorkflow() {
         pill={
           prospectRows.length > 0 ? (
             <span className="text-xs text-slate-400">{prospectRows.length} rows</span>
+          ) : undefined
+        }
+        summary={
+          prospectRows.length > 0 ? (
+            <span>
+              <span className="text-slate-200">{prospectRows.length}</span> prospect rows
+              available for review
+            </span>
+          ) : siteId ? (
+            <span className="text-slate-500">No prospect rows yet</span>
           ) : undefined
         }
       >
@@ -315,6 +407,24 @@ export function ProspectWorkflow() {
               error={mollyRun.error}
               onRetry={runMolly}
             />
+          ) : undefined
+        }
+        summary={
+          mollyTimeLabel ? (
+            <span>
+              <span className="text-slate-500">Last run:</span>{' '}
+              <span className="text-slate-200">
+                {mollyRanToday ? `today ${mollyTimeLabel}` : mollyTimeLabel}
+              </span>
+              {mollyRun?.top5Count != null && (
+                <>
+                  {' · '}
+                  <span className="text-slate-200">{mollyRun.top5Count}</span> picked
+                </>
+              )}
+            </span>
+          ) : siteId ? (
+            <span className="text-slate-500">Not yet run</span>
           ) : undefined
         }
       >
@@ -352,6 +462,25 @@ export function ProspectWorkflow() {
               {mollyRun.top5Count}
             </span>
           ) : undefined
+        }
+        summary={
+          mollyRun?.top5Count
+            ? (
+                <span>
+                  <span className="text-slate-200">{mollyRun.top5Count}</span> picks
+                  {mollyRun.pendingApprovalCount > 0 && (
+                    <>
+                      {' · '}
+                      <span className="text-amber-300">
+                        {mollyRun.pendingApprovalCount} awaiting approval
+                      </span>
+                    </>
+                  )}
+                </span>
+              )
+            : siteId ? (
+                <span className="text-slate-500">No picks yet</span>
+              ) : undefined
         }
       >
         {siteId ? (
