@@ -6,6 +6,7 @@ import { getDb, backlinks, sites, agentEvents } from '@leadlandlord/db';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { recordSend } from '@leadlandlord/db/email-throttle';
+import { getAnthropicClient } from '@leadlandlord/integrations/anthropic';
 
 export interface ActionResult {
   ok: boolean;
@@ -330,6 +331,78 @@ export async function updateCompetitorSeeds(
   await db.update(sites).set({ competitorSeeds: cleaned }).where(eq(sites.id, siteId));
   revalidatePath('/operator/backlinks/prospects');
   return { ok: true };
+}
+
+const HOST_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+
+function normalizeHost(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  let s = input.trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]!.split('?')[0]!;
+  return HOST_RE.test(s) ? s : null;
+}
+
+export async function suggestCompetitorSeeds(
+  siteId: string,
+): Promise<ActionResult & { suggestions?: Array<{ domain: string; rationale: string }> }> {
+  if (!siteId) return { ok: false, message: 'siteId required' };
+  const db = getDb();
+  const site = (
+    await db
+      .select({ id: sites.id, niche: sites.niche, city: sites.city, state: sites.state, domain: sites.domain })
+      .from(sites)
+      .where(eq(sites.id, siteId))
+      .limit(1)
+  )[0];
+  if (!site) return { ok: false, message: 'site not found' };
+
+  const prompt = `You are an SEO competitive-research assistant. The operator runs a local-service lead-gen site and needs 3 seed competitor domains to feed a backlink-prospecting tool (DataForSEO domain intersection).
+
+Site:
+  - Niche: ${site.niche}
+  - City: ${site.city}, ${site.state}
+  ${site.domain ? `- Own domain (exclude): ${site.domain}` : ''}
+
+Pick 3 high-authority domains that rank well for this niche in this metro. Mix national directories/aggregators (Yelp, Angi, HomeAdvisor, Thumbtack, BBB, etc.) with the strongest local independents you know. Bare hosts only — no protocol, no www., no paths.
+
+Respond ONLY with JSON, no prose, no markdown:
+{
+  "suggestions": [
+    { "domain": "example.com", "rationale": "One short sentence." }
+  ]
+}`;
+
+  let parsed: { suggestions?: Array<{ domain?: unknown; rationale?: unknown }> };
+  try {
+    const anthropic = getAnthropicClient();
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = msg.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { type: 'text'; text: string }).text)
+      .join('');
+    parsed = JSON.parse(text);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'AI suggestion failed' };
+  }
+
+  const ownHost = normalizeHost(site.domain);
+  const suggestions: Array<{ domain: string; rationale: string }> = [];
+  for (const s of parsed.suggestions ?? []) {
+    const domain = normalizeHost(s.domain);
+    if (!domain || domain === ownHost) continue;
+    if (suggestions.some((x) => x.domain === domain)) continue;
+    const rationale = typeof s.rationale === 'string' ? s.rationale.trim() : '';
+    suggestions.push({ domain, rationale });
+    if (suggestions.length >= 3) break;
+  }
+
+  if (suggestions.length === 0) return { ok: false, message: 'no valid suggestions returned' };
+  return { ok: true, suggestions };
 }
 
 /**
