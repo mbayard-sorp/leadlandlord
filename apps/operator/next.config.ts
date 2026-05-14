@@ -45,6 +45,14 @@ const config: NextConfig = {
     '/api/cron/agent/[name]': [
       '../../packages/agents/src/content-engine/system.md',
     ],
+    '/api/cron/operator-tick': [
+      '../../packages/agents/src/content-engine/system.md',
+    ],
+    // triggerOperatorTick server action is invoked from the prospects page
+    // and ultimately loads the ContentEngine agent via runOperatorTick.
+    '/operator/backlinks/prospects': [
+      '../../packages/agents/src/content-engine/system.md',
+    ],
   },
 };
 

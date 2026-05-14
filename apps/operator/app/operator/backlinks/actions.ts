@@ -8,7 +8,6 @@ import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp'
 import { recordSend } from '@leadlandlord/db/email-throttle';
 import { getAnthropicClient } from '@leadlandlord/integrations/anthropic';
 import { requireOperatorSession } from '@/lib/auth';
-import { runOperatorTick } from '@/lib/operator-tick';
 
 export interface ActionResult {
   ok: boolean;
@@ -319,6 +318,12 @@ export async function triggerOperatorTick(): Promise<
     return { ok: false, message: 'unauthorized' };
   }
   try {
+    // Lazy import: pulls the entire agent registry transitively. Keeping
+    // it inside the function prevents the page render path
+    // (page → ProspectWorkflow → SeedEditor → actions.ts) from loading
+    // every agent at module init, which can 500 the page if any agent's
+    // module-load throws (e.g. missing env var).
+    const { runOperatorTick } = await import('@/lib/operator-tick');
     const result = await runOperatorTick();
     return { ok: true, claimed: result.claimed, dispatched: result.dispatched };
   } catch (err) {
@@ -338,10 +343,13 @@ export async function triggerOperatorTick(): Promise<
 export async function requestProspectRun(args: {
   siteId: string;
   maxApolloEnrichments?: number;
+  skipApollo?: boolean;
 }): Promise<ActionResult & { eventId?: string }> {
   if (!args.siteId) return { ok: false, message: 'siteId required' };
 
-  const cap = Math.min(Math.max(1, args.maxApolloEnrichments ?? 15), 100);
+  const cap = args.skipApollo
+    ? 0
+    : Math.min(Math.max(1, args.maxApolloEnrichments ?? 15), 100);
 
   const db = getDb();
   const site = (await db.select({ id: sites.id }).from(sites).where(eq(sites.id, args.siteId)).limit(1))[0];
