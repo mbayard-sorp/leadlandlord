@@ -96,6 +96,14 @@ function cannedToolInput(toolName: string, prompt: string): unknown {
     case 'submit_niches':
     case 'submit_niche_candidates':
       return mockNicheCandidates();
+    case 'submit_competitor_seeds':
+      return {
+        suggestions: [
+          { domain: 'yelp.com', rationale: 'Mock suggestion (MOCK_AI=true).' },
+          { domain: 'angi.com', rationale: 'Mock suggestion (MOCK_AI=true).' },
+          { domain: 'thumbtack.com', rationale: 'Mock suggestion (MOCK_AI=true).' },
+        ],
+      };
     default:
       return {};
   }

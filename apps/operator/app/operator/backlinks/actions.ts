@@ -366,38 +366,47 @@ Site:
 
 Pick 3 high-authority domains that rank well for this niche in this metro. Mix national directories/aggregators (Yelp, Angi, HomeAdvisor, Thumbtack, BBB, etc.) with the strongest local independents you know. Bare hosts only — no protocol, no www., no paths.
 
-Respond ONLY with JSON, no prose, no markdown:
-{
-  "suggestions": [
-    { "domain": "example.com", "rationale": "One short sentence." }
-  ]
-}`;
+Call the submit_competitor_seeds tool with your 3 picks.`;
 
   let parsed: { suggestions?: Array<{ domain?: unknown; rationale?: unknown }> };
-  let rawText = '';
   try {
     const anthropic = getAnthropicClient();
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 512,
+      tools: [
+        {
+          name: 'submit_competitor_seeds',
+          description: 'Submit the 3 seed competitor domains.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              suggestions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    domain: { type: 'string', description: 'Bare host, no protocol or www.' },
+                    rationale: { type: 'string', description: 'One short sentence.' },
+                  },
+                  required: ['domain', 'rationale'],
+                },
+              },
+            },
+            required: ['suggestions'],
+          },
+        },
+      ],
+      tool_choice: { type: 'tool', name: 'submit_competitor_seeds' },
       messages: [{ role: 'user', content: prompt }],
     });
-    rawText = msg.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { type: 'text'; text: string }).text)
-      .join('')
-      .trim();
-    // Tolerate markdown fences or surrounding prose by extracting the
-    // outermost {...} block.
-    const start = rawText.indexOf('{');
-    const end = rawText.lastIndexOf('}');
-    const jsonSlice = start !== -1 && end > start ? rawText.slice(start, end + 1) : rawText;
-    if (!jsonSlice) throw new Error('empty AI response');
-    parsed = JSON.parse(jsonSlice);
+    const toolBlock = msg.content.find((b) => b.type === 'tool_use') as
+      | { type: 'tool_use'; input: unknown }
+      | undefined;
+    if (!toolBlock) throw new Error('no tool_use block in AI response');
+    parsed = toolBlock.input as typeof parsed;
   } catch (err) {
-    const detail = err instanceof Error ? err.message : 'AI suggestion failed';
-    const preview = rawText ? ` (raw: ${rawText.slice(0, 120)})` : '';
-    return { ok: false, message: `${detail}${preview}` };
+    return { ok: false, message: err instanceof Error ? err.message : 'AI suggestion failed' };
   }
 
   const ownHost = normalizeHost(site.domain);
