@@ -7,6 +7,8 @@ import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend'
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { recordSend } from '@leadlandlord/db/email-throttle';
 import { getAnthropicClient } from '@leadlandlord/integrations/anthropic';
+import { requireOperatorSession } from '@/lib/auth';
+import { runOperatorTick } from '@/lib/operator-tick';
 
 export interface ActionResult {
   ok: boolean;
@@ -298,6 +300,30 @@ export async function getApolloMonthlyUsage(): Promise<{
     remaining: Math.max(0, cap - used),
     monthKey: monthStart.toISOString().slice(0, 7),
   };
+}
+
+/**
+ * Drain the agent_events queue immediately instead of waiting up to 60s for
+ * the next operator-tick cron. Operator-only — calls into the same
+ * runOperatorTick() helper Vercel Cron uses, so behavior matches exactly.
+ *
+ * Use case: operator just queued a prospect run and doesn't want to stare
+ * at "Run queued — polling for progress…" wondering if the cron is alive.
+ */
+export async function triggerOperatorTick(): Promise<
+  ActionResult & { claimed?: number; dispatched?: string[] }
+> {
+  try {
+    await requireOperatorSession();
+  } catch {
+    return { ok: false, message: 'unauthorized' };
+  }
+  try {
+    const result = await runOperatorTick();
+    return { ok: true, claimed: result.claimed, dispatched: result.dispatched };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'tick failed' };
+  }
 }
 
 /**

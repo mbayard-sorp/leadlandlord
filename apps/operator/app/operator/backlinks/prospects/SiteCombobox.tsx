@@ -9,7 +9,7 @@ interface SiteOption {
 }
 
 interface Props {
-  onSelect: (siteId: string) => void;
+  onSelect: (siteId: string, label: string) => void;
   selectedId?: string;
 }
 
@@ -49,7 +49,7 @@ export function SiteCombobox({ onSelect, selectedId }: Props) {
   function handleSelect(opt: SiteOption) {
     setQuery(opt.label);
     setOpen(false);
-    onSelect(opt.id);
+    onSelect(opt.id, opt.label);
   }
 
   return (
