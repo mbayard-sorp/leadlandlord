@@ -10,6 +10,7 @@ import { ProspectTable } from './ProspectTable';
 import { MollyTop5Section } from './MollyTop5';
 import { runMollyForSite } from './molly-run-action';
 import type { Backlink, BacklinkProspect } from '@leadlandlord/db';
+import { TriageProspectTable } from './TriageProspectTable';
 
 type RunStatus = 'idle' | 'running' | 'succeeded' | 'failed' | 'budget_exceeded';
 
@@ -39,6 +40,9 @@ interface StatusResponse {
   };
   prospects: {
     rows: Backlink[];
+  };
+  triage: {
+    rows: BacklinkProspect[];
   };
 }
 
@@ -107,6 +111,7 @@ export function ProspectWorkflow() {
   const [openStep, setOpenStep] = useState<number>(1);
   const [step6Open, setStep6Open] = useState(false);
   const [maxApollo, setMaxApollo] = useState<number>(5);
+  const [skipApollo, setSkipApollo] = useState<boolean>(false);
 
   const [mollyPending, startMollyTransition] = useTransition();
   const [runPending, startRunTransition] = useTransition();
@@ -130,6 +135,7 @@ export function ProspectWorkflow() {
   const prospectRun = statusData?.prospectRun;
   const mollyRun = statusData?.mollyRun;
   const prospectRows = statusData?.prospects.rows ?? [];
+  const triageRows = statusData?.triage?.rows ?? [];
   const seeds = statusData?.competitorSeeds ?? [];
   const picks = picksData?.rows ?? [];
 
@@ -160,7 +166,11 @@ export function ProspectWorkflow() {
     setRunMsg(null);
     startRunTransition(async () => {
       const { requestProspectRun } = await import('../actions');
-      const r = await requestProspectRun({ siteId, maxApolloEnrichments: maxApollo });
+      const r = await requestProspectRun({
+        siteId,
+        maxApolloEnrichments: maxApollo,
+        skipApollo,
+      });
       if (r.ok) {
         setRunMsg({ ok: true, text: 'Run queued — polling for progress…' });
         setOpenStep(3);
@@ -296,15 +306,19 @@ export function ProspectWorkflow() {
                 {prospectRun.discovered} discovered, {prospectRun.enriched ?? 0} enriched,{' '}
                 {prospectRun.created ?? 0} created
               </span>{' '}
-              <span className="text-slate-500">· max apollo {maxApollo}</span>
+              <span className="text-slate-500">
+                {skipApollo ? '· apollo skipped' : `· max apollo ${maxApollo}`}
+              </span>
             </span>
           ) : siteId ? (
-            <span className="text-slate-500">Max Apollo enrichments: {maxApollo}</span>
+            <span className="text-slate-500">
+              {skipApollo ? 'Apollo skipped (all → Molly)' : `Max Apollo enrichments: ${maxApollo}`}
+            </span>
           ) : undefined
         }
       >
         <div className="mt-2 space-y-3">
-          <div className="flex items-end gap-3">
+          <div className="flex items-end gap-3 flex-wrap">
             <label className="text-xs text-slate-400 space-y-1">
               <span>
                 Max Apollo enrichments{' '}
@@ -315,11 +329,24 @@ export function ProspectWorkflow() {
                 min={1}
                 max={75}
                 value={maxApollo}
+                disabled={skipApollo}
                 onChange={(e) =>
                   setMaxApollo(Math.max(1, Math.min(75, Number(e.target.value) || 1)))
                 }
-                className="block w-24 rounded bg-slate-950 border border-slate-700 px-2 py-1 text-sm text-slate-200"
+                className="block w-24 rounded bg-slate-950 border border-slate-700 px-2 py-1 text-sm text-slate-200 disabled:opacity-50"
               />
+            </label>
+            <label className="text-xs text-slate-300 flex items-center gap-2 pb-1.5">
+              <input
+                type="checkbox"
+                checked={skipApollo}
+                onChange={(e) => setSkipApollo(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-950"
+              />
+              <span>
+                Skip Apollo{' '}
+                <span className="text-slate-500">(queue all for Molly)</span>
+              </span>
             </label>
             <button
               type="button"
@@ -368,15 +395,18 @@ export function ProspectWorkflow() {
         open={openStep === 4}
         onToggle={() => toggleStep(4)}
         pill={
-          prospectRows.length > 0 ? (
-            <span className="text-xs text-slate-400">{prospectRows.length} rows</span>
+          prospectRows.length + triageRows.length > 0 ? (
+            <span className="text-xs text-slate-400">
+              {prospectRows.length + triageRows.length} rows
+            </span>
           ) : undefined
         }
         summary={
-          prospectRows.length > 0 ? (
+          prospectRows.length + triageRows.length > 0 ? (
             <span>
-              <span className="text-slate-200">{prospectRows.length}</span> prospect rows
-              available for review
+              <span className="text-slate-200">{prospectRows.length}</span> enriched
+              {' · '}
+              <span className="text-slate-200">{triageRows.length}</span> awaiting Molly
             </span>
           ) : siteId ? (
             <span className="text-slate-500">No prospect rows yet</span>
@@ -384,8 +414,28 @@ export function ProspectWorkflow() {
         }
       >
         {siteId ? (
-          <div className="mt-2">
-            <ProspectTable rows={prospectRows} hideSiteColumn />
+          <div className="mt-2 space-y-4">
+            {prospectRows.length > 0 && (
+              <div>
+                <div className="text-xs text-slate-400 mb-2">
+                  Enriched ({prospectRows.length}) — Apollo found editor, ready to pitch
+                </div>
+                <ProspectTable rows={prospectRows} hideSiteColumn />
+              </div>
+            )}
+            {triageRows.length > 0 && (
+              <div>
+                <div className="text-xs text-slate-400 mb-2">
+                  Triage queue ({triageRows.length}) — needs Molly scoring (Step 5) then manual editor lookup
+                </div>
+                <TriageProspectTable rows={triageRows} />
+              </div>
+            )}
+            {prospectRows.length === 0 && triageRows.length === 0 && (
+              <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 p-6 text-center text-sm text-slate-500">
+                No prospect rows yet. Run the prospector to discover guest-post targets.
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-slate-500 mt-2">Select a site first.</p>

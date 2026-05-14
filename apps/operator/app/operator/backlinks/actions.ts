@@ -343,10 +343,13 @@ export async function triggerOperatorTick(): Promise<
 export async function requestProspectRun(args: {
   siteId: string;
   maxApolloEnrichments?: number;
+  skipApollo?: boolean;
 }): Promise<ActionResult & { eventId?: string }> {
   if (!args.siteId) return { ok: false, message: 'siteId required' };
 
-  const cap = Math.min(Math.max(1, args.maxApolloEnrichments ?? 15), 100);
+  const cap = args.skipApollo
+    ? 0
+    : Math.min(Math.max(1, args.maxApolloEnrichments ?? 15), 100);
 
   const db = getDb();
   const site = (await db.select({ id: sites.id }).from(sites).where(eq(sites.id, args.siteId)).limit(1))[0];

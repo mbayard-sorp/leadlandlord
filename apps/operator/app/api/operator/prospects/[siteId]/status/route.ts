@@ -32,7 +32,7 @@ export async function GET(
   const db = getDb();
 
   try {
-    const [siteRow, builderRuns, scorerRuns, prospectRows, prospectCounts, pendingEvents] =
+    const [siteRow, builderRuns, scorerRuns, prospectRows, prospectCounts, triageRows, pendingEvents] =
       await Promise.all([
         db
           .select({ competitorSeeds: sites.competitorSeeds })
@@ -69,6 +69,12 @@ export async function GET(
               ),
             ),
           ),
+        db
+          .select()
+          .from(backlinkProspects)
+          .where(eq(backlinkProspects.siteId, siteId))
+          .orderBy(desc(backlinkProspects.createdAt))
+          .limit(200),
         db
           .select({ id: agentEvents.id, payload: agentEvents.payload })
           .from(agentEvents)
@@ -148,6 +154,9 @@ export async function GET(
       },
       prospects: {
         rows: runRows,
+      },
+      triage: {
+        rows: triageRows,
       },
     };
 

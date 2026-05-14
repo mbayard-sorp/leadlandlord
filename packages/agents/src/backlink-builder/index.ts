@@ -95,8 +95,13 @@ export const BacklinkBuilderInput = z.discriminatedUnion('mode', [
     competitorOverride: z.array(z.string()).optional(),
     /** Max prospect domains to consider after DFS + filter (default 50). */
     maxProspects: z.number().int().min(1).max(500).optional(),
-    /** Hard cap on Apollo enrichments — the dominant per-prospect cost (default 15). */
-    maxApolloEnrichments: z.number().int().min(1).max(100).optional(),
+    /**
+     * Hard cap on Apollo enrichments — the dominant per-prospect cost
+     * (default 15). Pass 0 to skip Apollo entirely; every candidate then
+     * goes Path B (queued in `backlink_prospects` for Molly + manual editor
+     * lookup) regardless of Apollo budget.
+     */
+    maxApolloEnrichments: z.number().int().min(0).max(100).optional(),
     /** DFS rank floor 0–1000 (default 250). Per-call override of env default. */
     minDomainRank: z.number().int().min(0).max(1000).optional(),
     /**
