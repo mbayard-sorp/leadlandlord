@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createWriteClient } from '@leadlandlord/sanity-schema';
 import { getDomainStatus } from '@leadlandlord/integrations/vercel';
 import { log } from '@leadlandlord/shared/log';
+import { assertCronAuthorized } from '@/lib/cron-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,9 +40,8 @@ const PENDING_QUERY = `*[_type=="site" && count(domains[verified != true]) > 0]{
  *   - SANITY_PROJECT_ID, SANITY_DATASET, SANITY_API_TOKEN
  */
 export async function GET(req: Request) {
-  if (process.env.CRON_SECRET && req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
-  }
+  const denied = assertCronAuthorized(req);
+  if (denied) return denied;
 
   const projectId = process.env.VERCEL_SITES_PROJECT_ID;
   if (!projectId) {

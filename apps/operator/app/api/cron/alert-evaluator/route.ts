@@ -3,6 +3,7 @@ import { getDb, alertRules, alertEvents, eq, sql } from '@leadlandlord/db';
 import { pagerduty } from '@leadlandlord/integrations';
 import { log } from '@leadlandlord/shared/log';
 import { evaluateRule, type RuleContext } from '@leadlandlord/agents/alert-evaluator';
+import { assertCronAuthorized } from '@/lib/cron-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,12 +22,8 @@ export const maxDuration = 60;
  * from firing or stop the cron. Failures get logged with the alert_event.
  */
 export async function GET(req: Request) {
-  if (
-    process.env.CRON_SECRET &&
-    req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 });
-  }
+  const denied = assertCronAuthorized(req);
+  if (denied) return denied;
   const db = getDb();
   const rules = await db.select().from(alertRules).where(eq(alertRules.enabled, true));
   const now = new Date();
