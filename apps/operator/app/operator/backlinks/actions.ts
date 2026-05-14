@@ -279,68 +279,57 @@ export async function getApolloMonthlyUsage(): Promise<{
 }
 
 /**
- * Triggers a Backlink Builder prospect run for the given site. Wraps the
- * existing agent — the agent itself enforces Apollo cap, dedupe, and
- * compliance. Returns the agent's structured output for UI feedback.
+ * Fire-and-forget prospect run. Inserts an `operator.prospect.requested`
+ * event into `agentEvents`; the cron dispatcher picks it up and invokes
+ * BacklinkBuilder with `mode: 'prospect'`. Returns immediately with the
+ * new event id so the UI can poll `/status` for progress.
+ *
+ * Apollo cap enforcement moved into BacklinkBuilder.runProspect so it runs
+ * at agent-entry on the cron process rather than at request time.
  */
-export async function runProspectForSite(args: {
+export async function requestProspectRun(args: {
   siteId: string;
-  competitorOverride?: string[];
   maxApolloEnrichments?: number;
-  autoSend?: boolean;
-}): Promise<ActionResult & { discovered?: number; enriched?: number; created?: number }> {
+}): Promise<ActionResult & { eventId?: string }> {
+  if (!args.siteId) return { ok: false, message: 'siteId required' };
+
+  const cap = Math.min(Math.max(1, args.maxApolloEnrichments ?? 15), 100);
+
   const db = getDb();
-  const site = (await db.select().from(sites).where(eq(sites.id, args.siteId)).limit(1))[0];
+  const site = (await db.select({ id: sites.id }).from(sites).where(eq(sites.id, args.siteId)).limit(1))[0];
   if (!site) return { ok: false, message: 'site not found' };
 
-  // Hard-gate against Apollo cap before invoking the agent.
-  const usage = await getApolloMonthlyUsage();
-  if (usage.remaining <= 0) {
-    return {
-      ok: false,
-      message: `Apollo monthly cap reached (${usage.used}/${usage.cap}). Wait until ${nextMonthLabel()} or raise APOLLO_MONTHLY_CAP.`,
-    };
-  }
-
-  // Lazy import — keeps the agents bundle out of the operator's edge build
-  // when the action isn't called.
-  const { BacklinkBuilder } = await import('@leadlandlord/agents/backlink-builder');
-  const agent = new BacklinkBuilder();
-
-  const requested = args.maxApolloEnrichments ?? 15;
-  const capLimited = Math.min(requested, usage.remaining);
-
-  try {
-    // Operator-triggered runs override the agent's natural dedupe so a
-    // fix-and-retry loop isn't blocked by a cached zero-result. Each UI
-    // click is intentional, not an event-driven duplicate.
-    const forceDedupeKey = `prospect:operator:${args.siteId}:${Date.now()}`;
-    const out = await agent.run(
-      {
+  const [inserted] = await db
+    .insert(agentEvents)
+    .values({
+      agent: 'operator',
+      type: 'operator.prospect.requested',
+      targetAgent: 'backlink-builder',
+      payload: {
         mode: 'prospect',
         siteId: args.siteId,
-        competitorOverride: args.competitorOverride,
-        maxApolloEnrichments: capLimited,
-        autoSend: args.autoSend ?? false,
+        site_id: args.siteId,
+        maxApolloEnrichments: cap,
       },
-      { siteId: args.siteId, dedupeKey: forceDedupeKey },
-    );
-    revalidatePath('/operator/backlinks/prospects');
-    return {
-      ok: true,
-      discovered: out.prospectsDiscovered,
-      enriched: out.prospectsEnriched,
-      created: out.rowsCreated,
-    };
-  } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
-  }
+    })
+    .returning({ id: agentEvents.id });
+
+  revalidatePath('/operator/backlinks/prospects');
+  return { ok: true, eventId: inserted?.id };
 }
 
-function nextMonthLabel(): string {
-  const d = new Date();
-  d.setUTCMonth(d.getUTCMonth() + 1, 1);
-  return d.toISOString().slice(0, 10);
+export async function updateCompetitorSeeds(
+  siteId: string,
+  seeds: string[],
+): Promise<ActionResult> {
+  if (!siteId) return { ok: false, message: 'siteId required' };
+  const cleaned = [...new Set(seeds.map((s) => s.trim()).filter(Boolean))];
+  const db = getDb();
+  const row = (await db.select({ id: sites.id }).from(sites).where(eq(sites.id, siteId)).limit(1))[0];
+  if (!row) return { ok: false, message: 'site not found' };
+  await db.update(sites).set({ competitorSeeds: cleaned }).where(eq(sites.id, siteId));
+  revalidatePath('/operator/backlinks/prospects');
+  return { ok: true };
 }
 
 /**

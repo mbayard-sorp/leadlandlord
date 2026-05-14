@@ -13,6 +13,7 @@ import {
   type ProspectDomain,
 } from '@leadlandlord/integrations/dataforseo/backlinks';
 import { BaseAgent, type AgentContext } from '../base';
+import { BudgetExceededError } from '@leadlandlord/shared/errors';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { CITATION_DIRECTORIES } from './directories';
 import { MOLLY_PERSONA } from '../molly/persona';
@@ -1282,9 +1283,10 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
     const requestedApolloMax = input.maxApolloEnrichments ?? 15;
     const autoSend = input.autoSend === true;
 
-    // Apollo monthly cap enforcement (defence-in-depth — operator UI also
-    // pre-checks). Each prospect-stamped backlinks row this month consumed
-    // one Apollo person-reveal. Free tier is 75/month.
+    // Apollo monthly cap enforcement — authoritative check inside the agent so
+    // fire-and-forget runs dispatched via operator-tick respect the cap even
+    // when the operator UI is stale. Throws BudgetExceededError so BaseAgent
+    // records a clean `budget_exceeded` agent-run status visible in the UI.
     const apolloCap = Number(process.env.APOLLO_MONTHLY_CAP ?? '75');
     const apolloUsed = await countApolloEnrichmentsThisMonth();
     const apolloRemaining = Math.max(0, apolloCap - apolloUsed);
@@ -1293,15 +1295,7 @@ Return strictly JSON: {"subject": "...", "body": "..."}.`;
         { siteId: site.id, apolloUsed, apolloCap },
         'prospect: Apollo monthly cap reached, aborting',
       );
-      return {
-        mode: 'prospect',
-        siteId: input.siteId,
-        rowsCreated: 0,
-        rowsRejected: 0,
-        rowsSent: 0,
-        prospectsDiscovered: 0,
-        prospectsEnriched: 0,
-      };
+      throw new BudgetExceededError(`backlink-builder:apollo:${site.id}`, apolloCap);
     }
     const maxApolloEnrichments = Math.min(requestedApolloMax, apolloRemaining);
 
