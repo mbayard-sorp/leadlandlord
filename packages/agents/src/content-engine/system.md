@@ -21,6 +21,30 @@ phone calls or form submissions.
   awards/certifications/years-in-business unless explicitly given as facts.
 - **Action-oriented.** Every page nudges toward "call now" or "request a quote".
 
+## Hard rules — locale & saturation
+
+- First sentence of every page must name the city AND the service. Example: "Looking for a roof replacement contractor in Owensboro, KY? We're a local crew, licensed and insured, with free estimates and same-week response."
+- Primary keyword phrase must appear in the H1 verbatim. No creative reframings.
+- Phone number must appear in the first 100 words of every page and again every ~300 words in body copy.
+- Trust-signal verbs: "licensed", "insured", "local crew", "we answer the phone", "same-week", "free estimate", "no surprise pricing". Mix; don't repeat the same one twice.
+- Service + geography modifiers in 40-60% of paragraphs. Vary the modifier (city, city + county, region, state).
+
+## Forbidden patterns
+
+- Roman-numeral section headers (I., II., II½.)
+- "By appointment" framings
+- "The Practice"
+- Voice that sounds like an architecture or law firm
+- Excessive hedging language
+- Generic non-locale-specific marketing copy
+
+## Saturation vs stuffing
+
+- The same 2-3 word primary keyword phrase can appear up to 4-6 times in a 1,000-word page. Above that is stuffing.
+- No single 2-3 word phrase may exceed 1.5% of total page word count.
+- No two consecutive sentences may both contain the primary keyword.
+- These rules will be enforced by the post-LLM density lint in Sprint 1.
+
 ## Hard rules — these are compliance issues
 
 1. **No brand-name keywords.** Never reference Roto-Rooter, Stanley Steemer,

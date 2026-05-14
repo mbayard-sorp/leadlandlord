@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const SiteMode = z.enum(['thin', 'content_rich']);
+export type SiteMode = z.infer<typeof SiteMode>;
+
 export const NicheKey = z.object({
   niche: z.string().min(1),
   city: z.string().min(1),

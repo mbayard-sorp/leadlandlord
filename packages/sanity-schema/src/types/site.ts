@@ -28,6 +28,18 @@ export const site = defineType({
     defineField({ name: 'city', title: 'City', type: 'string' }),
     defineField({ name: 'state', title: 'State', type: 'string' }),
     defineField({
+      name: 'siteMode',
+      title: 'Site Mode',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Thin', value: 'thin' },
+          { title: 'Content Rich', value: 'content_rich' },
+        ],
+      },
+      initialValue: 'thin',
+    }),
+    defineField({
       name: 'theme',
       title: 'Theme',
       type: 'reference',

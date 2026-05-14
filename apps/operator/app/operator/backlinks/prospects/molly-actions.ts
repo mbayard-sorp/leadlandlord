@@ -51,7 +51,8 @@ export async function approveProspect(prospectId: string): Promise<MollyActionRe
   await db.insert(agentEvents).values({
     agent: 'operator-ui',
     type: 'prospect.approved',
-    targetAgent: 'backlink-builder',
+    // TODO(sprint-3): backlink-builder removed; wire to replacement agent
+    targetAgent: 'molly',
     payload: {
       mode: 'prospect_approved',
       siteId: row.siteId,

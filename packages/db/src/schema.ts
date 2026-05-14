@@ -78,6 +78,8 @@ export const agentRunStatusEnum = pgEnum('agent_run_status', [
   'not_implemented',
 ]);
 
+export const siteModeEnum = pgEnum('site_mode', ['thin', 'content_rich']);
+
 export const callClassificationEnum = pgEnum('call_classification', [
   'unclassified',
   'won',
@@ -203,6 +205,8 @@ export const sites = pgTable(
      * niche has been mined.
      */
     competitorSeeds: jsonb('competitor_seeds').$type<string[]>(),
+    /** thin = 6-8 pages (default); content_rich = ~28 pages (opt-in). */
+    siteMode: siteModeEnum('site_mode').notNull().default('thin'),
     deployedAt: timestamp('deployed_at', { withTimezone: true }),
     currentRank: integer('current_rank'),
     calls30d: integer('calls_30d').notNull().default(0),
@@ -1065,6 +1069,157 @@ export const alertEvents = pgTable(
 );
 
 // ────────────────────────────────────────────────────────────
+// Sprint 0 — Approval gates, networks, cross-site linking
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Every side-effecting agent action queues here before execution.
+ * Auto-approve rules may flip status to 'auto_approved' immediately.
+ */
+export const agentApprovals = pgTable(
+  'agent_approvals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentRunId: uuid('agent_run_id')
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: 'cascade' }),
+    /** e.g. 'niche_candidate', 'site_bundle', 'cross_link_placement', 'backlink_submission', 'citation_submission' */
+    kind: text('kind').notNull(),
+    /** The proposed action; shape varies by kind. */
+    payload: jsonb('payload').notNull(),
+    /** pending | approved | rejected | expired | auto_approved */
+    status: text('status').notNull().default('pending'),
+    /** Operator email or 'rule:<ruleId>' if auto-approved. */
+    decidedBy: text('decided_by'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    /** Auto-approve rule ID, if any. */
+    ruleMatched: text('rule_matched'),
+    rejectionReason: text('rejection_reason'),
+    /** Default 7 days from createdAt. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    statusKindCreatedIdx: index('agent_approvals_status_kind_created_idx').on(
+      t.status,
+      t.kind,
+      t.createdAt,
+    ),
+    agentRunIdx: index('agent_approvals_agent_run_idx').on(t.agentRunId),
+  }),
+);
+
+/**
+ * Operator-defined rules that auto-approve matching agentApprovals rows.
+ * Each rule specifies a kind + JSON path predicates over payload.
+ */
+export const autoApproveRules = pgTable('auto_approve_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** Matches agentApprovals.kind. */
+  kind: text('kind').notNull(),
+  /** JSON path predicates over payload, e.g. { "payload.linkType": "out_of_network" }. */
+  matcher: jsonb('matcher').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  active: boolean('active').notNull().default(true),
+  /** Usage telemetry: incremented on each auto-approval. */
+  approvedCount: integer('approved_count').notNull().default(0),
+});
+
+/**
+ * A named group of sites that may cross-link via network-linker.
+ * Seeded with one row: slug='default'.
+ */
+export const networks = pgTable('networks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Many-to-many: sites <-> networks. One row per (site, network) pair.
+ * UNIQUE on siteId — each site belongs to at most one network.
+ */
+export const siteNetworkMemberships = pgTable(
+  'site_network_memberships',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    networkId: uuid('network_id')
+      .notNull()
+      .references(() => networks.id, { onDelete: 'cascade' }),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Max outbound cross-site links this site may place. */
+    linkBudgetOutbound: integer('link_budget_outbound').notNull().default(4),
+    /** Max inbound cross-site links this site may receive. */
+    linkBudgetInbound: integer('link_budget_inbound').notNull().default(8),
+    /** active | paused | quarantined */
+    status: text('status').notNull().default('active'),
+  },
+  (t) => ({
+    siteUniq: uniqueIndex('site_network_memberships_site_uniq').on(t.siteId),
+    networkIdx: index('site_network_memberships_network_idx').on(t.networkId),
+  }),
+);
+
+/**
+ * Individual cross-site links placed by network-linker. Each row represents
+ * one live (or removed/broken) link in a page's MDX body.
+ */
+export const crossSiteLinks = pgTable(
+  'cross_site_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceSiteId: uuid('source_site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** Sanity page doc ID where the link lives. */
+    sourcePageId: text('source_page_id').notNull(),
+    targetSiteId: uuid('target_site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    targetUrl: text('target_url').notNull(),
+    anchorText: text('anchor_text').notNull(),
+    /** SHA-256 of surrounding sentence context — used to detect link drift. */
+    surroundingContextHash: text('surrounding_context_hash'),
+    placedAt: timestamp('placed_at', { withTimezone: true }).notNull().defaultNow(),
+    /** active | removed | broken */
+    status: text('status').notNull().default('active'),
+  },
+  (t) => ({
+    sourceSiteIdx: index('cross_site_links_source_site_idx').on(t.sourceSiteId),
+    targetSiteIdx: index('cross_site_links_target_site_idx').on(t.targetSiteId),
+    sourcePageIdx: index('cross_site_links_source_page_idx').on(t.sourcePageId),
+  }),
+);
+
+/**
+ * Operator or agent requests for the network-linker to add links to a site.
+ */
+export const linkRequests = pgTable(
+  'link_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestingSiteId: uuid('requesting_site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    desiredCount: integer('desired_count').notNull().default(1),
+    /** pending | processing | completed | cancelled */
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (t) => ({
+    siteStatusIdx: index('link_requests_site_status_idx').on(t.requestingSiteId, t.status),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
 // Phone provisioning audit log (R3.5)
 // ────────────────────────────────────────────────────────────
 
@@ -1153,3 +1308,15 @@ export type EmailSend = typeof emailSends.$inferSelect;
 export type NewEmailSend = typeof emailSends.$inferInsert;
 export type PhoneProvision = typeof phoneProvisions.$inferSelect;
 export type NewPhoneProvision = typeof phoneProvisions.$inferInsert;
+export type AgentApproval = typeof agentApprovals.$inferSelect;
+export type NewAgentApproval = typeof agentApprovals.$inferInsert;
+export type AutoApproveRule = typeof autoApproveRules.$inferSelect;
+export type NewAutoApproveRule = typeof autoApproveRules.$inferInsert;
+export type Network = typeof networks.$inferSelect;
+export type NewNetwork = typeof networks.$inferInsert;
+export type SiteNetworkMembership = typeof siteNetworkMemberships.$inferSelect;
+export type NewSiteNetworkMembership = typeof siteNetworkMemberships.$inferInsert;
+export type CrossSiteLink = typeof crossSiteLinks.$inferSelect;
+export type NewCrossSiteLink = typeof crossSiteLinks.$inferInsert;
+export type LinkRequest = typeof linkRequests.$inferSelect;
+export type NewLinkRequest = typeof linkRequests.$inferInsert;
