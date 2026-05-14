@@ -72,8 +72,8 @@ function EnabledSection({ state }: Props) {
           disabled={pending}
           className={
             state.operatorEnabled
-              ? 'rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white'
-              : 'rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white'
+              ? 'rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white'
+              : 'rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white'
           }
         >
           {pending ? '…' : state.operatorEnabled ? 'Disable operator' : 'Enable operator'}
@@ -112,14 +112,14 @@ function ModeSection({ state }: Props) {
           <span className="text-slate-500">autonomous</span> — full decision tree.
         </p>
       </header>
-      <form onSubmit={submit} className="flex items-end gap-3">
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <label className="block text-xs text-slate-400">
           Operator mode
           <select
             name="operatorMode"
             value={mode}
             onChange={(e) => setMode(e.target.value)}
-            className="mt-1 block w-48 rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+            className="mt-1 block w-full sm:w-48 rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           >
             <option value="manual">manual</option>
             <option value="supervised">supervised</option>
@@ -129,7 +129,7 @@ function ModeSection({ state }: Props) {
         <button
           type="submit"
           disabled={pending || mode === state.operatorMode}
-          className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
+          className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white"
         >
           {pending ? 'Saving…' : 'Save mode'}
         </button>
@@ -173,7 +173,7 @@ function TargetsSection({ state }: Props) {
             name="targetMrrUsd"
             defaultValue={Number(state.targetMrrUsd)}
             required
-            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           />
         </label>
         <label className="text-xs text-slate-400">
@@ -185,7 +185,7 @@ function TargetsSection({ state }: Props) {
             name="targetActiveSites"
             defaultValue={state.targetActiveSites}
             required
-            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           />
         </label>
         <label className="text-xs text-slate-400">
@@ -198,7 +198,7 @@ function TargetsSection({ state }: Props) {
             name="targetMonthlyMargin"
             defaultValue={Number(state.targetMonthlyMargin)}
             required
-            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           />
         </label>
         <label className="text-xs text-slate-400">
@@ -210,7 +210,7 @@ function TargetsSection({ state }: Props) {
             name="autoApproveDomainBudgetUsd"
             defaultValue={Number(state.autoApproveDomainBudgetUsd)}
             required
-            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           />
         </label>
         <label className="md:col-span-2 inline-flex items-center gap-2 text-xs text-slate-300">
@@ -226,7 +226,7 @@ function TargetsSection({ state }: Props) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
+            className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white"
           >
             {pending ? 'Saving…' : 'Save targets'}
           </button>

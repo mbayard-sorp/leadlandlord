@@ -16,7 +16,7 @@ export default async function NichesPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Niches</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Niches</h1>
         <p className="text-sm text-slate-400 mt-1">
           Niche Hunter brainstorms candidates with Claude, scores each with DataForSEO real
           search volume + keyword difficulty, ranks them. Approve a niche to dispatch Site
@@ -91,32 +91,35 @@ function Table({
   showButtons?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+    <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
             <Th>Niche</Th>
-            <Th>City</Th>
+            <Th className="hidden md:table-cell">City</Th>
             <Th>Score</Th>
-            <Th>Vol</Th>
-            <Th>KD</Th>
-            <Th>Job $</Th>
-            <Th>Close</Th>
-            <Th>Rationale</Th>
+            <Th className="hidden md:table-cell">Vol</Th>
+            <Th className="hidden md:table-cell">KD</Th>
+            <Th className="hidden lg:table-cell">Job $</Th>
+            <Th className="hidden lg:table-cell">Close</Th>
+            <Th className="hidden lg:table-cell">Rationale</Th>
             {showButtons && <Th>Decision</Th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-slate-800/60 last:border-0">
-              <Td>{r.niche}</Td>
-              <Td>{r.city}, {r.state}</Td>
+              <Td className="break-words">
+                {r.niche}
+                <div className="text-xs text-slate-500 md:hidden">{r.city}, {r.state}</div>
+              </Td>
+              <Td className="hidden md:table-cell">{r.city}, {r.state}</Td>
               <Td className="font-semibold">{r.score ?? '—'}</Td>
-              <Td>{r.searchVolume ?? '—'}</Td>
-              <Td>{r.kd ?? '—'}</Td>
-              <Td>${r.estAvgJobValueUsd ?? '—'}</Td>
-              <Td>{r.estCloseRate ? `${(Number(r.estCloseRate) * 100).toFixed(0)}%` : '—'}</Td>
-              <Td className="text-xs text-slate-400 max-w-md">{r.rationale}</Td>
+              <Td className="hidden md:table-cell">{r.searchVolume ?? '—'}</Td>
+              <Td className="hidden md:table-cell">{r.kd ?? '—'}</Td>
+              <Td className="hidden lg:table-cell">${r.estAvgJobValueUsd ?? '—'}</Td>
+              <Td className="hidden lg:table-cell">{r.estCloseRate ? `${(Number(r.estCloseRate) * 100).toFixed(0)}%` : '—'}</Td>
+              <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell">{r.rationale}</Td>
               {showButtons && (
                 <Td>
                   <DecisionButtons id={r.id} />
@@ -130,8 +133,8 @@ function Table({
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 font-medium">{children}</th>;
+function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <th className={`px-3 py-2 font-medium ${className}`}>{children}</th>;
 }
 
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {

@@ -76,7 +76,7 @@ export default async function OverviewPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold">Overview</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Overview</h1>
         <p className="text-sm text-slate-400 mt-1">Phase 1 KPIs. Pipeline + P&L wire up in Phase 4.</p>
       </header>
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">

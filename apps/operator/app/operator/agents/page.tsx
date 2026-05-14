@@ -65,7 +65,7 @@ export default async function AgentsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold">Agents</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Agents</h1>
         <p className="text-sm text-slate-400 mt-1">
           Live runs, today's cost-by-agent, and pending manual approvals.
         </p>
@@ -76,22 +76,22 @@ export default async function AgentsPage() {
         {todayByAgent.length === 0 ? (
           <p className="text-sm text-slate-500">No runs yet today.</p>
         ) : (
-          <div className="rounded-lg border border-slate-800 overflow-hidden">
+          <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
               <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="text-left px-3 py-2">Agent</th>
-                  <th className="text-left px-3 py-2">Runs</th>
-                  <th className="text-left px-3 py-2">Tokens in/out</th>
+                  <th className="text-left px-3 py-2 hidden md:table-cell">Runs</th>
+                  <th className="text-left px-3 py-2 hidden md:table-cell">Tokens in/out</th>
                   <th className="text-left px-3 py-2">Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {todayByAgent.map((r) => (
                   <tr key={r.agent}>
-                    <td className="px-3 py-2 font-mono">{r.agent}</td>
-                    <td className="px-3 py-2">{r.runs}</td>
-                    <td className="px-3 py-2 text-slate-400">
+                    <td className="px-3 py-2 font-mono break-words">{r.agent}</td>
+                    <td className="px-3 py-2 hidden md:table-cell">{r.runs}</td>
+                    <td className="px-3 py-2 text-slate-400 hidden md:table-cell">
                       {r.tokens_in.toLocaleString()} / {r.tokens_out.toLocaleString()}
                     </td>
                     <td className="px-3 py-2">${r.cost.toFixed(4)}</td>
@@ -131,16 +131,16 @@ export default async function AgentsPage() {
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">Recent runs</h2>
-        <div className="rounded-lg border border-slate-800 overflow-hidden">
+        <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm">
             <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2">Agent</th>
                 <th className="text-left px-3 py-2">Status</th>
                 <th className="text-left px-3 py-2">Started</th>
-                <th className="text-left px-3 py-2">Duration</th>
-                <th className="text-left px-3 py-2">Tokens</th>
-                <th className="text-left px-3 py-2">Cost</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">Duration</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Tokens</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">Cost</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -151,18 +151,18 @@ export default async function AgentsPage() {
                     : '…';
                 return (
                   <tr key={r.id} className="hover:bg-slate-900/40">
-                    <td className="px-3 py-2 font-mono">{r.agent}</td>
+                    <td className="px-3 py-2 font-mono break-words">{r.agent}</td>
                     <td className="px-3 py-2">
                       <RunStatus status={r.status} />
                     </td>
-                    <td className="px-3 py-2 text-slate-400">
+                    <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
                       {r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}
                     </td>
-                    <td className="px-3 py-2 text-slate-400">{dur}</td>
-                    <td className="px-3 py-2 text-slate-400">
+                    <td className="px-3 py-2 text-slate-400 hidden md:table-cell">{dur}</td>
+                    <td className="px-3 py-2 text-slate-400 hidden lg:table-cell">
                       {r.tokensIn.toLocaleString()} / {r.tokensOut.toLocaleString()}
                     </td>
-                    <td className="px-3 py-2">${Number(r.costUsd).toFixed(4)}</td>
+                    <td className="px-3 py-2 hidden md:table-cell">${Number(r.costUsd).toFixed(4)}</td>
                   </tr>
                 );
               })}

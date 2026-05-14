@@ -66,7 +66,7 @@ export default async function PortfolioPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Portfolio</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Portfolio</h1>
         <p className="text-sm text-slate-400 mt-1">All sites the system has built.</p>
       </header>
       <DailySnapshotsPanel rows={portfolioRows} />
@@ -75,18 +75,18 @@ export default async function PortfolioPage() {
           No sites yet. Run <code className="text-slate-200">pnpm dry-run</code> to build your first one.
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 overflow-hidden">
+        <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm">
             <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2">Niche</th>
-                <th className="text-left px-3 py-2">City</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">City</th>
                 <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2">Theme</th>
-                <th className="text-left px-3 py-2">Primary domain</th>
-                <th className="text-left px-3 py-2">Tracking #</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Theme</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">Primary domain</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Tracking #</th>
                 <th className="text-left px-3 py-2">Calls 30d</th>
-                <th className="text-left px-3 py-2">MRR</th>
+                <th className="text-left px-3 py-2 hidden md:table-cell">MRR</th>
                 <th className="text-left px-3 py-2">Yesterday</th>
               </tr>
             </thead>
@@ -95,40 +95,41 @@ export default async function PortfolioPage() {
                 const sanity = sanityById.get(s.id);
                 return (
                   <tr key={s.id} className="hover:bg-slate-900/40">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 break-words">
                       <Link
                         href={`/operator/sites/${s.id}`}
                         className="text-sky-400 hover:text-sky-300"
                       >
                         {s.niche}
                       </Link>
+                      <div className="text-xs text-slate-500 md:hidden">{s.city}, {s.state}</div>
                     </td>
-                    <td className="px-3 py-2 text-slate-400">{s.city}, {s.state}</td>
+                    <td className="px-3 py-2 text-slate-400 hidden md:table-cell">{s.city}, {s.state}</td>
                     <td className="px-3 py-2">
                       <StatusBadge status={s.status} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 hidden lg:table-cell">
                       {sanity?.theme ? (
                         <span className="font-mono text-xs capitalize text-slate-300">{sanity.theme}</span>
                       ) : (
                         <span className="text-slate-600">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 hidden md:table-cell">
                       {sanity?.primaryHost ? (
                         <DomainCell host={sanity.primaryHost} verified={sanity.primaryDomainVerified} extra={sanity.domainCount > 1 ? sanity.domainCount - 1 : 0} />
                       ) : (
                         <span className="text-slate-600">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs">
+                    <td className="px-3 py-2 font-mono text-xs hidden lg:table-cell">
                       {s.trackingNumber ?? '—'}
                       {s.trackingProvider === 'mock' && (
                         <span className="ml-2 text-amber-400 text-[10px] uppercase">mock</span>
                       )}
                     </td>
                     <td className="px-3 py-2">{s.calls30d}</td>
-                    <td className="px-3 py-2">${Number(s.mrrUsd).toFixed(2)}</td>
+                    <td className="px-3 py-2 hidden md:table-cell">${Number(s.mrrUsd).toFixed(2)}</td>
                     <td className="px-3 py-2">
                       <SnapshotCell snap={siteSnapById.get(s.id)} />
                     </td>
@@ -247,30 +248,32 @@ function DailySnapshotsPanel({ rows }: { rows: PortfolioSnapshot[] }) {
           Costs (latest ${Number(latest.costsUsd).toFixed(2)})
         </span>
       </div>
-      <table className="w-full text-xs">
-        <thead className="text-slate-500">
-          <tr>
-            <th className="text-left py-1">Date</th>
-            <th className="text-right py-1">MRR</th>
-            <th className="text-right py-1">Costs</th>
-            <th className="text-right py-1">Calls</th>
-            <th className="text-right py-1">Leads</th>
-            <th className="text-right py-1">Tenants</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-800">
-          {[...rows].map((r) => (
-            <tr key={r.id}>
-              <td className="py-1 text-slate-300 font-mono">{r.date}</td>
-              <td className="py-1 text-right text-slate-300">${Number(r.mrrUsd).toFixed(2)}</td>
-              <td className="py-1 text-right text-slate-300">${Number(r.costsUsd).toFixed(2)}</td>
-              <td className="py-1 text-right text-slate-400">{r.callsCount}</td>
-              <td className="py-1 text-right text-slate-400">{r.leadsCount}</td>
-              <td className="py-1 text-right text-slate-400">{r.tenantsActiveCount}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="text-slate-500">
+            <tr>
+              <th className="text-left py-1">Date</th>
+              <th className="text-right py-1">MRR</th>
+              <th className="text-right py-1">Costs</th>
+              <th className="text-right py-1">Calls</th>
+              <th className="text-right py-1 hidden sm:table-cell">Leads</th>
+              <th className="text-right py-1 hidden sm:table-cell">Tenants</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-800">
+            {[...rows].map((r) => (
+              <tr key={r.id}>
+                <td className="py-1 text-slate-300 font-mono">{r.date}</td>
+                <td className="py-1 text-right text-slate-300">${Number(r.mrrUsd).toFixed(2)}</td>
+                <td className="py-1 text-right text-slate-300">${Number(r.costsUsd).toFixed(2)}</td>
+                <td className="py-1 text-right text-slate-400">{r.callsCount}</td>
+                <td className="py-1 text-right text-slate-400 hidden sm:table-cell">{r.leadsCount}</td>
+                <td className="py-1 text-right text-slate-400 hidden sm:table-cell">{r.tenantsActiveCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

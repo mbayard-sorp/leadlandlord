@@ -76,19 +76,24 @@ export function DomainAttachForm({ siteId, domains }: Props) {
           <span className="block text-xs uppercase tracking-wide text-slate-500 mb-1">Hostname</span>
           <input
             name="host"
+            type="url"
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             placeholder="example.com or www.example.com"
             required
-            className="w-full bg-slate-950/40 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500"
+            className="w-full min-h-[44px] bg-slate-950/40 border border-slate-700 rounded px-3 text-sm text-slate-100 focus:outline-none focus:border-sky-500"
           />
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-300 sm:pb-2">
-          <input type="checkbox" name="is_primary" value="true" className="w-4 h-4" />
+        <label className="inline-flex items-center min-h-[44px] gap-2 text-sm text-slate-300">
+          <input type="checkbox" name="is_primary" value="true" className="w-5 h-5" />
           Primary
         </label>
         <button
           type="submit"
           disabled={pending}
-          className="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50 sm:pb-2"
+          className="inline-flex items-center justify-center min-h-[44px] px-4 rounded bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
         >
           {pending ? 'Attaching…' : 'Attach'}
         </button>
@@ -154,8 +159,8 @@ function DomainRow({ siteId, domain }: { siteId: string; domain: Domain }) {
   }
 
   return (
-    <li className="px-3 py-2 flex items-center gap-2 text-sm">
-      <span className="font-mono flex-1">{domain.host}</span>
+    <li className="px-3 py-2 flex flex-wrap items-center gap-2 text-sm">
+      <span className="font-mono flex-1 min-w-0 break-words">{domain.host}</span>
       {domain.isPrimary && (
         <span className="px-1.5 py-0.5 rounded border border-sky-700/50 bg-sky-900/30 text-sky-300 text-[10px] uppercase tracking-wide">primary</span>
       )}
@@ -168,7 +173,7 @@ function DomainRow({ siteId, domain }: { siteId: string; domain: Domain }) {
         type="button"
         onClick={verify}
         disabled={pending}
-        className="text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50"
+        className="inline-flex items-center min-h-[44px] px-2 text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50"
       >
         Verify now
       </button>
@@ -176,7 +181,7 @@ function DomainRow({ siteId, domain }: { siteId: string; domain: Domain }) {
         type="button"
         onClick={detach}
         disabled={pending}
-        className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+        className="inline-flex items-center min-h-[44px] px-2 text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
       >
         Detach
       </button>

@@ -17,7 +17,7 @@ export default async function ProspectsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Backlink prospects</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Backlink prospects</h1>
         <p className="text-sm text-slate-400 mt-1">
           DataForSEO-discovered guest-post targets enriched with editor contacts via Apollo.
         </p>

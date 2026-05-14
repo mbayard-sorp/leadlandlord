@@ -47,16 +47,16 @@ export function ProspectTable({ rows, hideSiteColumn = false }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 overflow-hidden">
+    <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
       <table className="w-full text-sm">
         <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            {!hideSiteColumn && <th className="text-left px-3 py-2">Site</th>}
+            {!hideSiteColumn && <th className="text-left px-3 py-2 hidden md:table-cell">Site</th>}
             <th className="text-left px-3 py-2">Target domain</th>
-            <th className="text-right px-3 py-2">DFS rank</th>
-            <th className="text-left px-3 py-2">Editor</th>
+            <th className="text-right px-3 py-2 hidden md:table-cell">DFS rank</th>
+            <th className="text-left px-3 py-2 hidden lg:table-cell">Editor</th>
             <th className="text-left px-3 py-2">Status</th>
-            <th className="text-left px-3 py-2">Pitch</th>
+            <th className="text-left px-3 py-2 hidden lg:table-cell">Pitch</th>
             <th className="text-left px-3 py-2"></th>
           </tr>
         </thead>
@@ -69,13 +69,13 @@ export function ProspectTable({ rows, hideSiteColumn = false }: Props) {
             return (
               <tr key={r.id} className="hover:bg-slate-900/40 align-top">
                 {!hideSiteColumn && (
-                  <td className="px-3 py-2 text-xs text-slate-300">{r.siteId.slice(0, 8)}</td>
+                  <td className="px-3 py-2 text-xs text-slate-300 hidden md:table-cell">{r.siteId.slice(0, 8)}</td>
                 )}
-                <td className="px-3 py-2 font-mono text-xs text-slate-200">{r.sourceDomain}</td>
-                <td className="px-3 py-2 text-right font-mono text-xs text-slate-300">
+                <td className="px-3 py-2 font-mono text-xs text-slate-200 break-words">{r.sourceDomain}</td>
+                <td className="px-3 py-2 text-right font-mono text-xs text-slate-300 hidden md:table-cell">
                   {p.dfsRank ?? '—'}
                 </td>
-                <td className="px-3 py-2 text-xs">
+                <td className="px-3 py-2 text-xs hidden lg:table-cell">
                   {p.needsManualEditor && !editorEmail ? (
                     <div className="text-amber-300">
                       needs manual editor
@@ -98,7 +98,7 @@ export function ProspectTable({ rows, hideSiteColumn = false }: Props) {
                 <td className="px-3 py-2">
                   <StatusBadge status={r.status} />
                 </td>
-                <td className="px-3 py-2 text-xs text-slate-300 max-w-md">
+                <td className="px-3 py-2 text-xs text-slate-300 max-w-md hidden lg:table-cell">
                   {r.subjectLine ? (
                     <div className="font-medium text-slate-200">{r.subjectLine}</div>
                   ) : null}

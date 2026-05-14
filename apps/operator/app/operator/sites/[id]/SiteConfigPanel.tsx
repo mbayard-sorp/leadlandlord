@@ -57,7 +57,10 @@ export function SiteConfigPanel({ siteId, initial, domainHosts }: Props) {
             name="ga_measurement_id"
             defaultValue={initial.gaMeasurementId ?? ''}
             placeholder="G-XXXXXXXXXX"
-            className="input font-mono text-xs"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            className="input font-mono"
           />
         </Field>
         {domainHosts.length > 0 ? (
@@ -101,27 +104,11 @@ export function SiteConfigPanel({ siteId, initial, domainHosts }: Props) {
         <button
           type="submit"
           disabled={pending}
-          className="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
+          className="inline-flex items-center min-h-[44px] px-4 rounded bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save'}
         </button>
       </div>
-
-      <style jsx>{`
-        :global(.input) {
-          width: 100%;
-          background: rgb(15 23 42 / 0.6);
-          border: 1px solid rgb(51 65 85);
-          border-radius: 6px;
-          padding: 8px 12px;
-          color: rgb(226 232 240);
-          font-size: 0.875rem;
-        }
-        :global(.input:focus) {
-          outline: none;
-          border-color: rgb(56 189 248);
-        }
-      `}</style>
     </form>
   );
 }

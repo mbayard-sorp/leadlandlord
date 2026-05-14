@@ -66,9 +66,9 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Backlinks</h1>
+          <h1 className="text-xl md:text-2xl font-semibold">Backlinks</h1>
           <p className="text-sm text-slate-400 mt-1">
             Citation queue, HARO pitches, and guest-post outreach. Manual queue — operator actions
             each row.
@@ -76,7 +76,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
         </div>
         <Link
           href="/operator/backlinks/prospects"
-          className="text-xs px-3 py-1.5 rounded border border-sky-700/60 bg-sky-900/30 text-sky-200 hover:bg-sky-900/50 self-start"
+          className="inline-flex items-center min-h-[44px] text-xs px-3 rounded border border-sky-700/60 bg-sky-900/30 text-sky-200 hover:bg-sky-900/50 self-start"
         >
           Prospects →
         </Link>
@@ -87,7 +87,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
           <Link
             key={s}
             href={`/operator/backlinks?status=${s}`}
-            className={`px-3 py-1 rounded border ${
+            className={`inline-flex items-center min-h-[44px] px-3 rounded border ${
               filter === s
                 ? 'border-sky-700 bg-sky-900/40 text-sky-200'
                 : 'border-slate-700 text-slate-300 hover:border-slate-500'
@@ -117,17 +117,17 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                     ({group.length} {group.length === 1 ? 'row' : 'rows'})
                   </span>
                 </h2>
-                <div className="rounded-lg border border-slate-800 overflow-hidden">
+                <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
-                        <th className="text-left px-3 py-2">Type</th>
+                        <th className="text-left px-3 py-2 hidden sm:table-cell">Type</th>
                         <th className="text-left px-3 py-2">Source domain</th>
                         <th className="text-left px-3 py-2">Status</th>
-                        <th className="text-left px-3 py-2">Subject / Pitch</th>
-                        <th className="text-left px-3 py-2">Nudges</th>
-                        <th className="text-left px-3 py-2">Action</th>
-                        <th className="text-left px-3 py-2">Created</th>
+                        <th className="text-left px-3 py-2 hidden lg:table-cell">Subject / Pitch</th>
+                        <th className="text-left px-3 py-2 hidden md:table-cell">Nudges</th>
+                        <th className="text-left px-3 py-2 hidden md:table-cell">Action</th>
+                        <th className="text-left px-3 py-2 hidden lg:table-cell">Created</th>
                         <th className="text-left px-3 py-2"></th>
                       </tr>
                     </thead>
@@ -138,14 +138,15 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                           typeof md.submitUrl === 'string' ? md.submitUrl : null;
                         return (
                           <tr key={r.id} className="hover:bg-slate-900/40 align-top">
-                            <td className="px-3 py-2 font-mono text-xs">{r.type}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-slate-300">
+                            <td className="px-3 py-2 font-mono text-xs hidden sm:table-cell">{r.type}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-slate-300 break-words">
                               {r.sourceDomain}
+                              <div className="text-[10px] uppercase tracking-wide text-slate-500 sm:hidden">{r.type}</div>
                             </td>
                             <td className="px-3 py-2">
                               <StatusBadge status={r.status} />
                             </td>
-                            <td className="px-3 py-2 text-xs text-slate-300 max-w-md">
+                            <td className="px-3 py-2 text-xs text-slate-300 max-w-md hidden lg:table-cell">
                               {r.subjectLine ? (
                                 <div className="font-medium text-slate-200">{r.subjectLine}</div>
                               ) : null}
@@ -160,7 +161,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                                 </div>
                               ) : null}
                             </td>
-                            <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">
+                            <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap hidden md:table-cell">
                               {r.nudgeCount > 0 ? (
                                 <div>
                                   <div className="font-mono text-slate-300">{r.nudgeCount}/7</div>
@@ -174,7 +175,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                                 <span className="text-slate-600">—</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-xs">
+                            <td className="px-3 py-2 text-xs hidden md:table-cell">
                               {submitUrl ? (
                                 <a
                                   href={submitUrl}
@@ -188,7 +189,7 @@ export default async function BacklinksPage({ searchParams }: PageProps) {
                                 '—'
                               )}
                             </td>
-                            <td className="px-3 py-2 text-xs text-slate-400">
+                            <td className="px-3 py-2 text-xs text-slate-400 hidden lg:table-cell">
                               {r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}
                             </td>
                             <td className="px-3 py-2">

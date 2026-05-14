@@ -81,7 +81,7 @@ export default async function MollyPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold">Molly</h1>
+        <h1 className="text-xl md:text-2xl font-semibold">Molly</h1>
         <p className="text-sm text-slate-400 mt-1">
           Outreach persona for the guest-post pipeline. Graduation tracks the
           first {GRADUATION_THRESHOLD} successful sends; BCC stops once she

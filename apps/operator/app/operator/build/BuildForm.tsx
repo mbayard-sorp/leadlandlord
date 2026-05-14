@@ -112,6 +112,8 @@ export function BuildForm() {
               name="niche"
               required
               placeholder="gutter cleaning"
+              autoCapitalize="words"
+              autoCorrect="off"
               className="cell"
               disabled={pending}
             />
@@ -121,6 +123,8 @@ export function BuildForm() {
               name="city"
               required
               placeholder="Boise"
+              autoCapitalize="words"
+              autoCorrect="off"
               className="cell"
               disabled={pending}
             />
@@ -132,27 +136,30 @@ export function BuildForm() {
               placeholder="ID"
               maxLength={2}
               minLength={2}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
               className="cell uppercase"
               disabled={pending}
             />
           </Field>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
+        <label className="inline-flex items-center min-h-[44px] gap-2 text-sm text-slate-300">
           <input
             type="checkbox"
             name="fast_mode"
             defaultChecked
-            className="w-4 h-4"
+            className="w-5 h-5"
             disabled={pending}
           />
           Fast mode (smaller content bundle, ~50% faster)
         </label>
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-wrap justify-end gap-3">
           {pending && (
             <button
               type="button"
               onClick={cancel}
-              className="px-4 py-2 rounded border border-slate-700 text-slate-300 text-sm hover:bg-slate-800"
+              className="inline-flex items-center min-h-[44px] px-4 rounded border border-slate-700 text-slate-300 text-sm hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -160,27 +167,11 @@ export function BuildForm() {
           <button
             type="submit"
             disabled={pending}
-            className="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
+            className="inline-flex items-center min-h-[44px] px-4 rounded bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
           >
             {pending ? 'Building…' : 'Build site'}
           </button>
         </div>
-
-        <style jsx>{`
-          :global(.cell) {
-            width: 100%;
-            background: rgb(15 23 42 / 0.6);
-            border: 1px solid rgb(51 65 85);
-            border-radius: 6px;
-            padding: 8px 12px;
-            color: rgb(226 232 240);
-            font-size: 0.875rem;
-          }
-          :global(.cell:focus) {
-            outline: none;
-            border-color: rgb(56 189 248);
-          }
-        `}</style>
       </form>
 
       {errorMsg && (
