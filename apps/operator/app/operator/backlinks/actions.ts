@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
-import { getDb, backlinks, sites, agentEvents } from '@leadlandlord/db';
+import { getDb, backlinks, backlinkProspects, sites, agentEvents } from '@leadlandlord/db';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { recordSend } from '@leadlandlord/db/email-throttle';
@@ -243,10 +243,19 @@ export async function sendProspect(id: string): Promise<ActionResult> {
 }
 
 /**
- * Aggregate Apollo usage in the current calendar month. Each prospect row
- * with `metadata.prospect.apolloPersonId` consumed one Apollo person-reveal
- * credit. Used to gate runs against the free-tier 75-lookup cap surfaced
- * in the operator UI.
+ * Aggregate Apollo usage in the current calendar month. Apollo bills per
+ * `findEditorByDomain` call regardless of whether the response is usable, so
+ * we count both:
+ *
+ *   - Path A successes: `backlinks` rows stamped with
+ *     `metadata.prospect.apolloPersonId` (Apollo returned a usable editor).
+ *   - Path B failures: `backlink_prospects` rows where the agent recorded
+ *     `metadata.apolloBudgetExhausted === false` (Apollo was called but
+ *     returned masked email / no people / 404). PRIOR BUG: these were
+ *     uncounted, so the meter never moved when most domains hit Path B.
+ *
+ * Used to gate runs against the free-tier 75-lookup cap surfaced in the
+ * operator UI.
  */
 export async function getApolloMonthlyUsage(): Promise<{
   used: number;
@@ -258,19 +267,31 @@ export async function getApolloMonthlyUsage(): Promise<{
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const cap = Number(process.env.APOLLO_MONTHLY_CAP ?? '75');
-  // Count `prospect`-stamped backlink rows created this month. Each represents
-  // exactly one Apollo enrichment (the agent only inserts a row after a
-  // successful findEditorByDomain call).
-  const rows = await db
-    .select({ id: backlinks.id, metadata: backlinks.metadata, createdAt: backlinks.createdAt })
-    .from(backlinks);
+
   let used = 0;
-  for (const r of rows) {
+
+  // Path A — Apollo succeeded, backlinks row created with apolloPersonId.
+  const blRows = await db
+    .select({ metadata: backlinks.metadata, createdAt: backlinks.createdAt })
+    .from(backlinks);
+  for (const r of blRows) {
     if (!r.createdAt || new Date(r.createdAt) < monthStart) continue;
     const md = (r.metadata ?? {}) as Record<string, unknown>;
     const p = md.prospect as Record<string, unknown> | undefined;
     if (p && p.apolloPersonId) used += 1;
   }
+
+  // Path B — Apollo was called but result wasn't usable; the agent landed
+  // the row in backlink_prospects with apolloBudgetExhausted=false.
+  const bpRows = await db
+    .select({ metadata: backlinkProspects.metadata, createdAt: backlinkProspects.createdAt })
+    .from(backlinkProspects);
+  for (const r of bpRows) {
+    if (!r.createdAt || new Date(r.createdAt) < monthStart) continue;
+    const md = (r.metadata ?? {}) as Record<string, unknown>;
+    if (md.apolloBudgetExhausted === false) used += 1;
+  }
+
   return {
     used,
     cap,
