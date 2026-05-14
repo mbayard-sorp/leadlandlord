@@ -412,6 +412,16 @@ export function ProspectWorkflow() {
             <span className="text-slate-500">No prospect rows yet</span>
           ) : undefined
         }
+        summary={
+          prospectRows.length > 0 ? (
+            <span>
+              <span className="text-slate-200">{prospectRows.length}</span> prospect rows
+              available for review
+            </span>
+          ) : siteId ? (
+            <span className="text-slate-500">No prospect rows yet</span>
+          ) : undefined
+        }
       >
         {siteId ? (
           <div className="mt-2 space-y-4">
