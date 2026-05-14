@@ -374,6 +374,7 @@ Respond ONLY with JSON, no prose, no markdown:
 }`;
 
   let parsed: { suggestions?: Array<{ domain?: unknown; rationale?: unknown }> };
+  let rawText = '';
   try {
     const anthropic = getAnthropicClient();
     const msg = await anthropic.messages.create({
@@ -381,13 +382,22 @@ Respond ONLY with JSON, no prose, no markdown:
       max_tokens: 512,
       messages: [{ role: 'user', content: prompt }],
     });
-    const text = msg.content
+    rawText = msg.content
       .filter((b) => b.type === 'text')
       .map((b) => (b as { type: 'text'; text: string }).text)
-      .join('');
-    parsed = JSON.parse(text);
+      .join('')
+      .trim();
+    // Tolerate markdown fences or surrounding prose by extracting the
+    // outermost {...} block.
+    const start = rawText.indexOf('{');
+    const end = rawText.lastIndexOf('}');
+    const jsonSlice = start !== -1 && end > start ? rawText.slice(start, end + 1) : rawText;
+    if (!jsonSlice) throw new Error('empty AI response');
+    parsed = JSON.parse(jsonSlice);
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : 'AI suggestion failed' };
+    const detail = err instanceof Error ? err.message : 'AI suggestion failed';
+    const preview = rawText ? ` (raw: ${rawText.slice(0, 120)})` : '';
+    return { ok: false, message: `${detail}${preview}` };
   }
 
   const ownHost = normalizeHost(site.domain);
