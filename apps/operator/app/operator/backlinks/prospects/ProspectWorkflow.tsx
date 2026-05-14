@@ -55,6 +55,7 @@ function StepCard({
   open,
   onToggle,
   children,
+  allowOverflow = false,
 }: {
   step: number;
   title: string;
@@ -62,13 +63,18 @@ function StepCard({
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
+  allowOverflow?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 overflow-hidden">
+    <div
+      className={`rounded-lg border border-slate-800 bg-slate-900/40 ${
+        allowOverflow ? '' : 'overflow-hidden'
+      }`}
+    >
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-900/60"
+        className="w-full flex items-center justify-between px-4 py-3 text-left rounded-t-lg hover:bg-slate-900/60"
       >
         <div className="flex items-center gap-3">
           <span className="w-6 h-6 rounded-full bg-slate-700 text-xs font-mono text-slate-300 flex items-center justify-center shrink-0">
@@ -175,6 +181,7 @@ export function ProspectWorkflow() {
         open={openStep === 1}
         onToggle={() => toggleStep(1)}
         pill={siteId ? <span className="text-xs text-emerald-400">selected</span> : undefined}
+        allowOverflow
       >
         <div className="mt-2 max-w-sm">
           <SiteCombobox onSelect={handleSiteSelect} selectedId={siteId} />
