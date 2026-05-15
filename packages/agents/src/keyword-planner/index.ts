@@ -42,8 +42,17 @@ export const KeywordPlannerInput = z.object({
   niche: z.string().min(1),
   city: z.string().min(1),
   state: z.string().length(2),
-  /** Approximate target cluster count. Matches Content Engine's planned page count. */
-  target_clusters: z.number().int().min(5).max(40).default(21),
+  /**
+   * Controls page volume. 'thin' = 6-12 clusters total (1 home + 4-6 services
+   * + 3-5 FAQ blog posts, 0 service-area, 0 info). 'content_rich' = full
+   * ~28-cluster output. Defaults to 'thin'.
+   */
+  site_mode: z.enum(['thin', 'content_rich']).default('thin'),
+  /**
+   * Approximate target cluster count. Overrides the site_mode default when
+   * explicitly provided. Matches Content Engine's planned page count.
+   */
+  target_clusters: z.number().int().min(5).max(40).optional(),
   /** DataForSEO filters. Defaults match a "rank quickly" stance. */
   min_search_volume: z.number().int().nonnegative().default(20),
   max_kd: z.number().int().min(0).max(100).default(50),
@@ -310,15 +319,26 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
       )
       .join('\n');
 
+    // thin: 6-12 clusters (1 home + 4-6 services + 3-5 FAQ blog posts, 0
+    // service-area, 0 info pages). content_rich: ~21 clusters full-site.
+    const derivedTarget =
+      input.target_clusters ??
+      (input.site_mode === 'thin' ? 9 : 21);
+
+    const thinModeInstruction =
+      input.site_mode === 'thin'
+        ? `\nSITE MODE: thin. Generate ONLY: 1 home cluster, 4-6 service clusters, 3-5 blog/FAQ clusters. Do NOT generate service_area or info clusters. Total 6-12 clusters max.`
+        : '';
+
     const userPrompt = `Niche: ${input.niche}
 City: ${input.city}
 State: ${input.state}
-Target cluster count: ${input.target_clusters}
+Target cluster count: ${derivedTarget}${thinModeInstruction}
 
 Candidates (sorted by score):
 ${candidateTable}
 
-Cluster these into ${input.target_clusters} (±5) page-mapped keyword clusters per the rules in the system prompt. Submit via the ${CLUSTER_TOOL_NAME} tool exactly once.`;
+Cluster these into ${derivedTarget} (±3) page-mapped keyword clusters per the rules in the system prompt. Submit via the ${CLUSTER_TOOL_NAME} tool exactly once.`;
 
     const response = await client.messages.create({
       model,

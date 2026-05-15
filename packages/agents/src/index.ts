@@ -10,7 +10,6 @@ export { SeoOperator } from './seo-operator/index';
 export { SeoIngestGsc } from './seo-ingest-gsc/index';
 export { SeoIngestGa4 } from './seo-ingest-ga4/index';
 export { LighthouseAudit } from './lighthouse-audit/index';
-export { BacklinkBuilder } from './backlink-builder/index';
 export { TenantProspector } from './tenant-prospector/index';
 export { OutreachAgent } from './outreach-agent/index';
 export { TrialManager } from './trial-manager/index';

@@ -182,6 +182,23 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           />
         </section>
 
+        {/* Neighborhoods — thin-mode home page service-area section */}
+        {bundle.neighborhoods.length > 0 && (
+          <section className="classic-areas" aria-label="Neighborhoods we serve">
+            <p className="classic-section-eyebrow">Neighborhoods we serve</p>
+            <h2 className="classic-h2">Local service across {bundle.city}</h2>
+            <ul className="classic-area-chips">
+              {bundle.neighborhoods.map((n) => (
+                <li key={n.name}>
+                  <a href={n.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                    {n.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* FAQ */}
         {faqs.length > 0 && (
           <section className="classic-faq" aria-label="FAQ">

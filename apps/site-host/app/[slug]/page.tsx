@@ -1,0 +1,144 @@
+import { notFound } from 'next/navigation';
+import { resolveCurrentSite } from '../../lib/site-context';
+import { breadcrumbsJsonLd, buildPageMetadata, currentRequestBaseUrl } from '../../lib/seo-meta';
+import { sanityToBundle } from '../../lib/theme-bundle';
+import { getTrackingNumber } from '../../lib/tracking';
+import { telHref } from '../../lib/content';
+import { parseJsonLd } from '../../lib/jsonld';
+import { Markdown } from '../../components/shared/Markdown';
+import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
+
+interface Params {
+  params: Promise<{ slug: string }>;
+}
+
+/**
+ * Flat service detail pages at /<service-slug>. Sprint 1: service URLs moved
+ * from /services/<slug> to /<slug> (flat). The /services/:slug → /:slug 301
+ * redirect in next.config.ts keeps old URLs functional during transition.
+ *
+ * Resolves against site.services only — other page types have their own
+ * named routes (about, contact, blog/[slug], pages/[slug], etc.).
+ */
+export default async function FlatServicePage({ params }: Params) {
+  const { slug } = await params;
+  const site = await resolveCurrentSite();
+  if (!site) notFound();
+  const bundle = sanityToBundle(site);
+  const page = bundle.services.find((p) => slugFromUrl(p.slug) === slug);
+  if (!page) notFound();
+
+  const phone = await getTrackingNumber(site.siteId);
+  const tel = telHref(phone);
+  const base = await currentRequestBaseUrl();
+  const canonical = `/${slug}/`;
+
+  const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: page.title,
+    description: page.meta_description,
+    url: `${base}${canonical}`,
+    ...(bundle.hero_image_url ? { image: bundle.hero_image_url } : {}),
+    provider: {
+      '@type': 'LocalBusiness',
+      name: bundle.business_name,
+      telephone: phone,
+      areaServed: `${bundle.city}, ${bundle.state}`,
+    },
+    areaServed: `${bundle.city}, ${bundle.state}`,
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'USD',
+      availability: 'https://schema.org/InStock',
+      url: `${base}${canonical}`,
+    },
+  };
+
+  const breadcrumb = await breadcrumbsJsonLd([
+    { name: bundle.business_name, path: '/' },
+    { name: page.title, path: canonical },
+  ]);
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+      />
+
+      <article className="info-page">
+        <header className="info-page-head">
+          <a href="/" className="info-page-brand">
+            ← {bundle.business_name}
+          </a>
+          <a href={tel} className="info-page-phone num">
+            ☎ {phone}
+          </a>
+        </header>
+
+        <div className="info-page-body">
+          <p className="info-page-eyebrow">
+            {bundle.niche} · {bundle.city}, {bundle.state}
+          </p>
+          <Breadcrumbs items={[
+            { name: bundle.business_name, url: '/' },
+            { name: page.title, url: canonical },
+          ]} />
+          <h1 className="info-page-h1">{page.title}</h1>
+          {page.meta_description && (
+            <p className="info-page-lede">{page.meta_description}</p>
+          )}
+          <Markdown source={page.mdx} className="prose-site" />
+
+          <aside className="info-page-cta">
+            <h2>Get a free quote on {page.title.toLowerCase()}</h2>
+            <p>Free quote in 15 minutes. Licensed and insured.</p>
+            <div className="info-page-cta-buttons">
+              <a href={tel} className="info-page-btn-primary num">
+                ☎ {phone}
+              </a>
+              <a href="/contact" className="info-page-btn-secondary">
+                Get a quote →
+              </a>
+            </div>
+          </aside>
+        </div>
+
+        <footer className="info-page-footer">
+          <p>
+            © {new Date().getFullYear()} {bundle.business_name} · Licensed and insured
+          </p>
+          <p className="info-page-footer-disclaimer">
+            This site connects callers with a partnered local provider.
+          </p>
+        </footer>
+      </article>
+    </>
+  );
+}
+
+export async function generateMetadata({ params }: Params) {
+  const { slug } = await params;
+  const site = await resolveCurrentSite();
+  if (!site) return {};
+  const bundle = sanityToBundle(site);
+  const page = bundle.services.find((p) => slugFromUrl(p.slug) === slug);
+  if (!page) return {};
+  return buildPageMetadata({
+    title: page.title,
+    description: page.meta_description,
+    path: `/${slug}/`,
+    image: page.og_image_url ?? bundle.hero_image_url,
+    siteName: bundle.business_name,
+  });
+}
+
+function slugFromUrl(url: string): string {
+  // Handle both old /services/<slug> format and new flat /<slug> format
+  return url.replace(/^\/services\//, '').replace(/^\//, '').replace(/\/$/, '');
+}

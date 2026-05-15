@@ -70,6 +70,11 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     ctx.log.info({ siteId }, 'site row ready');
     this.emit({ step: 'site_row_ready', site_id: siteId });
 
+    const siteRow = (
+      await db.select({ siteMode: sites.siteMode }).from(sites).where(eq(sites.id, siteId)).limit(1)
+    )[0];
+    const siteMode = siteRow?.siteMode ?? 'thin';
+
     await db
       .update(sites)
       .set({ status: 'building', updatedAt: new Date() })
@@ -115,6 +120,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
           niche: input.niche,
           city: input.city,
           state: input.state.toUpperCase(),
+          site_mode: siteMode,
         },
         { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:keyword-planner` },
       );
@@ -146,6 +152,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         fast_mode: input.fast_mode ?? false,
         keyword_clusters: clusters,
         theme: pickThemeForNiche(input.niche),
+        site_mode: siteMode,
       },
       { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:content-engine` },
     );

@@ -70,46 +70,7 @@ export async function setProspectEditorEmail(
   // Draft the pitch now that we have a real recipient. If the row already
   // has a draft from a prior save, regenerate — operator may have changed
   // the email and the body should reflect the new domain context.
-  const { draftGuestPostPitch } = await import('@leadlandlord/agents/backlink-builder');
-  let subject: string;
-  let body: string;
-  try {
-    const drafted = await draftGuestPostPitch({
-      targetDomain: row.sourceDomain,
-      pitchTopic,
-      niche: site.niche,
-      city: site.city,
-      state: site.state,
-    });
-    subject = drafted.subject;
-    body = drafted.body;
-  } catch (err) {
-    return {
-      ok: false,
-      message: `draft failed: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  await db
-    .update(backlinks)
-    .set({
-      pitchDraft: body,
-      subjectLine: subject,
-      metadata: {
-        ...md,
-        targetEditorEmail: trimmed,
-        pitchTopic,
-        prospect: {
-          ...((md.prospect ?? {}) as Record<string, unknown>),
-          needsManualEditor: false,
-          editorEmailManual: true,
-          draftedAt: new Date().toISOString(),
-        },
-      },
-    })
-    .where(eq(backlinks.id, id));
-  revalidatePath('/operator/backlinks/prospects');
-  return { ok: true };
+  throw new Error('backlink-builder removed in sprint-0/foundations; replacements arriving in sprint 3-4');
 }
 
 /**
@@ -119,128 +80,8 @@ export async function setProspectEditorEmail(
  * Backlink Builder guest_post send path so on-the-wire behavior matches
  * what we'll see when training wheels come off.
  */
-export async function sendProspect(id: string): Promise<ActionResult> {
-  const db = getDb();
-  const row = (await db.select().from(backlinks).where(eq(backlinks.id, id)).limit(1))[0];
-  if (!row) return { ok: false, message: 'backlink not found' };
-  if (row.status !== 'pending') {
-    return { ok: false, message: `cannot send row with status=${row.status}` };
-  }
-  if (row.type !== 'guest_post') {
-    return { ok: false, message: `sendProspect only handles guest_post rows (got ${row.type})` };
-  }
-
-  const md = (row.metadata ?? {}) as Record<string, unknown>;
-  const toAddress = typeof md.targetEditorEmail === 'string' ? md.targetEditorEmail : null;
-  if (!toAddress) return { ok: false, message: 'metadata.targetEditorEmail missing' };
-
-  // Draft on-the-fly if missing. Happens for rows whose email was saved
-  // before the auto-draft logic landed, or any caller that supplies an
-  // email without explicitly drafting first.
-  let subject: string;
-  let body: string;
-  if (row.pitchDraft) {
-    subject = row.subjectLine ?? `Guest post idea for ${row.sourceDomain}`;
-    body = row.pitchDraft;
-  } else {
-    const site = (await db.select().from(sites).where(eq(sites.id, row.siteId)).limit(1))[0];
-    if (!site) return { ok: false, message: 'site not found for backlink' };
-    const pitchTopic =
-      typeof md.pitchTopic === 'string'
-        ? md.pitchTopic
-        : `Guide to ${site.niche} for homeowners in ${site.city}`;
-    try {
-      const { draftGuestPostPitch } = await import('@leadlandlord/agents/backlink-builder');
-      const drafted = await draftGuestPostPitch({
-        targetDomain: row.sourceDomain,
-        pitchTopic,
-        niche: site.niche,
-        city: site.city,
-        state: site.state,
-      });
-      subject = drafted.subject;
-      body = drafted.body;
-      // Persist the freshly-drafted pitch so a re-send doesn't re-draft.
-      await db
-        .update(backlinks)
-        .set({
-          pitchDraft: body,
-          subjectLine: subject,
-          metadata: {
-            ...md,
-            pitchTopic,
-            prospect: {
-              ...((md.prospect ?? {}) as Record<string, unknown>),
-              draftedAt: new Date().toISOString(),
-            },
-          },
-        })
-        .where(eq(backlinks.id, id));
-    } catch (err) {
-      return {
-        ok: false,
-        message: `draft failed: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-  }
-
-  const useZoho = process.env.ZOHO_MCP_ENABLED === 'true';
-  const mailbox = useZoho
-    ? (process.env.ZOHO_DEFAULT_FROM ?? '')
-    : (process.env.RESEND_FROM_ADDRESS ?? '');
-  if (!mailbox) {
-    return {
-      ok: false,
-      message: useZoho ? 'ZOHO_DEFAULT_FROM not set' : 'RESEND_FROM_ADDRESS not set',
-    };
-  }
-
-  let externalId: string | undefined;
-  let sendError: string | undefined;
-  try {
-    if (useZoho) {
-      const res = await sendEmailZoho({ to: toAddress, from: mailbox, subject, text: body });
-      externalId = res.messageId;
-    } else {
-      const res = await sendEmailResend({ to: toAddress, from: mailbox, subject, text: body });
-      externalId = res.messageId;
-    }
-  } catch (err) {
-    sendError = err instanceof Error ? err.message : String(err);
-  }
-
-  await recordSend({
-    siteId: row.siteId,
-    mailbox,
-    toAddress,
-    subject,
-    purpose: 'guest_post',
-    provider: useZoho ? 'zoho' : 'resend',
-    externalId: externalId ?? null,
-    status: sendError ? 'failed' : 'sent',
-    errorMessage: sendError ?? null,
-  });
-
-  if (sendError) {
-    return { ok: false, message: `send failed: ${sendError}` };
-  }
-
-  await db
-    .update(backlinks)
-    .set({
-      status: 'submitted',
-      metadata: {
-        ...md,
-        operatorApproved: true,
-        operatorApprovedAt: new Date().toISOString(),
-        externalId: externalId ?? null,
-      },
-    })
-    .where(eq(backlinks.id, id));
-
-  revalidatePath('/operator/backlinks');
-  revalidatePath('/operator/backlinks/prospects');
-  return { ok: true };
+export async function sendProspect(_id: string): Promise<ActionResult> {
+  throw new Error('backlink-builder removed in sprint-0/foundations; replacements arriving in sprint 3-4');
 }
 
 /**
@@ -360,7 +201,8 @@ export async function requestProspectRun(args: {
     .values({
       agent: 'operator',
       type: 'operator.prospect.requested',
-      targetAgent: 'backlink-builder',
+      // TODO(sprint-3): backlink-builder removed; wire to replacement agent
+      targetAgent: 'molly',
       payload: {
         mode: 'prospect',
         siteId: args.siteId,

@@ -232,6 +232,48 @@ export async function getSerpResults(args: {
     }));
 }
 
+// ---------- Paid ad count (Google Ads SERP) --------------------------------
+
+interface PaidSerpItemRaw {
+  type?: string;
+}
+
+/**
+ * Count the number of paid ads appearing on the Google SERP for a keyword.
+ * Uses the DataForSEO /serp/google/ads/live/advanced endpoint.
+ *
+ * Returns 0 on any failure so the caller's scoring path stays unblocked.
+ * Higher ad count signals stronger advertiser willingness-to-pay, which is
+ * a positive signal for rank-and-rent viability.
+ *
+ * Cap ad_count at 10 before passing to scoring normalization.
+ */
+export async function getPaidAdCount(args: {
+  keyword: string;
+  location_code?: number;
+  language_code?: string;
+}): Promise<number> {
+  const { keyword, location_code = 2840, language_code = 'en' } = args;
+  if (process.env.MOCK_AI === 'true') {
+    // Return a plausible mock so scoring path exercises ad_presence weight.
+    return 3;
+  }
+  try {
+    const rows = await dfsPost<{ items: PaidSerpItemRaw[] | null; items_count?: number }>(
+      '/serp/google/ads/live/advanced',
+      [{ keyword, location_code, language_code, depth: 10 }],
+    );
+    const row = rows[0];
+    if (!row) return 0;
+    // Prefer items_count if present; fall back to counting items with type='paid'.
+    if (typeof row.items_count === 'number') return Math.min(row.items_count, 10);
+    const items = row.items ?? [];
+    return Math.min(items.filter((it) => it.type === 'paid').length, 10);
+  } catch {
+    return 0;
+  }
+}
+
 // ---------- Keyword expansion (Labs) --------------------------------------
 
 /**

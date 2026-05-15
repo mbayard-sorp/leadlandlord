@@ -62,8 +62,9 @@ export async function scheduleMollyNudge(): Promise<ScheduledEvent[]> {
     const requiredDays = cadenceDays[r.nudgeCount] ?? Infinity;
     if (elapsedDays < requiredDays) continue;
 
+    // TODO(sprint-3): replaced by network-linker / backlink-copycat / citation-runner
     events.push({
-      agent: 'backlink-builder',
+      agent: 'molly',
       payload: {
         mode: 'nudge',
         siteId: r.siteId,

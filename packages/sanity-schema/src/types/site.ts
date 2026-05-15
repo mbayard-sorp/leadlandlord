@@ -28,6 +28,18 @@ export const site = defineType({
     defineField({ name: 'city', title: 'City', type: 'string' }),
     defineField({ name: 'state', title: 'State', type: 'string' }),
     defineField({
+      name: 'siteMode',
+      title: 'Site Mode',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Thin', value: 'thin' },
+          { title: 'Content Rich', value: 'content_rich' },
+        ],
+      },
+      initialValue: 'thin',
+    }),
+    defineField({
       name: 'theme',
       title: 'Theme',
       type: 'reference',
@@ -145,6 +157,25 @@ export const site = defineType({
       title: 'Nearby Cities',
       type: 'array',
       of: [{ type: 'string' }],
+    }),
+    defineField({
+      name: 'neighborhoods',
+      title: 'Neighborhoods',
+      type: 'array',
+      description: 'Neighborhoods in the service area. Each entry includes a name and a Google Maps search URL. Populated by the content engine in thin mode.',
+      of: [
+        {
+          type: 'object',
+          fields: [
+            defineField({ name: 'name', title: 'Name', type: 'string', validation: (r) => r.required() }),
+            defineField({ name: 'googleMapsUrl', title: 'Google Maps URL', type: 'url', validation: (r) => r.required() }),
+          ],
+          preview: {
+            select: { title: 'name', subtitle: 'googleMapsUrl' },
+            prepare: ({ title, subtitle }) => ({ title: title ?? '(unnamed)', subtitle }),
+          },
+        },
+      ],
     }),
     defineField({
       name: 'heroImage',

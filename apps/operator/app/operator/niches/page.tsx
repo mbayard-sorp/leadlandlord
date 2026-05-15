@@ -1,5 +1,6 @@
 import { desc } from 'drizzle-orm';
 import { getDb, niches } from '@leadlandlord/db';
+import Link from 'next/link';
 import { RunForm } from './RunForm';
 import { DecisionButtons } from './DecisionButtons';
 
@@ -16,7 +17,15 @@ export default async function NichesPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-xl md:text-2xl font-semibold">Niches</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl md:text-2xl font-semibold">Niches</h1>
+          <Link
+            href="/operator/approvals/niches"
+            className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded"
+          >
+            Approvals inbox
+          </Link>
+        </div>
         <p className="text-sm text-slate-400 mt-1">
           Niche Hunter brainstorms candidates with Claude, scores each with DataForSEO real
           search volume + keyword difficulty, ranks them. Approve a niche to dispatch Site

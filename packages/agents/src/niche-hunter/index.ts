@@ -1,29 +1,39 @@
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
-import { getDb, niches } from '@leadlandlord/db';
+import { getDb, niches, agentApprovals } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
-import { getLocalKeywordMetrics, type KeywordMetrics } from '@leadlandlord/integrations/dataforseo';
+import {
+  getLocalKeywordMetrics,
+  getPaidAdCount,
+  type KeywordMetrics,
+} from '@leadlandlord/integrations/dataforseo';
+import { ScoringConfig, DEFAULT_WEIGHTS, type ScoringWeights } from './scoring-config';
+import { isDenylisted } from './denylist';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
- * Niche Hunter — Phase 0.
+ * Niche Hunter — Phase 0 / Sprint 2.
  *
  * Pipeline:
- *   1. Claude brainstorms ~50 candidate niche × city pairs that match the
+ *   1. Claude brainstorms ~50 candidate niche x city pairs that match the
  *      input filters (states, population range, allowed categories). Each
  *      candidate carries Claude's estimate of avg_job_value_usd + close_rate
  *      (training-data-informed; sometimes off but useful as a prior).
- *   2. For each candidate, DataForSEO returns real Google search volume +
+ *   2. Denylist filter drops high-fraud / legally problematic niches.
+ *   3. For each candidate, DataForSEO returns real Google search volume +
  *      keyword difficulty + competition for a small seed-keyword bundle
  *      ("<niche> <city>", "<niche> in <city>", "<niche> near me <city>").
- *   3. Composite score combines volume, KD-inverse, competition-inverse,
- *      avg_job_value, and est_close_rate. Filtered by min_search_volume +
- *      max_kd thresholds.
- *   4. Persists top N as `niches` rows with decision='pending' for operator
- *      review at /operator/niches.
+ *      A second call fetches paid-ad count as an advertiser-demand signal.
+ *   4. Composite score combines volume, KD-inverse, competition-inverse,
+ *      avg_job_value, est_close_rate, and ad_presence using configurable
+ *      weights. Filtered by min_search_volume + max_kd thresholds.
+ *   5. Persists top N as `niches` rows with decision='pending'.
+ *   6. Dual-writes an `agentApprovals` row per niche (kind='niche_candidate').
+ *      Auto-approve rules are checked; matching rules flip status to
+ *      'auto_approved' immediately.
  *
- * Output is the same set the operator dashboard reads — no need for the
- * caller to query the DB themselves.
+ * Output is the same set the operator dashboard reads.
  */
 
 const CategoryEnum = z.enum([
@@ -61,6 +71,8 @@ export const NicheHunterInput = z.object({
     .optional(),
   /** How many candidates Claude brainstorms before DataForSEO scoring. */
   brainstorm_count: z.number().int().positive().max(100).default(50),
+  /** Scoring weights + thresholds. Defaults to DEFAULT_WEIGHTS. */
+  scoring_config: ScoringConfig.optional(),
 });
 export type NicheHunterInput = z.infer<typeof NicheHunterInput>;
 
@@ -74,6 +86,7 @@ const NicheCandidateSchema = z.object({
   est_close_rate: z.number(),
   score: z.number(),
   rationale: z.string(),
+  ad_count: z.number(),
 });
 
 export const NicheHunterOutput = z.object({
@@ -93,7 +106,7 @@ const BRAINSTORM_SCHEMA = {
   properties: {
     candidates: {
       type: 'array',
-      description: 'Niche × city candidates worth investigating with real SEO data.',
+      description: 'Niche x city candidates worth investigating with real SEO data.',
       items: {
         type: 'object',
         properties: {
@@ -128,11 +141,11 @@ const BRAINSTORM_SCHEMA = {
   required: ['candidates'],
 };
 
-const SYSTEM_PROMPT = `You are a niche-hunting analyst for a lead-generation platform that builds and operates websites for local service businesses. You generate niche × city candidates for further SEO scoring.
+const SYSTEM_PROMPT = `You are a niche-hunting analyst for a lead-generation platform that builds and operates websites for local service businesses. You generate niche x city candidates for further SEO scoring.
 
 A good candidate is:
 - A specific trade or service (not "construction" — too broad; "concrete patio installation" — yes)
-- In a US city of the right population for organic local SEO (sweet spot: 50k–500k metros)
+- In a US city of the right population for organic local SEO (sweet spot: 50k-500k metros)
 - Has reasonable per-job revenue ($150+ to support a tenant paying us monthly)
 - Has demand year-round or in predictable seasons
 - Is dominated by small operators, not national chains (Yelp/local SEO matters more than ad spend)
@@ -159,6 +172,7 @@ interface ScoredCandidate extends ClaudeCandidate {
   kd: number;
   competition: number;
   cpc: number;
+  ad_count: number;
   score: number;
 }
 
@@ -173,6 +187,8 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
   }
 
   protected async execute(input: NicheHunterInput, ctx: AgentContext): Promise<NicheHunterOutput> {
+    const scoringConfig = ScoringConfig.parse(input.scoring_config ?? {});
+
     // 1. Brainstorm via Claude (tool-use forces structured output).
     const candidates = await this.brainstorm(input, ctx);
     ctx.log.info({ count: candidates.length }, 'brainstormed candidates');
@@ -182,7 +198,7 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const scored: ScoredCandidate[] = [];
     for (const c of candidates) {
       try {
-        const metrics = await this.scoreCandidate(c, ctx);
+        const metrics = await this.scoreCandidate(c, ctx, scoringConfig.weights);
         scored.push({ ...c, ...metrics });
       } catch (err) {
         ctx.log.warn(
@@ -197,15 +213,15 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const filtered = scored
       .filter(
         (s) =>
-          s.search_volume >= input.min_search_volume &&
-          s.kd <= input.max_kd &&
-          s.est_avg_job_value_usd >= input.min_avg_job_value_usd,
+          s.search_volume >= scoringConfig.min_search_volume &&
+          s.kd <= scoringConfig.max_kd &&
+          s.est_avg_job_value_usd >= scoringConfig.min_avg_job_value_usd,
       )
       .sort((a, b) => b.score - a.score)
       .slice(0, input.target_count);
 
-    // 4. Persist. Skip dupes (niche, city, state).
-    const persisted = await this.persistNiches(filtered);
+    // 4. Persist niches + dual-write agentApprovals.
+    const persisted = await this.persistNiches(filtered, ctx);
 
     return {
       niches: filtered.map((c) => ({
@@ -218,6 +234,7 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
         est_close_rate: c.est_close_rate,
         score: c.score,
         rationale: c.rationale,
+        ad_count: c.ad_count,
       })),
       brainstormed: candidates.length,
       scored: scored.length,
@@ -237,11 +254,11 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     if (input.geo_filter?.population_min || input.geo_filter?.population_max) {
       const lo = input.geo_filter.population_min ?? 0;
       const hi = input.geo_filter.population_max ?? '∞';
-      filterDesc.push(`City population range: ${lo}–${hi}.`);
+      filterDesc.push(`City population range: ${lo}-${hi}.`);
     }
     filterDesc.push(`Minimum estimated avg job value: $${input.min_avg_job_value_usd}.`);
 
-    const userPrompt = `Generate exactly ${input.brainstorm_count} niche × city candidates.
+    const userPrompt = `Generate exactly ${input.brainstorm_count} niche x city candidates.
 
 Filters:
 ${filterDesc.map((f) => `- ${f}`).join('\n')}
@@ -256,7 +273,7 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
       tools: [
         {
           name: BRAINSTORM_TOOL_NAME,
-          description: 'Submit the brainstormed niche × city candidates.',
+          description: 'Submit the brainstormed niche x city candidates.',
           input_schema: BRAINSTORM_SCHEMA as never,
         },
       ],
@@ -288,6 +305,14 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
         );
         continue;
       }
+      // Denylist gate.
+      if (isDenylisted(parsedCandidate.data.niche)) {
+        ctx.log.warn(
+          { niche: parsedCandidate.data.niche },
+          'niche-hunter: dropping denylisted niche',
+        );
+        continue;
+      }
       // Additional gate: respect operator's allowed_categories filter.
       if (!input.allowed_categories.includes(parsedCandidate.data.category as typeof input.allowed_categories[number])) {
         ctx.log.warn(
@@ -304,22 +329,31 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
   private async scoreCandidate(
     c: ClaudeCandidate,
     ctx: AgentContext,
-  ): Promise<{ search_volume: number; kd: number; competition: number; cpc: number; score: number }> {
+    weights: ScoringWeights,
+  ): Promise<{ search_volume: number; kd: number; competition: number; cpc: number; ad_count: number; score: number }> {
     const stateName = US_STATE_NAMES[c.state.toUpperCase()] ?? c.state;
     const location = `${c.city},${stateName},United States`;
     const seeds = [c.niche, `${c.niche} ${c.city.toLowerCase()}`, `${c.niche} near me`];
     const metrics = await getLocalKeywordMetrics({ keywords: seeds, location });
     const aggregated = aggregateMetrics(metrics);
+
+    // Paid ad count — fire-and-forget on failure (defaults to 0).
+    const ad_count = await getPaidAdCount({
+      keyword: `${c.niche} ${c.city.toLowerCase()}`,
+    });
+
     const score = computeScore({
       ...aggregated,
       est_avg_job_value_usd: c.est_avg_job_value_usd,
       est_close_rate: c.est_close_rate,
+      ad_count,
+      weights,
     });
-    ctx.log.debug({ niche: c.niche, city: c.city, score, ...aggregated }, 'scored');
-    return { ...aggregated, score };
+    ctx.log.debug({ niche: c.niche, city: c.city, score, ad_count, ...aggregated }, 'scored');
+    return { ...aggregated, ad_count, score };
   }
 
-  private async persistNiches(scored: ScoredCandidate[]): Promise<number> {
+  private async persistNiches(scored: ScoredCandidate[], ctx: AgentContext): Promise<number> {
     if (scored.length === 0) return 0;
     const db = getDb();
     let count = 0;
@@ -339,7 +373,51 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
         })
         .onConflictDoNothing({ target: [niches.niche, niches.city, niches.state] })
         .returning({ id: niches.id });
-      if (inserted.length) count++;
+
+      if (!inserted.length) continue;
+      count++;
+      const nicheId = inserted[0]!.id;
+
+      // Dual-write: create agentApprovals row for operator review.
+      const approvalPayload = {
+        nicheId,
+        niche: c.niche,
+        city: c.city,
+        state: c.state,
+        score: c.score,
+        searchVolume: c.search_volume,
+        kd: c.kd,
+        adCount: c.ad_count,
+        estAvgJobValueUsd: c.est_avg_job_value_usd,
+        estCloseRate: c.est_close_rate,
+        rationale: c.rationale,
+      };
+
+      let approvalStatus = 'pending';
+      let ruleMatched: string | undefined;
+
+      try {
+        const autoResult = await checkAutoApprove('niche_candidate', approvalPayload);
+        if (autoResult.matched) {
+          approvalStatus = 'auto_approved';
+          ruleMatched = autoResult.ruleId;
+        }
+      } catch (err) {
+        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'niche-hunter: auto-approve check failed, defaulting to pending');
+      }
+
+      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+      await db.insert(agentApprovals).values({
+        agentRunId: ctx.runId,
+        kind: 'niche_candidate',
+        payload: approvalPayload,
+        status: approvalStatus,
+        decidedBy: approvalStatus === 'auto_approved' ? `rule:${ruleMatched ?? 'unknown'}` : null,
+        decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: ruleMatched ?? null,
+        expiresAt,
+      }).onConflictDoNothing();
     }
     return count;
   }
@@ -369,23 +447,41 @@ interface ScoreInputs {
   competition: number;
   est_avg_job_value_usd: number;
   est_close_rate: number;
+  ad_count: number;
+  weights: ScoringWeights;
 }
 
 /**
- * Composite score: roughly proportional to expected monthly tenant revenue
- * the niche could support. Penalizes hard-to-rank or high-competition
- * keywords; rewards real demand × close rate × job value.
+ * Composite score using configurable weights.
  *
- * Calibrated so a "great" niche scores >= 100 and a "skip" scores < 20.
+ * Dimension sub-scores (all 0..1 before weighting):
+ *   demand         — log-scaled search volume
+ *   serp_difficulty — KD-inverse x competition-inverse
+ *   ad_presence    — ad_count / 10 (capped)
+ *   city_size_fit  — job value relative to $500 benchmark
+ *   niche_risk     — close rate (higher = lower risk)
+ *
+ * Raw sum is scaled by 100 so a "great" niche scores near 100.
  */
 export function computeScore(s: ScoreInputs): number {
-  const volumeFactor = Math.log10(Math.max(1, s.search_volume + 1)) * 30; // diminishing returns on volume
-  const kdInverse = (100 - s.kd) / 100; // 0..1
-  const competitionInverse = 1 - s.competition; // 0..1
-  const valueFactor = Math.min(2, Math.max(0, s.est_avg_job_value_usd) / 500); // capped at 2x for $1k+ jobs; clamped to 0 for negative values
-  const closeRateFactor = Math.max(0.01, Math.min(1, s.est_close_rate));
-  const raw = volumeFactor * kdInverse * competitionInverse * valueFactor * closeRateFactor;
-  return Number(raw.toFixed(2));
+  const weights = s.weights ?? DEFAULT_WEIGHTS;
+
+  const demandSub = Math.min(1, Math.log10(Math.max(1, s.search_volume + 1)) / 4); // log10(10000)=4 -> 1.0
+  const kdInverse = (100 - Math.max(0, Math.min(100, s.kd))) / 100;
+  const compInverse = 1 - Math.max(0, Math.min(1, s.competition));
+  const serpSub = kdInverse * compInverse;
+  const adSub = Math.min(1, s.ad_count / 10);
+  const valueSub = Math.min(1, Math.max(0, s.est_avg_job_value_usd) / 500);
+  const closeSub = Math.max(0.01, Math.min(1, s.est_close_rate));
+
+  const raw =
+    weights.demand * demandSub +
+    weights.serp_difficulty * serpSub +
+    weights.ad_presence * adSub +
+    weights.city_size_fit * valueSub +
+    weights.niche_risk * closeSub;
+
+  return Number((raw * 100).toFixed(2));
 }
 
 const US_STATE_NAMES: Record<string, string> = {

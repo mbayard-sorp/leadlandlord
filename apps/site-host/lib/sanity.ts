@@ -28,9 +28,10 @@ export function urlForImage(source: SanityImageSource) {
 const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, "pageOgImageUrl": pageOgImage.asset->url }`;
 
 const SITE_PROJECTION = `{
-  _id, siteId, "slug": slug.current, businessName, niche, city, state,
+  _id, siteId, "slug": slug.current, businessName, niche, city, state, siteMode,
   gaMeasurementId, robotsDisallow, generatedAt,
   trustSignals, nearbyCities,
+  "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
   "heroImageUrl": heroImage.asset->url,
   "theme": theme->name,
@@ -71,11 +72,13 @@ export interface SanitySite {
   niche: string;
   city: string;
   state: string;
+  siteMode?: 'thin' | 'content_rich' | null;
   gaMeasurementId?: string | null;
   robotsDisallow?: boolean | null;
   generatedAt?: string | null;
   trustSignals?: string[] | null;
   nearbyCities?: string[] | null;
+  neighborhoods?: Array<{ name: string; googleMapsUrl: string }> | null;
   heroImagePrompt?: string | null;
   heroImageUrl?: string | null;
   theme: 'classic' | 'modern' | 'premium' | 'bright';
