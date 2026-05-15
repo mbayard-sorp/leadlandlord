@@ -15,6 +15,7 @@ import { scheduleMollyDigest } from './molly-digest';
 import { scheduleMollyInbox } from './molly-inbox';
 import { scheduleMollyNudge } from './molly-nudge';
 import { scheduleNetworkLinker } from './network-linker';
+import { scheduleWaveProgression } from './wave-progression';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -38,6 +39,7 @@ export const schedulers: Record<string, Scheduler> = {
   'molly-inbox': scheduleMollyInbox,
   'molly-nudge': scheduleMollyNudge,
   'network-linker': scheduleNetworkLinker,
+  'wave-progression': scheduleWaveProgression,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';
