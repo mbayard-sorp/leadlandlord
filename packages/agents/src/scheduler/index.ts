@@ -14,6 +14,7 @@ import { scheduleOperator } from './operator';
 import { scheduleMollyDigest } from './molly-digest';
 import { scheduleMollyInbox } from './molly-inbox';
 import { scheduleMollyNudge } from './molly-nudge';
+import { scheduleNetworkLinker } from './network-linker';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -36,6 +37,7 @@ export const schedulers: Record<string, Scheduler> = {
   'molly-digest': scheduleMollyDigest,
   'molly-inbox': scheduleMollyInbox,
   'molly-nudge': scheduleMollyNudge,
+  'network-linker': scheduleNetworkLinker,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';

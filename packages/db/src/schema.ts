@@ -1195,6 +1195,16 @@ export const crossSiteLinks = pgTable(
     sourceSiteIdx: index('cross_site_links_source_site_idx').on(t.sourceSiteId),
     targetSiteIdx: index('cross_site_links_target_site_idx').on(t.targetSiteId),
     sourcePageIdx: index('cross_site_links_source_page_idx').on(t.sourcePageId),
+    pageTargetAnchorIdx: index('cross_site_links_page_target_anchor_idx').on(
+      t.sourcePageId,
+      t.targetUrl,
+      t.anchorText,
+    ),
+    sourceTargetPlacedIdx: index('cross_site_links_source_target_placed_idx').on(
+      t.sourceSiteId,
+      t.targetSiteId,
+      t.placedAt,
+    ),
   }),
 );
 
@@ -1212,10 +1222,13 @@ export const linkRequests = pgTable(
     /** pending | processing | completed | cancelled */
     status: text('status').notNull().default('pending'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** When the drain cron may pick this request up. */
+    scheduledFor: timestamp('scheduled_for', { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp('processed_at', { withTimezone: true }),
   },
   (t) => ({
     siteStatusIdx: index('link_requests_site_status_idx').on(t.requestingSiteId, t.status),
+    statusScheduledIdx: index('link_requests_status_scheduled_idx').on(t.status, t.scheduledFor),
   }),
 );
 

@@ -22,6 +22,8 @@
     { "path": "/api/cron/schedule/molly-inbox", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/schedule/molly-nudge", "schedule": "*/30 * * * *" },
 
+    { "path": "/api/cron/schedule/network-linker", "schedule": "*/15 * * * *" },
+
     { "path": "/api/cron/alert-evaluator", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/backups", "schedule": "0 3 * * *" }
   ],
