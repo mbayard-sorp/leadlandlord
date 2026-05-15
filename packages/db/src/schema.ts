@@ -1233,6 +1233,49 @@ export const linkRequests = pgTable(
 );
 
 // ────────────────────────────────────────────────────────────
+// Sprint 5 — Wave launcher
+// ────────────────────────────────────────────────────────────
+
+export const waveStateEnum = pgEnum('wave_state', [
+  'draft',
+  'launching',
+  'aging',
+  'linking',
+  'backlinking',
+  'monitoring',
+  'completed',
+]);
+
+export interface WaveTransition {
+  from: string;
+  to: string;
+  at: string;
+  approvalId?: string;
+  evidence?: string;
+}
+
+export const waves = pgTable(
+  'waves',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    niche: text('niche').notNull(),
+    siteIds: uuid('site_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    state: waveStateEnum('state').notNull().default('draft'),
+    agingUntil: timestamp('aging_until', { withTimezone: true }),
+    transitions: jsonb('transitions').$type<WaveTransition[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    stateUpdatedIdx: index('waves_state_updated_idx').on(t.state, t.updatedAt),
+  }),
+);
+
+export type Wave = typeof waves.$inferSelect;
+export type NewWave = typeof waves.$inferInsert;
+
+// ────────────────────────────────────────────────────────────
 // Phone provisioning audit log (R3.5)
 // ────────────────────────────────────────────────────────────
 

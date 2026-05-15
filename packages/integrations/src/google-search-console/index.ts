@@ -161,6 +161,55 @@ export async function getSearchAnalytics(
   });
 }
 
+export interface IndexationStatus {
+  url: string;
+  indexed: boolean;
+  impressions: number;
+  lastSeen: string | null;
+}
+
+export async function checkIndexationStatus(
+  domain: string,
+  urls: string[],
+  lookbackDays = 14,
+): Promise<IndexationStatus[]> {
+  if (urls.length === 0) return [];
+
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - lookbackDays);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  if (process.env.GOOGLE_DRY_RUN === 'true') {
+    const todayStr = fmt(today);
+    return urls.map((url) => ({ url, indexed: true, impressions: 10, lastSeen: todayStr }));
+  }
+
+  const endDateStr = fmt(today);
+  const rows = await getSearchAnalytics({
+    domain,
+    startDate: fmt(start),
+    endDate: endDateStr,
+    dimensions: ['page'],
+    rowLimit: 5000,
+  });
+
+  const byPage = new Map<string, number>();
+  for (const row of rows) {
+    byPage.set(row.page, (byPage.get(row.page) ?? 0) + row.impressions);
+  }
+
+  return urls.map((url) => {
+    const impressions = byPage.get(url) ?? 0;
+    return {
+      url,
+      indexed: impressions > 0,
+      impressions,
+      lastSeen: impressions > 0 ? endDateStr : null,
+    };
+  });
+}
+
 /**
  * Lightweight connectivity probe — calls `sites.list` (cheapest authed
  * endpoint) and returns `{ ok: true, siteCount }`. Throws `IntegrationError`
