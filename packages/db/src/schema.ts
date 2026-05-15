@@ -275,6 +275,26 @@ export const prospects = pgTable(
   }),
 );
 
+export const linkedinDmQueue = pgTable(
+  'linkedin_dm_queue',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    prospectId: uuid('prospect_id')
+      .notNull()
+      .references(() => prospects.id, { onDelete: 'cascade' }),
+    draftText: text('draft_text').notNull(),
+    /** 'queued' | 'sent' | 'discarded' */
+    status: text('status').notNull().default('queued'),
+    queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    operatorNotes: text('operator_notes'),
+  },
+  (t) => ({
+    statusQueuedIdx: index('linkedin_dm_queue_status_queued_idx').on(t.status, t.queuedAt),
+    prospectIdx: index('linkedin_dm_queue_prospect_idx').on(t.prospectId),
+  }),
+);
+
 export const outreachEvents = pgTable(
   'outreach_events',
   {
@@ -288,6 +308,10 @@ export const outreachEvents = pgTable(
     response: text('response'),
     sentiment: text('sentiment'),
     metadata: jsonb('metadata'),
+    /** Klaviyo flow/sequence ID returned when the prospect is enrolled in a Klaviyo sequence. */
+    klaviyoSequenceId: text('klaviyo_sequence_id'),
+    /** FK into linkedin_dm_queue for LinkedIn touch rows. */
+    linkedinDmQueueId: uuid('linkedin_dm_queue_id').references(() => linkedinDmQueue.id, { onDelete: 'set null' }),
   },
   (t) => ({
     prospectIdx: index('outreach_events_prospect_idx').on(t.prospectId),
@@ -379,6 +403,8 @@ export const trials = pgTable(
     estRevenueUsd: numeric('est_revenue_usd', { precision: 10, scale: 2 }),
     decision: trialDecisionEnum('decision').notNull().default('pending'),
     quotedRentUsd: numeric('quoted_rent_usd', { precision: 10, scale: 2 }),
+    /** Set once the end-of-trial operator report has been dispatched. Idempotency guard. */
+    endReportSentAt: timestamp('end_report_sent_at', { withTimezone: true }),
   },
   (t) => ({
     siteIdx: index('trials_site_idx').on(t.siteId),
@@ -1359,6 +1385,8 @@ export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 export type OutreachEvent = typeof outreachEvents.$inferSelect;
 export type NewOutreachEvent = typeof outreachEvents.$inferInsert;
+export type LinkedinDmQueueRow = typeof linkedinDmQueue.$inferSelect;
+export type NewLinkedinDmQueueRow = typeof linkedinDmQueue.$inferInsert;
 export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
 export type NewPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
 export type MaintenanceFinding = typeof maintenanceFindings.$inferSelect;

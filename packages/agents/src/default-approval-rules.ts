@@ -46,6 +46,15 @@ export const defaultApprovalRules: SeedRule[] = [
     active: true,
     description: 'Auto-approve email outreach (no per-send cost)',
   },
+  {
+    kind: 'prospect_outreach_send',
+    matcher: {
+      channel: { $eq: 'klaviyo' },
+    },
+    createdBy: 'seed:sprint-6-phase-3',
+    active: true,
+    description: 'Auto-approve Klaviyo sequence outreach (fixed subscription cost, no per-send fee)',
+  },
 
   // ── subscription_checkout ─────────────────────────────────────────────────
   {
