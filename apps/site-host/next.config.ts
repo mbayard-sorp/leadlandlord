@@ -22,6 +22,22 @@ if (envLocal) loadEnv({ path: envLocal, override: true });
 
 const config: NextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      // Sprint 1: service URLs moved from /services/<slug> to /<slug> (flat).
+      // 301 = permanent redirect; old URLs remain crawlable during transition.
+      {
+        source: '/services/:slug',
+        destination: '/:slug',
+        permanent: true,
+      },
+      {
+        source: '/services',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
   turbopack: {
     root: repoRoot,
   },

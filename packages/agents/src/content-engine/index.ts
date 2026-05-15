@@ -6,6 +6,11 @@ import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { ContentBundle } from '@leadlandlord/shared/types';
+import { getTrustSignals } from './trust-signal-pool';
+import { getDisclosure } from './disclosure-pool';
+import { getHeadlineTemplate } from './headline-templates';
+import { lintBundle } from './density-lint';
+import { injectInternalLinks } from './internal-linker';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -134,7 +139,12 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     const client = getAnthropicClient();
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
 
-    const userPrompt = buildUserPrompt(input);
+    // Pre-select hygiene pool values so Claude works within chosen templates
+    const trustSignals = getTrustSignals(input.site_id, input.theme ?? 'classic', 4);
+    const disclosure = getDisclosure(input.site_id);
+    const headlineTemplate = getHeadlineTemplate(input.site_id, input.theme ?? 'classic');
+
+    const userPrompt = buildUserPrompt(input, { trustSignals, disclosure, headlineTemplate });
     const systemPrompt = composeSystemPrompt(input.theme);
 
     // Per-call clone of the tool schema with cluster_key enum constraints
@@ -225,7 +235,108 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     }
 
     const normalized = normalizeBundle(toolUse.input, input);
-    const parsed = ContentBundle.parse(normalized);
+    let parsed = ContentBundle.parse(normalized);
+
+    // Neighborhoods expansion: the LLM emits neighborhood names in thin mode.
+    // Post-LLM we wrap each name in a Google Maps search URL.
+    if (input.site_mode === 'thin' && Array.isArray((normalized as Record<string, unknown>).neighborhood_names)) {
+      const names = (normalized as Record<string, unknown>).neighborhood_names as string[];
+      parsed = {
+        ...parsed,
+        neighborhoods: names.map((name) => ({
+          name,
+          google_maps_url: `https://www.google.com/maps/search/${encodeURIComponent(`${name} ${input.city} ${input.state}`)}`,
+        })),
+      };
+    } else if (parsed.neighborhoods.length > 0 && parsed.neighborhoods[0]?.google_maps_url === '') {
+      // Defensive: if model emitted neighborhood objects without URLs, backfill
+      parsed = {
+        ...parsed,
+        neighborhoods: parsed.neighborhoods.map((n) => ({
+          ...n,
+          google_maps_url: n.google_maps_url || `https://www.google.com/maps/search/${encodeURIComponent(`${n.name} ${input.city} ${input.state}`)}`,
+        })),
+      };
+    }
+
+    // Density lint — check all pages. On error violations, retry once.
+    const primaryKeyword = input.keyword_clusters[0]?.primary_keyword ?? input.niche;
+    ctx.progress({ label: 'running density lint' });
+    let lintResults = lintBundle(parsed, { primaryKeyword });
+    const errorPages = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
+    if (errorPages.length > 0) {
+      ctx.log.warn(
+        { errorPages: errorPages.map((r) => ({ slug: r.pageSlug, count: r.violations.filter((v) => v.severity === 'error').length })) },
+        'density lint errors detected — retrying LLM once',
+      );
+      // Build violation annotation for retry
+      const violationSummary = errorPages
+        .map((r) => `Page ${r.pageSlug}:\n${r.violations.filter((v) => v.severity === 'error').map((v) => `  [${v.rule}] ${v.detail}`).join('\n')}`)
+        .join('\n\n');
+
+      const retryUserPrompt = `${buildUserPrompt(input, { trustSignals, disclosure, headlineTemplate })}
+
+## DENSITY LINT VIOLATIONS FROM PREVIOUS ATTEMPT — FIX THESE:
+${violationSummary}
+
+Re-generate the full bundle fixing all listed violations. Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
+
+      ctx.progress({ label: 'retrying content generation (density lint fix)' });
+      const retryStream = client.messages.stream({
+        model,
+        max_tokens: 32_000,
+        temperature: 0.2,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        tools: [
+          {
+            name: OUTPUT_TOOL_NAME,
+            description: 'Output the complete content bundle for the website. Call this exactly once with the full bundle.',
+            input_schema: toolInputSchema as never,
+          },
+        ],
+        tool_choice: { type: 'tool', name: OUTPUT_TOOL_NAME },
+        messages: [{ role: 'user', content: retryUserPrompt }],
+      });
+      retryStream.on('inputJson', (partialJson: string) => {
+        streamedChars += partialJson.length;
+        ctx.progress({ label: `retry: receiving content from Claude (${Math.round(streamedChars / 1024)} KB)` });
+      });
+      const retryResponse = await retryStream.finalMessage();
+      const retryUsage = retryResponse.usage;
+      ctx.recordUsage({
+        model,
+        input_tokens: retryUsage.input_tokens,
+        output_tokens: retryUsage.output_tokens,
+        cache_read_input_tokens: retryUsage.cache_read_input_tokens ?? 0,
+        cache_creation_input_tokens: retryUsage.cache_creation_input_tokens ?? 0,
+        cost_usd: estimateCostUsd(model, {
+          input_tokens: retryUsage.input_tokens,
+          output_tokens: retryUsage.output_tokens,
+          cache_read_input_tokens: retryUsage.cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens: retryUsage.cache_creation_input_tokens ?? 0,
+        }),
+      });
+      const retryToolUse = retryResponse.content.find(
+        (block): block is Extract<typeof block, { type: 'tool_use' }> =>
+          block.type === 'tool_use' && block.name === OUTPUT_TOOL_NAME,
+      );
+      if (!retryToolUse) {
+        throw new Error(`density lint retry: model did not invoke ${OUTPUT_TOOL_NAME}. Stop: ${retryResponse.stop_reason}`);
+      }
+      const retryNormalized = normalizeBundle(retryToolUse.input, input);
+      parsed = ContentBundle.parse(retryNormalized);
+      lintResults = lintBundle(parsed, { primaryKeyword });
+      const retryErrors = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
+      if (retryErrors.length > 0) {
+        throw new Error(
+          `density lint failed after retry. Violations:\n${retryErrors.map((r) => `${r.pageSlug}: ${r.violations.map((v) => v.detail).join('; ')}`).join('\n')}`,
+        );
+      }
+    }
+
+    // Internal linker — inject deterministic cross-page links.
+    ctx.progress({ label: 'injecting internal links' });
+    parsed = injectInternalLinks(parsed);
 
     // Coverage check — every input cluster must be claimed by some page.
     const coverage = checkClusterCoverage(parsed, input.keyword_clusters ?? []);
@@ -327,6 +438,9 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   if (!Array.isArray(bundle.info_pages)) {
     bundle.info_pages = [];
   }
+  if (!Array.isArray(bundle.neighborhoods)) {
+    bundle.neighborhoods = [];
+  }
 
   // Defensive parse for page arrays. Claude occasionally serializes one of
   // services/service_areas/blog_posts/info_pages as a JSON-encoded string
@@ -372,20 +486,36 @@ function trimPage(p: unknown): unknown {
   return page;
 }
 
-function buildUserPrompt(input: ContentEngineInput): string {
+interface HygienePools {
+  trustSignals: string[];
+  disclosure: string;
+  headlineTemplate: string;
+}
+
+function buildUserPrompt(input: ContentEngineInput, pools: HygienePools): string {
   const businessName =
     input.business_name ?? `${capitalize(input.city)} ${capitalize(input.niche)} Pros`;
   const clusterTable = renderClusterTable(input.keyword_clusters);
   const clusterSection = clusterTable
     ? `\n\nKEYWORD CLUSTERS — TARGETING REQUIREMENT:\nYou are given ${input.keyword_clusters.length} pre-planned keyword clusters from real search-volume data. EACH CLUSTER MUST BE TARGETED BY EXACTLY ONE PAGE. The page's H1, slug, meta_description, and first 100 words of body must include the cluster's primary_keyword verbatim. Each page must declare \`cluster_key\`, \`primary_keyword\`, and \`targeted_keywords\` fields. Match cluster.page_kind to the page kind you choose.\n\n${clusterTable}`
     : '\n\nNo pre-planned keyword clusters. Generate copy using best-practice local SEO patterns for the niche × city.';
+
+  const siteModeSection = input.site_mode === 'thin'
+    ? `\nSITE MODE: thin. Generate ONLY: 1 home page (1,500-2,200 words), 1 services index, 4-6 service pages, 1 contact page, 3-5 FAQ blog posts. NO service-area pages. NO info pages. About page omitted unless business_name strongly suggests a specific identity.`
+    : `\nSITE MODE: content_rich. Generate the full ~28-page bundle as specified in the system prompt.`;
+
+  const hygiene = `\n\n## Chosen for this site (use these; do not substitute your own)
+trust_signals: ${JSON.stringify(pools.trustSignals)}
+h1_template: "${pools.headlineTemplate}" (fill {service}, {city}, {trust_signal} placeholders)
+footer_disclosure: "${pools.disclosure}"`;
+
   return `Generate a complete content bundle for a local lead-gen website.
 
 niche: ${input.niche}
 city: ${input.city}
 state: ${input.state}
 business_name: ${businessName}
-fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}${clusterSection}
+fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}${siteModeSection}${hygiene}${clusterSection}
 
 Invoke the ${OUTPUT_TOOL_NAME} tool exactly once with the full bundle. Do not return prose — only the tool call.`;
 }

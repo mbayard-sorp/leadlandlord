@@ -41,6 +41,12 @@ export const ContentEngineInput = z.object({
    * declare `targeted_keywords` + `primary_keyword` in the output.
    */
   keyword_clusters: z.array(KeywordClusterInput).default([]),
+  /**
+   * Controls page volume. 'thin' = 6-12 pages total (home + 4-6 services +
+   * 3-5 FAQ blog posts, no service-area or info pages). 'content_rich' keeps
+   * the existing ~28-page full-site output. Defaults to 'thin'.
+   */
+  site_mode: z.enum(['thin', 'content_rich']).default('thin'),
 });
 export type ContentEngineInput = z.infer<typeof ContentEngineInput>;
 

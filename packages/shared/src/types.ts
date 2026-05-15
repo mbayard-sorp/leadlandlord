@@ -90,6 +90,18 @@ export const ContentBundle = z.object({
    * visible nav — surfaced via in-page "Learn more" sections + sitemap.
    */
   info_pages: z.array(Page).default([]),
+  /**
+   * Neighborhood list for the home page service-area section. Populated
+   * post-LLM: the model emits names only; the content engine wraps each in
+   * a Google Maps search URL before persisting. Thin-mode only (content_rich
+   * uses service-area pages instead).
+   */
+  neighborhoods: z.array(
+    z.object({
+      name: z.string(),
+      google_maps_url: z.string().url(),
+    }),
+  ).default([]),
   generated_at: z.string(),
 });
 export type ContentBundle = z.infer<typeof ContentBundle>;

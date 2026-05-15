@@ -71,6 +71,11 @@ export const BundleSchema = z.object({
   })).default([]),
   guarantees: z.array(z.string()).default([]),
   response_time_promise: z.string().optional(),
+  /** Neighborhood service-area list for thin-mode home pages. */
+  neighborhoods: z.array(z.object({
+    name: z.string(),
+    googleMapsUrl: z.string().url(),
+  })).default([]),
 });
 
 export type Bundle = z.infer<typeof BundleSchema>;

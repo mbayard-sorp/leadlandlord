@@ -57,6 +57,10 @@ export function sanityToBundle(site: SanitySite): Bundle {
       caption: g.caption ?? undefined,
     })),
     guarantees: site.guarantees ?? [],
+    neighborhoods: (site.neighborhoods ?? []).map((n) => ({
+      name: n.name,
+      googleMapsUrl: n.googleMapsUrl,
+    })),
   };
 }
 

@@ -175,6 +175,11 @@ export async function writeSiteToSanity(
     robotsDisallow: true, // default during warming — operator flips when going live
     trustSignals: bundle.trust_signals ?? [],
     nearbyCities: bundle.nearby_cities ?? [],
+    neighborhoods: (bundle.neighborhoods ?? []).map((n, i) => ({
+      _key: `n${i}`,
+      name: n.name,
+      googleMapsUrl: n.google_maps_url,
+    })),
     heroImagePrompt: bundle.hero_image_prompt ?? undefined,
     // heroImage asset is patched separately after generation — see SiteBuilder step 6.
     home: { _ref: pageDocId(siteId, 'home', 0), _type: 'reference' },
