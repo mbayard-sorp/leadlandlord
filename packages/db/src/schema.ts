@@ -265,10 +265,13 @@ export const prospects = pgTable(
     lastOutreachAt: timestamp('last_outreach_at', { withTimezone: true }),
     status: prospectStatusEnum('status').notNull().default('new'),
     metadata: jsonb('metadata'),
+    apolloOrgId: text('apollo_org_id'),
+    scoringMetadata: jsonb('scoring_metadata'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     siteStatusIdx: index('prospects_site_status_idx').on(t.siteId, t.status),
+    statusLastOutreachIdx: index('prospects_status_last_outreach_idx').on(t.status, t.lastOutreachAt),
   }),
 );
 

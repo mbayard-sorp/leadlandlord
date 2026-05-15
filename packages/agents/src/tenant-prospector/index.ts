@@ -4,6 +4,7 @@ import { BaseAgent, type AgentContext } from '../base';
 import { getDb, sites, prospects, type NewProspect } from '@leadlandlord/db';
 import { searchN, type Place } from '@leadlandlord/integrations/google-places';
 import { findOwnerByDomain } from '@leadlandlord/integrations/apollo';
+import { getPaidAdCount } from '@leadlandlord/integrations/dataforseo';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 
 export const TenantProspectorInput = z.object({
@@ -91,6 +92,12 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
     const trackingNumber = normalizePhone(site.trackingNumber);
     const apolloEnabled = !!process.env.APOLLO_API_KEY;
 
+    // Niche-level willingness-to-pay signal: how many advertisers are bidding
+    // on this niche+city right now. One call per run (not per prospect) — the
+    // signal applies to the whole local market. 0 on failure keeps scoring unblocked.
+    const paidAdCount = await getPaidAdCount({ keyword: query }).catch(() => 0);
+    ctx.log.info({ siteId: input.site_id, paidAdCount }, 'tenant-prospector paid-ad signal');
+
     let inserted = 0;
     let skippedDuplicates = 0;
     let skippedNoPhone = 0;
@@ -128,6 +135,7 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
       let contactName: string | null = null;
       let email: string | null = null;
       let apolloMetadata: Record<string, unknown> | undefined;
+      let apolloOrgId: string | null = null;
       if (apolloEnabled && place.websiteUri) {
         const owner = await safeFindOwner(place.websiteUri, ctx);
         if (owner) {
@@ -140,6 +148,7 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
           email = owner.person.email && !owner.person.email.includes('email_not_unlocked')
             ? owner.person.email
             : null;
+          apolloOrgId = owner.org.id ?? null;
           apolloMetadata = {
             apollo_org_id: owner.org.id,
             apollo_person_id: owner.person.id,
@@ -153,6 +162,19 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
         }
       }
 
+      const rating = typeof place.rating === 'number' ? place.rating : null;
+      const reviewCount = typeof place.userRatingCount === 'number' ? place.userRatingCount : null;
+      // Heuristic score 0-100. Weights:
+      //   paid-ad density (0-30): proxy for niche advertiser willingness-to-pay
+      //   review count (0-30): proxy for business activity/longevity
+      //   rating (0-20): quality floor
+      //   apollo enrichment hit (0-20): contact reachability
+      const score =
+        Math.min(paidAdCount, 10) * 3 +
+        Math.min(reviewCount ?? 0, 300) / 10 +
+        Math.max(0, ((rating ?? 0) - 3)) * 10 +
+        (apolloOrgId ? 20 : 0);
+
       toInsert.push({
         siteId: input.site_id,
         businessName: name,
@@ -163,6 +185,15 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
         source: 'google-places',
         status: 'new',
         metadata: { ...buildMetadata(place), ...(apolloMetadata ?? {}) },
+        apolloOrgId,
+        scoringMetadata: {
+          score: Math.round(Math.min(score, 100)),
+          paid_ad_count: paidAdCount,
+          rating,
+          review_count: reviewCount,
+          has_apollo: !!apolloOrgId,
+          scored_at: new Date().toISOString(),
+        },
       });
     }
 
