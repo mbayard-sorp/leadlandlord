@@ -21,6 +21,7 @@ export const navLinks: ReadonlyArray<NavLinkItem> = [
   { href: '/operator/tenants', label: 'Tenants', disabled: true },
   { href: '/operator/niches', label: 'Niches' },
   { href: '/operator/networks', label: 'Networks' },
+  { href: '/operator/waves', label: 'Waves' },
   { href: '/operator/approvals', label: 'Approvals' },
   { href: '/operator/approvals/niches', label: '↳ Niche queue' },
   { href: '/operator/approvals/rules', label: '↳ Auto-approve' },
