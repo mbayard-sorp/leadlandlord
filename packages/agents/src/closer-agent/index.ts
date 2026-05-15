@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { eq, and, gte, lte } from 'drizzle-orm';
+import { eq, and, gte, lte, sql } from 'drizzle-orm';
 import {
   getDb,
   sites,
   prospects,
   trials,
   calls,
+  agentApprovals,
   type Site,
   type Prospect,
   type Trial,
@@ -17,6 +18,7 @@ import {
 import { sendSms } from '@leadlandlord/integrations/twilio';
 import { startOutboundCall } from '@leadlandlord/integrations/elevenlabs';
 import { BaseAgent, type AgentContext } from '../base';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
  * Closer Agent — runs the end-of-trial close on a single trial:
@@ -117,6 +119,95 @@ export class CloserAgent extends BaseAgent<typeof CloserAgentInput, typeof Close
     // 3. Stripe Checkout link. Subscription metadata carries trial_id +
     //    site_id + prospect_id so the webhook (Phase 6.6) can wire the
     //    successful checkout back to the right rows.
+
+    // ── Approval gate: subscription_checkout ────────────────────────────────
+    // Pull the prospect score from scoringMetadata for the matcher.
+    const prospectScore =
+      prospect.scoringMetadata !== null &&
+      typeof prospect.scoringMetadata === 'object' &&
+      'score' in (prospect.scoringMetadata as Record<string, unknown>)
+        ? Number((prospect.scoringMetadata as Record<string, unknown>).score)
+        : 0;
+
+    const checkoutApprovalPayload = {
+      kind: 'subscription_checkout' as const,
+      trial_id: trial.id,
+      prospect_id: prospect.id,
+      site_id: site.id,
+      monthly_rent_usd: monthlyRent,
+      prospect_score: prospectScore,
+    };
+
+    const existingCheckoutApproval = await db
+      .select({ id: agentApprovals.id })
+      .from(agentApprovals)
+      .where(
+        and(
+          eq(agentApprovals.kind, 'subscription_checkout'),
+          sql`${agentApprovals.payload}->>'trial_id' = ${trial.id}`,
+          eq(agentApprovals.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    if (existingCheckoutApproval.length > 0) {
+      ctx.log.info(
+        { trialId: trial.id, approvalId: existingCheckoutApproval[0]!.id },
+        'subscription_checkout_blocked: pending approval already exists',
+      );
+      return {
+        trial_id: trial.id,
+        outcome: 'skipped',
+        monthly_rent_usd: monthlyRent,
+        message: `Awaiting operator approval for checkout (id: ${existingCheckoutApproval[0]!.id})`,
+      };
+    }
+
+    let checkoutApprovalStatus = 'pending';
+    let checkoutRuleMatched: string | undefined;
+    try {
+      const autoResult = await checkAutoApprove('subscription_checkout', checkoutApprovalPayload, db);
+      if (autoResult.matched) {
+        checkoutApprovalStatus = 'auto_approved';
+        checkoutRuleMatched = autoResult.ruleId;
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'closer: auto-approve check failed, defaulting to pending',
+      );
+    }
+
+    const [checkoutApprovalRow] = await db
+      .insert(agentApprovals)
+      .values({
+        agentRunId: ctx.runId,
+        kind: 'subscription_checkout',
+        payload: checkoutApprovalPayload as object,
+        status: checkoutApprovalStatus,
+        decidedBy: checkoutApprovalStatus === 'auto_approved'
+          ? `auto-rule:${checkoutRuleMatched ?? 'unknown'}`
+          : null,
+        decidedAt: checkoutApprovalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: checkoutRuleMatched ?? null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: agentApprovals.id });
+
+    if (checkoutApprovalStatus !== 'auto_approved') {
+      ctx.log.info(
+        { trialId: trial.id, approvalId: checkoutApprovalRow!.id },
+        'subscription_checkout_blocked: awaiting operator approval',
+      );
+      return {
+        trial_id: trial.id,
+        outcome: 'skipped',
+        monthly_rent_usd: monthlyRent,
+        message: `Awaiting operator approval for Stripe checkout (id: ${checkoutApprovalRow!.id})`,
+      };
+    }
+    // ── End approval gate ────────────────────────────────────────────────────
+
     const operatorBase = (process.env.OPERATOR_PUBLIC_URL ?? 'https://leadlandlord-operator.vercel.app').replace(
       /\/$/,
       '',

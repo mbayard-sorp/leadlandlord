@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import {
   getDb,
   prospects,
   sites,
   outreachEvents,
+  agentApprovals,
   type Prospect,
   type Site,
 } from '@leadlandlord/db';
@@ -15,6 +16,7 @@ import { startOutboundCall } from '@leadlandlord/integrations/elevenlabs';
 import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
  * Outreach Agent — runs ONE outreach step against ONE prospect.
@@ -224,6 +226,107 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
         }
       }
     }
+
+    // ── Approval gate ────────────────────────────────────────────────────────
+    // Build payload for this send and check auto-approve rules. If no rule
+    // matches, queue a pending approval row and return 'blocked' — the
+    // operator approves in the UI and the cron re-runs the step.
+    // Idempotency: skip insertion if a pending approval already exists for
+    // this (prospect_id, step) combination.
+    const estCostUsd = channel === 'sms' ? 0.0075 : 0; // Twilio SMS ~$0.0075; email $0
+    const approvalPayload = {
+      kind: 'prospect_outreach_send' as const,
+      prospect_id: prospect.id,
+      step: input.step,
+      channel,
+      recipient,
+      est_cost_usd: estCostUsd,
+    };
+
+    const existingApproval = await db
+      .select({ id: agentApprovals.id, status: agentApprovals.status })
+      .from(agentApprovals)
+      .where(
+        and(
+          eq(agentApprovals.kind, 'prospect_outreach_send'),
+          sql`${agentApprovals.payload}->>'prospect_id' = ${prospect.id}`,
+          sql`${agentApprovals.payload}->>'step' = ${input.step}`,
+          eq(agentApprovals.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    if (existingApproval.length > 0) {
+      ctx.log.info(
+        { prospectId: prospect.id, step: input.step, approvalId: existingApproval[0]!.id },
+        'outreach_send_blocked: pending approval already exists',
+      );
+      await db.insert(outreachEvents).values({
+        prospectId: prospect.id,
+        channel,
+        templateId: input.step,
+        response: null,
+        metadata: { status: 'blocked', reason: 'pending_approval', approvalId: existingApproval[0]!.id },
+      });
+      return {
+        prospect_id: prospect.id,
+        step: input.step,
+        status: 'blocked',
+        channel,
+        violations: [],
+      };
+    }
+
+    let approvalStatus = 'pending';
+    let ruleMatched: string | undefined;
+    try {
+      const autoResult = await checkAutoApprove('prospect_outreach_send', approvalPayload, db);
+      if (autoResult.matched) {
+        approvalStatus = 'auto_approved';
+        ruleMatched = autoResult.ruleId;
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'outreach: auto-approve check failed, defaulting to pending',
+      );
+    }
+
+    const [approvalRow] = await db
+      .insert(agentApprovals)
+      .values({
+        agentRunId: ctx.runId,
+        kind: 'prospect_outreach_send',
+        payload: approvalPayload as object,
+        status: approvalStatus,
+        decidedBy: approvalStatus === 'auto_approved' ? `auto-rule:${ruleMatched ?? 'unknown'}` : null,
+        decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: ruleMatched ?? null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: agentApprovals.id });
+
+    if (approvalStatus !== 'auto_approved') {
+      ctx.log.info(
+        { prospectId: prospect.id, step: input.step, approvalId: approvalRow!.id },
+        'outreach_send_blocked: awaiting operator approval',
+      );
+      await db.insert(outreachEvents).values({
+        prospectId: prospect.id,
+        channel,
+        templateId: input.step,
+        response: null,
+        metadata: { status: 'blocked', reason: 'awaiting_approval', approvalId: approvalRow!.id },
+      });
+      return {
+        prospect_id: prospect.id,
+        step: input.step,
+        status: 'blocked',
+        channel,
+        violations: [],
+      };
+    }
+    // ── End approval gate ────────────────────────────────────────────────────
 
     // Dispatch.
     let externalId: string | undefined;

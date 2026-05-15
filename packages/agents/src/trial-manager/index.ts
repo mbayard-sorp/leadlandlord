@@ -6,12 +6,14 @@ import {
   prospects,
   trials,
   calls,
+  agentApprovals,
   type Trial,
   type Site,
   type Prospect,
 } from '@leadlandlord/db';
 import { sendSms } from '@leadlandlord/integrations/twilio';
 import { BaseAgent, type AgentContext } from '../base';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
  * Trial Manager — orchestrates the trial-week cycle for a single site:
@@ -137,6 +139,87 @@ export class TrialManager extends BaseAgent<typeof TrialManagerInput, typeof Tri
         message: 'site not found',
       };
     }
+
+    // ── Approval gate: trial_provisioning ───────────────────────────────────
+    // Idempotency: if a pending approval already exists for this prospect_id,
+    // return without re-queuing.
+    const approvalPayload = {
+      kind: 'trial_provisioning' as const,
+      prospect_id: prospect.id,
+      site_id: site.id,
+      forwarding_to: prospect.phone,
+      duration_days: input.duration_days,
+    };
+
+    const existingProvisionApproval = await db
+      .select({ id: agentApprovals.id })
+      .from(agentApprovals)
+      .where(
+        and(
+          eq(agentApprovals.kind, 'trial_provisioning'),
+          sql`${agentApprovals.payload}->>'prospect_id' = ${prospect.id}`,
+          eq(agentApprovals.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    if (existingProvisionApproval.length > 0) {
+      ctx.log.info(
+        { prospectId: prospect.id, approvalId: existingProvisionApproval[0]!.id },
+        'trial_provisioning_blocked: pending approval already exists',
+      );
+      return {
+        trial_id: prospect.id,
+        action: 'start',
+        ok: false,
+        message: `Awaiting operator approval for trial provisioning (id: ${existingProvisionApproval[0]!.id})`,
+      };
+    }
+
+    let provisionApprovalStatus = 'pending';
+    let provisionRuleMatched: string | undefined;
+    try {
+      const autoResult = await checkAutoApprove('trial_provisioning', approvalPayload, db);
+      if (autoResult.matched) {
+        provisionApprovalStatus = 'auto_approved';
+        provisionRuleMatched = autoResult.ruleId;
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'trial-manager: auto-approve check failed, defaulting to pending',
+      );
+    }
+
+    const [provisionApprovalRow] = await db
+      .insert(agentApprovals)
+      .values({
+        agentRunId: ctx.runId,
+        kind: 'trial_provisioning',
+        payload: approvalPayload as object,
+        status: provisionApprovalStatus,
+        decidedBy: provisionApprovalStatus === 'auto_approved'
+          ? `auto-rule:${provisionRuleMatched ?? 'unknown'}`
+          : null,
+        decidedAt: provisionApprovalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: provisionRuleMatched ?? null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: agentApprovals.id });
+
+    if (provisionApprovalStatus !== 'auto_approved') {
+      ctx.log.info(
+        { prospectId: prospect.id, approvalId: provisionApprovalRow!.id },
+        'trial_provisioning_blocked: awaiting operator approval',
+      );
+      return {
+        trial_id: prospect.id,
+        action: 'start',
+        ok: false,
+        message: `Awaiting operator approval for trial provisioning (id: ${provisionApprovalRow!.id})`,
+      };
+    }
+    // ── End approval gate ────────────────────────────────────────────────────
 
     // Flip forwarding to the prospect's phone for the trial week.
     await db

@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { eq, and, ne, sql } from 'drizzle-orm';
-import { getDb, prospects, sites, agentEvents, tenants } from '@leadlandlord/db';
+import { getDb, prospects, sites, agentEvents, tenants, agentApprovals } from '@leadlandlord/db';
 import { BaseAgent, type AgentContext } from '../base';
 import { TenantProspector } from '../tenant-prospector/index';
 import { OutreachAgent } from '../outreach-agent/index';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
  * Churn Recovery — fires on `tenant.churned` events emitted by the Stripe
@@ -115,6 +116,91 @@ export class ChurnRecovery extends BaseAgent<typeof ChurnRecoveryInput, typeof C
 
     // 3. Emit one outreach_agent event per prospect — the cron worker picks
     // these up and dispatches OutreachAgent for sms_day_0.
+
+    // ── Approval gate: churn_winback ─────────────────────────────────────────
+    // Gate the entire winback fan-out as a single approval. Always requires
+    // manual review (no default auto-approve rule for churn_winback).
+    // Idempotency: check for an existing pending approval for this
+    // (site_id, churned_tenant_id) pair.
+    const winbackApprovalPayload = {
+      kind: 'churn_winback' as const,
+      site_id: input.site_id,
+      churned_tenant_id: input.churned_tenant_id,
+      prospect_count: queueRows.length,
+      prospects_added: prospectsAdded,
+    };
+
+    const existingWinbackApproval = await db
+      .select({ id: agentApprovals.id })
+      .from(agentApprovals)
+      .where(
+        and(
+          eq(agentApprovals.kind, 'churn_winback'),
+          sql`${agentApprovals.payload}->>'site_id' = ${input.site_id}`,
+          sql`${agentApprovals.payload}->>'churned_tenant_id' = ${input.churned_tenant_id}`,
+          eq(agentApprovals.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    if (existingWinbackApproval.length > 0) {
+      ctx.log.info(
+        { siteId: input.site_id, approvalId: existingWinbackApproval[0]!.id },
+        'churn_winback_blocked: pending approval already exists',
+      );
+      return {
+        site_id: input.site_id,
+        next_prospects_queued: 0,
+        prospects_added: prospectsAdded,
+        message: `Awaiting operator approval for winback (id: ${existingWinbackApproval[0]!.id})`,
+      };
+    }
+
+    let winbackApprovalStatus = 'pending';
+    let winbackRuleMatched: string | undefined;
+    try {
+      const autoResult = await checkAutoApprove('churn_winback', winbackApprovalPayload, db);
+      if (autoResult.matched) {
+        winbackApprovalStatus = 'auto_approved';
+        winbackRuleMatched = autoResult.ruleId;
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'churn-recovery: auto-approve check failed, defaulting to pending',
+      );
+    }
+
+    const [winbackApprovalRow] = await db
+      .insert(agentApprovals)
+      .values({
+        agentRunId: ctx.runId,
+        kind: 'churn_winback',
+        payload: winbackApprovalPayload as object,
+        status: winbackApprovalStatus,
+        decidedBy: winbackApprovalStatus === 'auto_approved'
+          ? `auto-rule:${winbackRuleMatched ?? 'unknown'}`
+          : null,
+        decidedAt: winbackApprovalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: winbackRuleMatched ?? null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: agentApprovals.id });
+
+    if (winbackApprovalStatus !== 'auto_approved') {
+      ctx.log.info(
+        { siteId: input.site_id, prospectCount: queueRows.length, approvalId: winbackApprovalRow!.id },
+        'churn_winback_blocked: awaiting operator approval',
+      );
+      return {
+        site_id: input.site_id,
+        next_prospects_queued: 0,
+        prospects_added: prospectsAdded,
+        message: `Awaiting operator approval for winback fan-out (id: ${winbackApprovalRow!.id})`,
+      };
+    }
+    // ── End approval gate ────────────────────────────────────────────────────
+
     const events = queueRows.map((p) => ({
       agent: 'churn-recovery' as const,
       type: 'outreach.kick' as const,

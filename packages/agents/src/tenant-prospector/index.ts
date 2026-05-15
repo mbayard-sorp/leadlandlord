@@ -1,11 +1,15 @@
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
-import { getDb, sites, prospects, type NewProspect } from '@leadlandlord/db';
+import { getDb, sites, prospects, agentApprovals, type NewProspect } from '@leadlandlord/db';
 import { searchN, type Place } from '@leadlandlord/integrations/google-places';
 import { findOwnerByDomain } from '@leadlandlord/integrations/apollo';
 import { getPaidAdCount } from '@leadlandlord/integrations/dataforseo';
 import { IntegrationError } from '@leadlandlord/shared/errors';
+import { checkAutoApprove } from '../approval-engine';
+
+/** Score threshold above which a prospect is eligible for trial promotion. */
+const PROMOTE_TO_TRIAL_SCORE_THRESHOLD = 70;
 
 export const TenantProspectorInput = z.object({
   site_id: z.string().uuid(),
@@ -200,6 +204,94 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
     if (toInsert.length > 0) {
       const insertedRows = await db.insert(prospects).values(toInsert).returning({ id: prospects.id });
       inserted = insertedRows.length;
+
+      // ── Approval gate: prospect_promote_to_trial ───────────────────────────
+      // For high-score prospects (score >= threshold), queue a
+      // prospect_promote_to_trial approval so the operator can green-light
+      // the handoff to TrialManager. Auto-approve rules apply (>= 70 auto-approves).
+      // Idempotency: skip if a pending approval already exists for the
+      // same (site_id, prospect row index combination keyed by business name).
+      const highScoreCandidates = toInsert
+        .map((p, i) => ({ prospect: p, id: insertedRows[i]?.id }))
+        .filter(({ prospect }) => {
+          const score =
+            prospect.scoringMetadata !== null &&
+            typeof prospect.scoringMetadata === 'object' &&
+            'score' in (prospect.scoringMetadata as Record<string, unknown>)
+              ? Number((prospect.scoringMetadata as Record<string, unknown>).score)
+              : 0;
+          return score >= PROMOTE_TO_TRIAL_SCORE_THRESHOLD;
+        });
+
+      for (const { prospect, id: prospectId } of highScoreCandidates) {
+        if (!prospectId) continue;
+        const score = Number(
+          (prospect.scoringMetadata as Record<string, unknown>).score,
+        );
+
+        // Idempotency check per prospect.
+        const existingPromoteApproval = await db
+          .select({ id: agentApprovals.id })
+          .from(agentApprovals)
+          .where(
+            and(
+              eq(agentApprovals.kind, 'prospect_promote_to_trial'),
+              sql`${agentApprovals.payload}->>'prospect_id' = ${prospectId}`,
+              eq(agentApprovals.status, 'pending'),
+            ),
+          )
+          .limit(1);
+
+        if (existingPromoteApproval.length > 0) {
+          ctx.log.info(
+            { prospectId, approvalId: existingPromoteApproval[0]!.id },
+            'prospect_promote_to_trial: pending approval already exists — skipping',
+          );
+          continue;
+        }
+
+        const promotePayload = {
+          kind: 'prospect_promote_to_trial' as const,
+          prospect_id: prospectId,
+          site_id: input.site_id,
+          business_name: prospect.businessName,
+          prospect_score: score,
+        };
+
+        let promoteApprovalStatus = 'pending';
+        let promoteRuleMatched: string | undefined;
+        try {
+          const autoResult = await checkAutoApprove('prospect_promote_to_trial', promotePayload, db);
+          if (autoResult.matched) {
+            promoteApprovalStatus = 'auto_approved';
+            promoteRuleMatched = autoResult.ruleId;
+          }
+        } catch (err) {
+          ctx.log.warn(
+            { err: err instanceof Error ? err.message : err },
+            'tenant-prospector: auto-approve check for promote_to_trial failed, defaulting to pending',
+          );
+        }
+
+        await db.insert(agentApprovals).values({
+          agentRunId: ctx.runId,
+          kind: 'prospect_promote_to_trial',
+          payload: promotePayload as object,
+          status: promoteApprovalStatus,
+          decidedBy: promoteApprovalStatus === 'auto_approved'
+            ? `auto-rule:${promoteRuleMatched ?? 'unknown'}`
+            : null,
+          decidedAt: promoteApprovalStatus === 'auto_approved' ? new Date() : null,
+          ruleMatched: promoteRuleMatched ?? null,
+          expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        });
+
+        ctx.log.info(
+          { prospectId, score, status: promoteApprovalStatus },
+          'prospect_promote_to_trial approval queued',
+        );
+      }
+      // ── End approval gate ────────────────────────────────────────────────────
     }
 
     ctx.log.info(
