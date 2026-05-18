@@ -11,7 +11,7 @@ import {
 import { ScoringConfig, DEFAULT_WEIGHTS, type ScoringWeights } from './scoring-config';
 import { isDenylisted } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
-import { listCities } from '@leadlandlord/us-cities/loader';
+import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
 
 /**
  * Niche Hunter — Phase 0 / Sprint 2.
@@ -250,14 +250,41 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const client = getAnthropicClient();
     const model = process.env.NICHE_HUNTER_MODEL ?? 'claude-sonnet-4-6';
 
-    // Sample a pool of low-competition cities to constrain Claude's choices.
-    const sampledCities = listCities({
-      populationMin: input.geo_filter?.population_min ?? 10_000,
-      populationMax: input.geo_filter?.population_max ?? 100_000,
+    // Build a ranked city pool using Census-based scoring (ADR 0008).
+    // Note: geo_filter.population_min / population_max are now overridden by
+    // the ADR's hard filters (15k–110k) — they remain in the public schema
+    // for backward compatibility but do not affect the ranked pool.
+    // UsCity is a subset of RankedCity, so the union covers both the ranked path
+    // and the random-sample fallback path below.
+    let sampledCities: import('@leadlandlord/us-cities/loader').UsCity[] = [];
+    const rankedCities = rankCities({
+      limit: 150,
+      perStateCap: 12,
       states: input.geo_filter?.states,
-      sampleN: 150,
     });
-    ctx.log.info({ count: sampledCities.length }, 'niche-hunter: sampled city pool');
+    sampledCities = rankedCities;
+
+    if (rankedCities.length > 0) {
+      const top3 = rankedCities.slice(0, 3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+      const bot3 = rankedCities.slice(-3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+      ctx.log.info(
+        { count: rankedCities.length, top3, bottom3: bot3 },
+        'niche-hunter: ranked city pool',
+      );
+    } else {
+      // Fallback: Census enrichment not yet run or all cities filtered.
+      // Fall back to random sampling so the agent still works.
+      ctx.log.warn(
+        'niche-hunter: rankCities returned 0 cities — falling back to random listCities sample',
+      );
+      sampledCities = listCities({
+        populationMin: input.geo_filter?.population_min ?? 10_000,
+        populationMax: input.geo_filter?.population_max ?? 100_000,
+        states: input.geo_filter?.states,
+        sampleN: 150,
+      });
+      ctx.log.info({ count: sampledCities.length }, 'niche-hunter: fallback sampled city pool');
+    }
 
     // Build a lookup set for post-brainstorm guard (city|state).
     const cityStateSet = new Set(

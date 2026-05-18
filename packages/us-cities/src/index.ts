@@ -1,3 +1,5 @@
+export { rankCities, type RankedCity, type RankCitiesOpts } from './city-ranker.js';
+
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
@@ -53,6 +55,14 @@ function parseCSVLine(line: string): string[] {
 // Module-scoped cache — parse once on first call.
 // ---------------------------------------------------------------------------
 let _cache: UsCity[] | null = null;
+
+/**
+ * Reset the in-memory cities cache. Only for use in tests.
+ * @internal
+ */
+export function _resetCitiesCache(): void {
+  _cache = null;
+}
 
 function loadAll(): UsCity[] {
   if (_cache) return _cache;
