@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { telHref } from '../../lib/content';
+import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -103,10 +103,9 @@ export function PremiumHome({
                 {bundle.city}, {bundle.state}
               </p>
               {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+              {/* SEO: render the exact targeted keyword phrase verbatim, title-cased. */}
               <h1 id="hero-h1" className="premium-h1">
-                Considered <em>{bundle.niche}</em>
-                <br />
-                for {bundle.city} homes.
+                {titleCaseKeyword(heroH1(bundle))}
               </h1>
               {/* Trust line — license/insurance when fields present */}
               {(bundle.license_number || bundle.insurance_carrier) ? (

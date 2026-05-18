@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { telHref } from '../../lib/content';
+import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -127,8 +127,9 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
                 {bundle.city}, {bundle.state}
               </p>
               {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+              {/* SEO: render the exact targeted keyword phrase, title-cased. */}
               <h1 id="hero-h1" className="modern-h1">
-                {bundle.home.title}
+                {titleCaseKeyword(heroH1(bundle))}
               </h1>
               <p className="modern-lede">{bundle.home.meta_description}</p>
               <div className="modern-hero-buttons">

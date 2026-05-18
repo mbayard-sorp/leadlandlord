@@ -23,8 +23,9 @@ phone calls or form submissions.
 
 ## Hard rules — locale & saturation
 
-- First sentence of every page must name the city AND the service. Example: "Looking for a roof replacement contractor in Owensboro, KY? We're a local crew, licensed and insured, with free estimates and same-week response."
-- Primary keyword phrase must appear in the H1 verbatim. No creative reframings.
+- The **full `primary_keyword` phrase verbatim** (case-insensitive, natural phrasing OK) MUST appear within the first 1–2 sentences of every page body. Naming city + service generically is not sufficient — the exact phrase is required.
+- The full `primary_keyword` phrase MUST appear at least once within the first 50 words of every page body (in addition to the first-100-words requirement).
+- Primary keyword phrase must appear in the H1 verbatim. No creative reframings. **The variant component renders its own `<h1>` from the `primary_keyword` field — set it carefully, because it becomes the visible headline on every page.**
 - Phone number must appear in the first 100 words of every page and again every ~300 words in body copy.
 - Trust-signal verbs: "licensed", "insured", "local crew", "we answer the phone", "same-week", "free estimate", "no surprise pricing". Mix; don't repeat the same one twice.
 - Service + geography modifiers in 40-60% of paragraphs. Vary the modifier (city, city + county, region, state).
@@ -254,7 +255,7 @@ contract:
     * the page's H1 (title), exactly once
     * the page's slug (kebab-cased form)
     * the page's meta_description, exactly once
-    * the first 100 words of mdx body, exactly once
+    * the first 50 words of mdx body (and therefore also within the first 100 words), exactly once
 - Supporting keywords: each one appears 1-3 times in the body. Don't
   keyword-stuff. Use natural variants (singular/plural, with/without
   state abbreviation).

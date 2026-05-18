@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { telHref } from '../../lib/content';
+import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -72,17 +72,18 @@ export function BrightHome({
     .map((p) => ({ q: p.title, a: p.meta_description }));
   const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
 
-  // Underline the niche keyword in the hero headline with the squiggle.
+  // SEO: render the exact targeted keyword phrase verbatim as H1, with the
+  // niche term underlined by the squiggle when it appears inside the phrase.
   const renderHeroH1 = () => {
-    const title = bundle.home.title;
+    const h1 = titleCaseKeyword(heroH1(bundle));
     const keyword = bundle.niche;
-    const idx = title.toLowerCase().indexOf(keyword.toLowerCase());
+    const idx = h1.toLowerCase().indexOf(keyword.toLowerCase());
     if (idx < 0) {
-      return title;
+      return h1;
     }
-    const before = title.slice(0, idx);
-    const match = title.slice(idx, idx + keyword.length);
-    const after = title.slice(idx + keyword.length);
+    const before = h1.slice(0, idx);
+    const match = h1.slice(idx, idx + keyword.length);
+    const after = h1.slice(idx + keyword.length);
     return (
       <>
         {before}

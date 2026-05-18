@@ -61,7 +61,8 @@ export function lintPage(
 
   const bodyWords = extractWords(mdx);
   const bodyText = mdx.toLowerCase();
-  const first100Words = extractWords(mdx).slice(0, 100).join(' ').toLowerCase();
+  const first50Words = bodyWords.slice(0, 50).join(' ').toLowerCase();
+  const first100Words = bodyWords.slice(0, 100).join(' ').toLowerCase();
 
   // --- error rules ---
 
@@ -100,6 +101,15 @@ export function lintPage(
       rule: 'keyword-in-first-100',
       severity: 'error',
       detail: `Primary keyword "${opts.primaryKeyword}" not found in first 100 words`,
+    });
+  }
+
+  // 4a. Primary keyword in first 50 words (must appear in opening paragraph)
+  if (!first50Words.includes(kw)) {
+    violations.push({
+      rule: 'keyword-in-first-50',
+      severity: 'error',
+      detail: `Primary keyword "${opts.primaryKeyword}" not found in first 50 words — must appear in the opening paragraph`,
     });
   }
 
