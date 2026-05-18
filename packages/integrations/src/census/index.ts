@@ -1,5 +1,5 @@
-export { fetchAcsPlaces } from './client.js';
-export type { AcsPlaceRow, UsCityCensus } from './types.js';
+export { fetchAcsPlaces } from './client';
+export type { AcsPlaceRow, UsCityCensus } from './types';
 
 /**
  * Parse the Census NAME field into just the city/place name, stripping the

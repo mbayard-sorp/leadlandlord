@@ -1,4 +1,4 @@
-import type { AcsPlaceRow } from './types.js';
+import type { AcsPlaceRow } from './types';
 
 /**
  * Low-level Census ACS 5-Year Estimates client.

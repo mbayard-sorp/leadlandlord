@@ -23,7 +23,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 // Import after mocking so the module picks up the mock.
 import { existsSync, readFileSync } from 'node:fs';
-import { listCitiesEnriched, _resetCensusCache } from './index.js';
+import { listCitiesEnriched, _resetCensusCache } from './index';
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);

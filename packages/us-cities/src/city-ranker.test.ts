@@ -19,8 +19,8 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import { existsSync, readFileSync } from 'node:fs';
-import { _resetCensusCache, _resetCitiesCache } from './index.js';
-import { rankCities } from './city-ranker.js';
+import { _resetCensusCache, _resetCitiesCache } from './index';
+import { rankCities } from './city-ranker';
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);

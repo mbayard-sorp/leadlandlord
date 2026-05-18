@@ -7,7 +7,7 @@
  * Pure function: no I/O beyond the listCitiesEnriched() loader.
  */
 
-import { listCitiesEnriched, type UsCityEnriched } from './index.js';
+import { listCitiesEnriched, type UsCityEnriched } from './index';
 
 export interface RankedCity extends UsCityEnriched {
   score: number; // 0–1

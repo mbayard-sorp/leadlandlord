@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listCities } from './index.js';
+import { listCities } from './index';
 
 describe('listCities', () => {
   it('returns UsCity objects with correct shape', () => {

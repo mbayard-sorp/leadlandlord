@@ -1,4 +1,4 @@
-export { rankCities, type RankedCity, type RankCitiesOpts } from './city-ranker.js';
+export { rankCities, type RankedCity, type RankCitiesOpts } from './city-ranker';
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
