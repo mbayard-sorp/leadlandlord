@@ -29,7 +29,8 @@
     "./google-analytics": "./src/google-analytics/index.ts",
     "./brightlocal": "./src/brightlocal/index.ts",
     "./pagerduty": "./src/pagerduty/index.ts",
-    "./firecrawl": "./src/firecrawl/index.ts"
+    "./firecrawl": "./src/firecrawl/index.ts",
+    "./census": "./src/census/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

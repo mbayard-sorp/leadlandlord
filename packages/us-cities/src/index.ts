@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 
@@ -108,6 +108,51 @@ function sample<T>(arr: T[], n: number): T[] {
   return result.slice(result.length - Math.min(n, result.length));
 }
 
+// ---------------------------------------------------------------------------
+// Census enrichment types (mirrors UsCityCensus in @leadlandlord/integrations
+// but kept local so us-cities has no runtime dep on integrations).
+// ---------------------------------------------------------------------------
+
+export interface UsCityCensus {
+  medianIncome: number;
+  medianHomeValue: number;
+  /** Owner-occupied units / total occupied units, 0-1. */
+  ownerOccupiedPct: number;
+  totalHousingUnits: number;
+  medianAge: number;
+  /** Population from Census (may differ from SimpleMaps estimate). */
+  populationCensus: number;
+}
+
+export type UsCityEnriched = UsCity & Partial<UsCityCensus>;
+
+// ---------------------------------------------------------------------------
+// Module-scoped census cache — lazy-loaded on first call to listCitiesEnriched.
+// ---------------------------------------------------------------------------
+let _censusCache: Record<string, UsCityCensus> | null = null;
+let _censusCacheLoaded = false;
+
+function loadCensusCache(): Record<string, UsCityCensus> {
+  if (_censusCacheLoaded) return _censusCache ?? {};
+  _censusCacheLoaded = true;
+  const cachePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '../data/census-enrichment.json',
+  );
+  if (!existsSync(cachePath)) {
+    // Cache not yet generated — callers get undefined for demographic fields.
+    _censusCache = {};
+    return _censusCache;
+  }
+  try {
+    const raw = readFileSync(cachePath, 'utf8');
+    _censusCache = JSON.parse(raw) as Record<string, UsCityCensus>;
+  } catch {
+    _censusCache = {};
+  }
+  return _censusCache;
+}
+
 export function listCities(opts: ListCitiesOpts = {}): UsCity[] {
   const {
     populationMin = 10_000,
@@ -130,4 +175,45 @@ export function listCities(opts: ListCitiesOpts = {}): UsCity[] {
     return sample(filtered, sampleN);
   }
   return filtered;
+}
+
+/**
+ * Same as listCities but overlays Census ACS 5-Year demographic data where
+ * available. Cities without a Census match return undefined for all Census
+ * fields — callers should handle Partial<UsCityCensus>.
+ *
+ * The Census cache file is read once on first call and memoized. If the cache
+ * file doesn't exist yet (i.e. enrich:census hasn't been run), this function
+ * degrades gracefully and returns the base UsCity data with no Census fields.
+ *
+ * Cache key: `${state2}|${city_ascii_lowercased}` — matches the key format
+ * written by packages/us-cities/scripts/enrich-from-census.ts.
+ */
+/**
+ * Reset the in-memory Census cache. Only for use in tests.
+ * @internal
+ */
+export function _resetCensusCache(): void {
+  _censusCache = null;
+  _censusCacheLoaded = false;
+}
+
+export function listCitiesEnriched(opts: ListCitiesOpts = {}): UsCityEnriched[] {
+  const cities = listCities(opts);
+  const cache = loadCensusCache();
+
+  return cities.map((c) => {
+    const key = `${c.state}|${c.city.toLowerCase()}`;
+    const census = cache[key];
+    if (!census) return { ...c };
+    return {
+      ...c,
+      medianIncome: census.medianIncome,
+      medianHomeValue: census.medianHomeValue,
+      ownerOccupiedPct: census.ownerOccupiedPct,
+      totalHousingUnits: census.totalHousingUnits,
+      medianAge: census.medianAge,
+      populationCensus: census.populationCensus,
+    };
+  });
 }
