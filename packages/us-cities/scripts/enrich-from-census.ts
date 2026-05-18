@@ -16,9 +16,27 @@
  * DO NOT run this script in CI — it makes 51 real API calls.
  */
 
-import { writeFileSync, readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { config as loadDotenv } from 'dotenv';
+
+// Load the repo-root .env so the script picks up CENSUS_API_KEY without
+// requiring the caller to export it manually. Walks up from this file to
+// find the first .env in a parent directory.
+{
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, '.env');
+    if (existsSync(candidate)) {
+      loadDotenv({ path: candidate });
+      break;
+    }
+    const parent = resolve(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+}
 
 // We import from the workspace package — tsx resolves TypeScript sources directly.
 import { fetchAcsPlaces, parseCensusName } from '@leadlandlord/integrations/census';
