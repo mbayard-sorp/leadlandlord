@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { getTrustSignals } from './trust-signal-pool';
-import { getDisclosure } from './disclosure-pool';
 import { getHeadlineTemplate } from './headline-templates';
 
 const ID_A = '00000000-0000-0000-0000-000000000001';
@@ -46,27 +45,6 @@ describe('getTrustSignals', () => {
 
   it('caps at pool size without throwing', () => {
     expect(() => getTrustSignals(ID_A, 'classic', 100)).not.toThrow();
-  });
-});
-
-describe('getDisclosure', () => {
-  it('returns a non-empty string', () => {
-    expect(getDisclosure(ID_A).length).toBeGreaterThan(10);
-  });
-
-  it('is deterministic — same siteId always returns same disclosure', () => {
-    expect(getDisclosure(ID_A)).toBe(getDisclosure(ID_A));
-  });
-
-  it('different siteIds return different disclosures', () => {
-    const results = new Set([ID_A, ID_B, ID_C].map(getDisclosure));
-    // 3 different UUIDs should not all hash to the same pool entry
-    expect(results.size).toBeGreaterThan(1);
-  });
-
-  it('disclosure contains referral/provider language', () => {
-    const d = getDisclosure(ID_A);
-    expect(d.toLowerCase()).toMatch(/provider|partner|referral|contractor|connect/);
   });
 });
 

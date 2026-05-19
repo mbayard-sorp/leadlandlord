@@ -285,9 +285,6 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         <footer className="classic-footer surface-inverse">
           <div>© {new Date().getFullYear()} {bundle.business_name} · Licensed & insured{bundle.license_number ? ` · Licensed #${bundle.license_number}` : ''}</div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
-          <div className="classic-footer-disclaimer">
-            This site connects callers with a partnered local provider.
-          </div>
         </footer>
 
         {/* sticky mobile bar */}

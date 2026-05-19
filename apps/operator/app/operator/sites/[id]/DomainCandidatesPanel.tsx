@@ -3,15 +3,20 @@
 import { useEffect, useState, useTransition } from 'react';
 import { usePolledFetch } from '../../../../lib/use-polled-fetch';
 import {
+  addGscVerificationTxt,
+  addManualCandidate,
   approveDomainCandidate,
+  checkDomainAvailability,
   searchDomainsForSite,
   type DomainCandidateRow,
+  type ManualCheckResult,
 } from './domain-actions';
 
 interface PolledResponse {
   ok: true;
   searching: boolean;
   lastError: string | null;
+  registeredDomain: string | null;
   candidates: Array<{
     id: string;
     domain: string;
@@ -33,7 +38,7 @@ const POLL_MS = 3000;
 // Hard cap so we don't poll forever if the agent crashes silently.
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
 
-export function DomainCandidatesPanel({ siteId, candidates: initial, registeredDomain }: Props) {
+export function DomainCandidatesPanel({ siteId, candidates: initial, registeredDomain: initialRegistered }: Props) {
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [pollEnabled, setPollEnabled] = useState(false);
@@ -47,6 +52,7 @@ export function DomainCandidatesPanel({ siteId, candidates: initial, registeredD
   // Server-rendered initial list; once polling starts, the live list takes over.
   const candidates = data?.candidates ?? initial;
   const searching = data?.searching ?? false;
+  const registeredDomain = data?.registeredDomain ?? initialRegistered;
 
   // Start polling when the operator clicks Search; stop once the agent finishes
   // (searching=false), regardless of whether candidates were found. A finished
@@ -63,17 +69,19 @@ export function DomainCandidatesPanel({ siteId, candidates: initial, registeredD
     }
     if (!data.searching) {
       setPollEnabled(false);
-      if (data.candidates.length > 0) {
+      if (data.registeredDomain && !initialRegistered) {
+        setMsg(`Registered ${data.registeredDomain}.`);
+      } else if (data.lastError) {
+        setMsg(`Domain Procurer failed: ${data.lastError}`);
+      } else if (data.candidates.length > 0) {
         setMsg(
           `Found ${data.candidates.length} candidate${data.candidates.length === 1 ? '' : 's'}.`,
         );
-      } else if (data.lastError) {
-        setMsg(`Domain Procurer failed: ${data.lastError}`);
       } else {
         setMsg('No candidates found.');
       }
     }
-  }, [data, pollEnabled, pollStartedAt]);
+  }, [data, pollEnabled, pollStartedAt, initialRegistered]);
 
   function search() {
     setMsg(null);
@@ -93,8 +101,69 @@ export function DomainCandidatesPanel({ siteId, candidates: initial, registeredD
     setMsg(null);
     startTransition(async () => {
       const r = await approveDomainCandidate(siteId, candidateId);
-      setMsg(r.ok ? 'Approval enqueued. Domain Procurer will register.' : r.message ?? 'approve failed');
+      if (r.ok) {
+        setMsg('Approval enqueued. Registering…');
+        // Poll until the candidate flips to 'registered' (or the timeout
+        // hits). Same poll loop as the initial search uses.
+        setPollStartedAt(Date.now());
+        setPollEnabled(true);
+      } else {
+        setMsg(r.message ?? 'approve failed');
+      }
     });
+  }
+
+  const [manualDomain, setManualDomain] = useState('');
+  const [manualCheck, setManualCheck] = useState<ManualCheckResult | null>(null);
+  const [manualPending, setManualPending] = useState(false);
+
+  async function check() {
+    if (!manualDomain.trim() || manualPending) return;
+    setManualCheck(null);
+    setManualPending(true);
+    try {
+      const r = await checkDomainAvailability(manualDomain);
+      setManualCheck(r);
+    } finally {
+      setManualPending(false);
+    }
+  }
+
+  function addManual() {
+    if (!manualCheck?.domain || !manualCheck.available) return;
+    const target = manualCheck.domain;
+    startTransition(async () => {
+      const r = await addManualCandidate(siteId, target);
+      if (r.ok) {
+        setMsg(`Added ${target} to candidates.`);
+        setManualDomain('');
+        setManualCheck(null);
+      } else {
+        setMsg(r.message ?? 'add failed');
+      }
+    });
+  }
+
+  const [gscToken, setGscToken] = useState('');
+  const [gscPending, setGscPending] = useState(false);
+
+  function submitGsc() {
+    if (!gscToken.trim() || gscPending || !registeredDomain) return;
+    setGscPending(true);
+    setMsg(null);
+    (async () => {
+      try {
+        const r = await addGscVerificationTxt(siteId, gscToken);
+        if (r.ok) {
+          setMsg(`GSC TXT written. Click "Verify" in Search Console now.`);
+          setGscToken('');
+        } else {
+          setMsg(r.message ?? 'GSC TXT write failed');
+        }
+      } finally {
+        setGscPending(false);
+      }
+    })();
   }
 
   const showSpinner = pending || pollEnabled || searching;
@@ -191,6 +260,114 @@ export function DomainCandidatesPanel({ siteId, candidates: initial, registeredD
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      <div className="rounded border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+            Check a specific domain
+          </h4>
+          <span className="text-[10px] text-slate-500">manual lookup</span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={manualDomain}
+            onChange={(e) => setManualDomain(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                check();
+              }
+            }}
+            placeholder="e.g. junkremovalsanangelo.com"
+            disabled={manualPending}
+            className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={check}
+            disabled={manualPending || !manualDomain.trim()}
+            className="text-xs px-3 py-1.5 rounded bg-slate-700/60 hover:bg-slate-700 text-slate-200 disabled:opacity-50 whitespace-nowrap"
+          >
+            {manualPending ? 'Checking…' : 'Check'}
+          </button>
+        </div>
+        {manualCheck && (
+          <div className="flex items-center justify-between gap-3 text-xs">
+            {manualCheck.ok ? (
+              <>
+                <span className="font-mono text-slate-300">{manualCheck.domain}</span>
+                {manualCheck.available ? (
+                  <span className="flex items-center gap-3">
+                    <span className="text-emerald-300">
+                      ✓ available
+                      {manualCheck.priceUsd != null && ` · $${manualCheck.priceUsd.toFixed(2)}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={addManual}
+                      disabled={pending}
+                      className="px-2 py-1 rounded bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-200 disabled:opacity-50"
+                    >
+                      Add to candidates
+                    </button>
+                  </span>
+                ) : (
+                  <span className="text-slate-500">taken</span>
+                )}
+              </>
+            ) : (
+              <span className="text-amber-300">{manualCheck.message ?? 'check failed'}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {registeredDomain && (
+        <div className="rounded border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+              Google Search Console
+            </h4>
+            <a
+              href={`https://search.google.com/search-console/welcome?domain=${encodeURIComponent(registeredDomain)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] text-sky-300 hover:text-sky-200 underline"
+            >
+              Open GSC →
+            </a>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Add <span className="font-mono text-slate-400">{registeredDomain}</span> as a Domain property in GSC,
+            copy the TXT verification value, paste it below, then click Verify in GSC.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={gscToken}
+              onChange={(e) => setGscToken(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitGsc();
+                }
+              }}
+              placeholder="google-site-verification=…"
+              disabled={gscPending}
+              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={submitGsc}
+              disabled={gscPending || !gscToken.trim()}
+              className="text-xs px-3 py-1.5 rounded bg-slate-700/60 hover:bg-slate-700 text-slate-200 disabled:opacity-50 whitespace-nowrap"
+            >
+              {gscPending ? 'Writing…' : 'Add TXT record'}
+            </button>
+          </div>
         </div>
       )}
 

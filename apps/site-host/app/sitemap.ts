@@ -3,9 +3,18 @@ import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../lib/site-context';
 import { sanityToBundle } from '../lib/theme-bundle';
 
+// Cache the rendered sitemap for an hour. Without this, every Googlebot
+// fetch is a server-rendered round-trip through Sanity, and a cold start +
+// slow Sanity call can exceed Google's fetch budget — surfacing in GSC as
+// "general HTTP error" / "couldn't read sitemap" even though our own curl
+// returns 200. ISR at the route handler level means subsequent fetches hit
+// Vercel's edge cache; only one renderer behind it ever touches Sanity per
+// revalidate window.
+export const revalidate = 3600;
+
 /**
  * Per-host dynamic sitemap. Site-host is multi-tenant — sitemap.xml resolves
- * to the current host's Sanity content. Cached at the Sanity-fetch layer.
+ * to the current host's Sanity content.
  *
  * Includes every page kind Content Engine emits: home, about, contact, plus
  * services, service-areas, blog, and info pages. Each kind has its own

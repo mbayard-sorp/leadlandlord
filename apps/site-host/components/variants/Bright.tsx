@@ -356,9 +356,6 @@ export function BrightHome({
             © {new Date().getFullYear()} {bundle.business_name} · Bonded & insured
           </div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
-          <div className="bright-footer-disclaimer">
-            This site connects callers with a partnered local provider.
-          </div>
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">

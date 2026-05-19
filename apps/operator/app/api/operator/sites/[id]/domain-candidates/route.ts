@@ -5,6 +5,7 @@ import {
   agentEvents,
   agentRuns,
   domainCandidates,
+  sites,
   type DomainCandidate,
 } from '@leadlandlord/db';
 import { log } from '@leadlandlord/shared/log';
@@ -33,6 +34,13 @@ interface DomainCandidatesResponse {
    * Reset to null when a newer run succeeds.
    */
   lastError: string | null;
+  /**
+   * Currently registered domain on the site row, if any. Surfaced so the
+   * panel can show the "Registered: …" banner after a register run completes
+   * without requiring a full page reload (the server-rendered prop is stale
+   * once registration finishes async).
+   */
+  registeredDomain: string | null;
   candidates: DomainCandidateRow[];
 }
 
@@ -62,14 +70,14 @@ export async function GET(
   const db = getDb();
 
   try {
-    const [candidates, pendingEvents, runningRuns, latestRun] = await Promise.all([
+    const [candidates, pendingEvents, runningRuns, latestRun, siteRow] = await Promise.all([
       db
         .select()
         .from(domainCandidates)
         .where(
           and(
             eq(domainCandidates.siteId, siteId),
-            inArray(domainCandidates.status, ['available', 'pending_approval']),
+            inArray(domainCandidates.status, ['available', 'pending_approval', 'approved', 'registered']),
           ),
         )
         .orderBy(asc(domainCandidates.rank))
@@ -82,7 +90,7 @@ export async function GET(
             eq(agentEvents.targetAgent, 'domain-procurer'),
             isNull(agentEvents.processedAt),
             isNull(agentEvents.deadLetteredAt),
-            sql`${agentEvents.payload}->>'siteId' = ${siteId}`,
+            sql`${agentEvents.payload}->>'site_id' = ${siteId}`,
           ),
         )
         .limit(1),
@@ -103,6 +111,11 @@ export async function GET(
         .where(and(eq(agentRuns.agent, 'domain-procurer'), eq(agentRuns.siteId, siteId)))
         .orderBy(desc(agentRuns.startedAt))
         .limit(1),
+      db
+        .select({ domain: sites.domain })
+        .from(sites)
+        .where(eq(sites.id, siteId))
+        .limit(1),
     ]);
 
     const lastRun = latestRun[0] ?? null;
@@ -115,6 +128,7 @@ export async function GET(
       ok: true,
       searching: pendingEvents.length > 0 || runningRuns.length > 0,
       lastError,
+      registeredDomain: siteRow[0]?.domain ?? null,
       candidates: candidates.map((c) => ({
         id: c.id,
         domain: c.domain,

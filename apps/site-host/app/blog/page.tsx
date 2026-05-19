@@ -102,9 +102,6 @@ export default async function BlogIndex() {
           <p>
             © {new Date().getFullYear()} {bundle.business_name} · Licensed and insured
           </p>
-          <p className="info-page-footer-disclaimer">
-            This site connects callers with a partnered local provider.
-          </p>
         </footer>
       </article>
     </>

@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { desc, and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { desc, and, eq, isNull, sql } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 import {
   getDb,
@@ -9,6 +8,7 @@ import {
   type PortfolioSnapshot,
 } from '@leadlandlord/db';
 import { fetchPortfolioFromSanity, type SanityPortfolioRow } from '@/lib/sanity-read';
+import { PortfolioTable, type SanityInfo, type SiteSnapshot } from './PortfolioTable';
 
 // Render on demand — this is the live operator dashboard. Prerendering
 // at build time couples the build to DB schema state (e.g. a new column
@@ -60,8 +60,37 @@ export default async function PortfolioPage() {
     loadPortfolioSnapshots().catch(() => [] as PortfolioSnapshot[]),
     loadLatestSiteSnapshots().catch(() => [] as PortfolioSnapshot[]),
   ]);
-  const sanityById = new Map(sanityRows.map((s) => [s.siteId, s]));
-  const siteSnapById = new Map(siteSnaps.filter((s) => s.siteId).map((s) => [s.siteId!, s]));
+  const sanityById: Record<string, SanityInfo> = Object.fromEntries(
+    sanityRows.map((s) => [
+      s.siteId,
+      {
+        theme: s.theme ?? null,
+        primaryHost: s.primaryHost ?? null,
+        primaryDomainVerified: s.primaryDomainVerified ?? null,
+        domainCount: s.domainCount ?? 0,
+      },
+    ]),
+  );
+  const siteSnapById: Record<string, SiteSnapshot> = Object.fromEntries(
+    siteSnaps
+      .filter((s) => s.siteId)
+      .map((s) => [
+        s.siteId!,
+        { status: s.status ?? null, mrrUsd: String(s.mrrUsd), costsUsd: String(s.costsUsd) },
+      ]),
+  );
+  const tableRows = rows.map((r) => ({
+    id: r.id,
+    niche: r.niche,
+    city: r.city,
+    state: r.state,
+    status: r.status,
+    trackingNumber: r.trackingNumber ?? null,
+    trackingProvider: r.trackingProvider ?? null,
+    calls30d: r.calls30d,
+    mrrUsd: String(r.mrrUsd),
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+  }));
 
   return (
     <div className="space-y-6">
@@ -75,128 +104,8 @@ export default async function PortfolioPage() {
           No sites yet. Run <code className="text-slate-200">pnpm dry-run</code> to build your first one.
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 overflow-x-auto -mx-4 sm:mx-0">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="text-left px-3 py-2">Niche</th>
-                <th className="text-left px-3 py-2 hidden md:table-cell">City</th>
-                <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2 hidden lg:table-cell">Theme</th>
-                <th className="text-left px-3 py-2 hidden md:table-cell">Primary domain</th>
-                <th className="text-left px-3 py-2 hidden lg:table-cell">Tracking #</th>
-                <th className="text-left px-3 py-2">Calls 30d</th>
-                <th className="text-left px-3 py-2 hidden md:table-cell">MRR</th>
-                <th className="text-left px-3 py-2">Yesterday</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {rows.map((s) => {
-                const sanity = sanityById.get(s.id);
-                return (
-                  <tr key={s.id} className="hover:bg-slate-900/40">
-                    <td className="px-3 py-2 break-words">
-                      <Link
-                        href={`/operator/sites/${s.id}`}
-                        className="text-sky-400 hover:text-sky-300"
-                      >
-                        {s.niche}
-                      </Link>
-                      <div className="text-xs text-slate-500 md:hidden">{s.city}, {s.state}</div>
-                    </td>
-                    <td className="px-3 py-2 text-slate-400 hidden md:table-cell">{s.city}, {s.state}</td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={s.status} />
-                    </td>
-                    <td className="px-3 py-2 hidden lg:table-cell">
-                      {sanity?.theme ? (
-                        <span className="font-mono text-xs capitalize text-slate-300">{sanity.theme}</span>
-                      ) : (
-                        <span className="text-slate-600">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 hidden md:table-cell">
-                      {sanity?.primaryHost ? (
-                        <DomainCell host={sanity.primaryHost} verified={sanity.primaryDomainVerified} extra={sanity.domainCount > 1 ? sanity.domainCount - 1 : 0} />
-                      ) : (
-                        <span className="text-slate-600">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs hidden lg:table-cell">
-                      {s.trackingNumber ?? '—'}
-                      {s.trackingProvider === 'mock' && (
-                        <span className="ml-2 text-amber-400 text-[10px] uppercase">mock</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{s.calls30d}</td>
-                    <td className="px-3 py-2 hidden md:table-cell">${Number(s.mrrUsd).toFixed(2)}</td>
-                    <td className="px-3 py-2">
-                      <SnapshotCell snap={siteSnapById.get(s.id)} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <PortfolioTable rows={tableRows} sanityById={sanityById} siteSnapById={siteSnapById} />
       )}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const tone =
-    status === 'live' || status === 'rented'
-      ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/50'
-      : status === 'warming' || status === 'building'
-      ? 'bg-sky-900/40 text-sky-300 border-sky-700/50'
-      : status === 'paused' || status === 'archived'
-      ? 'bg-slate-800/60 text-slate-400 border-slate-700'
-      : 'bg-amber-900/30 text-amber-300 border-amber-700/50';
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded border text-xs ${tone}`}>{status}</span>
-  );
-}
-
-function DomainCell({ host, verified, extra }: { host: string; verified: boolean | null; extra: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <a
-        href={`https://${host}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sky-400 hover:text-sky-300 font-mono text-xs truncate max-w-[200px]"
-      >
-        {host}
-      </a>
-      {verified ? (
-        <span className="text-emerald-300/80 text-[10px] uppercase tracking-wide">verified</span>
-      ) : verified === false ? (
-        <span className="text-amber-300/80 text-[10px] uppercase tracking-wide">pending</span>
-      ) : null}
-      {extra > 0 && <span className="text-slate-500 text-xs">+{extra}</span>}
-    </div>
-  );
-}
-
-function SnapshotCell({ snap }: { snap: PortfolioSnapshot | undefined }) {
-  if (!snap) return <span className="text-slate-600">—</span>;
-  const tone =
-    snap.status === 'green'
-      ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/50'
-      : snap.status === 'amber'
-      ? 'bg-amber-900/30 text-amber-300 border-amber-700/50'
-      : snap.status === 'red'
-      ? 'bg-rose-900/40 text-rose-300 border-rose-700/50'
-      : 'bg-slate-800/60 text-slate-400 border-slate-700';
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`inline-block px-2 py-0.5 rounded border text-xs ${tone}`}>
-        {snap.status ?? 'idle'}
-      </span>
-      <span className="text-slate-500 text-xs font-mono">
-        ${Number(snap.mrrUsd).toFixed(0)} / ${Number(snap.costsUsd).toFixed(2)}
-      </span>
     </div>
   );
 }
@@ -204,12 +113,18 @@ function SnapshotCell({ snap }: { snap: PortfolioSnapshot | undefined }) {
 function DailySnapshotsPanel({ rows }: { rows: PortfolioSnapshot[] }) {
   if (rows.length === 0) {
     return (
-      <section className="rounded-lg border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-400">
-        <h2 className="text-sm font-semibold text-slate-200">Daily snapshots</h2>
-        <p className="mt-1 text-xs text-slate-500">
+      <details className="rounded-lg border border-slate-800 bg-slate-900/30 group">
+        <summary className="cursor-pointer list-none p-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <span className="text-slate-500 transition-transform group-open:rotate-90">▸</span>
+            Daily snapshots
+          </h2>
+          <span className="text-xs text-slate-500">no data yet</span>
+        </summary>
+        <p className="px-4 pb-4 text-xs text-slate-500">
           The portfolio analyst hasn&apos;t produced any daily roll-ups yet.
         </p>
-      </section>
+      </details>
     );
   }
   // Render oldest → newest left-to-right
@@ -229,51 +144,58 @@ function DailySnapshotsPanel({ rows }: { rows: PortfolioSnapshot[] }) {
     .join(' ');
   const latest = ordered[ordered.length - 1]!;
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/30 p-4 space-y-3">
-      <header className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-200">Daily snapshots</h2>
-        <span className="text-xs text-slate-500">last {ordered.length} day(s)</span>
-      </header>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20">
-        <path d={mrrPath} stroke="#34d399" strokeWidth="1.5" fill="none" />
-        <path d={costPath} stroke="#f472b6" strokeWidth="1.5" fill="none" />
-      </svg>
-      <div className="flex gap-4 text-xs text-slate-400">
-        <span>
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1" />
-          MRR (latest ${Number(latest.mrrUsd).toFixed(2)})
+    <details className="rounded-lg border border-slate-800 bg-slate-900/30 group">
+      <summary className="cursor-pointer list-none p-4 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+          <span className="text-slate-500 transition-transform group-open:rotate-90">▸</span>
+          Daily snapshots
+        </h2>
+        <span className="text-xs text-slate-500">
+          last {ordered.length} day(s) · MRR ${Number(latest.mrrUsd).toFixed(0)} · costs ${Number(latest.costsUsd).toFixed(2)}
         </span>
-        <span>
-          <span className="inline-block w-2 h-2 rounded-full bg-pink-400 mr-1" />
-          Costs (latest ${Number(latest.costsUsd).toFixed(2)})
-        </span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="text-slate-500">
-            <tr>
-              <th className="text-left py-1">Date</th>
-              <th className="text-right py-1">MRR</th>
-              <th className="text-right py-1">Costs</th>
-              <th className="text-right py-1">Calls</th>
-              <th className="text-right py-1 hidden sm:table-cell">Leads</th>
-              <th className="text-right py-1 hidden sm:table-cell">Tenants</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800">
-            {[...rows].map((r) => (
-              <tr key={r.id}>
-                <td className="py-1 text-slate-300 font-mono">{r.date}</td>
-                <td className="py-1 text-right text-slate-300">${Number(r.mrrUsd).toFixed(2)}</td>
-                <td className="py-1 text-right text-slate-300">${Number(r.costsUsd).toFixed(2)}</td>
-                <td className="py-1 text-right text-slate-400">{r.callsCount}</td>
-                <td className="py-1 text-right text-slate-400 hidden sm:table-cell">{r.leadsCount}</td>
-                <td className="py-1 text-right text-slate-400 hidden sm:table-cell">{r.tenantsActiveCount}</td>
+      </summary>
+      <div className="px-4 pb-4 space-y-3">
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20">
+          <path d={mrrPath} stroke="#34d399" strokeWidth="1.5" fill="none" />
+          <path d={costPath} stroke="#f472b6" strokeWidth="1.5" fill="none" />
+        </svg>
+        <div className="flex gap-4 text-xs text-slate-400">
+          <span>
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1" />
+            MRR (latest ${Number(latest.mrrUsd).toFixed(2)})
+          </span>
+          <span>
+            <span className="inline-block w-2 h-2 rounded-full bg-pink-400 mr-1" />
+            Costs (latest ${Number(latest.costsUsd).toFixed(2)})
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-slate-500">
+              <tr>
+                <th className="text-left py-1">Date</th>
+                <th className="text-right py-1">MRR</th>
+                <th className="text-right py-1">Costs</th>
+                <th className="text-right py-1">Calls</th>
+                <th className="text-right py-1 hidden sm:table-cell">Leads</th>
+                <th className="text-right py-1 hidden sm:table-cell">Tenants</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {[...rows].map((r) => (
+                <tr key={r.id}>
+                  <td className="py-1 text-slate-300 font-mono">{r.date}</td>
+                  <td className="py-1 text-right text-slate-300">${Number(r.mrrUsd).toFixed(2)}</td>
+                  <td className="py-1 text-right text-slate-300">${Number(r.costsUsd).toFixed(2)}</td>
+                  <td className="py-1 text-right text-slate-400">{r.callsCount}</td>
+                  <td className="py-1 text-right text-slate-400 hidden sm:table-cell">{r.leadsCount}</td>
+                  <td className="py-1 text-right text-slate-400 hidden sm:table-cell">{r.tenantsActiveCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </section>
+    </details>
   );
 }

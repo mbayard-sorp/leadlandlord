@@ -40,10 +40,6 @@ export function SiteShell({ children, businessName, niche, city, state, phone }:
           <strong>{businessName}</strong> — {niche} in {city}, {state}. Call {phone} or use the
           form on any page to request a quote.
         </p>
-        <p className="site-page-disclaimer">
-          This site connects callers with a partnered local provider. Phone numbers are answered
-          during business hours.
-        </p>
       </footer>
     </div>
   );

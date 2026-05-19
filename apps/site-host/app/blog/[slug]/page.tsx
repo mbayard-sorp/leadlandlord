@@ -80,7 +80,7 @@ export default async function BlogPost({ params }: Params) {
           {page.meta_description && (
             <p className="info-page-lede">{page.meta_description}</p>
           )}
-          <Markdown source={page.mdx} className="prose-site" />
+          <Markdown source={page.mdx} className="prose-site" phone={phone} />
 
           <aside className="info-page-cta">
             <h2>Need help with {bundle.niche.toLowerCase()} in {bundle.city}?</h2>
@@ -99,9 +99,6 @@ export default async function BlogPost({ params }: Params) {
         <footer className="info-page-footer">
           <p>
             © {new Date().getFullYear()} {bundle.business_name} · Licensed and insured
-          </p>
-          <p className="info-page-footer-disclaimer">
-            This site connects callers with a partnered local provider.
           </p>
         </footer>
       </article>

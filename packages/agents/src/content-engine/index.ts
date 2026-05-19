@@ -7,7 +7,6 @@ import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { ContentBundle } from '@leadlandlord/shared/types';
 import { getTrustSignals } from './trust-signal-pool';
-import { getDisclosure } from './disclosure-pool';
 import { getHeadlineTemplate } from './headline-templates';
 import { lintBundle } from './density-lint';
 import { injectInternalLinks } from './internal-linker';
@@ -141,10 +140,9 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
 
     // Pre-select hygiene pool values so Claude works within chosen templates
     const trustSignals = getTrustSignals(input.site_id, input.theme ?? 'classic', 4);
-    const disclosure = getDisclosure(input.site_id);
     const headlineTemplate = getHeadlineTemplate(input.site_id, input.theme ?? 'classic');
 
-    const userPrompt = buildUserPrompt(input, { trustSignals, disclosure, headlineTemplate });
+    const userPrompt = buildUserPrompt(input, { trustSignals, headlineTemplate });
     const systemPrompt = composeSystemPrompt(input.theme);
 
     // Per-call clone of the tool schema with cluster_key enum constraints
@@ -274,7 +272,7 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
         .map((r) => `Page ${r.pageSlug}:\n${r.violations.filter((v) => v.severity === 'error').map((v) => `  [${v.rule}] ${v.detail}`).join('\n')}`)
         .join('\n\n');
 
-      const retryUserPrompt = `${buildUserPrompt(input, { trustSignals, disclosure, headlineTemplate })}
+      const retryUserPrompt = `${buildUserPrompt(input, { trustSignals, headlineTemplate })}
 
 ## DENSITY LINT VIOLATIONS FROM PREVIOUS ATTEMPT — FIX THESE:
 ${violationSummary}
@@ -488,12 +486,49 @@ function trimPage(p: unknown): unknown {
   if (typeof page.title === 'string' && page.title.length > 70) {
     page.title = page.title.slice(0, 67).trimEnd() + '…';
   }
+  if (typeof page.mdx === 'string') {
+    page.mdx = sanitizePhoneLiterals(page.mdx);
+  }
   return page;
 }
 
+/**
+ * Scrub any literal phone-number patterns from MDX and replace with the
+ * `{{phone}}` placeholder that the site-host renderer substitutes per-tenant.
+ * The system prompt instructs the model to use `{{phone}}` directly, but
+ * Sonnet still hallucinates fake numbers in body copy (most often
+ * `(555) NNN-NNNN` or `NNN-NNN-NNNN`). Catching this at normalize time —
+ * before density-lint, before Sanity persist — keeps fake numbers off
+ * production sites without forcing a content-engine retry.
+ *
+ * Patterns matched (anchored to word boundaries to avoid eating
+ * unrelated digits like prices or ZIPs):
+ *   - `+1 NNN NNN NNNN` / `+1 (NNN) NNN-NNNN`
+ *   - `(NNN) NNN-NNNN`
+ *   - `NNN-NNN-NNNN` / `NNN.NNN.NNNN` / `NNN NNN NNNN`
+ *   - Markdown `[label](tel:+...)` links — collapsed to just `{{phone}}`.
+ */
+export function sanitizePhoneLiterals(mdx: string): string {
+  // 1. Markdown tel: links → `{{phone}}` (keep the surrounding label only if
+  //    it isn't itself a phone number; otherwise drop entirely).
+  let out = mdx.replace(/\[([^\]]*)\]\(tel:[^)]+\)/gi, (_match, label: string) => {
+    if (PHONE_RE.test(label)) return '{{phone}}';
+    return label.trim().length > 0 ? `${label} (call {{phone}})` : '{{phone}}';
+  });
+  // 2. Bare literal phone patterns.
+  out = out.replace(PHONE_RE, '{{phone}}');
+  // 3. Collapse accidental duplicates from steps 1/2 colliding.
+  out = out.replace(/(\{\{phone\}\})(\s*\1)+/g, '{{phone}}');
+  return out;
+}
+
+// Match common US phone formats. Anchored to a non-digit boundary on each
+// side so we don't chew through price strings ("$1,234,567") or long ID
+// numbers. Allows optional leading `+1` and various separator forms.
+const PHONE_RE = /(?<![\d])(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\d{3}[\s.-])\d{3}[\s.-]\d{4}(?![\d])/g;
+
 interface HygienePools {
   trustSignals: string[];
-  disclosure: string;
   headlineTemplate: string;
 }
 
@@ -511,8 +546,7 @@ function buildUserPrompt(input: ContentEngineInput, pools: HygienePools): string
 
   const hygiene = `\n\n## Chosen for this site (use these; do not substitute your own)
 trust_signals: ${JSON.stringify(pools.trustSignals)}
-h1_template: "${pools.headlineTemplate}" (fill {service}, {city}, {trust_signal} placeholders)
-footer_disclosure: "${pools.disclosure}"`;
+h1_template: "${pools.headlineTemplate}" (fill {service}, {city}, {trust_signal} placeholders)`;
 
   return `Generate a complete content bundle for a local lead-gen website.
 

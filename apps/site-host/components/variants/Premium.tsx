@@ -281,9 +281,6 @@ export function PremiumHome({
             © {new Date().getFullYear()} {bundle.business_name} · Licensed & insured
           </div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
-          <div className="premium-footer-disclaimer">
-            This site connects callers with a partnered local provider.
-          </div>
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">

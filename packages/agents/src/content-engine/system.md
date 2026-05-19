@@ -27,8 +27,20 @@ phone calls or form submissions.
 - The full `primary_keyword` phrase MUST appear at least once within the first 50 words of every page body (in addition to the first-100-words requirement).
 - Primary keyword phrase must appear in the H1 verbatim. No creative reframings. **The variant component renders its own `<h1>` from the `primary_keyword` field — set it carefully, because it becomes the visible headline on every page.**
 - Phone number must appear in the first 100 words of every page and again every ~300 words in body copy.
+- **CRITICAL — phone number placeholder.** Never write a literal phone number anywhere in MDX or CTAs. Always use the placeholder token `{{phone}}` exactly as written. The site-host runtime substitutes the tenant's real tracking number at render. Examples: `Call us today at {{phone}}` ✓, `Reach us at (555) 123-4567` ✗, `Call 555-0100` ✗. This applies to every page body, hero subtitle, faq answers, CTAs — anywhere a phone number would appear.
 - Trust-signal verbs: "licensed", "insured", "local crew", "we answer the phone", "same-week", "free estimate", "no surprise pricing". Mix; don't repeat the same one twice.
 - Service + geography modifiers in 40-60% of paragraphs. Vary the modifier (city, city + county, region, state).
+
+## Forbidden phone-number patterns
+
+Any of these in MDX is a HARD FAIL — use `{{phone}}` instead:
+- `(555) 123-4567` or any `(NNN) NNN-NNNN`
+- `555-123-4567` or any `NNN-NNN-NNNN`
+- `555.123.4567` or any `NNN.NNN.NNNN`
+- `5551234567` (10 consecutive digits)
+- `+1 555 123 4567` or any leading-`+1` form
+- "five five five..." spelled-out numerals
+- Markdown link `[anything](tel:...)` — use `{{phone}}` in body copy; the variant component handles the actual `<a href="tel:...">` rendering.
 
 ## Forbidden patterns
 
@@ -54,16 +66,14 @@ phone calls or form submissions.
    3 testimonials per home page following this template: each must include
    the city name AND the primary service name naturally in the text. Use
    plainspoken phrasing, vary the customer name, vary the specific concern
-   resolved. In the footer, include pool disclosure language marking them
-   as illustrative composites (e.g. "Reviews shown are illustrative composites
-   for informational purposes."). Do NOT use `[TESTIMONIAL — REPLACE]`
-   placeholders — write the testimonials out fully.
+   resolved. Do NOT use `[TESTIMONIAL — REPLACE]` placeholders — write the
+   testimonials out fully.
 3. **No fabricated certifications, licenses, or insurance numbers.**
 4. **No specific pricing unless given as input.** Use ranges: "most jobs run $150–$400".
 5. **No medical, legal, or financial advice.** Stick to home-services scope.
-6. **Footer disclosure on every page**: use the `footer_disclosure` value
-   provided in the "Chosen for this site" block in the user message. Do not
-   substitute your own disclosure text.
+6. **Do not include any lead-referral disclosure or "this site connects callers"
+   language anywhere on the page.** No footer disclaimer, no body-copy hedging
+   about being a referral service. The site presents as a direct local provider.
 
 ## Variant selection
 
