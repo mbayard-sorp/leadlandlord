@@ -314,8 +314,8 @@ function checkConsecutiveSentences(text: string, kw: string): Violation | null {
   return null;
 }
 
-function collectAllPages(bundle: ContentBundle): Array<{ slug: string; mdx: string; title: string; meta_description?: string }> {
-  const pages: Array<{ slug: string; mdx: string; title: string; meta_description?: string }> = [];
+function collectAllPages(bundle: ContentBundle): Array<{ slug: string; mdx: string; title: string; meta_description?: string; cluster_key?: string }> {
+  const pages: Array<{ slug: string; mdx: string; title: string; meta_description?: string; cluster_key?: string }> = [];
   if (bundle.home) pages.push(bundle.home);
   if (bundle.about) pages.push(bundle.about);
   if (bundle.contact) pages.push(bundle.contact);
