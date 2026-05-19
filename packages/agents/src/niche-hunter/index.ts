@@ -194,13 +194,20 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const scoringConfig = ScoringConfig.parse(input.scoring_config ?? {});
 
     // 1. Brainstorm via Claude (tool-use forces structured output).
+    ctx.progress({ step: 1, total: 4, label: 'brainstorming candidates with Claude' });
     const candidates = await this.brainstorm(input, ctx);
     ctx.log.info({ count: candidates.length }, 'brainstormed candidates');
 
     // 2. Score each candidate with DataForSEO. Sequential because batching
     //    across locations isn't supported on a single endpoint call.
     const scored: ScoredCandidate[] = [];
-    for (const c of candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i]!;
+      ctx.progress({
+        step: 2,
+        total: 4,
+        label: `scoring ${i + 1}/${candidates.length}: ${c.niche} — ${c.city}, ${c.state}`,
+      });
       try {
         const metrics = await this.scoreCandidate(c, ctx, scoringConfig.weights);
         scored.push({ ...c, ...metrics });
@@ -214,6 +221,7 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     ctx.log.info({ scored: scored.length }, 'scored candidates');
 
     // 3. Apply thresholds + take top N.
+    ctx.progress({ step: 3, total: 4, label: `filtering ${scored.length} scored candidates` });
     const filtered = scored
       .filter(
         (s) =>
@@ -225,6 +233,7 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
       .slice(0, input.target_count);
 
     // 4. Persist niches + dual-write agentApprovals.
+    ctx.progress({ step: 4, total: 4, label: `saving ${filtered.length} niches to queue` });
     const persisted = await this.persistNiches(filtered, ctx);
 
     return {

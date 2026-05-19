@@ -262,7 +262,7 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     // Density lint — check all pages. On error violations, retry once.
     const primaryKeyword = input.keyword_clusters[0]?.primary_keyword ?? input.niche;
     ctx.progress({ label: 'running density lint' });
-    let lintResults = lintBundle(parsed, { primaryKeyword });
+    let lintResults = lintBundle(parsed, { primaryKeyword, clusters: input.keyword_clusters });
     const errorPages = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
     if (errorPages.length > 0) {
       ctx.log.warn(
@@ -279,7 +279,12 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
 ## DENSITY LINT VIOLATIONS FROM PREVIOUS ATTEMPT — FIX THESE:
 ${violationSummary}
 
-Re-generate the full bundle fixing all listed violations. Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
+Re-generate the full bundle fixing all listed violations.
+
+CRITICAL — DO NOT DROP CLUSTER ASSIGNMENTS:
+Every cluster_key listed in the keyword clusters table above must still be targeted by exactly one page in your retry output. Each page that targeted a cluster previously must keep its cluster_key and primary_keyword fields. Fix violations by rewriting content, not by removing pages or stripping cluster targeting.
+
+Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
 
       ctx.progress({ label: 'retrying content generation (density lint fix)' });
       const retryStream = client.messages.stream({

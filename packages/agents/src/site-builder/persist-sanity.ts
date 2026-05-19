@@ -57,7 +57,11 @@ export async function ensureSiteDocStub(
   // The final writeSiteToSanity at the end of site-builder uses
   // createOrReplace to update everything. Between the two, downstream agents
   // (keyword-planner) can safely reference `site-${siteId}`.
-  const stubSlug = `${basics.niche}-${basics.city}`
+  // Include state so the stub slug matches the final bundleSlug() exactly.
+  // Without this the stub gets created as `<niche>-<city>` and the final
+  // overwrite at writeSiteToSanity uses `<niche>-<city>-<state>` — any
+  // mid-build URL bookmark (preview link in the operator UI) drifts.
+  const stubSlug = `${basics.niche}-${basics.city}-${basics.state}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');

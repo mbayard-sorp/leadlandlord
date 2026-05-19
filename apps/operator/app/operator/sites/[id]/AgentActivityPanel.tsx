@@ -137,10 +137,11 @@ export function AgentActivityPanel({ siteId }: Props) {
 
 function RunRow({ node, now, depth }: { node: RunNode; now: number; depth: number }) {
   const elapsedMs = now - new Date(node.startedAt).getTime();
-  const stepLabel =
-    node.progressStep && node.progressTotal
-      ? ` ${node.progressStep}/${node.progressTotal}`
-      : '';
+  const hasProgress = node.progressStep != null && node.progressTotal != null && node.progressTotal > 0;
+  const pct = hasProgress
+    ? Math.min(100, Math.round((node.progressStep! / node.progressTotal!) * 100))
+    : null;
+  const stepLabel = hasProgress ? ` ${node.progressStep}/${node.progressTotal} (${pct}%)` : '';
   return (
     <li>
       <div
@@ -154,6 +155,17 @@ function RunRow({ node, now, depth }: { node: RunNode; now: number; depth: numbe
         <span className="text-xs text-slate-500">running {formatDuration(elapsedMs)}</span>
         <span className="ml-auto text-xs text-slate-400">${node.costUsd.toFixed(4)}</span>
       </div>
+      {pct !== null && (
+        <div
+          className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800"
+          style={{ marginLeft: depth * 16 + 20, maxWidth: 320 }}
+        >
+          <div
+            className="h-full bg-emerald-500 transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
       {node.progressMessage && (
         <div
           className="text-xs text-slate-400 mt-0.5"

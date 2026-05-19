@@ -1,8 +1,10 @@
-import { desc } from 'drizzle-orm';
-import { getDb, niches } from '@leadlandlord/db';
+import { desc, inArray } from 'drizzle-orm';
+import { getDb, niches, sites } from '@leadlandlord/db';
 import Link from 'next/link';
 import { RunForm } from './RunForm';
 import { DecisionButtons } from './DecisionButtons';
+import { StatusBar } from './StatusBar';
+import { BuildLink } from './BuildLink';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,19 @@ export default async function NichesPage() {
   const pending = rows.filter((r) => r.decision === 'pending');
   const approved = rows.filter((r) => r.decision === 'approved' || r.decision === 'approved_dry_run');
   const rejected = rows.filter((r) => r.decision === 'rejected');
+
+  // Map nicheId -> siteId for approved niches so each row can show a build link.
+  const approvedIds = approved.map((r) => r.id);
+  const siteByNiche = new Map<string, string>();
+  if (approvedIds.length > 0) {
+    const siteRows = await db
+      .select({ id: sites.id, nicheId: sites.nicheId })
+      .from(sites)
+      .where(inArray(sites.nicheId, approvedIds));
+    for (const s of siteRows) {
+      if (s.nicheId) siteByNiche.set(s.nicheId, s.id);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -35,6 +50,8 @@ export default async function NichesPage() {
 
       <RunForm />
 
+      <StatusBar />
+
       <Section title={`Pending review (${pending.length})`}>
         {pending.length === 0 ? (
           <Empty>Nothing pending. Run Niche Hunter above to populate.</Empty>
@@ -44,7 +61,11 @@ export default async function NichesPage() {
       </Section>
 
       <Section title={`Approved (${approved.length})`} muted>
-        {approved.length === 0 ? <Empty>No approved niches yet.</Empty> : <Table rows={approved} />}
+        {approved.length === 0 ? (
+          <Empty>No approved niches yet.</Empty>
+        ) : (
+          <Table rows={approved} showBuildLink siteByNiche={siteByNiche} />
+        )}
       </Section>
 
       <Section title={`Rejected (${rejected.length})`} muted>
@@ -84,6 +105,8 @@ function Empty({ children }: { children: React.ReactNode }) {
 function Table({
   rows,
   showButtons = false,
+  showBuildLink = false,
+  siteByNiche,
 }: {
   rows: Array<{
     id: string;
@@ -98,6 +121,8 @@ function Table({
     rationale: string | null;
   }>;
   showButtons?: boolean;
+  showBuildLink?: boolean;
+  siteByNiche?: Map<string, string>;
 }) {
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
@@ -113,6 +138,7 @@ function Table({
             <Th className="hidden lg:table-cell">Close</Th>
             <Th className="hidden lg:table-cell">Rationale</Th>
             {showButtons && <Th>Decision</Th>}
+            {showBuildLink && <Th>Build</Th>}
           </tr>
         </thead>
         <tbody>
@@ -132,6 +158,11 @@ function Table({
               {showButtons && (
                 <Td>
                   <DecisionButtons id={r.id} />
+                </Td>
+              )}
+              {showBuildLink && (
+                <Td>
+                  <BuildLink nicheId={r.id} initialSiteId={siteByNiche?.get(r.id) ?? null} />
                 </Td>
               )}
             </tr>
