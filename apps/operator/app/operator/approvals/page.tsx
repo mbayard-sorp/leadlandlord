@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { ApprovalButtons } from './ApprovalButtons';
 import { CrossLinkPlacementPreview } from './CrossLinkPlacementPreview';
+import { WaveStateTransitionPreview } from './WaveStateTransitionPreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,6 +98,8 @@ export default async function ApprovalsPage({
                   <Td className="max-w-sm text-slate-300">
                     {row.kind === 'cross_link_placement' ? (
                       <CrossLinkPlacementPreview payload={row.payload} />
+                    ) : row.kind === 'wave_state_transition' ? (
+                      <WaveStateTransitionPreview payload={row.payload} />
                     ) : (
                       <>
                         {payloadPreview(row.kind, row.payload)}
