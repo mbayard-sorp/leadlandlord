@@ -3,9 +3,28 @@
 import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
-import { NicheHunterInput } from '@leadlandlord/agents/niche-hunter';
+import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS } from '@leadlandlord/agents/niche-hunter';
+import {
+  getLocalKeywordMetrics,
+  getSerpComposition,
+  getPaidAdCount,
+} from '@leadlandlord/integrations/dataforseo';
 import { log } from '@leadlandlord/shared/log';
 import { requireOperatorSession } from '@/lib/auth';
+
+const US_STATE_NAMES: Record<string, string> = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+  CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
+  HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland',
+  MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri',
+  MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio',
+  OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+  SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+  VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+  DC: 'District of Columbia',
+};
 
 interface ActionResult {
   ok: boolean;
@@ -234,4 +253,84 @@ export async function rejectNiche(formData: FormData): Promise<ActionResult> {
     .where(eq(niches.id, id));
   revalidatePath('/operator/niches');
   return { ok: true, message: 'Rejected.' };
+}
+
+/**
+ * Validate a single niche row with a live DataForSEO "full trio" call.
+ * Stores measured volume/difficulty in dfsSearchVolume/dfsKd, stores the
+ * raw API response in dfsRaw, and recomputes score from measured inputs.
+ * The original searchVolume/kd estimate columns are not overwritten.
+ */
+export async function validateNiche(nicheId: string): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const sys = await getSystemState();
+  if (sys.killSwitch) {
+    const reason = sys.killSwitchReason ? ` (${sys.killSwitchReason})` : '';
+    return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
+  }
+
+  const db = getDb();
+  const [row] = await db.select().from(niches).where(eq(niches.id, nicheId)).limit(1);
+  if (!row) return { ok: false, message: 'Niche not found' };
+
+  // Reconstruct location and primary keyword exactly as scoreCandidate() does.
+  const stateName = US_STATE_NAMES[row.state.toUpperCase()] ?? row.state;
+  const location = `${row.city},${stateName},United States`;
+  const primaryKeyword = `${row.niche} ${row.city.toLowerCase()}`;
+  const seeds = [row.niche, primaryKeyword, `${row.niche} near me`];
+
+  try {
+    const [metrics, serpComposition, paidAdCount] = await Promise.all([
+      getLocalKeywordMetrics({ keywords: seeds, location, forceRefresh: false }),
+      getSerpComposition({ keyword: primaryKeyword, location, forceRefresh: false }),
+      getPaidAdCount({ keyword: primaryKeyword }),
+    ]);
+
+    const dfsRaw = { metrics, serpComposition, paidAdCount };
+
+    // Aggregate seed metrics the same way scoreCandidate() does.
+    const search_volume = metrics.reduce((s, m) => s + m.search_volume, 0);
+    const competition = metrics.length
+      ? metrics.reduce((s, m) => s + m.competition, 0) / metrics.length
+      : 0;
+    const kd = serpComposition.difficulty;
+
+    // Recompute score using measured inputs and DEFAULT_WEIGHTS.
+    // estAvgJobValueUsd and estCloseRate are numeric strings from Drizzle.
+    const est_avg_job_value_usd = parseFloat(row.estAvgJobValueUsd ?? '300');
+    const est_close_rate = parseFloat(row.estCloseRate ?? '0.4');
+
+    const score = computeScore({
+      search_volume,
+      kd,
+      competition,
+      est_avg_job_value_usd,
+      est_close_rate,
+      ad_count: paidAdCount,
+      weights: DEFAULT_WEIGHTS,
+    });
+
+    await db
+      .update(niches)
+      .set({
+        dfsSearchVolume: search_volume,
+        dfsKd: Math.round(kd),
+        dfsRaw,
+        validatedAt: new Date(),
+        volumeSource: 'dataforseo',
+        score: score.toFixed(2),
+      })
+      .where(eq(niches.id, nicheId));
+
+    revalidatePath('/operator/niches');
+    return {
+      ok: true,
+      message: `Validated — measured volume: ${search_volume}/mo, KD: ${Math.round(kd)}, score: ${score.toFixed(2)}.`,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error({ nicheId, err: message }, 'validateNiche: DataForSEO call failed');
+    return { ok: false, message: `DataForSEO validation failed: ${message}` };
+  }
 }

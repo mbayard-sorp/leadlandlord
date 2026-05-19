@@ -95,6 +95,10 @@ export function RunForm() {
       onSubmit={onSubmit}
       className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 grid grid-cols-1 md:grid-cols-3 gap-3"
     >
+      <p className="md:col-span-3 text-[11px] text-slate-400 bg-slate-800/60 rounded px-3 py-2">
+        <strong className="text-slate-200">Estimate-only mode (no DataForSEO spend).</strong>{' '}
+        Scoring uses Claude&apos;s brainstorm-time volume and confidence estimates. Validate individual rows on demand after reviewing results.
+      </p>
       <Field
         label="States (comma-separated, e.g. AZ,NM)"
         name="states"
@@ -120,7 +124,7 @@ export function RunForm() {
         name="score_top_n"
         defaultValue={defaults.score_top_n}
         type="number"
-        tooltip="After brainstorming, Claude self-ranks all candidates by confidence_score (1-10). Only this many top picks are sent through DataForSEO. Each scored candidate ≈ $0.225 (3 endpoint calls). Default 8 → ~$1.80/run."
+        tooltip="After brainstorming, Claude self-ranks candidates by confidence_score. In estimate-only mode (the default) this controls how many rows are saved — no DFS spend regardless of value. In full-DFS mode each scored candidate costs ~$0.225 (3 endpoint calls)."
       />
       <Field
         label="Min search volume / mo"
