@@ -24,6 +24,7 @@ import { MollyDigest } from './molly-digest/index';
 import { MollyInbox } from './molly-inbox/index';
 import { MollyCopywriter } from './molly-copywriter/index';
 import { NetworkLinker } from './network-linker/index';
+import { WaveLauncher } from './wave-launcher/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -55,6 +56,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'molly-inbox': () => new MollyInbox(),
   'molly-copywriter': () => new MollyCopywriter(),
   'network-linker': () => new NetworkLinker(),
+  'wave-launcher': () => new WaveLauncher(),
 };
 
 export function getAgent(name: string): AnyAgent {
