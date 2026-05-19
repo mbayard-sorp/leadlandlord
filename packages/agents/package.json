@@ -21,6 +21,8 @@
     "./error-classify": "./src/error-classify.ts",
     "./scheduler": "./src/scheduler/index.ts",
     "./niche-hunter": "./src/niche-hunter/index.ts",
+    "./niche-hunter/lead-benchmarks": "./src/niche-hunter/lead-benchmarks.ts",
+    "./niche-hunter/scoring-config": "./src/niche-hunter/scoring-config.ts",
     "./keyword-planner": "./src/keyword-planner/index.ts",
     "./alert-evaluator": "./src/alert-evaluator/index.ts",
     "./molly/persona": "./src/molly/persona.ts",

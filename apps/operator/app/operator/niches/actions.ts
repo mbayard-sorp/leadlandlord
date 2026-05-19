@@ -3,11 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
-import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS } from '@leadlandlord/agents/niche-hunter';
+import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from '@leadlandlord/agents/niche-hunter';
+import { getRentabilityPrior } from '@leadlandlord/agents/niche-hunter/lead-benchmarks';
 import {
   getLocalKeywordMetrics,
   getSerpComposition,
   getPaidAdCount,
+  getKeywordCandidates,
 } from '@leadlandlord/integrations/dataforseo';
 import { log } from '@leadlandlord/shared/log';
 import { requireOperatorSession } from '@/lib/auth';
@@ -278,16 +280,24 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
   const stateName = US_STATE_NAMES[row.state.toUpperCase()] ?? row.state;
   const location = `${row.city},${stateName},United States`;
   const primaryKeyword = `${row.niche} ${row.city.toLowerCase()}`;
-  const seeds = [row.niche, primaryKeyword, `${row.niche} near me`];
+  // Volume seeds deliberately exclude the "<niche> <city>" variant: the
+  // search_volume endpoint is already geo-scoped by `location`, so the
+  // city-in-query phrase reliably returns ~0 and only adds noise to the
+  // aggregate. We still use primaryKeyword for SERP + ads, where city
+  // specificity is correct.
+  // SYNC: these two seeds must stay identical to scoreCandidate() in
+  // packages/agents/src/niche-hunter/index.ts. If you change one, change both.
+  const seeds = [row.niche, `${row.niche} near me`];
 
   try {
-    const [metrics, serpComposition, paidAdCount] = await Promise.all([
+    // A1: getKeywordCandidates is city-independent with 90-day cache (~$0.028
+    // cold-miss per distinct niche). Run in parallel with the existing trio.
+    const [metrics, serpComposition, paidAdCount, clusterCandidates] = await Promise.all([
       getLocalKeywordMetrics({ keywords: seeds, location, forceRefresh: false }),
       getSerpComposition({ keyword: primaryKeyword, location, forceRefresh: false }),
       getPaidAdCount({ keyword: primaryKeyword }),
+      getKeywordCandidates({ seed: row.niche }),
     ]);
-
-    const dfsRaw = { metrics, serpComposition, paidAdCount };
 
     // Aggregate seed metrics the same way scoreCandidate() does.
     const search_volume = metrics.reduce((s, m) => s + m.search_volume, 0);
@@ -296,25 +306,57 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
       : 0;
     const kd = serpComposition.difficulty;
 
+    // Commercial-intent + seasonality signals, captured from data we already
+    // pay for (no extra DataForSEO call). avg_cpc is now also wired into
+    // computeScore (A2).
+    const avg_cpc =
+      metrics.length > 0 ? metrics.reduce((s, m) => s + m.cpc, 0) / metrics.length : 0;
+    const monthly = metrics.flatMap((m) => m.monthly_searches ?? []);
+    const seasonality =
+      monthly.length > 0
+        ? {
+            peak: Math.max(...monthly.map((x) => x.search_volume)),
+            trough: Math.min(...monthly.map((x) => x.search_volume)),
+          }
+        : null;
+
+    // A1: Sum search_volume across commercial/transactional-intent phrases.
+    const clusterVolume = clusterCandidates
+      .filter((c) => c.intent === 'commercial' || c.intent === 'transactional')
+      .reduce((sum, c) => sum + c.search_volume, 0);
+
+    // Blend: take the larger of the geo-scoped 2-seed figure and the cluster
+    // estimate scaled by GEO_SHARE_PRIOR. Preserves dfsSearchVolume unchanged
+    // for calibration — only the demand input to computeScore changes.
+    const demandVolume = Math.max(search_volume, clusterVolume * GEO_SHARE_PRIOR);
+
+    const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume };
+
     // Recompute score using measured inputs and DEFAULT_WEIGHTS.
     // estAvgJobValueUsd and estCloseRate are numeric strings from Drizzle.
     const est_avg_job_value_usd = parseFloat(row.estAvgJobValueUsd ?? '300');
     const est_close_rate = parseFloat(row.estCloseRate ?? '0.4');
 
+    // A3: static rentability prior from lead-price benchmarks (zero API cost).
+    const rentability_prior = getRentabilityPrior(row.niche);
+
     const score = computeScore({
-      search_volume,
+      search_volume: demandVolume,
       kd,
       competition,
       est_avg_job_value_usd,
       est_close_rate,
       ad_count: paidAdCount,
       weights: DEFAULT_WEIGHTS,
+      avg_cpc,          // A2: wires CPC sub-score (weight 0.05)
+      rentability_prior, // A3: wires rentability prior (weight 0.05)
     });
 
     await db
       .update(niches)
       .set({
         dfsSearchVolume: search_volume,
+        dfsClusterVolume: clusterVolume,
         dfsKd: Math.round(kd),
         dfsRaw,
         validatedAt: new Date(),
@@ -326,7 +368,7 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
     revalidatePath('/operator/niches');
     return {
       ok: true,
-      message: `Validated — measured volume: ${search_volume}/mo, KD: ${Math.round(kd)}, score: ${score.toFixed(2)}.`,
+      message: `Validated — measured volume: ${search_volume}/mo, cluster: ${clusterVolume}, KD: ${Math.round(kd)}, score: ${score.toFixed(2)}.`,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

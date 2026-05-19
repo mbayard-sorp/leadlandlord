@@ -171,6 +171,11 @@ export const niches = pgTable(
     validatedAt: timestamp('validated_at', { withTimezone: true }),
     // Full raw DataForSEO response(s) captured at validation, for field discovery.
     dfsRaw: jsonb('dfs_raw'),
+    // ADR 0009 Phase 1 / A1: sum of search_volume across commercial/transactional
+    // phrases from getKeywordCandidates (Labs, 90-day cache, city-independent).
+    // Null until validateNiche runs. Used as a demand cross-check alongside
+    // dfsSearchVolume; see scoring-config.ts GEO_SHARE_PRIOR.
+    dfsClusterVolume: integer('dfs_cluster_volume'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
   },

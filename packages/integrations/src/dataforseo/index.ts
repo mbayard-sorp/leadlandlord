@@ -13,12 +13,26 @@ import { dfsPost } from './client';
 
 // ---------- Keyword search volume + CPC + competition ----------------------
 
+/** One month of historical search volume, as returned by Google Ads. */
+export interface MonthlySearch {
+  year: number;
+  month: number;
+  search_volume: number;
+}
+
 export interface KeywordMetrics {
   keyword: string;
   search_volume: number;
   cpc: number;
   /** 0-1 normalized; Google Ads "competition index" is 0-100 originally. */
   competition: number;
+  /**
+   * Trailing ~12 months of volume. Already present in the same search_volume
+   * response — captured for free (no extra call) so downstream can detect
+   * seasonal niches (e.g. gutter cleaning) rather than treating one month as
+   * steady-state. Empty when DFS omits it.
+   */
+  monthly_searches: MonthlySearch[];
 }
 
 interface SearchVolumeRow {
@@ -30,6 +44,8 @@ interface SearchVolumeRow {
   competition: string | number | null;
   /** 0-100 numeric competition index. Use this when present. */
   competition_index: number | null;
+  /** Trailing monthly volumes. Same response, no extra cost. */
+  monthly_searches: MonthlySearch[] | null;
 }
 
 /**
@@ -57,6 +73,7 @@ export async function getLocalKeywordMetrics(args: {
       search_volume: 200 + i * 10,
       cpc: 2.0,
       competition: 0.4,
+      monthly_searches: [],
     }));
   }
 
@@ -114,6 +131,7 @@ async function fetchLocalKeywordMetricsFromApi(
       search_volume: v?.search_volume ?? 0,
       cpc: v?.cpc ?? 0,
       competition: normalizeCompetition(v),
+      monthly_searches: v?.monthly_searches ?? [],
     };
   });
 }
@@ -391,12 +409,34 @@ export async function getPaidAdCount(args: {
   keyword: string;
   location_code?: number;
   language_code?: string;
+  /** Skip cache and re-fetch from DataForSEO. */
+  forceRefresh?: boolean;
 }): Promise<number> {
-  const { keyword, location_code = 2840, language_code = 'en' } = args;
+  const { keyword, location_code = 2840, language_code = 'en', forceRefresh } = args;
   if (process.env.MOCK_AI === 'true') {
     // Return a plausible mock so scoring path exercises ad_presence weight.
     return 3;
   }
+  // Cached like the other SERP endpoints: ad presence for a given keyword
+  // barely moves week-to-week, and validation/re-validation used to fire a
+  // fresh ads-SERP call every time. 14-day TTL matches getSerpComposition.
+  const cacheKey = stableKey([language_code, location_code, keyword.toLowerCase()]);
+  const { value } = await withDataForSeoCache<number>({
+    endpoint: 'paid-ads',
+    key: cacheKey,
+    ttlDays: 14,
+    costUsd: 0.075,
+    forceRefresh,
+    fetcher: () => fetchPaidAdCountFromApi(keyword, location_code, language_code),
+  });
+  return value;
+}
+
+async function fetchPaidAdCountFromApi(
+  keyword: string,
+  location_code: number,
+  language_code: string,
+): Promise<number> {
   try {
     const rows = await dfsPost<{ items: PaidSerpItemRaw[] | null; items_count?: number }>(
       '/serp/google/ads/live/advanced',
