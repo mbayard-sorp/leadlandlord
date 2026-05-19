@@ -4,6 +4,13 @@ import Link from 'next/link';
 import { ApprovalButtons } from './ApprovalButtons';
 import { CrossLinkPlacementPreview } from './CrossLinkPlacementPreview';
 import { WaveStateTransitionPreview } from './WaveStateTransitionPreview';
+import { ProspectOutreachSendPreview } from './ProspectOutreachSendPreview';
+import { TrialProvisioningPreview } from './TrialProvisioningPreview';
+import { SubscriptionCheckoutPreview } from './SubscriptionCheckoutPreview';
+import { DunningActionPreview } from './DunningActionPreview';
+import { ChurnWinbackPreview } from './ChurnWinbackPreview';
+import { ProspectPromoteToTrialPreview } from './ProspectPromoteToTrialPreview';
+import { TrialDecisionOverridePreview } from './TrialDecisionOverridePreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,6 +107,20 @@ export default async function ApprovalsPage({
                       <CrossLinkPlacementPreview payload={row.payload} />
                     ) : row.kind === 'wave_state_transition' ? (
                       <WaveStateTransitionPreview payload={row.payload} />
+                    ) : row.kind === 'prospect_outreach_send' ? (
+                      <ProspectOutreachSendPreview payload={row.payload} />
+                    ) : row.kind === 'trial_provisioning' ? (
+                      <TrialProvisioningPreview payload={row.payload} />
+                    ) : row.kind === 'subscription_checkout' ? (
+                      <SubscriptionCheckoutPreview payload={row.payload} />
+                    ) : row.kind === 'dunning_action' ? (
+                      <DunningActionPreview payload={row.payload} />
+                    ) : row.kind === 'churn_winback' ? (
+                      <ChurnWinbackPreview payload={row.payload} />
+                    ) : row.kind === 'prospect_promote_to_trial' ? (
+                      <ProspectPromoteToTrialPreview payload={row.payload} />
+                    ) : row.kind === 'trial_decision_override' ? (
+                      <TrialDecisionOverridePreview payload={row.payload} />
                     ) : (
                       <>
                         {payloadPreview(row.kind, row.payload)}

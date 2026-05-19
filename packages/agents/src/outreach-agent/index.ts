@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql, gte } from 'drizzle-orm';
 import {
   getDb,
   prospects,
   sites,
   outreachEvents,
+  agentApprovals,
+  linkedinDmQueue,
   type Prospect,
   type Site,
 } from '@leadlandlord/db';
@@ -12,9 +14,11 @@ import { sendSms } from '@leadlandlord/integrations/twilio';
 import { sendEmail as sendEmailResend } from '@leadlandlord/integrations/resend';
 import { sendEmail as sendEmailZoho } from '@leadlandlord/integrations/zoho-mcp';
 import { startOutboundCall } from '@leadlandlord/integrations/elevenlabs';
+import { trackEvent } from '@leadlandlord/integrations/klaviyo';
 import { getRemainingSendsToday, recordSend } from '@leadlandlord/db/email-throttle';
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
  * Outreach Agent — runs ONE outreach step against ONE prospect.
@@ -33,7 +37,18 @@ import { ComplianceGuard } from '../compliance-guard/index';
  * Per-prospect dedupe key prevents the same step running twice on retries.
  */
 
-export const OutreachStep = z.enum(['sms_day_0', 'email_day_1', 'voice_day_3', 'sms_day_5']);
+export const OutreachStep = z.enum([
+  'sms_day_0',
+  'email_day_1',
+  'voice_day_3',
+  'sms_day_5',
+  // Klaviyo 3-touch automated sequence (Day 0 / 3 / 7).
+  'klaviyo_day_0',
+  'klaviyo_day_3',
+  'klaviyo_day_7',
+  // LinkedIn DM — queued only, no live API call.
+  'linkedin_day_2',
+]);
 export type OutreachStep = z.infer<typeof OutreachStep>;
 
 export const OutreachAgentInput = z.object({
@@ -56,7 +71,7 @@ export const OutreachAgentOutput = z.object({
   prospect_id: z.string().uuid(),
   step: OutreachStep,
   status: z.enum(['sent', 'blocked', 'skipped', 'failed', 'dryrun']),
-  channel: z.enum(['sms', 'email', 'voice']),
+  channel: z.enum(['sms', 'email', 'voice', 'klaviyo', 'linkedin']),
   message: z.string().optional(),
   external_id: z.string().optional(),
   violations: z.array(z.unknown()).default([]),
@@ -225,8 +240,145 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
       }
     }
 
+    // ── Approval gate ────────────────────────────────────────────────────────
+    // Build payload for this send and check auto-approve rules. If no rule
+    // matches, queue a pending approval row and return 'blocked' — the
+    // operator approves in the UI and the cron re-runs the step.
+    // Idempotency: skip insertion if a pending approval already exists for
+    // this (prospect_id, step) combination.
+    const estCostUsd = channel === 'sms' ? 0.0075 : 0; // Twilio SMS ~$0.0075; email $0
+    const approvalPayload = {
+      kind: 'prospect_outreach_send' as const,
+      prospect_id: prospect.id,
+      step: input.step,
+      channel,
+      recipient,
+      est_cost_usd: estCostUsd,
+    };
+
+    const existingApproval = await db
+      .select({ id: agentApprovals.id, status: agentApprovals.status })
+      .from(agentApprovals)
+      .where(
+        and(
+          eq(agentApprovals.kind, 'prospect_outreach_send'),
+          sql`${agentApprovals.payload}->>'prospect_id' = ${prospect.id}`,
+          sql`${agentApprovals.payload}->>'step' = ${input.step}`,
+          eq(agentApprovals.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    if (existingApproval.length > 0) {
+      ctx.log.info(
+        { prospectId: prospect.id, step: input.step, approvalId: existingApproval[0]!.id },
+        'outreach_send_blocked: pending approval already exists',
+      );
+      await db.insert(outreachEvents).values({
+        prospectId: prospect.id,
+        channel,
+        templateId: input.step,
+        response: null,
+        metadata: { status: 'blocked', reason: 'pending_approval', approvalId: existingApproval[0]!.id },
+      });
+      return {
+        prospect_id: prospect.id,
+        step: input.step,
+        status: 'blocked',
+        channel,
+        violations: [],
+      };
+    }
+
+    let approvalStatus = 'pending';
+    let ruleMatched: string | undefined;
+    try {
+      const autoResult = await checkAutoApprove('prospect_outreach_send', approvalPayload, db);
+      if (autoResult.matched) {
+        approvalStatus = 'auto_approved';
+        ruleMatched = autoResult.ruleId;
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'outreach: auto-approve check failed, defaulting to pending',
+      );
+    }
+
+    const [approvalRow] = await db
+      .insert(agentApprovals)
+      .values({
+        agentRunId: ctx.runId,
+        kind: 'prospect_outreach_send',
+        payload: approvalPayload as object,
+        status: approvalStatus,
+        decidedBy: approvalStatus === 'auto_approved' ? `auto-rule:${ruleMatched ?? 'unknown'}` : null,
+        decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: ruleMatched ?? null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: agentApprovals.id });
+
+    if (approvalStatus !== 'auto_approved') {
+      ctx.log.info(
+        { prospectId: prospect.id, step: input.step, approvalId: approvalRow!.id },
+        'outreach_send_blocked: awaiting operator approval',
+      );
+      await db.insert(outreachEvents).values({
+        prospectId: prospect.id,
+        channel,
+        templateId: input.step,
+        response: null,
+        metadata: { status: 'blocked', reason: 'awaiting_approval', approvalId: approvalRow!.id },
+      });
+      return {
+        prospect_id: prospect.id,
+        step: input.step,
+        status: 'blocked',
+        channel,
+        violations: [],
+      };
+    }
+    // ── End approval gate ────────────────────────────────────────────────────
+
+    // ── Klaviyo idempotency check ────────────────────────────────────────────
+    // Don't re-enroll a prospect already in an active Klaviyo sequence
+    // (check for any klaviyo outreach_event in the last 14 days).
+    if (channel === 'klaviyo') {
+      const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const existing = await db
+        .select({ id: outreachEvents.id })
+        .from(outreachEvents)
+        .where(
+          and(
+            eq(outreachEvents.prospectId, prospect.id),
+            eq(outreachEvents.channel, 'klaviyo'),
+            gte(outreachEvents.sentAt, cutoff),
+            sql`${outreachEvents.klaviyoSequenceId} IS NOT NULL`,
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) {
+        ctx.log.info(
+          { prospectId: prospect.id, step: input.step, existingEventId: existing[0]!.id },
+          'outreach: prospect already enrolled in active Klaviyo sequence — skipping re-enroll',
+        );
+        return {
+          prospect_id: prospect.id,
+          step: input.step,
+          status: 'skipped',
+          channel,
+          message: 'already_enrolled_klaviyo',
+          violations: [],
+        };
+      }
+    }
+    // ── End Klaviyo idempotency ──────────────────────────────────────────────
+
     // Dispatch.
     let externalId: string | undefined;
+    let klaviyoSequenceId: string | undefined;
+    let linkedinDmQueueId: string | undefined;
     let status: 'sent' | 'failed' = 'sent';
     let failMessage: string | undefined;
     let emailMailbox: string | undefined;
@@ -267,6 +419,43 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
           externalId = res.conversation_id;
           break;
         }
+        case 'klaviyo': {
+          // Fire a Klaviyo metric event that triggers the outreach flow.
+          // The metric name maps to a Klaviyo flow trigger in the account.
+          const metricName = klaviyoMetricForStep(input.step);
+          const res = await trackEvent({
+            metric: metricName,
+            email: prospect.email ?? undefined,
+            phone: prospect.phone ?? undefined,
+            properties: {
+              niche: site.niche,
+              city: site.city,
+              state: site.state,
+              business_name: prospect.businessName,
+              first_name: firstNameOf(prospect.contactName),
+              step: input.step,
+            },
+          });
+          klaviyoSequenceId = res.eventId;
+          externalId = res.eventId;
+          break;
+        }
+        case 'linkedin': {
+          // Queue only — no live LinkedIn API call.
+          // Write linkedin_dm_queue row first so we have the ID for the event FK.
+          const draftText = body;
+          const [dmRow] = await db
+            .insert(linkedinDmQueue)
+            .values({
+              prospectId: prospect.id,
+              draftText,
+              status: 'queued',
+            })
+            .returning({ id: linkedinDmQueue.id });
+          linkedinDmQueueId = dmRow!.id;
+          externalId = dmRow!.id;
+          break;
+        }
       }
     } catch (err) {
       status = 'failed';
@@ -298,6 +487,8 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
       channel,
       templateId: input.step,
       response: null,
+      klaviyoSequenceId: klaviyoSequenceId ?? null,
+      linkedinDmQueueId: linkedinDmQueueId ?? null,
       metadata: {
         status,
         external_id: externalId,
@@ -328,7 +519,7 @@ export class OutreachAgent extends BaseAgent<typeof OutreachAgentInput, typeof O
   }
 }
 
-function channelForStep(step: OutreachStep): 'sms' | 'email' | 'voice' {
+function channelForStep(step: OutreachStep): 'sms' | 'email' | 'voice' | 'klaviyo' | 'linkedin' {
   switch (step) {
     case 'sms_day_0':
     case 'sms_day_5':
@@ -337,16 +528,28 @@ function channelForStep(step: OutreachStep): 'sms' | 'email' | 'voice' {
       return 'email';
     case 'voice_day_3':
       return 'voice';
+    case 'klaviyo_day_0':
+    case 'klaviyo_day_3':
+    case 'klaviyo_day_7':
+      return 'klaviyo';
+    case 'linkedin_day_2':
+      return 'linkedin';
   }
 }
 
-function scopeForStep(step: OutreachStep): 'outreach_sms' | 'outreach_email' | 'outreach_voice' {
+function scopeForStep(
+  step: OutreachStep,
+): 'outreach_sms' | 'outreach_email' | 'outreach_voice' | 'outreach_klaviyo' | 'outreach_linkedin' {
   const channel = channelForStep(step);
   return `outreach_${channel}` as const;
 }
 
-function recipientFor(prospect: Prospect, channel: 'sms' | 'email' | 'voice'): string | null {
-  if (channel === 'email') return prospect.email;
+function recipientFor(
+  prospect: Prospect,
+  channel: 'sms' | 'email' | 'voice' | 'klaviyo' | 'linkedin',
+): string | null {
+  if (channel === 'email' || channel === 'klaviyo') return prospect.email;
+  if (channel === 'linkedin') return prospect.email ?? prospect.phone; // best-effort identifier
   return prospect.phone;
 }
 
@@ -407,6 +610,14 @@ function renderBody(step: OutreachStep, prospect: Prospect, site: Site): string 
       return `Hi ${firstName}, this is the ${niche} calls thing in ${city}. You free for a quick 60 seconds?`;
     case 'sms_day_5':
       return `Hey ${firstName} — last shot. Free week of ${niche} calls forwarded to ${trackingNumber}. Reply YES or STOP.`;
+    case 'klaviyo_day_0':
+      return `Hi ${firstName}, we have ${niche} call leads coming in for ${city} and want to connect you with them. Free trial — no strings.`;
+    case 'klaviyo_day_3':
+      return `Following up, ${firstName}. The ${niche} calls in ${city} are still available. Reply and we'll set up a free week.`;
+    case 'klaviyo_day_7':
+      return `Last note, ${firstName}. If ${niche} leads in ${city} are useful, reply now — otherwise we'll move on.`;
+    case 'linkedin_day_2':
+      return `Hi ${firstName}, I run a ${niche} site generating calls in ${city}. Would love to connect them to a reliable local pro. Open to a short chat?`;
   }
 }
 
@@ -416,5 +627,27 @@ function renderSubject(step: OutreachStep, _prospect: Prospect, site: Site): str
       return `${site.niche} calls in ${site.city} — free week if you want them`;
     default:
       return `${site.niche} in ${site.city}`;
+  }
+}
+
+/**
+ * Map a Klaviyo step to a Klaviyo metric name. The metric must exist in the
+ * Klaviyo account and have a flow trigger configured for it.
+ * Env override: KLAVIYO_OUTREACH_METRIC_<STEP_UPPER> lets operators set a
+ * custom metric name per step without code changes.
+ */
+function klaviyoMetricForStep(step: OutreachStep): string {
+  const envKey = `KLAVIYO_OUTREACH_METRIC_${step.toUpperCase().replace(/-/g, '_')}`;
+  const envOverride = process.env[envKey];
+  if (envOverride) return envOverride;
+  switch (step) {
+    case 'klaviyo_day_0':
+      return 'Prospect Outreach Day 0';
+    case 'klaviyo_day_3':
+      return 'Prospect Outreach Day 3';
+    case 'klaviyo_day_7':
+      return 'Prospect Outreach Day 7';
+    default:
+      return 'Prospect Outreach';
   }
 }

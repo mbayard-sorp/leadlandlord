@@ -186,6 +186,59 @@ export async function createList(name: string): Promise<{ listId: string }> {
   return { listId: parsed.data.id };
 }
 
+const EventResponseSchema = z.object({
+  data: z.object({ id: z.string(), type: z.literal('event') }),
+});
+
+/**
+ * Track a custom event in Klaviyo, which fires any flow triggered by that
+ * metric name.  Use this to enroll a prospect in a Klaviyo automation sequence.
+ *
+ * Returns the Klaviyo event ID (use as `klaviyo_sequence_id` on the
+ * outreach_events row for idempotency tracking).
+ *
+ * Klaviyo docs: https://developers.klaviyo.com/en/reference/create_event
+ */
+export async function trackEvent(args: {
+  metric: string;
+  profileId?: string;
+  email?: string;
+  phone?: string;
+  properties?: Record<string, unknown>;
+}): Promise<{ eventId: string }> {
+  if (!args.profileId && !args.email && !args.phone) {
+    throw new IntegrationError('klaviyo', 'trackEvent requires profileId, email, or phone');
+  }
+
+  const profileAttrs: Record<string, unknown> = {};
+  if (args.email) profileAttrs.email = args.email;
+  if (args.phone) profileAttrs.phone_number = normalizePhoneE164(args.phone);
+
+  const profileData = args.profileId
+    ? { type: 'profile', id: args.profileId }
+    : { type: 'profile', attributes: profileAttrs };
+
+  const body = {
+    data: {
+      type: 'event',
+      attributes: {
+        properties: args.properties ?? {},
+        metric: {
+          data: { type: 'metric', attributes: { name: args.metric } },
+        },
+        profile: {
+          data: profileData,
+        },
+      },
+    },
+  };
+
+  const json = await klaviyoFetch('/events/', { method: 'POST', body });
+  const parsed = EventResponseSchema.parse(json);
+  log.info({ eventId: parsed.data.id, metric: args.metric }, 'klaviyo event tracked');
+  return { eventId: parsed.data.id };
+}
+
 /** Klaviyo wants E.164. The site forms accept loose user input, so normalize. */
 function normalizePhoneE164(raw: string): string {
   const digits = raw.replace(/[^+\d]/g, '');

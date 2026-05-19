@@ -2,6 +2,8 @@ import type { Scheduler } from './types';
 import { scheduleTenantProspector } from './tenant-prospector';
 import { scheduleOutreachAgent } from './outreach-agent';
 import { scheduleTrialManager } from './trial-manager';
+import { scheduleDailyCallSummary } from './trial-call-summary';
+import { scheduleTrialEndReport } from './trial-end-report';
 import { scheduleBillingDunning } from './billing-dunning';
 import { scheduleChurnRecovery } from './churn-recovery';
 import { scheduleSeoOperator } from './seo-operator';
@@ -26,6 +28,8 @@ export const schedulers: Record<string, Scheduler> = {
   'tenant-prospector': scheduleTenantProspector,
   'outreach-agent': scheduleOutreachAgent,
   'trial-manager': scheduleTrialManager,
+  'trial-call-summary': scheduleDailyCallSummary,
+  'trial-end-report': scheduleTrialEndReport,
   'billing-dunning': scheduleBillingDunning,
   'churn-recovery': scheduleChurnRecovery,
   'seo-operator': scheduleSeoOperator,

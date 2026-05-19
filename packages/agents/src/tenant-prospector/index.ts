@@ -1,10 +1,15 @@
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
-import { getDb, sites, prospects, type NewProspect } from '@leadlandlord/db';
+import { getDb, sites, prospects, agentApprovals, type NewProspect } from '@leadlandlord/db';
 import { searchN, type Place } from '@leadlandlord/integrations/google-places';
 import { findOwnerByDomain } from '@leadlandlord/integrations/apollo';
+import { getPaidAdCount } from '@leadlandlord/integrations/dataforseo';
 import { IntegrationError } from '@leadlandlord/shared/errors';
+import { checkAutoApprove } from '../approval-engine';
+
+/** Score threshold above which a prospect is eligible for trial promotion. */
+const PROMOTE_TO_TRIAL_SCORE_THRESHOLD = 70;
 
 export const TenantProspectorInput = z.object({
   site_id: z.string().uuid(),
@@ -91,6 +96,12 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
     const trackingNumber = normalizePhone(site.trackingNumber);
     const apolloEnabled = !!process.env.APOLLO_API_KEY;
 
+    // Niche-level willingness-to-pay signal: how many advertisers are bidding
+    // on this niche+city right now. One call per run (not per prospect) — the
+    // signal applies to the whole local market. 0 on failure keeps scoring unblocked.
+    const paidAdCount = await getPaidAdCount({ keyword: query }).catch(() => 0);
+    ctx.log.info({ siteId: input.site_id, paidAdCount }, 'tenant-prospector paid-ad signal');
+
     let inserted = 0;
     let skippedDuplicates = 0;
     let skippedNoPhone = 0;
@@ -128,6 +139,7 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
       let contactName: string | null = null;
       let email: string | null = null;
       let apolloMetadata: Record<string, unknown> | undefined;
+      let apolloOrgId: string | null = null;
       if (apolloEnabled && place.websiteUri) {
         const owner = await safeFindOwner(place.websiteUri, ctx);
         if (owner) {
@@ -140,6 +152,7 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
           email = owner.person.email && !owner.person.email.includes('email_not_unlocked')
             ? owner.person.email
             : null;
+          apolloOrgId = owner.org.id ?? null;
           apolloMetadata = {
             apollo_org_id: owner.org.id,
             apollo_person_id: owner.person.id,
@@ -153,6 +166,19 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
         }
       }
 
+      const rating = typeof place.rating === 'number' ? place.rating : null;
+      const reviewCount = typeof place.userRatingCount === 'number' ? place.userRatingCount : null;
+      // Heuristic score 0-100. Weights:
+      //   paid-ad density (0-30): proxy for niche advertiser willingness-to-pay
+      //   review count (0-30): proxy for business activity/longevity
+      //   rating (0-20): quality floor
+      //   apollo enrichment hit (0-20): contact reachability
+      const score =
+        Math.min(paidAdCount, 10) * 3 +
+        Math.min(reviewCount ?? 0, 300) / 10 +
+        Math.max(0, ((rating ?? 0) - 3)) * 10 +
+        (apolloOrgId ? 20 : 0);
+
       toInsert.push({
         siteId: input.site_id,
         businessName: name,
@@ -163,12 +189,109 @@ export class TenantProspector extends BaseAgent<typeof TenantProspectorInput, ty
         source: 'google-places',
         status: 'new',
         metadata: { ...buildMetadata(place), ...(apolloMetadata ?? {}) },
+        apolloOrgId,
+        scoringMetadata: {
+          score: Math.round(Math.min(score, 100)),
+          paid_ad_count: paidAdCount,
+          rating,
+          review_count: reviewCount,
+          has_apollo: !!apolloOrgId,
+          scored_at: new Date().toISOString(),
+        },
       });
     }
 
     if (toInsert.length > 0) {
       const insertedRows = await db.insert(prospects).values(toInsert).returning({ id: prospects.id });
       inserted = insertedRows.length;
+
+      // ── Approval gate: prospect_promote_to_trial ───────────────────────────
+      // For high-score prospects (score >= threshold), queue a
+      // prospect_promote_to_trial approval so the operator can green-light
+      // the handoff to TrialManager. Auto-approve rules apply (>= 70 auto-approves).
+      // Idempotency: skip if a pending approval already exists for the
+      // same (site_id, prospect row index combination keyed by business name).
+      const highScoreCandidates = toInsert
+        .map((p, i) => ({ prospect: p, id: insertedRows[i]?.id }))
+        .filter(({ prospect }) => {
+          const score =
+            prospect.scoringMetadata !== null &&
+            typeof prospect.scoringMetadata === 'object' &&
+            'score' in (prospect.scoringMetadata as Record<string, unknown>)
+              ? Number((prospect.scoringMetadata as Record<string, unknown>).score)
+              : 0;
+          return score >= PROMOTE_TO_TRIAL_SCORE_THRESHOLD;
+        });
+
+      for (const { prospect, id: prospectId } of highScoreCandidates) {
+        if (!prospectId) continue;
+        const score = Number(
+          (prospect.scoringMetadata as Record<string, unknown>).score,
+        );
+
+        // Idempotency check per prospect.
+        const existingPromoteApproval = await db
+          .select({ id: agentApprovals.id })
+          .from(agentApprovals)
+          .where(
+            and(
+              eq(agentApprovals.kind, 'prospect_promote_to_trial'),
+              sql`${agentApprovals.payload}->>'prospect_id' = ${prospectId}`,
+              eq(agentApprovals.status, 'pending'),
+            ),
+          )
+          .limit(1);
+
+        if (existingPromoteApproval.length > 0) {
+          ctx.log.info(
+            { prospectId, approvalId: existingPromoteApproval[0]!.id },
+            'prospect_promote_to_trial: pending approval already exists — skipping',
+          );
+          continue;
+        }
+
+        const promotePayload = {
+          kind: 'prospect_promote_to_trial' as const,
+          prospect_id: prospectId,
+          site_id: input.site_id,
+          business_name: prospect.businessName,
+          prospect_score: score,
+        };
+
+        let promoteApprovalStatus = 'pending';
+        let promoteRuleMatched: string | undefined;
+        try {
+          const autoResult = await checkAutoApprove('prospect_promote_to_trial', promotePayload, db);
+          if (autoResult.matched) {
+            promoteApprovalStatus = 'auto_approved';
+            promoteRuleMatched = autoResult.ruleId;
+          }
+        } catch (err) {
+          ctx.log.warn(
+            { err: err instanceof Error ? err.message : err },
+            'tenant-prospector: auto-approve check for promote_to_trial failed, defaulting to pending',
+          );
+        }
+
+        await db.insert(agentApprovals).values({
+          agentRunId: ctx.runId,
+          kind: 'prospect_promote_to_trial',
+          payload: promotePayload as object,
+          status: promoteApprovalStatus,
+          decidedBy: promoteApprovalStatus === 'auto_approved'
+            ? `auto-rule:${promoteRuleMatched ?? 'unknown'}`
+            : null,
+          decidedAt: promoteApprovalStatus === 'auto_approved' ? new Date() : null,
+          ruleMatched: promoteRuleMatched ?? null,
+          expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        });
+
+        ctx.log.info(
+          { prospectId, score, status: promoteApprovalStatus },
+          'prospect_promote_to_trial approval queued',
+        );
+      }
+      // ── End approval gate ────────────────────────────────────────────────────
     }
 
     ctx.log.info(

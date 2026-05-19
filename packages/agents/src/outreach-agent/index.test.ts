@@ -86,6 +86,8 @@ vi.mock('@leadlandlord/db', () => ({
   prospects: { __table: 'prospects', id: 'id' },
   sites: { __table: 'sites', id: 'id' },
   outreachEvents: { __table: 'outreach_events' },
+  agentApprovals: { __table: 'agent_approvals', id: 'id', kind: 'kind', status: 'status', payload: 'payload' },
+  autoApproveRules: { __table: 'auto_approve_rules', kind: 'kind', active: 'active', id: 'id', approvedCount: 'approved_count' },
   agentRuns: { __table: 'agent_runs' },
   agentBudgets: { __table: 'agent_budgets' },
   agentEvents: { __table: 'agent_events' },
@@ -120,6 +122,12 @@ vi.mock('../compliance-guard/index', () => ({
       return { ok: true, violations: [] };
     }
   },
+}));
+
+// Auto-approve all sends in the existing dry-run tests so the live-send test
+// path (dryRun=false) reaches the dispatch block as before.
+vi.mock('../approval-engine', () => ({
+  checkAutoApprove: vi.fn(async () => ({ matched: true, ruleId: 'test-rule' })),
 }));
 
 interface AgentExecCtx {

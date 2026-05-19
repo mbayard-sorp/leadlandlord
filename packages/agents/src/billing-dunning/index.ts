@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
-import { getDb, invoices, tenants, sites } from '@leadlandlord/db';
+import { eq, and, sql } from 'drizzle-orm';
+import { getDb, invoices, tenants, sites, agentApprovals } from '@leadlandlord/db';
 import { sendSms } from '@leadlandlord/integrations/twilio';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import { startOutboundCall } from '@leadlandlord/integrations/elevenlabs';
 import { BaseAgent, type AgentContext } from '../base';
+import { checkAutoApprove } from '../approval-engine';
 
 /**
  * Billing & Dunning — 7-day payment recovery sequence per the plan:
@@ -83,6 +84,93 @@ export class BillingDunning extends BaseAgent<typeof BillingDunningInput, typeof
     const channel = channelForStep(input.step);
     const updateUrl = buildPaymentUpdateUrl(tenant.stripeCustomerId);
     const amountUsd = Number.parseFloat(invoice.amountUsd);
+
+    // ── Approval gate: dunning_action ────────────────────────────────────────
+    // Map step to semantic action: sms_day_7 is the "cancel" threshold step;
+    // earlier steps are recovery retries.
+    const dunningAction = input.step === 'sms_day_7' ? 'cancel' : 'retry';
+    const dunningApprovalPayload = {
+      kind: 'dunning_action' as const,
+      invoice_id: invoice.id,
+      tenant_id: tenant.id,
+      step: input.step,
+      channel,
+      action: dunningAction,
+      amount_usd: amountUsd,
+    };
+
+    const existingDunningApproval = await db
+      .select({ id: agentApprovals.id })
+      .from(agentApprovals)
+      .where(
+        and(
+          eq(agentApprovals.kind, 'dunning_action'),
+          sql`${agentApprovals.payload}->>'invoice_id' = ${invoice.id}`,
+          sql`${agentApprovals.payload}->>'step' = ${input.step}`,
+          eq(agentApprovals.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    if (existingDunningApproval.length > 0) {
+      ctx.log.info(
+        { invoiceId: invoice.id, step: input.step, approvalId: existingDunningApproval[0]!.id },
+        'dunning_action_blocked: pending approval already exists',
+      );
+      return {
+        invoice_id: invoice.id,
+        step: input.step,
+        channel,
+        status: 'skipped',
+        message: `Awaiting operator approval for dunning action (id: ${existingDunningApproval[0]!.id})`,
+      };
+    }
+
+    let dunningApprovalStatus = 'pending';
+    let dunningRuleMatched: string | undefined;
+    try {
+      const autoResult = await checkAutoApprove('dunning_action', dunningApprovalPayload, db);
+      if (autoResult.matched) {
+        dunningApprovalStatus = 'auto_approved';
+        dunningRuleMatched = autoResult.ruleId;
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'billing-dunning: auto-approve check failed, defaulting to pending',
+      );
+    }
+
+    const [dunningApprovalRow] = await db
+      .insert(agentApprovals)
+      .values({
+        agentRunId: ctx.runId,
+        kind: 'dunning_action',
+        payload: dunningApprovalPayload as object,
+        status: dunningApprovalStatus,
+        decidedBy: dunningApprovalStatus === 'auto_approved'
+          ? `auto-rule:${dunningRuleMatched ?? 'unknown'}`
+          : null,
+        decidedAt: dunningApprovalStatus === 'auto_approved' ? new Date() : null,
+        ruleMatched: dunningRuleMatched ?? null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: agentApprovals.id });
+
+    if (dunningApprovalStatus !== 'auto_approved') {
+      ctx.log.info(
+        { invoiceId: invoice.id, step: input.step, approvalId: dunningApprovalRow!.id },
+        'dunning_action_blocked: awaiting operator approval',
+      );
+      return {
+        invoice_id: invoice.id,
+        step: input.step,
+        channel,
+        status: 'skipped',
+        message: `Awaiting operator approval for dunning action (id: ${dunningApprovalRow!.id})`,
+      };
+    }
+    // ── End approval gate ────────────────────────────────────────────────────
 
     let status: 'sent' | 'skipped' | 'failed' = 'skipped';
     let message: string | undefined;
