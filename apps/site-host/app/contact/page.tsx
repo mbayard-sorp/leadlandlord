@@ -37,7 +37,7 @@ export default async function Contact() {
         { name: 'Contact', url: '/contact/' },
       ]} />
       <h1 className="info-page-h1">{pageH1(bundle.contact)}</h1>
-      <PageBody page={{ ...bundle.contact, mdx: bundle.contact.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
+      <PageBody phone={phone} page={{ ...bundle.contact, mdx: bundle.contact.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
       <div className="site-contact-cta">
         <h2>
           Call now: <a href={telHref(phone)}>{phone}</a>

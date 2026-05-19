@@ -36,7 +36,7 @@ export default async function About() {
         { name: 'About', url: '/about/' },
       ]} />
       <h1 className="info-page-h1">{pageH1(bundle.about)}</h1>
-      <PageBody page={{ ...bundle.about, mdx: bundle.about.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
+      <PageBody phone={phone} page={{ ...bundle.about, mdx: bundle.about.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
     </SiteShell>
   );
 }

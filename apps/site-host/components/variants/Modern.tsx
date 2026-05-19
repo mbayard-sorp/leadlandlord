@@ -295,9 +295,6 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             © {new Date().getFullYear()} {bundle.business_name} · Licensed & insured
           </div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
-          <div className="modern-footer-disclaimer">
-            This site connects callers with a partnered local provider.
-          </div>
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">

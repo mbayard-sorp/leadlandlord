@@ -1,7 +1,10 @@
 import type { Bundle } from '../lib/content';
+import { substitutePhone } from '../lib/phone';
 
 interface Props {
   page: Bundle['home'];
+  /** Tenant tracking phone — replaces `{{phone}}` tokens in `page.mdx`. */
+  phone?: string;
 }
 
 /**
@@ -10,8 +13,9 @@ interface Props {
  * Phase 2 will swap to a real MDX compiler with custom components
  * (`<TrackingNumber />`, `<LeadForm />`, `<CallToAction />`).
  */
-export function PageBody({ page }: Props) {
-  const html = renderMarkdown(page.mdx);
+export function PageBody({ page, phone }: Props) {
+  const mdx = phone ? substitutePhone(page.mdx, phone) : page.mdx;
+  const html = renderMarkdown(mdx);
   return (
     <article>
       <div dangerouslySetInnerHTML={{ __html: html }} />
