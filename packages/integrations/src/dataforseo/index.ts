@@ -19,8 +19,6 @@ export interface KeywordMetrics {
   cpc: number;
   /** 0-1 normalized; Google Ads "competition index" is 0-100 originally. */
   competition: number;
-  /** 0-100 keyword difficulty from DataForSEO Labs. May be null when DFS has no data. */
-  kd: number;
 }
 
 interface SearchVolumeRow {
@@ -34,17 +32,13 @@ interface SearchVolumeRow {
   competition_index: number | null;
 }
 
-interface BulkKdRow {
-  keyword: string;
-  keyword_difficulty: number | null;
-}
-
 /**
- * Fetch search volume + CPC + competition + keyword difficulty for a list of
- * keywords, scoped to a location string (e.g. "Tucson, Arizona, United States").
+ * Fetch search volume + CPC + competition for a list of keywords, scoped to
+ * a location string (e.g. "Tucson, Arizona, United States").
  *
- * Two API calls under the hood (one for volume, one for KD) — DataForSEO
- * splits these across endpoints. Results are merged on keyword.
+ * Single Google Ads API call. Keyword difficulty used to live here too but
+ * was removed in favor of SERP composition (see getSerpComposition) which
+ * gave sharper, more actionable signal at the same cost.
  */
 export async function getLocalKeywordMetrics(args: {
   keywords: string[];
@@ -63,7 +57,6 @@ export async function getLocalKeywordMetrics(args: {
       search_volume: 200 + i * 10,
       cpc: 2.0,
       competition: 0.4,
-      kd: 25 + (i % 20),
     }));
   }
 
@@ -77,8 +70,8 @@ export async function getLocalKeywordMetrics(args: {
     // Search volume / CPC drift over weeks; 30 days is the sweet spot before
     // the underlying ranking signals shift enough to matter for site planning.
     ttlDays: 30,
-    // ~$0.0006 search_volume + ~$0.001 KD per keyword. Stamp the per-call total.
-    costUsd: keywords.length * 0.0016,
+    // ~$0.0006 search_volume per keyword. Stamp the per-call total.
+    costUsd: keywords.length * 0.0006,
     forceRefresh,
     fetcher: () => fetchLocalKeywordMetricsFromApi(keywords, location, language),
   });
@@ -114,39 +107,13 @@ async function fetchLocalKeywordMetricsFromApi(
     }
   }
 
-  // Keyword difficulty (DataForSEO Labs). The bulk endpoint rejects
-  // location_name and returns global difficulty when omitted — that's fine
-  // for niche scoring, KD is location-agnostic in practice.
-  let kdMap = new Map<string, number>();
-  try {
-    const kdRows = await dfsPost<{ items: BulkKdRow[] | null }>(
-      '/dataforseo_labs/google/bulk_keyword_difficulty/live',
-      [{ keywords, language_code: language, location_code: 2840 /* USA */ }],
-    );
-    for (const entry of kdRows) {
-      for (const it of entry.items ?? []) {
-        if (it.keyword && it.keyword_difficulty !== null) {
-          kdMap.set(it.keyword.toLowerCase(), it.keyword_difficulty);
-        }
-      }
-    }
-  } catch (err) {
-    // KD is nice-to-have for ranking; if DFS Labs rejects, default to 0 and
-    // let competition + volume drive the score. Logged so we can debug later.
-    // eslint-disable-next-line no-console
-    console.warn('[dataforseo] KD lookup failed, scoring without KD:', err instanceof Error ? err.message : err);
-    kdMap = new Map();
-  }
-
   return keywords.map((kw) => {
     const v = volumeMap.get(kw.toLowerCase());
-    const kd = kdMap.get(kw.toLowerCase()) ?? 0;
     return {
       keyword: kw,
       search_volume: v?.search_volume ?? 0,
       cpc: v?.cpc ?? 0,
       competition: normalizeCompetition(v),
-      kd,
     };
   });
 }
@@ -230,6 +197,178 @@ export async function getSerpResults(args: {
       domain: it.domain ?? new URL(it.url).host,
       description: it.description,
     }));
+}
+
+// ---------- SERP composition (organic + local pack) -----------------------
+
+/**
+ * Known aggregator/directory domains. Their presence in the top 10 organic
+ * results means the SERP is structurally hostile to a brand-new local site —
+ * a tenant page won't outrank a 20-year-old Yelp listing on its own merits.
+ *
+ * Match is by suffix on the domain (e.g. `yelp.co.uk` and `yelp.com` both
+ * match `yelp.com`). Keep the list narrow to "would-displace-a-tenant-site"
+ * — not every brand-name site (Wikipedia is debatable, but it almost never
+ * ranks for "<service> <city>" queries so we leave it out).
+ */
+const AGGREGATOR_DOMAINS = [
+  'yelp.com',
+  'angi.com',
+  'angieslist.com',
+  'homeadvisor.com',
+  'thumbtack.com',
+  'bbb.org',
+  'houzz.com',
+  'porch.com',
+  'bark.com',
+  'networx.com',
+  'trustpilot.com',
+  'manta.com',
+  'yellowpages.com',
+  'superpages.com',
+  'foursquare.com',
+  'mapquest.com',
+  'tripadvisor.com',
+  'nextdoor.com',
+];
+
+function isAggregator(domain: string): boolean {
+  const d = domain.toLowerCase().replace(/^www\./, '');
+  return AGGREGATOR_DOMAINS.some((agg) => d === agg || d.endsWith(`.${agg}`));
+}
+
+export interface SerpComposition {
+  /** Fraction of top-10 organic results owned by aggregator domains (0..1). */
+  aggregator_share: number;
+  /** Top-10 organic result count actually returned (usually 10, can be less). */
+  organic_count: number;
+  /** Google rendered a local 3-pack (or N-pack) for this query. */
+  has_local_pack: boolean;
+  /** Number of items in the local pack when present. */
+  local_pack_count: number;
+  /** Domains of the top-10 organic results, for debugging/inspection. */
+  top_domains: string[];
+  /**
+   * Derived 0-100 difficulty score replacing the old DataForSEO KD value.
+   * Higher = harder. Stored in the `niches.kd` column so existing UI and
+   * filters keep working without a schema migration.
+   *
+   * Formula: aggregator_share weighted 70 + local_pack absence weighted 30.
+   * A SERP with 80% aggregators and no local pack scores ~86; a SERP with
+   * 20% aggregators and a local pack scores ~14.
+   */
+  difficulty: number;
+}
+
+interface SerpCompositionItemRaw extends SerpItemRaw {
+  items?: Array<{ type?: string; domain?: string; url?: string }> | null;
+}
+
+/**
+ * Fetch SERP composition for a keyword in a location. Single call to the
+ * organic SERP endpoint — returns aggregator share, local pack presence,
+ * and a derived 0-100 difficulty score that replaces the old DataForSEO KD.
+ *
+ * Cost: ~$0.075/call. Replaces the equivalent KD lookup at the same price
+ * with much sharper, query-specific signal.
+ *
+ * Returns a "no local SERP found" composition on any failure (difficulty=50)
+ * so the caller's scoring path stays unblocked.
+ */
+export async function getSerpComposition(args: {
+  keyword: string;
+  location: string;
+  language?: string;
+  forceRefresh?: boolean;
+}): Promise<SerpComposition> {
+  const { keyword, location, language = 'en', forceRefresh } = args;
+  if (process.env.MOCK_AI === 'true') {
+    return {
+      aggregator_share: 0.3,
+      organic_count: 10,
+      has_local_pack: true,
+      local_pack_count: 3,
+      top_domains: ['mock-local-1.com', 'mock-local-2.com', 'yelp.com'],
+      difficulty: 21,
+    };
+  }
+  const cacheKey = stableKey([language, location, keyword.toLowerCase()]);
+  const { value } = await withDataForSeoCache<SerpComposition>({
+    endpoint: 'serp-composition',
+    key: cacheKey,
+    ttlDays: 14,
+    costUsd: 0.075,
+    forceRefresh,
+    fetcher: () => fetchSerpCompositionFromApi(keyword, location, language),
+  });
+  return value;
+}
+
+async function fetchSerpCompositionFromApi(
+  keyword: string,
+  location: string,
+  language: string,
+): Promise<SerpComposition> {
+  try {
+    const rows = await dfsPost<{ items: SerpCompositionItemRaw[] | null }>(
+      '/serp/google/organic/live/regular',
+      [
+        {
+          keyword,
+          location_name: location,
+          language_code: language,
+          depth: 10,
+          device: 'desktop',
+        },
+      ],
+    );
+    const items = rows[0]?.items ?? [];
+    const organic = items.filter((it) => it.type === 'organic');
+    const topDomains = organic
+      .map((it) => (it.domain ?? (it.url ? safeDomain(it.url) : '')).toLowerCase())
+      .filter((d): d is string => Boolean(d))
+      .slice(0, 10);
+    const aggregatorCount = topDomains.filter(isAggregator).length;
+    const aggregator_share = topDomains.length ? aggregatorCount / topDomains.length : 0;
+
+    const localPackItem = items.find((it) => it.type === 'local_pack');
+    const localPackChildren = localPackItem?.items ?? [];
+    const has_local_pack = Boolean(localPackItem);
+    const local_pack_count = localPackChildren.length;
+
+    const difficulty = Math.round(aggregator_share * 70 + (has_local_pack ? 0 : 30));
+
+    return {
+      aggregator_share,
+      organic_count: organic.length,
+      has_local_pack,
+      local_pack_count,
+      top_domains: topDomains,
+      difficulty,
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[dataforseo] SERP composition lookup failed, returning neutral:',
+      err instanceof Error ? err.message : err,
+    );
+    return {
+      aggregator_share: 0,
+      organic_count: 0,
+      has_local_pack: false,
+      local_pack_count: 0,
+      top_domains: [],
+      difficulty: 50,
+    };
+  }
+}
+
+function safeDomain(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '';
+  }
 }
 
 // ---------- Paid ad count (Google Ads SERP) --------------------------------

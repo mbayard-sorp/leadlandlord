@@ -16,6 +16,9 @@ const validCandidate = {
   est_avg_job_value_usd: 800,
   est_close_rate: 0.35,
   rationale: 'High demand in desert climates with many mature trees and minimal chain competition.',
+  confidence_score: 8,
+  est_monthly_searches_low: 120,
+  est_monthly_searches_high: 300,
 };
 
 describe('ClaudeCandidateSchema', () => {

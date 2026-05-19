@@ -76,7 +76,7 @@ function normalizeDomain(input: string): string | null {
   const stripped = trimmed
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
-    .split('/')[0];
+    .split('/')[0] ?? '';
   if (!stripped) return null;
   if (!/^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(stripped)) return null;
   return stripped;

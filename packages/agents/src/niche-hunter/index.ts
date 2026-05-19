@@ -6,6 +6,7 @@ import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/
 import {
   getLocalKeywordMetrics,
   getPaidAdCount,
+  getSerpComposition,
   type KeywordMetrics,
 } from '@leadlandlord/integrations/dataforseo';
 import { ScoringConfig, DEFAULT_WEIGHTS, type ScoringWeights } from './scoring-config';
@@ -55,6 +56,20 @@ export const ClaudeCandidateSchema = z.object({
   est_avg_job_value_usd: z.number().nonnegative().max(100_000),
   est_close_rate: z.number().min(0).max(1),
   rationale: z.string().min(1).max(400),
+  /**
+   * Claude's own 1-10 prior on the niche×city's likely SEO opportunity (10 =
+   * very promising, 1 = unlikely). Used to rank the brainstorm output so we
+   * only spend DataForSEO budget on the top N. Heuristic — not authoritative.
+   */
+  confidence_score: z.number().min(1).max(10),
+  /**
+   * Claude-estimated monthly search volume range for the primary local query
+   * ("<niche> <city>"). For hyperlocal long-tail, Google Ads buckets are
+   * unreliable below ~500/mo — we treat Claude's range as the primary demand
+   * signal when DataForSEO returns < 100, and only trust DFS volume above it.
+   */
+  est_monthly_searches_low: z.number().int().nonnegative().max(100_000),
+  est_monthly_searches_high: z.number().int().nonnegative().max(100_000),
 });
 
 export const NicheHunterInput = z.object({
@@ -72,6 +87,32 @@ export const NicheHunterInput = z.object({
     .optional(),
   /** How many candidates Claude brainstorms before DataForSEO scoring. */
   brainstorm_count: z.number().int().positive().max(100).default(50),
+  /**
+   * Max number of candidates that get sent through DataForSEO scoring. We
+   * brainstorm wide (`brainstorm_count`) then have Claude self-rank, and
+   * only send the top N here. Each scored candidate costs ~$0.075 × 3 calls
+   * = ~$0.225, so this is the primary spend lever. Default 8.
+   */
+  score_top_n: z.number().int().positive().max(50).default(8),
+  /**
+   * Size of the pre-ranked / sampled city pool sent to Claude as the
+   * brainstorm whitelist. Higher = more variety + larger prompt. Default 150.
+   */
+  city_pool_size: z.number().int().positive().max(500).default(150),
+  /**
+   * Max cities per state in the pool — diversity constraint so a single
+   * state can't dominate the brainstorm. Default 12.
+   */
+  per_state_cap: z.number().int().positive().max(50).default(12),
+  /**
+   * If set, bypass the default Census-based small-city ranker (which targets
+   * 20k–110k population) and instead random-sample cities whose population
+   * falls in [city_population_min, city_population_max]. Use this to chase
+   * larger metros for higher search volumes — at the cost of more aggregator
+   * competition on the SERP.
+   */
+  city_population_min: z.number().int().nonnegative().optional(),
+  city_population_max: z.number().int().nonnegative().optional(),
   /** Scoring weights + thresholds. Defaults to DEFAULT_WEIGHTS. */
   scoring_config: ScoringConfig.optional(),
 });
@@ -134,8 +175,23 @@ const BRAINSTORM_SCHEMA = {
             type: 'string',
             description: 'One-sentence explanation of why this combo is worth scoring.',
           },
+          confidence_score: {
+            type: 'number',
+            description:
+              'Integer 1-10 reflecting your confidence that this niche×city has a real, winnable local SEO opportunity. 10 = strong demand, weak national-brand SERPs, healthy per-job revenue. 1 = speculative or likely crowded. Be honest and use the full range — we only score the top-confidence picks against real SEO data, so over-rating wastes budget.',
+          },
+          est_monthly_searches_low: {
+            type: 'integer',
+            description:
+              'Your low-end estimate of monthly Google searches for "<niche> <city>" and close variants (e.g. "<niche> near <city>", "<niche> in <city>"). Reason about: city population × homeowner share × purchase frequency for this service category, then halve for the local intent fraction. For a 50k-person city and a common home service, low is usually 30-80.',
+          },
+          est_monthly_searches_high: {
+            type: 'integer',
+            description:
+              'Your high-end estimate for the same set of queries. Range should reflect honest uncertainty — typically 2-4× the low. We use the midpoint as the demand signal when real SEO data is unreliable for the term.',
+          },
         },
-        required: ['niche', 'city', 'state', 'category', 'est_avg_job_value_usd', 'est_close_rate', 'rationale'],
+        required: ['niche', 'city', 'state', 'category', 'est_avg_job_value_usd', 'est_close_rate', 'rationale', 'confidence_score', 'est_monthly_searches_low', 'est_monthly_searches_high'],
       },
     },
   },
@@ -159,6 +215,32 @@ Avoid:
 - Niches requiring licensing the platform can't verify (medical, legal)
 - Niches with unstable demand or one-off purchases
 
+CONFIDENCE SCORE:
+For each candidate, set \`confidence_score\` (integer 1-10) reflecting how strongly you believe this niche×city is a real, winnable local SEO opportunity. We only spend real keyword-data API budget on the top-confidence picks, so calibrate honestly:
+- 9-10: Strong demand year-round, weak national-brand competition, $300+ avg job value, clear small-operator market.
+- 7-8: Solid combo with one mild concern (mid demand, some competition, or smaller job value).
+- 5-6: Plausible but speculative — could go either way without real data.
+- 1-4: Likely crowded, niche too small, low margin, or seasonality risk.
+Use the full range — uniform 8s waste budget.
+
+MONTHLY SEARCH VOLUME ESTIMATE:
+Set \`est_monthly_searches_low\` and \`est_monthly_searches_high\` for the primary local query family ("<niche> <city>", "<niche> near <city>", "<niche> in <city>" combined).
+
+Why we ask: Google Ads Keyword Planner buckets aggressively at low volumes — it reports "tree removal lee's summit" as 0 even when real demand is 80/mo. For hyperlocal long-tail under ~500/mo, your reasoning is more accurate than the API. We trust your range when the API returns < 100.
+
+How to estimate, briefly:
+1. Start from city population × homeowner share × annual purchase rate for this category. E.g. for tree removal in a 90k city: ~90k × 0.65 homeowners × ~8% annual incidence = ~4,700 yearly jobs.
+2. Annual jobs → monthly demand × local-intent search fraction (people who search for it vs. ask a friend / use an aggregator). Typically 10-30%.
+3. So that example: 4700 / 12 × 0.20 ≈ 80/mo. Range 50–150 is honest.
+
+Rules of thumb for 50–100k cities:
+- Common home services (HVAC, roofing, plumbing, tree, fence): 50–300/mo
+- Mid-frequency (gutter, painting, fencing): 30–150/mo
+- Lower-frequency or niche (foundation repair, mold remediation, swamp cooler): 10–80/mo
+Bigger cities scale roughly linearly with population.
+
+Range should reflect honest uncertainty — typically 2-4× the low. Avoid suspiciously round-zero estimates; if a service category exists at all, the low is usually 10+.
+
 Diversify across niches AND across different cities from the provided list — don't cluster all picks in one city. Mix categories.`;
 
 interface ClaudeCandidate {
@@ -169,6 +251,9 @@ interface ClaudeCandidate {
   est_avg_job_value_usd: number;
   est_close_rate: number;
   rationale: string;
+  confidence_score: number;
+  est_monthly_searches_low: number;
+  est_monthly_searches_high: number;
 }
 
 interface ScoredCandidate extends ClaudeCandidate {
@@ -198,15 +283,33 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const candidates = await this.brainstorm(input, ctx);
     ctx.log.info({ count: candidates.length }, 'brainstormed candidates');
 
-    // 2. Score each candidate with DataForSEO. Sequential because batching
-    //    across locations isn't supported on a single endpoint call.
+    // Funnel by Claude's self-reported confidence so we only spend real
+    // DataForSEO budget on the top picks. Each scored candidate is ~$0.225
+    // (3 endpoint calls × ~$0.075), so this is the primary spend lever.
+    const ranked = [...candidates].sort((a, b) => b.confidence_score - a.confidence_score);
+    const toScore = ranked.slice(0, input.score_top_n);
+    if (candidates.length > toScore.length) {
+      ctx.log.info(
+        {
+          brainstormed: candidates.length,
+          scoring: toScore.length,
+          confidence_range: toScore.length
+            ? [toScore[toScore.length - 1]!.confidence_score, toScore[0]!.confidence_score]
+            : null,
+        },
+        'niche-hunter: funneled brainstorm by confidence_score before DataForSEO',
+      );
+    }
+
+    // 2. Score each top-confidence candidate with DataForSEO. Sequential
+    //    because batching across locations isn't supported on a single call.
     const scored: ScoredCandidate[] = [];
-    for (let i = 0; i < candidates.length; i++) {
-      const c = candidates[i]!;
+    for (let i = 0; i < toScore.length; i++) {
+      const c = toScore[i]!;
       ctx.progress({
         step: 2,
         total: 4,
-        label: `scoring ${i + 1}/${candidates.length}: ${c.niche} — ${c.city}, ${c.state}`,
+        label: `scoring ${i + 1}/${toScore.length}: ${c.niche} — ${c.city}, ${c.state}`,
       });
       try {
         const metrics = await this.scoreCandidate(c, ctx, scoringConfig.weights);
@@ -220,17 +323,50 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     }
     ctx.log.info({ scored: scored.length }, 'scored candidates');
 
-    // 3. Apply thresholds + take top N.
+    // 3. Apply thresholds + take top N. Top-level input fields are the
+    //    operator-facing knobs from the dashboard form; scoring_config is an
+    //    advanced override path that's rarely set. Prefer input when present,
+    //    fall back to scoring_config's defaults otherwise.
     ctx.progress({ step: 3, total: 4, label: `filtering ${scored.length} scored candidates` });
+    const minVol = input.min_search_volume ?? scoringConfig.min_search_volume;
+    const maxKd = input.max_kd ?? scoringConfig.max_kd;
+    const minJob = input.min_avg_job_value_usd ?? scoringConfig.min_avg_job_value_usd;
     const filtered = scored
       .filter(
         (s) =>
-          s.search_volume >= scoringConfig.min_search_volume &&
-          s.kd <= scoringConfig.max_kd &&
-          s.est_avg_job_value_usd >= scoringConfig.min_avg_job_value_usd,
+          s.search_volume >= minVol &&
+          s.kd <= maxKd &&
+          s.est_avg_job_value_usd >= minJob,
       )
       .sort((a, b) => b.score - a.score)
       .slice(0, input.target_count);
+    if (scored.length > filtered.length) {
+      ctx.log.info(
+        {
+          scored: scored.length,
+          passed: filtered.length,
+          thresholds: { min_search_volume: minVol, max_kd: maxKd, min_avg_job_value_usd: minJob },
+          rejected: scored
+            .filter(
+              (s) =>
+                !(s.search_volume >= minVol && s.kd <= maxKd && s.est_avg_job_value_usd >= minJob),
+            )
+            .map((s) => ({
+              niche: s.niche,
+              city: s.city,
+              search_volume: s.search_volume,
+              kd: s.kd,
+              est_avg_job_value_usd: s.est_avg_job_value_usd,
+              fail: [
+                s.search_volume < minVol ? 'volume' : null,
+                s.kd > maxKd ? 'kd' : null,
+                s.est_avg_job_value_usd < minJob ? 'job_value' : null,
+              ].filter(Boolean),
+            })),
+        },
+        'niche-hunter: candidates rejected by thresholds',
+      );
+    }
 
     // 4. Persist niches + dual-write agentApprovals.
     ctx.progress({ step: 4, total: 4, label: `saving ${filtered.length} niches to queue` });
@@ -259,40 +395,58 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const client = getAnthropicClient();
     const model = process.env.NICHE_HUNTER_MODEL ?? 'claude-sonnet-4-6';
 
-    // Build a ranked city pool using Census-based scoring (ADR 0008).
-    // Note: geo_filter.population_min / population_max are now overridden by
-    // the ADR's hard filters (15k–110k) — they remain in the public schema
-    // for backward compatibility but do not affect the ranked pool.
-    // UsCity is a subset of RankedCity, so the union covers both the ranked path
-    // and the random-sample fallback path below.
+    // Build the city pool. Two paths:
+    //   - Default: Census-based ranker (ADR 0008), targets 20k–110k pop.
+    //   - Override: explicit population bounds bypass the ranker and random-
+    //     sample from listCities. Use this to chase larger metros for higher
+    //     search volumes at the cost of more aggregator SERP competition.
     let sampledCities: import('@leadlandlord/us-cities/loader').UsCity[] = [];
-    const rankedCities = rankCities({
-      limit: 150,
-      perStateCap: 12,
-      states: input.geo_filter?.states,
-    });
-    sampledCities = rankedCities;
+    const usePopulationOverride =
+      typeof input.city_population_min === 'number' ||
+      typeof input.city_population_max === 'number';
 
-    if (rankedCities.length > 0) {
-      const top3 = rankedCities.slice(0, 3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
-      const bot3 = rankedCities.slice(-3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+    if (usePopulationOverride) {
+      sampledCities = listCities({
+        populationMin: input.city_population_min ?? 10_000,
+        populationMax: input.city_population_max ?? 999_999_999,
+        states: input.geo_filter?.states,
+        sampleN: input.city_pool_size,
+      });
       ctx.log.info(
-        { count: rankedCities.length, top3, bottom3: bot3 },
-        'niche-hunter: ranked city pool',
+        {
+          count: sampledCities.length,
+          population_min: input.city_population_min,
+          population_max: input.city_population_max,
+        },
+        'niche-hunter: population-override city pool',
       );
     } else {
-      // Fallback: Census enrichment not yet run or all cities filtered.
-      // Fall back to random sampling so the agent still works.
-      ctx.log.warn(
-        'niche-hunter: rankCities returned 0 cities — falling back to random listCities sample',
-      );
-      sampledCities = listCities({
-        populationMin: input.geo_filter?.population_min ?? 10_000,
-        populationMax: input.geo_filter?.population_max ?? 100_000,
+      const rankedCities = rankCities({
+        limit: input.city_pool_size,
+        perStateCap: input.per_state_cap,
         states: input.geo_filter?.states,
-        sampleN: 150,
       });
-      ctx.log.info({ count: sampledCities.length }, 'niche-hunter: fallback sampled city pool');
+      sampledCities = rankedCities;
+      if (rankedCities.length > 0) {
+        const top3 = rankedCities.slice(0, 3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+        const bot3 = rankedCities.slice(-3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+        ctx.log.info(
+          { count: rankedCities.length, top3, bottom3: bot3 },
+          'niche-hunter: ranked city pool',
+        );
+      } else {
+        // Census enrichment not yet run or all cities filtered. Fall back.
+        ctx.log.warn(
+          'niche-hunter: rankCities returned 0 cities — falling back to random listCities sample',
+        );
+        sampledCities = listCities({
+          populationMin: 10_000,
+          populationMax: 100_000,
+          states: input.geo_filter?.states,
+          sampleN: input.city_pool_size,
+        });
+        ctx.log.info({ count: sampledCities.length }, 'niche-hunter: fallback sampled city pool');
+      }
     }
 
     // Build a lookup set for post-brainstorm guard (city|state).
@@ -412,23 +566,64 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     const stateName = US_STATE_NAMES[c.state.toUpperCase()] ?? c.state;
     const location = `${c.city},${stateName},United States`;
     const seeds = [c.niche, `${c.niche} ${c.city.toLowerCase()}`, `${c.niche} near me`];
-    const metrics = await getLocalKeywordMetrics({ keywords: seeds, location });
-    const aggregated = aggregateMetrics(metrics);
+    const primaryKeyword = `${c.niche} ${c.city.toLowerCase()}`;
 
-    // Paid ad count — fire-and-forget on failure (defaults to 0).
-    const ad_count = await getPaidAdCount({
-      keyword: `${c.niche} ${c.city.toLowerCase()}`,
-    });
+    const [metrics, serp, ad_count] = await Promise.all([
+      getLocalKeywordMetrics({ keywords: seeds, location }),
+      getSerpComposition({ keyword: primaryKeyword, location }),
+      // Paid ad count — fire-and-forget on failure (defaults to 0).
+      getPaidAdCount({ keyword: primaryKeyword }),
+    ]);
+    const aggregated = aggregateMetrics(metrics);
+    // SERP composition's derived difficulty replaces the old DataForSEO KD.
+    // Stored in the same `kd` slot so DB, filters, and UI keep working.
+    const kd = serp.difficulty;
+
+    // Resolve the demand signal: Google Ads volume is unreliable below ~100
+    // for hyperlocal long-tail (heavy bucketing). When DFS comes in low we
+    // fall back to Claude's brainstorm-time estimate range midpoint, which
+    // is typically closer to truth for these terms.
+    const dfsVolume = aggregated.search_volume;
+    const claudeMid = Math.round((c.est_monthly_searches_low + c.est_monthly_searches_high) / 2);
+    const DFS_TRUST_FLOOR = 100;
+    const resolvedVolume = dfsVolume >= DFS_TRUST_FLOOR ? dfsVolume : claudeMid;
+    const volumeSource: 'dataforseo' | 'claude_estimate' =
+      dfsVolume >= DFS_TRUST_FLOOR ? 'dataforseo' : 'claude_estimate';
 
     const score = computeScore({
       ...aggregated,
+      search_volume: resolvedVolume,
+      kd,
       est_avg_job_value_usd: c.est_avg_job_value_usd,
       est_close_rate: c.est_close_rate,
       ad_count,
       weights,
     });
-    ctx.log.debug({ niche: c.niche, city: c.city, score, ad_count, ...aggregated }, 'scored');
-    return { ...aggregated, ad_count, score };
+    ctx.log.debug(
+      {
+        niche: c.niche,
+        city: c.city,
+        score,
+        ad_count,
+        kd,
+        dfs_volume: dfsVolume,
+        claude_volume_low: c.est_monthly_searches_low,
+        claude_volume_high: c.est_monthly_searches_high,
+        resolved_volume: resolvedVolume,
+        volume_source: volumeSource,
+        aggregator_share: serp.aggregator_share,
+        has_local_pack: serp.has_local_pack,
+        top_domains: serp.top_domains,
+      },
+      'scored',
+    );
+    return {
+      ...aggregated,
+      search_volume: resolvedVolume,
+      kd,
+      ad_count,
+      score,
+    };
   }
 
   private async persistNiches(scored: ScoredCandidate[], ctx: AgentContext): Promise<number> {
@@ -505,18 +700,16 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
 
 function aggregateMetrics(metrics: KeywordMetrics[]): {
   search_volume: number;
-  kd: number;
   competition: number;
   cpc: number;
 } {
-  if (metrics.length === 0) return { search_volume: 0, kd: 0, competition: 0, cpc: 0 };
+  if (metrics.length === 0) return { search_volume: 0, competition: 0, cpc: 0 };
   // Use sum for volume (total addressable demand across phrasings) and
-  // average for KD/competition/CPC (representative per-keyword difficulty).
+  // average for competition/CPC (representative per-keyword signal).
   const search_volume = metrics.reduce((s, m) => s + m.search_volume, 0);
-  const kd = metrics.reduce((s, m) => s + m.kd, 0) / metrics.length;
   const competition = metrics.reduce((s, m) => s + m.competition, 0) / metrics.length;
   const cpc = metrics.reduce((s, m) => s + m.cpc, 0) / metrics.length;
-  return { search_volume, kd, competition, cpc };
+  return { search_volume, competition, cpc };
 }
 
 interface ScoreInputs {
