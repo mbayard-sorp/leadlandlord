@@ -5,6 +5,8 @@ import { RunForm } from './RunForm';
 import { DecisionButtons } from './DecisionButtons';
 import { StatusBar } from './StatusBar';
 import { BuildLink } from './BuildLink';
+import { ValidateButton } from './ValidateButton';
+import { RawResponseDrawer } from './RawResponseDrawer';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,24 +104,69 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
+type NicheRow = {
+  id: string;
+  niche: string;
+  city: string;
+  state: string;
+  searchVolume: number | null;
+  kd: number | null;
+  estAvgJobValueUsd: string | null;
+  estCloseRate: string | null;
+  score: string | null;
+  rationale: string | null;
+  volumeSource: string;
+  estSearchVolume: number | null;
+  dfsSearchVolume: number | null;
+  dfsKd: number | null;
+  validatedAt: Date | null;
+  dfsRaw: unknown;
+  decision: string;
+};
+
+function VolCell({ row }: { row: NicheRow }) {
+  const isValidated = row.volumeSource === 'dataforseo';
+  const estimate = row.estSearchVolume ?? row.searchVolume;
+
+  if (isValidated && row.dfsSearchVolume !== null) {
+    return (
+      <span className="text-xs">
+        {estimate !== null ? <span className="text-slate-400">{estimate} est</span> : null}
+        {estimate !== null ? <span className="text-slate-500"> → </span> : null}
+        <span className="text-emerald-400 font-medium">{row.dfsSearchVolume} DFS</span>
+      </span>
+    );
+  }
+
+  if (estimate !== null) {
+    return <span className="text-xs text-slate-400">{estimate} est</span>;
+  }
+
+  return <span className="text-slate-500">—</span>;
+}
+
+function SourceBadge({ volumeSource }: { volumeSource: string }) {
+  if (volumeSource === 'dataforseo') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-900/50 px-2 py-0.5 text-xs font-medium text-emerald-300 border border-emerald-800">
+        validated
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400 border border-slate-700">
+      estimate
+    </span>
+  );
+}
+
 function Table({
   rows,
   showButtons = false,
   showBuildLink = false,
   siteByNiche,
 }: {
-  rows: Array<{
-    id: string;
-    niche: string;
-    city: string;
-    state: string;
-    searchVolume: number | null;
-    kd: number | null;
-    estAvgJobValueUsd: string | null;
-    estCloseRate: string | null;
-    score: string | null;
-    rationale: string | null;
-  }>;
+  rows: NicheRow[];
   showButtons?: boolean;
   showBuildLink?: boolean;
   siteByNiche?: Map<string, string>;
@@ -133,10 +180,12 @@ function Table({
             <Th className="hidden md:table-cell">City</Th>
             <Th>Score</Th>
             <Th className="hidden md:table-cell">Vol</Th>
+            <Th className="hidden md:table-cell">Source</Th>
             <Th className="hidden md:table-cell">KD</Th>
             <Th className="hidden lg:table-cell">Job $</Th>
             <Th className="hidden lg:table-cell">Close</Th>
             <Th className="hidden lg:table-cell">Rationale</Th>
+            <Th>Validate</Th>
             {showButtons && <Th>Decision</Th>}
             {showBuildLink && <Th>Build</Th>}
           </tr>
@@ -150,14 +199,32 @@ function Table({
               </Td>
               <Td className="hidden md:table-cell">{r.city}, {r.state}</Td>
               <Td className="font-semibold">{r.score ?? '—'}</Td>
-              <Td className="hidden md:table-cell">{r.searchVolume ?? '—'}</Td>
-              <Td className="hidden md:table-cell">{r.kd ?? '—'}</Td>
+              <Td className="hidden md:table-cell">
+                <VolCell row={r} />
+              </Td>
+              <Td className="hidden md:table-cell">
+                <SourceBadge volumeSource={r.volumeSource} />
+              </Td>
+              <Td className="hidden md:table-cell">
+                {r.dfsKd !== null ? (
+                  <span>{r.dfsKd} <span className="text-slate-500 text-xs">DFS</span></span>
+                ) : (r.kd ?? '—')}
+              </Td>
               <Td className="hidden lg:table-cell">${r.estAvgJobValueUsd ?? '—'}</Td>
               <Td className="hidden lg:table-cell">{r.estCloseRate ? `${(Number(r.estCloseRate) * 100).toFixed(0)}%` : '—'}</Td>
-              <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell">{r.rationale}</Td>
+              <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell">
+                {r.rationale}
+                {r.dfsRaw != null && <RawResponseDrawer dfsRaw={r.dfsRaw} />}
+              </Td>
+              <Td>
+                <ValidateButton
+                  nicheId={r.id}
+                  alreadyValidated={r.volumeSource === 'dataforseo'}
+                />
+              </Td>
               {showButtons && (
                 <Td>
-                  <DecisionButtons id={r.id} />
+                  <DecisionButtons id={r.id} volumeSource={r.volumeSource} />
                 </Td>
               )}
               {showBuildLink && (
@@ -173,7 +240,7 @@ function Table({
   );
 }
 
-function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function Th({ children, className = '' }: { children?: React.ReactNode; className?: string }) {
   return <th className={`px-3 py-2 font-medium ${className}`}>{children}</th>;
 }
 

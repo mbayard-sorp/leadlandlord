@@ -161,6 +161,16 @@ export const niches = pgTable(
     score: numeric('score', { precision: 6, scale: 2 }),
     decision: niceDecisionEnum('decision').notNull().default('pending'),
     rationale: text('rationale'),
+    // 'claude_estimate' until an operator validates the row, then 'dataforseo'.
+    volumeSource: text('volume_source').notNull().default('claude_estimate'),
+    // Claude's estimate midpoint, preserved separately from the measured value.
+    estSearchVolume: integer('est_search_volume'),
+    // Measured volume/difficulty from a DataForSEO validation (null until validated).
+    dfsSearchVolume: integer('dfs_search_volume'),
+    dfsKd: integer('dfs_kd'),
+    validatedAt: timestamp('validated_at', { withTimezone: true }),
+    // Full raw DataForSEO response(s) captured at validation, for field discovery.
+    dfsRaw: jsonb('dfs_raw'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
   },

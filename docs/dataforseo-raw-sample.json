@@ -1,0 +1,345 @@
+{
+  "keyword": "tree removal kirkland",
+  "location": "Kirkland,Washington,United States",
+  "fetchedAt": "2026-05-19T22:33:44.313Z",
+  "search_volume": {
+    "httpStatus": 200,
+    "json": {
+      "version": "0.1.20260430",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "3.7344 sec.",
+      "cost": 0.075,
+      "tasks_count": 1,
+      "tasks_error": 0,
+      "tasks": [
+        {
+          "id": "05200133-1700-0367-0000-90555857da40",
+          "status_code": 20000,
+          "status_message": "Ok.",
+          "time": "3.5714 sec.",
+          "cost": 0.075,
+          "result_count": 1,
+          "path": [
+            "v3",
+            "keywords_data",
+            "google_ads",
+            "search_volume",
+            "live"
+          ],
+          "data": {
+            "api": "keywords_data",
+            "function": "search_volume",
+            "se": "google_ads",
+            "keywords": [
+              "tree removal kirkland"
+            ],
+            "location_name": "Kirkland,Washington,United States",
+            "language_code": "en",
+            "sort_by": "search_volume"
+          },
+          "result": [
+            {
+              "keyword": "tree removal kirkland",
+              "spell": null,
+              "location_code": 1027627,
+              "language_code": "en",
+              "search_partners": false,
+              "competition": "HIGH",
+              "competition_index": 73,
+              "search_volume": 40,
+              "low_top_of_page_bid": 11.16,
+              "high_top_of_page_bid": 26.69,
+              "cpc": 36.29,
+              "monthly_searches": [
+                {
+                  "year": 2026,
+                  "month": 4,
+                  "search_volume": 50
+                },
+                {
+                  "year": 2026,
+                  "month": 3,
+                  "search_volume": 50
+                },
+                {
+                  "year": 2026,
+                  "month": 2,
+                  "search_volume": 20
+                },
+                {
+                  "year": 2026,
+                  "month": 1,
+                  "search_volume": 20
+                },
+                {
+                  "year": 2025,
+                  "month": 12,
+                  "search_volume": 30
+                },
+                {
+                  "year": 2025,
+                  "month": 11,
+                  "search_volume": 50
+                },
+                {
+                  "year": 2025,
+                  "month": 10,
+                  "search_volume": 70
+                },
+                {
+                  "year": 2025,
+                  "month": 9,
+                  "search_volume": 40
+                },
+                {
+                  "year": 2025,
+                  "month": 8,
+                  "search_volume": 30
+                },
+                {
+                  "year": 2025,
+                  "month": 7,
+                  "search_volume": 30
+                },
+                {
+                  "year": 2025,
+                  "month": 6,
+                  "search_volume": 20
+                },
+                {
+                  "year": 2025,
+                  "month": 5,
+                  "search_volume": 40
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "serp_organic": {
+    "httpStatus": 200,
+    "json": {
+      "version": "0.1.20260430",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "2.6789 sec.",
+      "cost": 0.002,
+      "tasks_count": 1,
+      "tasks_error": 0,
+      "tasks": [
+        {
+          "id": "05200133-1700-0121-0000-1a24f79149cf",
+          "status_code": 20000,
+          "status_message": "Ok.",
+          "time": "2.3486 sec.",
+          "cost": 0.002,
+          "result_count": 1,
+          "path": [
+            "v3",
+            "serp",
+            "google",
+            "organic",
+            "live",
+            "regular"
+          ],
+          "data": {
+            "api": "serp",
+            "function": "live",
+            "se": "google",
+            "se_type": "organic",
+            "keyword": "tree removal kirkland",
+            "location_name": "Kirkland,Washington,United States",
+            "language_code": "en",
+            "depth": 10,
+            "device": "desktop",
+            "os": "windows"
+          },
+          "result": [
+            {
+              "keyword": "tree removal kirkland",
+              "type": "organic",
+              "se_domain": "google.com",
+              "location_code": 1027627,
+              "language_code": "en",
+              "check_url": "https://www.google.com/search?q=tree%20removal%20kirkland&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCXvOUijAEpBUEVcoeHCqand6",
+              "datetime": "2026-05-19 22:33:43 +00:00",
+              "spell": null,
+              "refinement_chips": {
+                "type": "refinement_chips",
+                "xpath": "/html[1]/body[1]/div[3]/div[1]/div[5]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]",
+                "items": [
+                  {
+                    "type": "refinement_chips_element",
+                    "title": "Online estimates",
+                    "url": "https://www.google.com/search?sca_esv=c4a9854c715d4f5d&hl=en&gl=US&q=online+estimates+tree+removal+kirkland&uds=ALYpb_ncDc7jTlmw6Mmq7NjuX5c-6cK6kK80lbkaBaWP7g9b9Hno3cg2PlOc4n2hm-IX5N13wZZOb4cBS2zNp9lEU1aB95UAY8G2IggRq0ON5phMZ2lA5u__UEe3RSy-Wu9gPXi5dyIM5ecab2M6CoAX4z3IfGDhp0bxUt9O4I9JzvTxxQjw8UPGhClBlM-9zPJbc1toMh8t6avaJe8S8yz7yz9pku1pyP66bIhfTwW3pSBy82GfYGip60WDQCgKaL_rkBepqoswHuhNmQ3gEOW6BrKD2Tg8vA&sa=X&ved=2ahUKEwil8OOrtMaUAxWegv0HHV6-GdwQxKsJKAB6BAgbEAE&ictx=0",
+                    "domain": "www.google.com",
+                    "options": null
+                  },
+                  {
+                    "type": "refinement_chips_element",
+                    "title": "Open now",
+                    "url": "https://www.google.com/search?sca_esv=c4a9854c715d4f5d&hl=en&gl=US&q=tree+removal+kirkland+open+now&uds=ALYpb_ncDc7jTlmw6Mmq7NjuX5c-6H1wDVOGpVW-eVgYAxkQfJRyxb4ceFTiS1ek8Kaib7RwXRQSV--YMoDQbT86o2argFQsI8_aQ4qX6sATOrQBRyxAb44GauNGIfcY421a0KOhXAbuHmoAsAAIcwej_BqMVby2Wct4w7MXMtRQobQBb6FLJG4zSrlA0pIrnpohwhk2M3aehMeu6lyF7KQSIPiSAOdSdg&sa=X&ved=2ahUKEwil8OOrtMaUAxWegv0HHV6-GdwQxKsJKAF6BAgZEAE&ictx=0",
+                    "domain": "www.google.com",
+                    "options": null
+                  },
+                  {
+                    "type": "refinement_chips_element",
+                    "title": "Top rated",
+                    "url": "https://www.google.com/search?sca_esv=c4a9854c715d4f5d&hl=en&gl=US&q=top+rated+tree+removal+kirkland&uds=ALYpb_ncDc7jTlmw6Mmq7NjuX5c-e0T4soZBXa8N_OTZtfQIXgffEBIgg4GASbas4b3dFKc7Sbs6SrbZMuSwxTxzKhLOLNgHm31UKN8PCbRIBaFKPq1iM_8_o9lo60GGbHRDJxtJnSpud4gCrr0JB8ei9-Fz22GqtCHHzoiaMpRBFKJsimaqYbnHnzppl1vRHDOPkQctp50nRbUeZ2jVnLBB39j3PArW9w&sa=X&ved=2ahUKEwil8OOrtMaUAxWegv0HHV6-GdwQxKsJKAJ6BAgaEAE&ictx=0",
+                    "domain": "www.google.com",
+                    "options": null
+                  }
+                ]
+              },
+              "item_types": [
+                "local_pack",
+                "local_services",
+                "organic",
+                "related_searches"
+              ],
+              "se_results_count": 113,
+              "pages_count": 1,
+              "items_count": 9,
+              "items": [
+                {
+                  "type": "organic",
+                  "rank_group": 1,
+                  "rank_absolute": 5,
+                  "page": 1,
+                  "domain": "www.kirklandwa.gov",
+                  "title": "Tree Removal Information Guide",
+                  "description": "When submitting a tree removal permit to the City for hazard/nuisance trees, the applicant must hire a Qualified Professional Arborist certified by the ... Read more",
+                  "url": "https://www.kirklandwa.gov/files/sharedassets/public/v/1/planning-amp-building/trees/tree-removal-information-guide-2024.pdf",
+                  "breadcrumb": "https://www.kirklandwa.gov › files › public › trees"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 2,
+                  "rank_absolute": 6,
+                  "page": 1,
+                  "domain": "www.kirklandwa.gov",
+                  "title": "Trees and Urban Forestry",
+                  "description": "Tree Removal. Notice: The fee for tree removal permits is $600 (plus a 3.5% mybuildingpermit.com surcharge). The fee for Landmark tree removal ... Read more",
+                  "url": "https://www.kirklandwa.gov/Government/Departments/Planning-and-Building/Trees",
+                  "breadcrumb": "https://www.kirklandwa.gov › Planning-and-Building"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 3,
+                  "rank_absolute": 7,
+                  "page": 1,
+                  "domain": "www.eastsidetreeworks.com",
+                  "title": "Kirkland Service Tree Removals WA",
+                  "description": "Eastside Tree Works offers free estimates and affordable prices to Kirkland WA for removals, pruning, arborist reports and 24/7 storm damage response.",
+                  "url": "https://www.eastsidetreeworks.com/kirkland-tree-service.html",
+                  "breadcrumb": "https://www.eastsidetreeworks.com › kirkland-tree-service"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 4,
+                  "rank_absolute": 8,
+                  "page": 1,
+                  "domain": "www.reddit.com",
+                  "title": "Tree Removal / Replacement : r/Kirkland",
+                  "description": "I had a good experience with Jeff Ingmire from Eastside Tree Works to remove a dead tree on my property. You can probably apply and get the ... Read more",
+                  "url": "https://www.reddit.com/r/Kirkland/comments/18s5amw/tree_removal_replacement/",
+                  "breadcrumb": "4 comments  ·  2 years ago"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 5,
+                  "rank_absolute": 9,
+                  "page": 1,
+                  "domain": "www.savatree.com",
+                  "title": "Certified Arborist Tree Services in Kirkland, Washington",
+                  "description": "SavATree's certified arborists in Kirkland, offer expert tree and shrub care, including trimming, removal, and more. Call for a complementary consultation!",
+                  "url": "https://www.savatree.com/locations/near-me/kirkland-washington/",
+                  "breadcrumb": "https://www.savatree.com › locations › near-me › kirkla..."
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 6,
+                  "rank_absolute": 10,
+                  "page": 1,
+                  "domain": "www.yelp.com",
+                  "title": "THE BEST 10 Tree Services in KIRKLAND, WA",
+                  "description": "Top 10 Best Tree Services Near Kirkland, Washington - With Real Reviews · Bellevue Landscape Designs · Eastside Tree Works · Arborist Alliance · Pelton Tree Care. Read more",
+                  "url": "https://www.yelp.com/search?cflt=treeservices&find_loc=Kirkland%2C+WA",
+                  "breadcrumb": "https://www.yelp.com › Home Services › Tree Services"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 7,
+                  "rank_absolute": 11,
+                  "page": 1,
+                  "domain": "www.facebook.com",
+                  "title": "Did you know that the City of Kirkland is in the process of ...",
+                  "description": "Kirkland's tree code aims to maximize the public benefits of trees not prohibit homeowners from removing trees altogether.",
+                  "url": "https://www.facebook.com/kirklandwa.gov/videos/tree-code-update-homeowner-tree-removal/525181001375146/",
+                  "breadcrumb": "10+ reactions  ·  6 years ago"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 8,
+                  "rank_absolute": 12,
+                  "page": 1,
+                  "domain": "www.sauveandsons.com",
+                  "title": "Tree Service in Kirkland, WA | Free Estimates",
+                  "description": "Professional tree removal, trimming, stump grinding & emergency tree service in Kirkland, WA. Licensed & insured experts. Free estimates available.",
+                  "url": "https://www.sauveandsons.com/kirkland-tree-service",
+                  "breadcrumb": "https://www.sauveandsons.com › kirkland-tree-service"
+                },
+                {
+                  "type": "organic",
+                  "rank_group": 9,
+                  "rank_absolute": 13,
+                  "page": 1,
+                  "domain": "seattletreecare.org",
+                  "title": "Kirkland, WA Tree Service | Tree Removal, Pruning & ...",
+                  "description": "Need crane-assisted tree removal after a Kirkland storm? We can help! Check out our full list of services here. CALL 206-789-0534 NOW FOR KIRKLAND TREE SERVICE. Read more",
+                  "url": "https://seattletreecare.org/service-areas/kirkland-tree-service/",
+                  "breadcrumb": "https://seattletreecare.org › service-areas › kirkland-tree-s..."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "serp_ads": {
+    "httpStatus": 200,
+    "json": {
+      "version": "0.1.20260430",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.0712 sec.",
+      "cost": 0,
+      "tasks_count": 1,
+      "tasks_error": 1,
+      "tasks": [
+        {
+          "id": "05200133-1700-0139-0000-c7cd29de6ea3",
+          "status_code": 40402,
+          "status_message": "Invalid Path.",
+          "time": "0 sec.",
+          "cost": 0,
+          "result_count": 0,
+          "path": [
+            "v3",
+            "serp",
+            "google",
+            "ads",
+            "live",
+            "advanced"
+          ],
+          "data": null,
+          "result": null
+        }
+      ]
+    }
+  }
+}

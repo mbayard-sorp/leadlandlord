@@ -10,6 +10,7 @@ import {
   type KeywordMetrics,
 } from '@leadlandlord/integrations/dataforseo';
 import { ScoringConfig, DEFAULT_WEIGHTS, type ScoringWeights } from './scoring-config';
+export { DEFAULT_WEIGHTS } from './scoring-config';
 import { isDenylisted } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
 import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
@@ -115,6 +116,13 @@ export const NicheHunterInput = z.object({
   city_population_max: z.number().int().nonnegative().optional(),
   /** Scoring weights + thresholds. Defaults to DEFAULT_WEIGHTS. */
   scoring_config: ScoringConfig.optional(),
+  /**
+   * When false (default), scoring uses Claude's brainstorm-time estimates only
+   * — zero DataForSEO spend per run. Set to true to run the full DFS pipeline
+   * (keyword metrics + SERP composition + paid-ad count) for each candidate.
+   * Each DFS-scored candidate costs ~$0.225 (3 endpoint calls).
+   */
+  validate_with_dataforseo: z.boolean().default(false),
 });
 export type NicheHunterInput = z.infer<typeof NicheHunterInput>;
 
@@ -263,6 +271,8 @@ interface ScoredCandidate extends ClaudeCandidate {
   cpc: number;
   ad_count: number;
   score: number;
+  volumeSource: 'dataforseo' | 'claude_estimate';
+  claudeMid: number;
 }
 
 export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof NicheHunterOutput> {
@@ -312,7 +322,7 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
         label: `scoring ${i + 1}/${toScore.length}: ${c.niche} — ${c.city}, ${c.state}`,
       });
       try {
-        const metrics = await this.scoreCandidate(c, ctx, scoringConfig.weights);
+        const metrics = await this.scoreCandidate(c, ctx, scoringConfig.weights, input.validate_with_dataforseo);
         scored.push({ ...c, ...metrics });
       } catch (err) {
         ctx.log.warn(
@@ -562,7 +572,47 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     c: ClaudeCandidate,
     ctx: AgentContext,
     weights: ScoringWeights,
-  ): Promise<{ search_volume: number; kd: number; competition: number; cpc: number; ad_count: number; score: number }> {
+    validateWithDfs: boolean,
+  ): Promise<{ search_volume: number; kd: number; competition: number; cpc: number; ad_count: number; score: number; volumeSource: 'dataforseo' | 'claude_estimate'; claudeMid: number }> {
+    const claudeMid = Math.round((c.est_monthly_searches_low + c.est_monthly_searches_high) / 2);
+
+    if (!validateWithDfs) {
+      // Estimate-only path: score purely on Claude's brainstorm-time values.
+      // KD is derived from confidence_score (inverted): confidence 10 (very
+      // winnable) maps to difficulty ~0; confidence 1 maps to difficulty ~90.
+      // Formula: kd = (10 - confidence_score) / 10 * 90, capped 0-90.
+      const kd = Math.round(((10 - Math.max(1, Math.min(10, c.confidence_score))) / 10) * 90);
+      // No DFS data: use neutral competition/cpc/ad_count so scoring still works.
+      const competition = 0.3; // mid-range neutral assumption
+      const cpc = 0;
+      const ad_count = 0;
+      const score = computeScore({
+        search_volume: claudeMid,
+        kd,
+        competition,
+        est_avg_job_value_usd: c.est_avg_job_value_usd,
+        est_close_rate: c.est_close_rate,
+        ad_count,
+        weights,
+      });
+      ctx.log.debug(
+        {
+          niche: c.niche,
+          city: c.city,
+          score,
+          kd,
+          claude_volume_low: c.est_monthly_searches_low,
+          claude_volume_high: c.est_monthly_searches_high,
+          claude_mid: claudeMid,
+          confidence_score: c.confidence_score,
+          volume_source: 'claude_estimate',
+        },
+        'scored (estimate-only)',
+      );
+      return { search_volume: claudeMid, kd, competition, cpc, ad_count, score, volumeSource: 'claude_estimate', claudeMid };
+    }
+
+    // Full DFS path (validate_with_dataforseo: true).
     const stateName = US_STATE_NAMES[c.state.toUpperCase()] ?? c.state;
     const location = `${c.city},${stateName},United States`;
     const seeds = [c.niche, `${c.niche} ${c.city.toLowerCase()}`, `${c.niche} near me`];
@@ -584,7 +634,6 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     // fall back to Claude's brainstorm-time estimate range midpoint, which
     // is typically closer to truth for these terms.
     const dfsVolume = aggregated.search_volume;
-    const claudeMid = Math.round((c.est_monthly_searches_low + c.est_monthly_searches_high) / 2);
     const DFS_TRUST_FLOOR = 100;
     const resolvedVolume = dfsVolume >= DFS_TRUST_FLOOR ? dfsVolume : claudeMid;
     const volumeSource: 'dataforseo' | 'claude_estimate' =
@@ -623,6 +672,8 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
       kd,
       ad_count,
       score,
+      volumeSource,
+      claudeMid,
     };
   }
 
@@ -643,6 +694,11 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
           estCloseRate: c.est_close_rate.toFixed(4),
           score: c.score.toFixed(2),
           rationale: c.rationale,
+          volumeSource: c.volumeSource,
+          estSearchVolume: c.claudeMid,
+          // DFS columns: null on estimate-only runs; validation phase fills them.
+          dfsSearchVolume: c.volumeSource === 'dataforseo' ? c.search_volume : null,
+          dfsKd: c.volumeSource === 'dataforseo' ? Math.round(c.kd) : null,
         })
         .onConflictDoNothing({ target: [niches.niche, niches.city, niches.state] })
         .returning({ id: niches.id });
