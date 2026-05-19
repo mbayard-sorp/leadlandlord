@@ -1,6 +1,9 @@
 import { sql, desc } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 import { getDb, agentRuns, agentEvents, type AgentRun, type AgentEvent } from '@leadlandlord/db';
+import { agentRegistry } from '@leadlandlord/agents';
+import { AgentTogglesPanel } from './AgentTogglesPanel';
+import { loadAgentEnabledMap } from './_toggle-actions';
 
 export const revalidate = 30;
 
@@ -56,11 +59,13 @@ const loadApprovalQueue = unstable_cache(
 );
 
 export default async function AgentsPage() {
-  const [recentRuns, todayByAgent, approvalQueue] = await Promise.all([
+  const [recentRuns, todayByAgent, approvalQueue, enabledMap] = await Promise.all([
     loadRecentRuns(),
     loadTodayStats(),
     loadApprovalQueue(),
+    loadAgentEnabledMap(),
   ]);
+  const allAgents = Object.keys(agentRegistry).sort();
 
   return (
     <div className="space-y-8">
@@ -70,6 +75,8 @@ export default async function AgentsPage() {
           Live runs, today's cost-by-agent, and pending manual approvals.
         </p>
       </header>
+
+      <AgentTogglesPanel agents={allAgents} initial={enabledMap} />
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">Today</h2>
