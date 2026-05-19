@@ -20,24 +20,70 @@ export interface PageLintResult {
 }
 
 export interface LintOptions {
-  /** Primary keyword phrase to check (verbatim, case-insensitive). */
+  /**
+   * Fallback primary keyword. Each page's own `primary_keyword` (or the cluster
+   * resolved via `clusters` + `page.cluster_key`) wins when present. Only used
+   * for legacy bundles where the LLM didn't stamp per-page keywords.
+   */
   primaryKeyword: string;
   /** Optional tracking phone number. If provided, checked against first-100-words rule. */
   phone?: string;
+  /**
+   * Optional cluster map to resolve a page's primary keyword from its
+   * cluster_key when the page doesn't carry primary_keyword directly. Each
+   * page targets its own cluster, so density rules must compare against the
+   * cluster's keyword, not a single global one.
+   */
+  clusters?: Array<{ cluster_key: string; primary_keyword: string }>;
+  /**
+   * The site's niche (e.g. "junk removal"). Phrase-stuffing exempts n-grams
+   * that match the niche bigram — on a junk-removal site, "junk removal"
+   * legitimately appears constantly and is the site's defining term, not
+   * stuffing. Without this exemption the cap fires on every page.
+   */
+  niche?: string;
 }
 
 /**
  * Lint a full ContentBundle. Returns one result per page that has violations.
  * Pages with no violations are omitted from the result array.
+ *
+ * Per-page keyword resolution order:
+ *   1. page.primary_keyword (set by content-engine LLM)
+ *   2. clusters lookup by page.cluster_key
+ *   3. opts.primaryKeyword fallback
  */
 export function lintBundle(
   bundle: ContentBundle,
   opts: LintOptions,
 ): PageLintResult[] {
   const results: PageLintResult[] = [];
+  const clusterMap = new Map((opts.clusters ?? []).map((c) => [c.cluster_key, c.primary_keyword]));
   const allPages = collectAllPages(bundle);
   for (const page of allPages) {
-    const violations = lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', opts);
+    // Source of truth: only lint a page when its cluster_key matches one we
+    // planned. Trusting page.primary_keyword alone is risky — the LLM has
+    // been observed stamping the wrong cluster keyword on utility pages like
+    // /services, which then makes the lint check a phrase the page could
+    // never plausibly contain.
+    const pageKw = page.cluster_key && clusterMap.get(page.cluster_key);
+    if (!pageKw) {
+      // Run phone-only lint for pages without a target cluster.
+      if (opts.phone) {
+        const violations = lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', {
+          ...opts,
+          primaryKeyword: '',
+          niche: bundle.niche,
+        });
+        if (violations.length > 0) results.push({ pageSlug: page.slug, violations });
+      }
+      continue;
+    }
+    const violations = lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', {
+      ...opts,
+      primaryKeyword: pageKw,
+      niche: bundle.niche,
+    });
     if (violations.length > 0) {
       results.push({ pageSlug: page.slug, violations });
     }
@@ -113,18 +159,24 @@ export function lintPage(
     });
   }
 
-  // 5. Primary keyword 3+ times in body (with simple inflection tolerance)
+  // 5. Primary keyword N+ times in body (with simple inflection tolerance).
+  // Long-tail (4+ words) only requires 2 — hitting a 6-word exact phrase 3
+  // times in 500 words is unnatural and forces spammy writing.
+  const kwWordCount = kw.split(/\s+/).length;
+  const minOccurrences = kwWordCount >= 3 ? 2 : 3;
   const kwCount = countKeywordOccurrences(bodyText, kw);
-  if (kwCount < 3) {
+  if (kwCount < minOccurrences) {
     violations.push({
       rule: 'keyword-min-occurrences',
       severity: 'error',
-      detail: `Primary keyword "${opts.primaryKeyword}" appears ${kwCount} time(s) in body — need at least 3`,
+      detail: `Primary keyword "${opts.primaryKeyword}" appears ${kwCount} time(s) in body — need at least ${minOccurrences}`,
     });
   }
 
-  // 8. No 2-3 word phrase exceeds 1.5% of body word count (stuffing cap)
-  const stuffingViolations = checkPhraseStuffing(bodyWords, 1.5);
+  // 8. No 2-3 word phrase exceeds 1.5% of body word count (stuffing cap).
+  // Niche phrase is exempt: on a "junk removal" site, "junk removal" naturally
+  // appears constantly and isn't stuffing — it's the site's defining term.
+  const stuffingViolations = checkPhraseStuffing(bodyWords, 1.5, opts.niche);
   violations.push(...stuffingViolations);
 
   // 9. No two consecutive sentences both contain primary keyword
@@ -190,10 +242,11 @@ function countKeywordOccurrences(text: string, kw: string): number {
  * Check all 2-3 word n-grams in the body words. Flag any phrase exceeding
  * `capPercent`% of total word count.
  */
-function checkPhraseStuffing(bodyWords: string[], capPercent: number): Violation[] {
+function checkPhraseStuffing(bodyWords: string[], capPercent: number, niche?: string): Violation[] {
   if (bodyWords.length === 0) return [];
   const totalWords = bodyWords.length;
   const threshold = (capPercent / 100) * totalWords;
+  const nicheNormalized = niche?.toLowerCase().trim() ?? '';
 
   const counts = new Map<string, number>();
   for (let i = 0; i < bodyWords.length; i++) {
@@ -214,6 +267,8 @@ function checkPhraseStuffing(bodyWords: string[], capPercent: number): Violation
     if (count > threshold && count > 3) {
       // Skip very common stop-word combos
       if (isStopwordPhrase(phrase)) continue;
+      // Skip the niche phrase itself — it's the site's defining term, not stuffing.
+      if (nicheNormalized && phrase === nicheNormalized) continue;
       const pct = ((count / totalWords) * 100).toFixed(2);
       violations.push({
         rule: 'phrase-stuffing',
