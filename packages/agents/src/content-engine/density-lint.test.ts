@@ -90,6 +90,31 @@ describe('lintPage — keyword-in-first-100', () => {
   });
 });
 
+describe('lintPage — keyword-in-first-50', () => {
+  it('passes when keyword is in first 50 words', () => {
+    // buildPassingMdx has the keyword in the very first sentence
+    const violations = lintPage('/auto-glass-repair', buildPassingMdx(), 'Baton Rouge Auto Glass Repair', 'auto glass repair Baton Rouge', { primaryKeyword: KW });
+    const v = violations.filter((v) => v.rule === 'keyword-in-first-50');
+    expect(v).toHaveLength(0);
+  });
+
+  it('error when keyword appears only after word 50', () => {
+    // 55 filler words before the keyword, then meets remaining rules with additional occurrences
+    const mdx = `${'filler '.repeat(55)}auto glass repair in Baton Rouge. auto glass repair done right. auto glass repair always.`;
+    const violations = lintPage('/auto-glass-repair', mdx, 'Baton Rouge Auto Glass Repair', 'auto glass repair Baton Rouge', { primaryKeyword: KW });
+    const v = violations.filter((v) => v.rule === 'keyword-in-first-50');
+    expect(v[0]?.severity).toBe('error');
+  });
+
+  it('passes when keyword is exactly at word 50 boundary', () => {
+    // 47 filler words then "auto glass repair" spans words 48-50
+    const mdx = `${'filler '.repeat(47)}auto glass repair in Baton Rouge. auto glass repair is our specialty. We also do auto glass repair.`;
+    const violations = lintPage('/auto-glass-repair', mdx, 'Baton Rouge Auto Glass Repair', 'auto glass repair Baton Rouge', { primaryKeyword: KW });
+    const v = violations.filter((v) => v.rule === 'keyword-in-first-50');
+    expect(v).toHaveLength(0);
+  });
+});
+
 describe('lintPage — keyword-min-occurrences', () => {
   it('passes when keyword appears 3+ times', () => {
     const violations = lintPage('/auto-glass-repair', buildPassingMdx(), 'Baton Rouge Auto Glass Repair', 'auto glass repair Baton Rouge', { primaryKeyword: KW });

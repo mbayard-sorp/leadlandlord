@@ -3,7 +3,7 @@ import { resolveCurrentSite } from '../../../lib/site-context';
 import { breadcrumbsJsonLd, buildPageMetadata } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
-import { telHref } from '../../../lib/content';
+import { telHref, pageH1 } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
 import { Markdown } from '../../../components/shared/Markdown';
 import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
@@ -76,7 +76,7 @@ export default async function BlogPost({ params }: Params) {
             { name: 'Blog', url: '/blog/' },
             { name: page.title, url: `/blog/${slug}/` },
           ]} />
-          <h1 className="info-page-h1">{page.title}</h1>
+          <h1 className="info-page-h1">{pageH1(page)}</h1>
           {page.meta_description && (
             <p className="info-page-lede">{page.meta_description}</p>
           )}

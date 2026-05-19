@@ -11,6 +11,7 @@ import {
 import { ScoringConfig, DEFAULT_WEIGHTS, type ScoringWeights } from './scoring-config';
 import { isDenylisted } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
+import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
 
 /**
  * Niche Hunter — Phase 0 / Sprint 2.
@@ -143,9 +144,12 @@ const BRAINSTORM_SCHEMA = {
 
 const SYSTEM_PROMPT = `You are a niche-hunting analyst for a lead-generation platform that builds and operates websites for local service businesses. You generate niche x city candidates for further SEO scoring.
 
+CRITICAL — CITY SELECTION RULE:
+The user message will include a list of pre-filtered US cities. You MUST choose cities exclusively from that list. Do not invent, substitute, or use any city that is not in the provided list. These cities have been pre-screened for the right population band and low national-brand competition — they are the targets we want.
+
 A good candidate is:
 - A specific trade or service (not "construction" — too broad; "concrete patio installation" — yes)
-- In a US city of the right population for organic local SEO (sweet spot: 50k-500k metros)
+- In one of the provided cities (smaller markets where local SEO outperforms national directory sites)
 - Has reasonable per-job revenue ($150+ to support a tenant paying us monthly)
 - Has demand year-round or in predictable seasons
 - Is dominated by small operators, not national chains (Yelp/local SEO matters more than ad spend)
@@ -155,7 +159,7 @@ Avoid:
 - Niches requiring licensing the platform can't verify (medical, legal)
 - Niches with unstable demand or one-off purchases
 
-Diversify across niches and cities — don't return 50 variants of the same niche. Mix categories.`;
+Diversify across niches AND across different cities from the provided list — don't cluster all picks in one city. Mix categories.`;
 
 interface ClaudeCandidate {
   niche: string;
@@ -246,6 +250,51 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     const client = getAnthropicClient();
     const model = process.env.NICHE_HUNTER_MODEL ?? 'claude-sonnet-4-6';
 
+    // Build a ranked city pool using Census-based scoring (ADR 0008).
+    // Note: geo_filter.population_min / population_max are now overridden by
+    // the ADR's hard filters (15k–110k) — they remain in the public schema
+    // for backward compatibility but do not affect the ranked pool.
+    // UsCity is a subset of RankedCity, so the union covers both the ranked path
+    // and the random-sample fallback path below.
+    let sampledCities: import('@leadlandlord/us-cities/loader').UsCity[] = [];
+    const rankedCities = rankCities({
+      limit: 150,
+      perStateCap: 12,
+      states: input.geo_filter?.states,
+    });
+    sampledCities = rankedCities;
+
+    if (rankedCities.length > 0) {
+      const top3 = rankedCities.slice(0, 3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+      const bot3 = rankedCities.slice(-3).map((c) => `${c.city}, ${c.state} (${c.score.toFixed(3)})`);
+      ctx.log.info(
+        { count: rankedCities.length, top3, bottom3: bot3 },
+        'niche-hunter: ranked city pool',
+      );
+    } else {
+      // Fallback: Census enrichment not yet run or all cities filtered.
+      // Fall back to random sampling so the agent still works.
+      ctx.log.warn(
+        'niche-hunter: rankCities returned 0 cities — falling back to random listCities sample',
+      );
+      sampledCities = listCities({
+        populationMin: input.geo_filter?.population_min ?? 10_000,
+        populationMax: input.geo_filter?.population_max ?? 100_000,
+        states: input.geo_filter?.states,
+        sampleN: 150,
+      });
+      ctx.log.info({ count: sampledCities.length }, 'niche-hunter: fallback sampled city pool');
+    }
+
+    // Build a lookup set for post-brainstorm guard (city|state).
+    const cityStateSet = new Set(
+      sampledCities.map((c) => `${c.city.toLowerCase()}|${c.state.toUpperCase()}`),
+    );
+
+    const cityListText = sampledCities
+      .map((c) => `${c.city}, ${c.state} (pop ~${c.population.toLocaleString()})`)
+      .join('\n');
+
     const filterDesc: string[] = [];
     filterDesc.push(`Categories: ${input.allowed_categories.join(', ')}.`);
     if (input.geo_filter?.states?.length) {
@@ -262,6 +311,10 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
 
 Filters:
 ${filterDesc.map((f) => `- ${f}`).join('\n')}
+
+Pick niche+city combinations ONLY from the following pre-filtered list of low-competition US cities. Do NOT invent or use any city outside this list:
+
+${cityListText}
 
 Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with the candidates array.`;
 
@@ -321,8 +374,24 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
         );
         continue;
       }
+      // Hard guard: drop candidates whose city+state was not in the sampled pool.
+      const key = `${parsedCandidate.data.city.toLowerCase()}|${parsedCandidate.data.state.toUpperCase()}`;
+      if (!cityStateSet.has(key)) {
+        ctx.log.warn(
+          { city: parsedCandidate.data.city, state: parsedCandidate.data.state },
+          'niche-hunter: dropping candidate — city not in sampled pool',
+        );
+        continue;
+      }
+
       validated.push(parsedCandidate.data);
     }
+
+    const dropped = raw.length - validated.length;
+    if (dropped > 0) {
+      ctx.log.info({ dropped, kept: validated.length }, 'niche-hunter: city guard dropped candidates');
+    }
+
     return validated;
   }
 

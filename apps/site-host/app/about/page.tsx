@@ -3,6 +3,7 @@ import { resolveCurrentSite } from '../../lib/site-context';
 import { buildPageMetadata, breadcrumbsJsonLd } from '../../lib/seo-meta';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
+import { pageH1 } from '../../lib/content';
 import { SiteShell } from '../../components/SiteShell';
 import { PageBody } from '../../components/PageBody';
 import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
@@ -34,7 +35,8 @@ export default async function About() {
         { name: bundle.business_name, url: '/' },
         { name: 'About', url: '/about/' },
       ]} />
-      <PageBody page={bundle.about} />
+      <h1 className="info-page-h1">{pageH1(bundle.about)}</h1>
+      <PageBody page={{ ...bundle.about, mdx: bundle.about.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
     </SiteShell>
   );
 }

@@ -35,6 +35,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@leadlandlord/db": "workspace:*",
+    "@leadlandlord/us-cities": "workspace:*",
     "@leadlandlord/integrations": "workspace:*",
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",

@@ -3,7 +3,7 @@ import { resolveCurrentSite } from '../../lib/site-context';
 import { buildPageMetadata, breadcrumbsJsonLd } from '../../lib/seo-meta';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
-import { telHref } from '../../lib/content';
+import { telHref, pageH1 } from '../../lib/content';
 import { SiteShell } from '../../components/SiteShell';
 import { PageBody } from '../../components/PageBody';
 import { LeadForm } from '../../components/shared/LeadForm';
@@ -36,7 +36,8 @@ export default async function Contact() {
         { name: bundle.business_name, url: '/' },
         { name: 'Contact', url: '/contact/' },
       ]} />
-      <PageBody page={bundle.contact} />
+      <h1 className="info-page-h1">{pageH1(bundle.contact)}</h1>
+      <PageBody page={{ ...bundle.contact, mdx: bundle.contact.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
       <div className="site-contact-cta">
         <h2>
           Call now: <a href={telHref(phone)}>{phone}</a>

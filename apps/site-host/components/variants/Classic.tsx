@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { telHref } from '../../lib/content';
+import { heroH1, telHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -81,10 +81,9 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
               {bundle.city}, {bundle.state} · Family-owned
             </p>
             {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+            {/* SEO: render the exact targeted keyword phrase verbatim; CSS uppercases it. */}
             <h1 id="hero-h1" className="classic-h1">
-              {bundle.niche.toUpperCase()}
-              <br />
-              IN {bundle.city.toUpperCase()},<br className="hidden sm:block" /> {bundle.state}.
+              {heroH1(bundle)}
             </h1>
             <div className="classic-hero-rule" aria-hidden />
             <p className="classic-lede">

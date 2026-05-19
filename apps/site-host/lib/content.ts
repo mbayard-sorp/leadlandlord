@@ -26,6 +26,12 @@ export const PageSchema = z.object({
   mdx: z.string(),
   schema_org_jsonld: z.unknown().optional(),
   og_image_url: z.string().url().optional(),
+  /**
+   * Exact keyword phrase this page targets (from the assigned KeywordCluster).
+   * Content Engine sets this when keyword clusters are passed in. Variants
+   * render this as the on-page H1 verbatim — see `heroH1()`.
+   */
+  primary_keyword: z.string().optional(),
 });
 
 export const VariantSchema = z.enum(['classic', 'modern', 'premium', 'bright']);
@@ -84,6 +90,50 @@ export type Page = z.infer<typeof PageSchema>;
 /** Build a `tel:` href from the (possibly formatted) tracking number. */
 export function telHref(number: string): string {
   return `tel:${number.replace(/[^+\d]/g, '')}`;
+}
+
+/**
+ * The exact phrase variants render as the home-page H1.
+ *
+ * SEO-critical: must be the targeted keyword phrase verbatim so the strongest
+ * on-page signal aligns with what density-lint already enforces for `title`.
+ * Falls back to `niche in city, state` when no keyword cluster was assigned
+ * (legacy bundles, or sites generated before the keyword-planner pipeline).
+ */
+export function heroH1(bundle: Bundle): string {
+  const kw = bundle.home.primary_keyword?.trim();
+  if (kw) return kw;
+  return `${bundle.niche} in ${bundle.city}, ${bundle.state}`;
+}
+
+/**
+ * Title-case a keyword phrase for display in variants whose H1 is not
+ * CSS-uppercased. Lowercases articles/prepositions in the middle. Preserves
+ * the trailing 2-letter state abbreviation in uppercase.
+ */
+export function titleCaseKeyword(phrase: string): string {
+  const small = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'vs', 'with']);
+  const words = phrase.trim().split(/\s+/);
+  return words
+    .map((w, i) => {
+      if (/^[a-z]{2}$/.test(w) && i === words.length - 1) return w.toUpperCase();
+      if (i > 0 && i < words.length - 1 && small.has(w.toLowerCase())) return w.toLowerCase();
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+/**
+ * The exact phrase a non-home page renders as its on-page H1.
+ *
+ * Returns `page.primary_keyword` verbatim when present (set by Content Engine
+ * from the assigned KeywordCluster). Falls back to `page.title` for legacy
+ * bundles that pre-date keyword-planner. The `page.title` meta-title format
+ * ("Roof Replacement Owensboro KY | Smith Roofing") is intentionally kept for
+ * the HTML <title> / generateMetadata — only the visible H1 gets this value.
+ */
+export function pageH1(page: Page): string {
+  return page.primary_keyword?.trim() || page.title;
 }
 
 /**
