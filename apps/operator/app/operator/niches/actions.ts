@@ -36,10 +36,22 @@ export async function runNicheHunter(formData: FormData): Promise<ActionResult> 
   const minVol = Number(formData.get('min_search_volume') ?? 100);
   const maxKd = Number(formData.get('max_kd') ?? 40);
   const minJob = Number(formData.get('min_avg_job_value_usd') ?? 150);
+  const scoreTopN = Number(formData.get('score_top_n') ?? 8);
+  const cityPoolSize = Number(formData.get('city_pool_size') ?? 150);
+  const perStateCap = Number(formData.get('per_state_cap') ?? 12);
+  const popMinRaw = formData.get('city_population_min');
+  const popMaxRaw = formData.get('city_population_max');
+  const cityPopulationMin = popMinRaw !== null && popMinRaw !== '' ? Number(popMinRaw) : undefined;
+  const cityPopulationMax = popMaxRaw !== null && popMaxRaw !== '' ? Number(popMaxRaw) : undefined;
 
   const rawInput = {
     target_count: target,
     brainstorm_count: brainstorm,
+    score_top_n: scoreTopN,
+    city_pool_size: cityPoolSize,
+    per_state_cap: perStateCap,
+    ...(cityPopulationMin !== undefined ? { city_population_min: cityPopulationMin } : {}),
+    ...(cityPopulationMax !== undefined ? { city_population_max: cityPopulationMax } : {}),
     min_search_volume: minVol,
     max_kd: maxKd,
     min_avg_job_value_usd: minJob,
