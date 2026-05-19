@@ -2,6 +2,7 @@ import { asc, getDb, agentApprovals } from '@leadlandlord/db';
 import { eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { ApprovalButtons } from './ApprovalButtons';
+import { CrossLinkPlacementPreview } from './CrossLinkPlacementPreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,16 +95,22 @@ export default async function ApprovalsPage({
                     </span>
                   </Td>
                   <Td className="max-w-sm text-slate-300">
-                    {payloadPreview(row.kind, row.payload)}
-                    {row.kind === 'niche_candidate' && (
-                      <div className="mt-0.5">
-                        <Link
-                          href="/operator/approvals/niches"
-                          className="text-xs text-indigo-400 hover:underline"
-                        >
-                          View niche queue
-                        </Link>
-                      </div>
+                    {row.kind === 'cross_link_placement' ? (
+                      <CrossLinkPlacementPreview payload={row.payload} />
+                    ) : (
+                      <>
+                        {payloadPreview(row.kind, row.payload)}
+                        {row.kind === 'niche_candidate' && (
+                          <div className="mt-0.5">
+                            <Link
+                              href="/operator/approvals/niches"
+                              className="text-xs text-indigo-400 hover:underline"
+                            >
+                              View niche queue
+                            </Link>
+                          </div>
+                        )}
+                      </>
                     )}
                   </Td>
                   <Td className="text-slate-500 whitespace-nowrap">{ageLabel(row.createdAt)}</Td>

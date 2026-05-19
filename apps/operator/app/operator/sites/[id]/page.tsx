@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { desc, eq, inArray, and } from 'drizzle-orm';
 import {
   getDb,
@@ -234,6 +235,19 @@ export default async function SiteDetailPage({ params }: Params) {
           Agent activity
         </h2>
         <AgentActivityPanel siteId={site.id} />
+      </section>
+
+      {/* 8b. Network */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Network
+        </h2>
+        <Link
+          href={`/operator/sites/${site.id}/network`}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-300 hover:border-slate-600 hover:text-slate-100 transition-colors"
+        >
+          View cross-link memberships, outbound / inbound links, and open requests ↗
+        </Link>
       </section>
 
       {/* 9. Bottom drawer — collapsed by default */}

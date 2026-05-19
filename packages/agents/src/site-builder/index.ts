@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { getDb, sites, agentEvents } from '@leadlandlord/db';
+import { getDb, sites, agentEvents, networks, siteNetworkMemberships } from '@leadlandlord/db';
 import { imagen, klaviyo } from '@leadlandlord/integrations';
 import {
   createWriteClient,
@@ -25,6 +25,7 @@ export type SiteBuilderProgressEvent =
   | { step: 'content_generated'; pages: number }
   | { step: 'tracking_provisioned'; number: string; provider: string }
   | { step: 'klaviyo_list_ready'; list_id: string | null }
+  | { step: 'network_joined'; network_slug: string }
   | { step: 'sanity_publish_started' }
   | { step: 'sanity_pages_written'; pages: number }
   | { step: 'sanity_site_doc_written'; site_doc_id: string; theme: string }
@@ -65,7 +66,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     const db = getDb();
 
     // 1. Insert/find site row.
-    ctx.progress({ step: 1, total: 7, label: 'preparing site record' });
+    ctx.progress({ step: 1, total: 8, label: 'preparing site record' });
     const siteId = await this.upsertSite(input);
     ctx.log.info({ siteId }, 'site row ready');
     this.emit({ step: 'site_row_ready', site_id: siteId });
@@ -112,7 +113,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       }
     }
     if (!skipPlanner) {
-      ctx.progress({ step: 2, total: 7, label: 'planning keyword clusters' });
+      ctx.progress({ step: 2, total: 8, label: 'planning keyword clusters' });
       this.emit({ step: 'keywords_planning_started' });
       const planResult = await this.keywordPlanner.run(
         {
@@ -141,7 +142,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     ctx.log.info({ clusters: clusters.length }, 'clusters loaded for content engine');
 
     // 3. Generate content bundle.
-    ctx.progress({ step: 3, total: 7, label: 'generating site content' });
+    ctx.progress({ step: 3, total: 8, label: 'generating site content' });
     this.emit({ step: 'content_started' });
     const bundle = await this.contentEngine.run(
       {
@@ -163,7 +164,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     this.emit({ step: 'content_generated', pages: countPages(bundle) });
 
     // 3. Provision tracking number (mocked when MOCK_TELEPHONY=true).
-    ctx.progress({ step: 4, total: 7, label: 'provisioning tracking number' });
+    ctx.progress({ step: 4, total: 8, label: 'provisioning tracking number' });
     const tracking = await this.trackingSetup.run(
       { site_id: siteId },
       { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:tracking-setup` },
@@ -184,7 +185,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     //    the legacy materialize → vercel project create → env-var sync chain
     //    (no per-tenant Vercel project anymore — all rendering goes through
     //    the shared `leadlandlord-sites` project).
-    ctx.progress({ step: 5, total: 7, label: 'publishing pages to Sanity' });
+    ctx.progress({ step: 5, total: 8, label: 'publishing pages to Sanity' });
 
     // 4a. Compliance gate. Run compliance-guard on every page's MDX before we
     //     publish to Sanity. Any blocker → emit `site.compliance.failed` and
@@ -259,12 +260,41 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       theme: bundle.variant,
     });
 
-    // 5. Hero image — generate buffer, upload to Sanity assets, patch the
+    // 6.5. Join the default network (idempotent). Looks up the 'default' network
+    //     seeded in migration 0021 and upserts a membership row. ON CONFLICT DO
+    //     NOTHING handles the unique-on-siteId index gracefully.
+    ctx.progress({ step: 6, total: 8, label: 'joining site network' });
+    try {
+      const [defaultNetwork] = await db
+        .select({ id: networks.id, slug: networks.slug })
+        .from(networks)
+        .where(eq(networks.slug, 'default'))
+        .limit(1);
+
+      if (defaultNetwork) {
+        await db
+          .insert(siteNetworkMemberships)
+          .values({ siteId, networkId: defaultNetwork.id })
+          .onConflictDoNothing();
+        ctx.log.info({ siteId, networkId: defaultNetwork.id }, 'site joined default network');
+        this.emit({ step: 'network_joined', network_slug: defaultNetwork.slug });
+      } else {
+        ctx.log.warn({ siteId }, 'default network not found — skipping network join');
+      }
+    } catch (err) {
+      // Non-fatal: network joining must not block site delivery.
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'network join failed — proceeding without it',
+      );
+    }
+
+    // 7. Hero image — generate buffer, upload to Sanity assets, patch the
     //    site doc to reference the new asset. Failures here are non-fatal:
     //    variants render their placeholder background when no hero is set.
     let heroUrl: string | null = null;
     if (bundle.hero_image_prompt) {
-      ctx.progress({ step: 6, total: 7, label: 'generating hero image' });
+      ctx.progress({ step: 7, total: 8, label: 'generating hero image' });
       this.emit({ step: 'hero_image_started' });
       try {
         const img = await imagen.generateHeroImageBuffer(bundle.hero_image_prompt);
@@ -326,7 +356,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       },
     });
 
-    ctx.progress({ step: 7, total: 7, label: 'finalizing site' });
+    ctx.progress({ step: 8, total: 8, label: 'finalizing site' });
     this.emit({ step: 'site_ready', site_doc_id: persisted.siteDocId });
 
     return {
