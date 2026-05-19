@@ -1,4 +1,4 @@
-import type { ContentBundle } from '@leadlandlord/shared/types';
+import type { ContentBundle, Page } from '@leadlandlord/shared/types';
 
 /**
  * Post-LLM density lint. Pure function — no I/O. Run after ContentBundle.parse
@@ -314,8 +314,8 @@ function checkConsecutiveSentences(text: string, kw: string): Violation | null {
   return null;
 }
 
-function collectAllPages(bundle: ContentBundle): Array<{ slug: string; mdx: string; title: string; meta_description?: string }> {
-  const pages: Array<{ slug: string; mdx: string; title: string; meta_description?: string }> = [];
+function collectAllPages(bundle: ContentBundle): Page[] {
+  const pages: Page[] = [];
   if (bundle.home) pages.push(bundle.home);
   if (bundle.about) pages.push(bundle.about);
   if (bundle.contact) pages.push(bundle.contact);
