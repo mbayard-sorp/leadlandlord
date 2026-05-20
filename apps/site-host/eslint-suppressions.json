@@ -1,0 +1,78 @@
+{
+  "app/[slug]/page.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 3
+    }
+  },
+  "app/blog/[slug]/page.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 3
+    }
+  },
+  "app/blog/page.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 2
+    }
+  },
+  "app/pages/[slug]/page.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 3
+    }
+  },
+  "app/service-areas/[slug]/page.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 3
+    }
+  },
+  "app/services/[slug]/page.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 3
+    }
+  },
+  "components/SiteShell.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 4
+    }
+  },
+  "components/corporate/CorporateShell.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 2
+    }
+  },
+  "components/shared/LeadForm.tsx": {
+    "react/no-unescaped-entities": {
+      "count": 2
+    }
+  },
+  "components/shared/SiteNav.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 8
+    }
+  },
+  "components/variants/Bright.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 2
+    },
+    "react/no-unescaped-entities": {
+      "count": 1
+    }
+  },
+  "components/variants/Classic.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 2
+    }
+  },
+  "components/variants/Modern.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 2
+    },
+    "react/no-unescaped-entities": {
+      "count": 1
+    }
+  },
+  "components/variants/Premium.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 4
+    }
+  }
+}
