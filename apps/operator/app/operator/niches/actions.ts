@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
-import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from '@leadlandlord/agents/niche-hunter';
+import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS, resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
 import {
   getRentabilityPrior,
   getLeadBenchmarkPrice,
@@ -251,6 +251,26 @@ export async function getLatestNicheRunStatus(): Promise<NicheRunStatus> {
   return { state: 'idle', message: 'no recent runs' };
 }
 
+/**
+ * Hard-delete a rejected niche. Only operates on rows with decision === 'rejected';
+ * pending and approved rows are guarded so we never accidentally delete a niche
+ * that has (or is about to get) a dependent sites row.
+ * Not gated by the kill switch — this is a manual operator action, not an agent action.
+ */
+export async function deleteNiche(nicheId: string): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!nicheId) return { ok: false, message: 'missing niche id' };
+  const db = getDb();
+  const [row] = await db.select().from(niches).where(eq(niches.id, nicheId)).limit(1);
+  if (!row) return { ok: false, message: 'niche not found' };
+  if (row.decision !== 'rejected') {
+    return { ok: false, message: `Cannot delete a niche with decision '${row.decision}' — only rejected niches may be deleted.` };
+  }
+  await db.delete(niches).where(eq(niches.id, nicheId));
+  revalidatePath('/operator/niches');
+  return { ok: true };
+}
+
 export async function rejectNiche(formData: FormData): Promise<ActionResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
   const id = String(formData.get('id') ?? '');
@@ -281,7 +301,9 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
 
   // Task B: resolve operator-overridable scoring priors from system_state,
   // falling back to the hardcoded defaults when unset (NULL).
-  const geoSharePrior = sys.geoSharePrior != null ? parseFloat(sys.geoSharePrior) : GEO_SHARE_PRIOR;
+  // geoSharePrior is display-only since the Phase 1 amendment (ADR 0009, 2026-05-19);
+  // demand resolution now uses resolveDemandVolume and no longer reads this prior.
+  // It is preserved in system_state and the control panel for Phase 2 re-purposing.
   const cpcCeiling =
     sys.rentabilityCpcCeiling != null
       ? parseFloat(sys.rentabilityCpcCeiling)
@@ -348,10 +370,17 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
       .filter((c) => c.intent === 'commercial' || c.intent === 'transactional')
       .reduce((sum, c) => sum + c.search_volume, 0);
 
-    // Blend: take the larger of the geo-scoped 2-seed figure and the cluster
-    // estimate scaled by GEO_SHARE_PRIOR. Preserves dfsSearchVolume unchanged
-    // for calibration — only the demand input to computeScore changes.
-    const demandVolume = Math.max(search_volume, clusterVolume * geoSharePrior);
+    // Resolve demand via the shared resolver — single source of truth for both
+    // brainstorm and validate paths. SYNC: scoreCandidate in
+    // packages/agents/src/niche-hunter/index.ts calls the same resolveDemandVolume.
+    // claudeMid = Claude's brainstorm midpoint. Newer rows store it in
+    // estSearchVolume (round((low+high)/2)); legacy rows predating that column
+    // carry the estimate in searchVolume — fall back so they don't resolve to 0.
+    // dfsSearchVolume is kept unchanged for the calibration drawer cross-check;
+    // clusterVolume * GEO_SHARE_PRIOR is shown as an informational line in the
+    // drawer but is NOT a score input (Phase 2 pending).
+    const claudeMid = row.estSearchVolume ?? row.searchVolume ?? 0;
+    const { volume: demandVolume } = resolveDemandVolume(search_volume, claudeMid);
 
     // B1: store contractor_count in dfsRaw alongside DFS data for traceability.
     const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume, contractor_count };
