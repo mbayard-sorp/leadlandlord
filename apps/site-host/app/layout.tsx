@@ -5,6 +5,7 @@ import { resolveCurrentSite } from '../lib/site-context';
 import { currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { WebSiteJsonLd } from '../components/shared/WebSiteJsonLd';
+import { WebVitalsReporter } from '../components/shared/WebVitalsReporter';
 import './globals.css';
 
 /**
@@ -85,6 +86,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Script>
           </>
         ) : null}
+        {process.env.NODE_ENV === 'production' && <WebVitalsReporter />}
       </body>
     </html>
   );
