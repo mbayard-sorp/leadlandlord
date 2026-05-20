@@ -189,6 +189,18 @@ export function getLeadBenchmarkPrice(niche: string): number {
   return best?.price ?? DEFAULT_LEAD_BENCHMARK_PRICE;
 }
 
+/**
+ * Default CPC ceiling (USD) used to normalize the willingness-to-pay sub-score.
+ * Operator-overridable via system_state (ADR 0009 Task B).
+ */
+export const DEFAULT_RENTABILITY_CPC_CEILING = 12;
+
+/**
+ * Default lead-price ceiling (USD) used to normalize the lead-price sub-score.
+ * Operator-overridable via system_state (ADR 0009 Task B).
+ */
+export const DEFAULT_RENTABILITY_LEAD_PRICE_CEILING = 100;
+
 export interface RentabilityScoreInputs {
   /** Number of contractors returned by Places Text Search (first page, max 20). */
   contractor_count: number;
@@ -196,6 +208,16 @@ export interface RentabilityScoreInputs {
   avg_cpc: number;
   /** Midpoint lead price from static benchmarks (USD). */
   lead_benchmark_price: number;
+  /**
+   * CPC ceiling (USD) for the willingness-to-pay sub-score. Omit to use
+   * DEFAULT_RENTABILITY_CPC_CEILING (12). Operator-overridable (Task B).
+   */
+  cpc_ceiling?: number;
+  /**
+   * Lead-price ceiling (USD) for the lead-price sub-score. Omit to use
+   * DEFAULT_RENTABILITY_LEAD_PRICE_CEILING (100). Operator-overridable (Task B).
+   */
+  lead_price_ceiling?: number;
 }
 
 /**
@@ -219,18 +241,24 @@ export interface RentabilityScoreInputs {
  *
  * 2. CPC sub-score (weight 0.25): advertisers paying higher CPCs are signalling
  *    that leads convert and the job value justifies ad spend. We normalize
- *    against $12 (a typical high-CPC home-services ceiling in our data).
- *    Formula: min(1, avg_cpc / 12).
+ *    against the CPC ceiling ($12 default, operator-overridable).
+ *    Formula: min(1, avg_cpc / cpc_ceiling).
  *
  * 3. Lead price sub-score (weight 0.25): higher benchmark lead prices mean
  *    contractors in this trade are already conditioned to pay for leads.
- *    We normalize against $100 (a high-end benchmark ceiling).
- *    Formula: min(1, lead_benchmark_price / 100).
+ *    We normalize against the lead-price ceiling ($100 default, overridable).
+ *    Formula: min(1, lead_benchmark_price / lead_price_ceiling).
  *
  * All three sub-scores are in [0, 1]; the weighted sum is multiplied by 100.
  */
 export function computeRentabilityScore(inputs: RentabilityScoreInputs): number {
-  const { contractor_count, avg_cpc, lead_benchmark_price } = inputs;
+  const {
+    contractor_count,
+    avg_cpc,
+    lead_benchmark_price,
+    cpc_ceiling = DEFAULT_RENTABILITY_CPC_CEILING,
+    lead_price_ceiling = DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
+  } = inputs;
 
   // Sub-score 1: supply curve (tent, peaks at count=14, weight 0.50)
   const count = Math.max(0, Math.min(20, contractor_count));
@@ -247,12 +275,13 @@ export function computeRentabilityScore(inputs: RentabilityScoreInputs): number 
   }
 
   // Sub-score 2: CPC willingness-to-pay signal (weight 0.25)
-  // Ceiling $12 — CPCs above that are treated as max signal.
-  const cpcSub = Math.min(1, avg_cpc / 12);
+  // CPCs at/above the ceiling are treated as max signal.
+  const cpcSub = cpc_ceiling > 0 ? Math.min(1, avg_cpc / cpc_ceiling) : 0;
 
   // Sub-score 3: static lead-price benchmark (weight 0.25)
-  // Ceiling $100 — lead prices above that get max signal.
-  const leadPriceSub = Math.min(1, lead_benchmark_price / 100);
+  // Lead prices at/above the ceiling get max signal.
+  const leadPriceSub =
+    lead_price_ceiling > 0 ? Math.min(1, lead_benchmark_price / lead_price_ceiling) : 0;
 
   const raw = supplySub * 0.5 + cpcSub * 0.25 + leadPriceSub * 0.25;
   return Math.min(100, Math.max(0, raw * 100));

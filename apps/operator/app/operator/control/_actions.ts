@@ -107,6 +107,57 @@ export async function updateOperatorMode(formData: FormData): Promise<ActionResu
   return { ok: true, message: `Mode set to ${mode}.` };
 }
 
+/**
+ * Optional numeric: blank/whitespace → null (reset to the hardcoded default),
+ * otherwise a finite number. Returns `undefined` to signal a parse error.
+ */
+function optNum(v: FormDataEntryValue | null): number | null | undefined {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (s === '') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Task B: operator-tunable niche-scoring priors on system_state. A blank field
+ * stores NULL, which the validate action reads as "use the agents-package
+ * default" (geoSharePrior 0.15, cpc ceiling 12, lead-price ceiling 100).
+ */
+export async function updateScoringPriors(formData: FormData): Promise<ActionResult> {
+  const geo = optNum(formData.get('geoSharePrior'));
+  const cpc = optNum(formData.get('rentabilityCpcCeiling'));
+  const lead = optNum(formData.get('rentabilityLeadPriceCeiling'));
+
+  if (geo === undefined || cpc === undefined || lead === undefined) {
+    return { ok: false, message: 'Values must be numbers (or blank to reset to default).' };
+  }
+  if (geo != null && (geo <= 0 || geo > 1)) {
+    return { ok: false, message: 'Geo-share prior must be a fraction in (0, 1].' };
+  }
+  if (cpc != null && cpc <= 0) {
+    return { ok: false, message: 'CPC ceiling must be greater than 0.' };
+  }
+  if (lead != null && lead <= 0) {
+    return { ok: false, message: 'Lead-price ceiling must be greater than 0.' };
+  }
+
+  const db = getDb();
+  await db
+    .update(systemState)
+    .set({
+      geoSharePrior: geo == null ? null : geo.toFixed(3),
+      rentabilityCpcCeiling: cpc == null ? null : cpc.toFixed(2),
+      rentabilityLeadPriceCeiling: lead == null ? null : lead.toFixed(2),
+      updatedAt: new Date(),
+    })
+    .where(eq(systemState.id, 'global'));
+
+  log.info({ geo, cpc, lead }, 'niche-scoring priors updated from dashboard');
+  revalidatePath('/operator/control');
+  return { ok: true, message: 'Scoring priors saved. Applies to the next niche validation.' };
+}
+
 export async function setOperatorEnabled(formData: FormData): Promise<ActionResult> {
   const enabled = bool(formData.get('enabled'));
   const db = getDb();

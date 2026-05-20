@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
 import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from '@leadlandlord/agents/niche-hunter';
-import { getRentabilityPrior, getLeadBenchmarkPrice, computeRentabilityScore } from '@leadlandlord/agents/niche-hunter/lead-benchmarks';
+import {
+  getRentabilityPrior,
+  getLeadBenchmarkPrice,
+  computeRentabilityScore,
+  DEFAULT_RENTABILITY_CPC_CEILING,
+  DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
+} from '@leadlandlord/agents/niche-hunter/lead-benchmarks';
 import {
   getLocalKeywordMetrics,
   getSerpComposition,
@@ -273,6 +279,18 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
     return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
   }
 
+  // Task B: resolve operator-overridable scoring priors from system_state,
+  // falling back to the hardcoded defaults when unset (NULL).
+  const geoSharePrior = sys.geoSharePrior != null ? parseFloat(sys.geoSharePrior) : GEO_SHARE_PRIOR;
+  const cpcCeiling =
+    sys.rentabilityCpcCeiling != null
+      ? parseFloat(sys.rentabilityCpcCeiling)
+      : DEFAULT_RENTABILITY_CPC_CEILING;
+  const leadPriceCeiling =
+    sys.rentabilityLeadPriceCeiling != null
+      ? parseFloat(sys.rentabilityLeadPriceCeiling)
+      : DEFAULT_RENTABILITY_LEAD_PRICE_CEILING;
+
   const db = getDb();
   const [row] = await db.select().from(niches).where(eq(niches.id, nicheId)).limit(1);
   if (!row) return { ok: false, message: 'Niche not found' };
@@ -333,7 +351,7 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
     // Blend: take the larger of the geo-scoped 2-seed figure and the cluster
     // estimate scaled by GEO_SHARE_PRIOR. Preserves dfsSearchVolume unchanged
     // for calibration — only the demand input to computeScore changes.
-    const demandVolume = Math.max(search_volume, clusterVolume * GEO_SHARE_PRIOR);
+    const demandVolume = Math.max(search_volume, clusterVolume * geoSharePrior);
 
     // B1: store contractor_count in dfsRaw alongside DFS data for traceability.
     const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume, contractor_count };
@@ -364,6 +382,8 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
       contractor_count,
       avg_cpc,
       lead_benchmark_price,
+      cpc_ceiling: cpcCeiling,
+      lead_price_ceiling: leadPriceCeiling,
     });
 
     await db

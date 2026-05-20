@@ -56,9 +56,18 @@ Phase 2 was built ahead of the ADR's "30+ validations" evidence gate at the oper
 - Sanity-check `contractor_count`: Places first-page caps at 20, so any market with ≥20 contractors reads as "20/saturated." Confirm that ceiling is acceptable signal, not a distortion, for the cities we actually target.
 - Deliverable: a short calibration note (or ADR 0009 amendment) recording the tuned values and the evidence behind them.
 
-### Task B — Operator-tunable priors (settings UI)
+### Task B — Operator-tunable priors (settings UI) — SHIPPED (v1)
 
-The architect flagged `GEO_SHARE_PRIOR` (and arguably the rentability ceilings / benchmark overrides) should be operator-overridable, not a hardcoded constant. There is no settings UI yet — see the planned operator Settings section (auto-memory `project_settings_section.md`: runtime flags like MOCK_AI, throttles, toggles currently stuck in Vercel env). Fold these scoring priors into that effort when it lands. Until then the constants in `scoring-config.ts` / `lead-benchmarks.ts` are the single source of truth and changing them needs a deploy.
+The architect flagged `GEO_SHARE_PRIOR` (and arguably the rentability ceilings / benchmark overrides) should be operator-overridable, not a hardcoded constant.
+
+**Done (v1):** Three scalars are now operator-overridable from the existing `/operator/control` panel (no separate Settings page was built — the `system_state` singleton already hosts operator controls, so the priors live there):
+- `geoSharePrior` (default 0.15) — `system_state.geo_share_prior`
+- rentability CPC ceiling (default 12) — `system_state.rentability_cpc_ceiling`
+- rentability lead-price ceiling (default 100) — `system_state.rentability_lead_price_ceiling`
+
+Migration `0027_scoring_priors.sql` adds the three nullable columns. NULL = use the agents-package default, so unset rows behave identically to pre-Task-B. `validateNiche` (`apps/operator/app/operator/niches/actions.ts`) reads the overrides off the `sys` row it already fetches and falls back to `GEO_SHARE_PRIOR` / `DEFAULT_RENTABILITY_CPC_CEILING` / `DEFAULT_RENTABILITY_LEAD_PRICE_CEILING`. `computeRentabilityScore` now takes optional `cpc_ceiling` / `lead_price_ceiling`. Constants in `scoring-config.ts` / `lead-benchmarks.ts` remain the bootstrap defaults. Changes apply to the **next** validation only — existing rows are not rescored.
+
+**Still hardcoded (deferred, not in v1):** the per-trade `TRADE_BENCHMARKS` lead-price table (needs a table editor; framed as ongoing curation) and the rentability tent-curve breakpoints (2 / 14 / 20) and weights (0.50 / 0.25 / 0.25). Add these when the per-trade calibration work in Gate A justifies them.
 
 ### Phase 3 — Deferred, needs a new ADR (do NOT start without one)
 
