@@ -1,4 +1,4 @@
-/* Theme-aware shared component styling — driven entirely by CSS variables.
+/* Theme-aware shared component styling - driven entirely by CSS variables.
  * Each variant's colors/fonts/radii come from styles/themes/*.css.
  */
 
@@ -527,7 +527,7 @@
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
 }
-/* Premium carousel — horizontal scroll-snap, no JS */
+/* Premium carousel - horizontal scroll-snap, no JS */
 .reviews-carousel {
   display: flex;
   gap: 20px;
@@ -629,4 +629,29 @@
   font-family: var(--font-body);
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+/*
+ * ScrollReveal - class contract for components/motion/ScrollReveal.tsx (ADR 0012).
+ * Below-the-fold sections only. Children are always in the server HTML; only the
+ * reveal transition is client-driven (the .is-revealed class is added on intersection).
+ * Transform + opacity only (compositor-safe). Above-the-fold/LCP must not use this.
+ */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 600ms ease, transform 600ms ease;
+  will-change: opacity, transform;
+}
+.scroll-reveal.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
 }
