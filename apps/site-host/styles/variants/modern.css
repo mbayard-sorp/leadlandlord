@@ -1,6 +1,7 @@
-/* Variant B — Clean Modern component styles
- * Calm, geometric, single accent. "Nerdy so you don't have to be."
- * For solar, EV charging, smart-home, water treatment, energy audits.
+/* Variant B — Modern / Swiss-System component styles
+ * Rational, grid-led. Grotesk dominance, tabular numerals, tracked uppercase
+ * labels, rule-separated modules. Terse, spec-forward voice.
+ * For solar, EV, smart-home, water-heater install.
  */
 
 [data-theme='modern'] .modern-shell { padding-bottom: 64px; }
@@ -51,6 +52,8 @@
 [data-theme='modern'] .modern-cta-pill:hover { opacity: 0.92; }
 [data-theme='modern'] .modern-phone-pill {
   display: none;
+  align-items: center;
+  gap: 6px;
   padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid var(--ink);
@@ -60,7 +63,8 @@
   color: var(--ink);
   text-decoration: none;
 }
-@media (min-width: 640px) { [data-theme='modern'] .modern-phone-pill { display: inline-flex; align-items: center; } }
+@media (min-width: 640px) { [data-theme='modern'] .modern-phone-pill { display: inline-flex; } }
+[data-theme='modern'] .modern-phone-icon { flex-shrink: 0; }
 [data-theme='modern'] .modern-header-cta {
   display: flex;
   align-items: center;
@@ -199,7 +203,15 @@
   font-size: 0.9375rem;
   color: var(--ink-2);
 }
-[data-theme='modern'] .modern-trust li::before { content: '✓ '; color: var(--accent); font-weight: 700; }
+[data-theme='modern'] .modern-trust li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-theme='modern'] .modern-trust-check {
+  flex-shrink: 0;
+  color: var(--accent);
+}
 
 /* hero — inline form card overlapping */
 [data-theme='modern'] .modern-form-card {
@@ -273,16 +285,16 @@
   box-shadow: 0 2px 0 rgba(16, 20, 24, 0.05), 0 12px 28px rgba(16, 20, 24, 0.08);
   transform: translateY(-1px);
 }
-[data-theme='modern'] .modern-service-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-size: 1.25rem;
+/* Numeric service index (Swiss-grid aesthetic; replaces decorative glyph set) */
+[data-theme='modern'] .modern-service-index {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
   color: var(--accent);
-  background: var(--accent-50);
-  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--rule));
+  opacity: 0.7;
+  line-height: 1;
 }
 [data-theme='modern'] .modern-service-title {
   font-family: var(--font-display);
@@ -415,6 +427,11 @@
   background: var(--accent);
   color: var(--ink);
 }
+/* CTA section — eyebrow inherits .modern-eyebrow but needs contrast override on accent bg */
+[data-theme='modern'] .modern-cta-eyebrow {
+  color: var(--ink);
+  opacity: 0.65;
+}
 [data-theme='modern'] .modern-cta-h2 {
   font-family: var(--font-display);
   font-weight: 700;
@@ -433,7 +450,7 @@
 [data-theme='modern'] .modern-cta-phone {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 14px 28px;
   background: var(--ink);
   color: var(--paper);
@@ -441,7 +458,9 @@
   font-weight: 700;
   border-radius: 999px;
   text-decoration: none;
+  transition: opacity 0.15s;
 }
+[data-theme='modern'] .modern-cta-phone:hover { opacity: 0.9; }
 
 /* trust band — light, on paper-2, between hero and services */
 [data-theme='modern'] .modern-trust-band {
@@ -471,6 +490,46 @@
   }
 }
 
+/* Proof strip — plain-text testimonial + response promise. No star schema. */
+[data-theme='modern'] .modern-proof-strip {
+  padding: 20px clamp(20px, 5vw, 56px);
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 40px;
+}
+[data-theme='modern'] .modern-proof-quote {
+  margin: 0;
+  flex: 1 1 260px;
+}
+[data-theme='modern'] .modern-proof-text {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0 0 6px;
+  font-style: italic;
+}
+[data-theme='modern'] .modern-proof-attribution {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+[data-theme='modern'] .modern-response-promise {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin: 0;
+  flex-shrink: 0;
+}
+
 /* BIG phone block — light, between services and FAQ */
 [data-theme='modern'] .modern-phone-block {
   text-align: center;
@@ -489,7 +548,9 @@
   margin: 0 0 10px;
 }
 [data-theme='modern'] .modern-phone-block-num {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: clamp(36px, 7vw, 72px);
@@ -499,6 +560,7 @@
   text-decoration: none;
 }
 [data-theme='modern'] .modern-phone-block-num:hover { color: var(--accent); }
+[data-theme='modern'] .modern-phone-block-icon { flex-shrink: 0; }
 [data-theme='modern'] .modern-phone-block-sub {
   font-family: var(--font-body);
   font-size: 0.9375rem;

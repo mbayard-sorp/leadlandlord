@@ -21,16 +21,16 @@ import React, { useEffect, useRef } from 'react';
 /** Allowed wrapper tags. Extend as needed; keep the union small to avoid TS complexity errors. */
 type ValidTag = 'div' | 'section' | 'article' | 'aside' | 'li';
 
-interface ScrollRevealProps {
+interface ScrollRevealProps extends React.HTMLAttributes<HTMLElement> {
   children: React.ReactNode;
-  /** Extra classes to add alongside the scroll-reveal base class. */
-  className?: string;
   /** Wrapper element tag. Defaults to 'div'. */
   as?: ValidTag;
-  /** IntersectionObserver threshold (0–1). Default 0.1. */
+  /** IntersectionObserver threshold (0-1). Default 0.1. */
   threshold?: number;
   /** CSS transition-delay in ms applied via inline style. Default 0. */
   delay?: number;
+  // Standard HTML attributes (id, aria-*, etc.) are forwarded to the wrapper
+  // element, so a revealed section can keep its anchor id (#services, #contact).
 }
 
 export function ScrollReveal({
@@ -39,6 +39,8 @@ export function ScrollReveal({
   as: tag = 'div',
   threshold = 0.1,
   delay = 0,
+  style: styleProp,
+  ...rest
 }: ScrollRevealProps) {
   const ref = useRef<HTMLElement>(null);
 
@@ -69,13 +71,17 @@ export function ScrollReveal({
     return () => observer.disconnect();
   }, [threshold]);
 
-  const style: React.CSSProperties = delay > 0 ? { transitionDelay: `${delay}ms` } : {};
+  const style: React.CSSProperties = {
+    ...styleProp,
+    ...(delay > 0 ? { transitionDelay: `${delay}ms` } : {}),
+  };
   const combinedClass = ['scroll-reveal', className].filter(Boolean).join(' ');
 
   // Use createElement to avoid TS union-complexity errors from a dynamic JSX tag.
+  // `rest` carries forwarded HTML attributes (id, aria-*); our ref/class/style win.
   return React.createElement(
     tag,
-    { ref, className: combinedClass, style },
+    { ...rest, ref, className: combinedClass, style },
     children,
   );
 }

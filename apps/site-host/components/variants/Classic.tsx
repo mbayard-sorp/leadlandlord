@@ -1,6 +1,11 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { heroH1, telHref } from '../../lib/content';
+import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
+import { Phone } from '../icons/Phone';
+import { Check } from '../icons/Check';
+import { Star } from '../icons/Star';
+import { ScrollReveal } from '../motion/ScrollReveal';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -27,27 +32,30 @@ interface Props {
 
 /**
  * Variant A — Trade-Classic.
- * Painted truck doors. Hardware-store flyer. Yellow-Pages-direct.
+ * Warm-Modern. Sunlit, human, composed. The neighbor's trusted crew.
  * For HVAC, plumbing, electrical, gutter, roofing, fence, septic.
  *
  * Type: Oswald 700 uppercase display + Public Sans body.
  * Color: Ink #0F1620 + Paper #FBFAF6 + Accent safety-orange #E85D10.
  * Borders: 2px Ink, 2-4px radius. No shadows.
+ * Voice: warm, direct, family-owned. "We pick up." "Your neighbors' crew."
  */
 export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https://example.com' }: Props) {
   const tel = telHref(phone);
   const baseUrl = pageUrl.replace(/\/$/, '');
+
+  // Trust signals: Classic falls back to warm/human defaults, not generic ones.
   const trust =
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
-      : ['Licensed & insured', 'Same-week service', 'Free quotes', 'We answer the phone'];
-  const areas = uniq([bundle.city, ...bundle.nearby_cities, ...bundle.service_areas.map((a) => a.title)]).slice(0, 12);
-  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
-  const faqs = bundle.blog_posts
-    .filter((p) => /\?$/.test(p.title))
-    .slice(0, 6)
-    .map((p) => ({ q: p.title, a: p.meta_description }));
-  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
+      : ['Licensed & insured', 'Your neighbors’ crew', 'Free honest quotes', 'We pick up'];
+
+  // Derived data — via shared variant-utils helpers.
+  const areas = deriveAreas(bundle);
+  const slugByTitle = areaSlugByTitle(bundle);
+  const faqs = deriveFaqs(bundle);
+  const blogTeasers = deriveBlogTeasers(bundle);
+  const review = firstReview(bundle);
 
   return (
     <>
@@ -58,8 +66,11 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
       <div className="classic-shell">
         {/* utility bar */}
         <div className="classic-utility surface-inverse">
-          <span>★ Family-owned · {bundle.city}, {bundle.state}</span>
-          <span className="hidden sm:inline">Open 7am – 9pm · 7 days</span>
+          <span>
+            <Star width={12} height={12} className="classic-utility-star" />
+            {' '}Family-owned &middot; {bundle.city}, {bundle.state}
+          </span>
+          <span className="hidden sm:inline">Open 7am &ndash; 9pm &middot; 7 days</span>
         </div>
 
         {/* header — brand wordmark + phone pill */}
@@ -68,20 +79,22 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             <span className="classic-mark" aria-hidden />
             <span className="classic-brand-name">{bundle.business_name}</span>
           </a>
-          <a href={tel} className="classic-phone-pill num">☎ {phone}</a>
+          <a href={tel} className="classic-phone-pill num">
+            <Phone width={15} height={15} />
+            {phone}
+          </a>
         </header>
 
         {/* top nav */}
         <SiteNav bundle={bundle} variant="classic" />
 
-        {/* hero */}
+        {/* hero — above fold, no ScrollReveal, no motion wrapper */}
         <section className="classic-hero" aria-labelledby="hero-h1">
           <div className="classic-hero-text">
             <p className="classic-eyebrow">
-              {bundle.city}, {bundle.state} · Family-owned
+              {bundle.city}, {bundle.state} &middot; Your neighbors&rsquo; crew
             </p>
-            {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
-            {/* SEO: render the exact targeted keyword phrase verbatim; CSS uppercases it. */}
+            {/* ADR 0002: H1 renders the exact targeted keyword phrase verbatim; CSS uppercases it. */}
             <h1 id="hero-h1" className="classic-h1">
               {heroH1(bundle)}
             </h1>
@@ -89,14 +102,23 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             <p className="classic-lede">
               {bundle.home.meta_description}
             </p>
+            {bundle.response_time_promise && (
+              <p className="classic-availability">{bundle.response_time_promise}</p>
+            )}
             <div className="classic-hero-buttons">
-              <a href={tel} className="classic-btn classic-btn-primary">☎ Call {phone}</a>
-              <a href="#contact" className="classic-btn classic-btn-secondary">Get free quote →</a>
+              <a href={tel} className="classic-btn classic-btn-primary">
+                <Phone width={16} height={16} />
+                Call {phone}
+              </a>
+              <a href="#contact" className="classic-btn classic-btn-secondary">Get your free quote &rarr;</a>
             </div>
             <CallNowBadge bundle={bundle} />
             <ul className="classic-hero-trust">
               {trust.slice(0, 3).map((t) => (
-                <li key={t}>✓ {t}</li>
+                <li key={t}>
+                  <Check width={14} height={14} className="classic-check-icon" />
+                  {t}
+                </li>
               ))}
             </ul>
           </div>
@@ -117,25 +139,38 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </div>
         </section>
 
-        {/* TrustStrip (chips) — right under hero, before BIG phone block */}
+        {/* TrustStrip — right under hero, above fold, no ScrollReveal */}
         <TrustStrip bundle={bundle} variant="classic" />
 
-        {/* CertificationsRow — below TrustStrip */}
+        {/* Proof element: first real review as plain text, no review schema */}
+        {review && (
+          <div className="classic-proof-strip">
+            <blockquote className="classic-proof-quote">
+              &ldquo;{review.text}&rdquo;
+            </blockquote>
+            <cite className="classic-proof-author">&mdash; {review.author}</cite>
+          </div>
+        )}
+
+        {/* CertificationsRow — below proof strip */}
         <CertificationsRow bundle={bundle} variant="classic" />
 
-        {/* BIG phone block */}
+        {/* BIG phone block — Classic hallmark; warm eyebrow copy */}
         <section className="classic-phone-block">
-          <p className="classic-phone-eyebrow">We answer the phone.</p>
+          <p className="classic-phone-eyebrow">Real people. We pick up.</p>
           <a href={tel} className="classic-phone-big num">{phone}</a>
           <CallNowBadge bundle={bundle} />
-          <p className="classic-phone-sub">Tap to call · 7am – 9pm, 7 days · free quotes</p>
+          <p className="classic-phone-sub">
+            <Phone width={14} height={14} className="classic-phone-sub-icon" />
+            Tap to call &middot; 7am &ndash; 9pm, 7 days &middot; free quotes
+          </p>
         </section>
 
         {/* trust strip on dark */}
         <section className="classic-trust-strip surface-inverse" aria-label="Trust signals">
           {trust.slice(0, 4).map((t, i) => (
             <div key={t}>
-              <div className="classic-trust-eyebrow">{['Licensed & insured', 'Same-week service', 'Free quotes', 'We answer'][i] ?? t}</div>
+              <div className="classic-trust-eyebrow">{['Licensed & insured', 'Your neighbors’ crew', 'Free honest quotes', 'We pick up'][i] ?? t}</div>
               <div className="classic-trust-detail">{t}</div>
             </div>
           ))}
@@ -143,10 +178,10 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </section>
 
         {/* numbered services */}
-        <section className="classic-services" id="services">
+        <ScrollReveal as="section" className="classic-services" id="services">
           <header className="classic-section-head">
-            <p className="classic-section-eyebrow">What we do</p>
-            <h2 className="classic-h2">Services</h2>
+            <p className="classic-section-eyebrow">How we help</p>
+            <h2 className="classic-h2">Our services</h2>
           </header>
           <div className="classic-services-grid">
             {bundle.services.map((s, i) => (
@@ -154,22 +189,22 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
                 <div className="classic-service-num num">{String(i + 1).padStart(2, '0')}</div>
                 <h3 className="classic-service-title">{s.title}</h3>
                 <p className="classic-service-blurb">{s.meta_description}</p>
-                <span className="classic-service-link">READ MORE →</span>
+                <span className="classic-service-link">LEARN MORE &rarr;</span>
               </a>
             ))}
           </div>
-        </section>
+        </ScrollReveal>
 
         {/* PhotoGallery — below services grid */}
         <PhotoGallery bundle={bundle} variant="classic" />
 
         {/* service areas */}
-        <section className="classic-areas" id="where">
-          <p className="classic-section-eyebrow">Where we work</p>
-          <h2 className="classic-h2">{bundle.city} & nearby towns</h2>
+        <ScrollReveal as="section" className="classic-areas" id="where">
+          <p className="classic-section-eyebrow">Right in your backyard</p>
+          <h2 className="classic-h2">{bundle.city} &amp; nearby towns</h2>
           <ul className="classic-area-chips">
             {areas.map((c) => {
-              const slug = areaSlugByTitle.get(c);
+              const slug = slugByTitle.get(c);
               return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
             })}
           </ul>
@@ -179,11 +214,11 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             state={bundle.state}
             height={320}
           />
-        </section>
+        </ScrollReveal>
 
         {/* Neighborhoods — thin-mode home page service-area section */}
         {bundle.neighborhoods.length > 0 && (
-          <section className="classic-areas" aria-label="Neighborhoods we serve">
+          <ScrollReveal as="section" className="classic-areas" aria-label="Neighborhoods we serve">
             <p className="classic-section-eyebrow">Neighborhoods we serve</p>
             <h2 className="classic-h2">Local service across {bundle.city}</h2>
             <ul className="classic-area-chips">
@@ -195,14 +230,14 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
                 </li>
               ))}
             </ul>
-          </section>
+          </ScrollReveal>
         )}
 
         {/* FAQ */}
         {faqs.length > 0 && (
-          <section className="classic-faq" aria-label="FAQ">
-            <p className="classic-section-eyebrow">Common questions</p>
-            <h2 className="classic-h2">Questions our customers ask</h2>
+          <ScrollReveal as="section" className="classic-faq" aria-label="FAQ">
+            <p className="classic-section-eyebrow">Good question</p>
+            <h2 className="classic-h2">Questions our neighbors ask</h2>
             <dl className="classic-faq-list">
               {faqs.map((f, i) => (
                 <details key={i} className="classic-faq-item" open={i === 0}>
@@ -213,58 +248,61 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
                 </details>
               ))}
             </dl>
-          </section>
+          </ScrollReveal>
         )}
 
         {/* Learn more — links to /pages/[slug] */}
         {bundle.info_pages.length > 0 && (
-          <section className="classic-learn-more" aria-label="Resources">
-            <p className="classic-section-eyebrow">Learn more</p>
-            <h2 className="classic-h2">Local guides & info</h2>
+          <ScrollReveal as="section" className="classic-learn-more" aria-label="Resources">
+            <p className="classic-section-eyebrow">Good reads</p>
+            <h2 className="classic-h2">Local guides &amp; info</h2>
             <ul className="classic-learn-list">
               {bundle.info_pages.slice(0, 6).map((p) => (
                 <li key={p.slug}>
                   <a href={p.slug}>
                     <span className="classic-learn-title">{p.title}</span>
-                    <span className="classic-learn-arrow">→</span>
+                    <span className="classic-learn-arrow">&rarr;</span>
                     <span className="classic-learn-blurb">{p.meta_description}</span>
                   </a>
                 </li>
               ))}
             </ul>
-          </section>
+          </ScrollReveal>
         )}
 
         {/* From the blog — links to /blog/[slug] */}
         {blogTeasers.length > 0 && (
-          <section className="classic-learn-more" aria-label="From the blog">
-            <p className="classic-section-eyebrow">From the blog</p>
+          <ScrollReveal as="section" className="classic-learn-more" aria-label="From the blog">
+            <p className="classic-section-eyebrow">From our crew</p>
             <h2 className="classic-h2">Recent articles</h2>
             <ul className="classic-learn-list">
               {blogTeasers.map((p) => (
                 <li key={p.slug}>
                   <a href={p.slug}>
                     <span className="classic-learn-title">{p.title}</span>
-                    <span className="classic-learn-arrow">→</span>
+                    <span className="classic-learn-arrow">&rarr;</span>
                     <span className="classic-learn-blurb">{p.meta_description}</span>
                   </a>
                 </li>
               ))}
             </ul>
-          </section>
+          </ScrollReveal>
         )}
 
         {/* ReviewsSection — above the LeadForm contact section */}
         <ReviewsSection bundle={bundle} variant="classic" />
 
         {/* contact + form */}
-        <section className="classic-contact" id="contact">
+        <ScrollReveal as="section" className="classic-contact" id="contact">
           <div className="classic-contact-info surface-inverse">
-            <p className="classic-section-eyebrow" data-accent>Get in touch</p>
-            <h2 className="classic-h2">Call us — we pick up.</h2>
-            <a href={tel} className="classic-phone-block-inline num" data-accent>{phone}</a>
+            <p className="classic-section-eyebrow" data-accent>Ready to help</p>
+            <h2 className="classic-h2">Call us &mdash; we pick up.</h2>
+            <a href={tel} className="classic-phone-block-inline num" data-accent>
+              <Phone width={20} height={20} className="classic-contact-phone-icon" />
+              {phone}
+            </a>
             <CallNowBadge bundle={bundle} />
-            <p>Open 7am – 9pm, 7 days a week.</p>
+            <p>Open 7am &ndash; 9pm, 7 days a week.</p>
             <p className="classic-contact-areas">
               Serving {areas.slice(0, 6).join(' · ')}
             </p>
@@ -272,36 +310,31 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           <div className="classic-contact-form">
             <LeadForm
               variant="classic"
-              heading="Get a free quote"
-              sub="Or just call — we pick up."
-              submit="SEND →"
+              heading="Get a free, honest quote"
+              sub="Or just call — we pick up every time."
+              submit="SEND &rarr;"
               siteId={siteId}
               siteSlug={siteSlug}
             />
           </div>
-        </section>
+        </ScrollReveal>
 
         {/* footer */}
         <footer className="classic-footer surface-inverse">
-          <div>© {new Date().getFullYear()} {bundle.business_name} · Licensed & insured{bundle.license_number ? ` · Licensed #${bundle.license_number}` : ''}</div>
+          <div>&copy; {new Date().getFullYear()} {bundle.business_name} &middot; Licensed &amp; insured{bundle.license_number ? ` · Licensed #${bundle.license_number}` : ''}</div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
         </footer>
 
         {/* sticky mobile bar */}
         <div className="sticky-mobile-bar surface-inverse" aria-hidden="false">
-          <a href={tel} className="phone num" aria-label={`Call ${phone}`}>☎ {phone}</a>
-          <a href="#contact" className="cta">Get quote</a>
+          <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
+            <Phone width={16} height={16} />
+            {phone}
+          </a>
+          <a href="#contact" className="cta">Free quote</a>
         </div>
         <div className="classic-mobile-spacer" aria-hidden />
       </div>
     </>
   );
-}
-
-function uniq<T>(arr: T[]): T[] {
-  return arr.filter((v, i, a) => a.indexOf(v) === i);
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
