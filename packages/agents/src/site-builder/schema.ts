@@ -33,8 +33,13 @@ export const SiteBuilderOutput = z.object({
   theme: z.enum(['classic', 'modern', 'premium', 'bright']),
   /** Hero image asset URL when generated, null when skipped (no API key) or failed. */
   hero_image_url: z.string().url().nullable(),
-  tracking_number: z.string(),
-  tracking_provider: z.enum(['twilio', 'mock']),
+  /**
+   * Tracking number is provisioned out of band (operator does it manually via
+   * the site detail page), so site-builder no longer sets it — null until an
+   * operator assigns one.
+   */
+  tracking_number: z.string().nullable(),
+  tracking_provider: z.enum(['twilio', 'mock']).nullable(),
   deployed_at: z.string(),
 });
 export type SiteBuilderOutput = z.infer<typeof SiteBuilderOutput>;
