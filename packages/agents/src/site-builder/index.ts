@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
 import { getDb, sites, agentEvents, networks, siteNetworkMemberships } from '@leadlandlord/db';
 import { imagen, klaviyo } from '@leadlandlord/integrations';
 import {
@@ -76,10 +77,27 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     )[0];
     const siteMode = siteRow?.siteMode ?? 'thin';
 
-    await db
+    // Resolve the build epoch — the stable anchor for expensive sub-agent
+    // dedupe keys. Set once on first build (COALESCE keeps any existing value
+    // so a reaper retry reuses the same epoch → cache hit). An explicit
+    // refresh (force_content_refresh) or a re-target (skip_keyword_planning
+    // regenerates content against existing clusters) bumps it so content is
+    // regenerated rather than served from the prior cached run.
+    const wantsFreshContent =
+      input.force_content_refresh === true || (input.skip_keyword_planning ?? false);
+    const newEpoch = randomUUID();
+    const [epochRow] = await db
       .update(sites)
-      .set({ status: 'building', updatedAt: new Date() })
-      .where(eq(sites.id, siteId));
+      .set({
+        status: 'building',
+        updatedAt: new Date(),
+        buildEpoch: wantsFreshContent
+          ? newEpoch
+          : sql`COALESCE(${sites.buildEpoch}, ${newEpoch})`,
+      })
+      .where(eq(sites.id, siteId))
+      .returning({ buildEpoch: sites.buildEpoch });
+    const buildEpoch = epochRow?.buildEpoch ?? newEpoch;
 
     // 1b. Create a minimal Sanity site stub so keyword-planner's cluster
     //     docs (which carry a `site` reference) don't fail with "non-existent
@@ -123,7 +141,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
           state: input.state.toUpperCase(),
           site_mode: siteMode,
         },
-        { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:keyword-planner` },
+        { siteId, parentRunId: ctx.runId, dedupeKey: `kp:${siteId}:${buildEpoch}` },
       );
       ctx.log.info(
         { clusters: planResult.clusters_persisted, totalVolume: planResult.total_volume },
@@ -155,7 +173,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         theme: pickThemeForNiche(input.niche),
         site_mode: siteMode,
       },
-      { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:content-engine` },
+      { siteId, parentRunId: ctx.runId, dedupeKey: `ce:${siteId}:${buildEpoch}` },
     );
     ctx.log.info(
       { pages: countPages(bundle) },
@@ -165,9 +183,13 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
 
     // 3. Provision tracking number (mocked when MOCK_TELEPHONY=true).
     ctx.progress({ step: 4, total: 8, label: 'provisioning tracking number' });
+    // No dedupeKey override — tracking-setup's own dedupeKeyFn keys on site_id,
+    // so a retry reuses the already-provisioned number instead of leaking a new
+    // paid Twilio number. The number is independent of content, so it is NOT
+    // epoch-scoped: a content refresh must not reprovision a phone line.
     const tracking = await this.trackingSetup.run(
       { site_id: siteId },
-      { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:tracking-setup` },
+      { siteId, parentRunId: ctx.runId },
     );
     this.emit({
       step: 'tracking_provisioned',
@@ -212,7 +234,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         try {
           const result = await guard.run(
             { scope: 'site_publish', text: page.mdx, metadata: { slug: page.slug, kind: page.kind } },
-            { siteId, parentRunId: ctx.runId, dedupeKey: `${ctx.runId}:compliance-guard:${page.slug}` },
+            { siteId, parentRunId: ctx.runId, dedupeKey: `cg:${siteId}:${buildEpoch}:${page.slug}` },
           );
           if (!result.ok) {
             for (const v of result.violations) {

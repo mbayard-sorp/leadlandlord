@@ -18,6 +18,10 @@ function findEnvFile(start: string, name: string): string | undefined {
   return undefined;
 }
 const repoRoot = resolve(__dirname, '../..');
+
+// Relative to this app dir. Traces every agent prompt/overlay markdown file
+// into the Lambda bundle so runtime readFileSync calls resolve in production.
+const AGENT_PROMPT_GLOB = '../../packages/agents/src/**/*.md';
 const envLocal = findEnvFile(__dirname, '.env.local');
 if (envLocal) loadEnv({ path: envLocal, override: true });
 
@@ -35,24 +39,21 @@ const config: NextConfig = {
     '@leadlandlord/shared',
   ],
   serverExternalPackages: ['pino', '@neondatabase/serverless', '@sanity/client'],
-  // Static text files read by agents at runtime (e.g. ContentEngine's
-  // system.md) aren't traced automatically by Vercel's nft. Include them
-  // explicitly for any route that may invoke an agent.
+  // Static text files (system.md prompts, niche overlays) are read by agents
+  // at runtime via readFileSync and aren't traced automatically by Vercel's
+  // nft. A single glob covers every current and future agent prompt so adding
+  // a new agent can't silently ENOENT in production. Convention: all agent
+  // prompt files live under packages/agents/src/.
   outputFileTracingIncludes: {
-    '/api/operator/build': [
-      '../../packages/agents/src/content-engine/system.md',
-    ],
-    '/api/cron/agent/[name]': [
-      '../../packages/agents/src/content-engine/system.md',
-    ],
-    '/api/cron/operator-tick': [
-      '../../packages/agents/src/content-engine/system.md',
-    ],
+    '/api/operator/build': [AGENT_PROMPT_GLOB],
+    '/api/cron/agent/[name]': [AGENT_PROMPT_GLOB],
+    '/api/cron/operator-tick': [AGENT_PROMPT_GLOB],
     // triggerOperatorTick server action is invoked from the prospects page
     // and ultimately loads the ContentEngine agent via runOperatorTick.
-    '/operator/backlinks/prospects': [
-      '../../packages/agents/src/content-engine/system.md',
-    ],
+    '/operator/backlinks/prospects': [AGENT_PROMPT_GLOB],
+    // The agents dashboard imports the agent registry, which loads each
+    // agent's index.ts (system.md read at module init).
+    '/operator/agents': [AGENT_PROMPT_GLOB],
   },
 };
 

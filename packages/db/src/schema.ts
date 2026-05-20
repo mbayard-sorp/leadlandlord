@@ -228,6 +228,14 @@ export const sites = pgTable(
     competitorSeeds: jsonb('competitor_seeds').$type<string[]>(),
     /** thin = 6-8 pages (default); content_rich = ~28 pages (opt-in). */
     siteMode: siteModeEnum('site_mode').notNull().default('thin'),
+    /**
+     * Stable per-build token. Anchors site-builder's expensive sub-agent
+     * dedupe keys (content-engine, keyword-planner, compliance-guard) so a
+     * reaper-triggered re-run reuses the cached agent_runs output instead of
+     * re-executing the multi-minute Claude call. Set once on first build;
+     * bumped only when the operator wants fresh content (see SiteBuilderInput).
+     */
+    buildEpoch: text('build_epoch'),
     deployedAt: timestamp('deployed_at', { withTimezone: true }),
     currentRank: integer('current_rank'),
     calls30d: integer('calls_30d').notNull().default(0),

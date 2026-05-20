@@ -2,6 +2,7 @@ import { ZodError } from 'zod';
 import {
   AgentRunError,
   AgentDisabledError,
+  KillSwitchActiveError,
   NotImplementedError,
 } from '@leadlandlord/shared/errors';
 
@@ -15,6 +16,7 @@ export type AgentFailureKind =
   | 'unknown_agent'
   | 'not_implemented'
   | 'agent_disabled'
+  | 'kill_switch'
   | 'runtime_error';
 
 /**
@@ -28,6 +30,10 @@ export type AgentFailureKind =
  *    throws after BaseAgent wrapped it in AgentRunError.
  *  - AgentRunError wrapping a NotImplementedError → not_implemented.
  *    BaseAgent.run wraps execute() failures in AgentRunError.underlying.
+ *  - KillSwitchActiveError → kill_switch. The agent never ran (the switch
+ *    threw before the run row was inserted), so this is NOT a failure of the
+ *    work. The queue treats it as a non-attempt-consuming lease release so the
+ *    event stays claimable once the switch is flipped off.
  *  - Anything else (integration timeouts, DB hiccups, bugs in execute) →
  *    runtime_error, eligible for backoff retry.
  *
@@ -38,10 +44,12 @@ export type AgentFailureKind =
 export function classifyAgentError(err: unknown): AgentFailureKind {
   if (err instanceof ZodError) return 'validation_error';
   if (err instanceof AgentDisabledError) return 'agent_disabled';
+  if (err instanceof KillSwitchActiveError) return 'kill_switch';
   if (err instanceof AgentRunError) {
     if (err.underlying instanceof ZodError) return 'validation_error';
     if (err.underlying instanceof NotImplementedError) return 'not_implemented';
     if (err.underlying instanceof AgentDisabledError) return 'agent_disabled';
+    if (err.underlying instanceof KillSwitchActiveError) return 'kill_switch';
   }
   if (err instanceof NotImplementedError) return 'not_implemented';
   return 'runtime_error';
