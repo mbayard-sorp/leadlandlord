@@ -1,5 +1,11 @@
 import { waitUntil } from '@vercel/functions';
-import { claimEvents, markEventProcessed, markEventFailed } from '@leadlandlord/db/queue';
+import {
+  claimEvents,
+  markEventProcessed,
+  markEventFailed,
+  reapStaleLeases,
+} from '@leadlandlord/db/queue';
+import { isKillSwitchActive } from '@leadlandlord/db/system-state';
 import { getAgent } from '@leadlandlord/agents/registry';
 import { classifyAgentError } from '@leadlandlord/agents/error-classify';
 import { log } from '@leadlandlord/shared/log';
@@ -10,6 +16,8 @@ const BATCH_LIMIT = 5;
 export interface TickResult {
   claimed: number;
   dispatched: string[];
+  reaped?: { reclaimed: number; deadLettered: number };
+  skipped?: 'kill_switch';
 }
 
 /**
@@ -28,6 +36,25 @@ export async function runOperatorTick(): Promise<TickResult> {
     { build_marker: 'pr12-mock-2026-05-08T0030', mock_ai: process.env.MOCK_AI ?? 'unset' },
     'operator-tick build marker',
   );
+
+  // Global kill switch: short-circuit the whole drain. Claiming events while
+  // the switch is on used to classify each agent's KillSwitchActiveError as a
+  // runtime_error, burning attempts toward dead-letter — toggling the switch
+  // could silently poison legit work. Not claiming at all is the clean stop.
+  if (await isKillSwitchActive()) {
+    log.warn({}, 'operator-tick skipped — portfolio kill switch active');
+    return { claimed: 0, dispatched: [], skipped: 'kill_switch' };
+  }
+
+  // Reclaim leases orphaned by workers that died mid-run (e.g. hit the host
+  // route's maxDuration ceiling). Without this a crashed run wedges its event
+  // forever. Runs before claim so a freshly-released event is claimable this
+  // same tick.
+  const reaped = await reapStaleLeases();
+  if (reaped.reclaimed || reaped.deadLettered) {
+    log.warn(reaped, 'operator-tick reaped stale leases');
+  }
+
   const events = await claimEvents(BATCH_LIMIT);
   log.info({ claimed: events.length }, 'operator-tick claimed events');
 
@@ -107,5 +134,5 @@ export async function runOperatorTick(): Promise<TickResult> {
     })(),
   );
 
-  return { claimed: events.length, dispatched };
+  return { claimed: events.length, dispatched, reaped };
 }

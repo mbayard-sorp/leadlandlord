@@ -3,6 +3,16 @@ import { getDb } from './client';
 import type { AgentEvent } from './schema';
 
 /**
+ * Lease duration for a claimed event. A claim stamps `processing_at`; if the
+ * worker dies without resolving the event (e.g. the Fluid Compute instance
+ * hits its maxDuration ceiling mid-run), the lease goes stale and
+ * `reapStaleLeases` reclaims it. Must be GREATER than the worst-case run time
+ * — operator-tick's host route caps at 800s, so 900s leaves headroom without
+ * reclaiming a still-running event.
+ */
+export const LEASE_SECONDS = 900;
+
+/**
  * Atomically claim up to `limit` agent events that are eligible for processing.
  *
  * Eligibility filter:
@@ -14,6 +24,10 @@ import type { AgentEvent } from './schema';
  * Uses `FOR UPDATE SKIP LOCKED` so multiple dispatcher instances run in
  * parallel without double-claiming the same row. Marks claimed rows by
  * stamping `processing_at`.
+ *
+ * Stale leases are NOT reclaimed here — `reapStaleLeases` handles that as a
+ * distinct step so the claim path stays simple and attempt accounting for
+ * orphaned runs lives in one place.
  *
  * The Neon HTTP driver runs each statement in its own implicit transaction,
  * so we wrap SELECT-and-UPDATE into a single CTE-style query.
@@ -55,6 +69,54 @@ export async function claimEvents(limit = 10): Promise<AgentEvent[]> {
 }
 
 /**
+ * Reclaim events whose lease has gone stale (claimed but never resolved,
+ * because the worker died mid-run). Without this, a crashed run leaves
+ * `processing_at` set forever and `claimEvents` never re-claims the row.
+ *
+ * Each reaped event has its `attempts` incremented so a perpetually-orphaning
+ * event eventually dead-letters instead of looping. Once attempts reach
+ * RUNTIME_MAX_ATTEMPTS the event is dead-lettered here; otherwise its lease is
+ * released (`processing_at` cleared) so the next `claimEvents` picks it up.
+ *
+ * Idempotency note: re-running an event must be safe. site-builder (the main
+ * long-runner) is idempotent — `upsertSite`, deterministic Sanity IDs, and a
+ * cluster loop-guard make a re-claim re-do at most the unfinished tail.
+ *
+ * Returns counts for logging/observability.
+ */
+export async function reapStaleLeases(
+  leaseSeconds = LEASE_SECONDS,
+): Promise<{ reclaimed: number; deadLettered: number }> {
+  const db = getDb();
+  const rows = (await db.execute(sql`
+    UPDATE agent_events
+    SET attempts = attempts + 1,
+        processing_at = NULL,
+        dead_lettered_at = CASE
+          WHEN attempts + 1 >= ${RUNTIME_MAX_ATTEMPTS} THEN NOW()
+          ELSE NULL
+        END,
+        next_attempt_at = NULL,
+        failure_kind = 'runtime_error',
+        error = CASE
+          WHEN attempts + 1 >= ${RUNTIME_MAX_ATTEMPTS}
+            THEN 'orphaned: lease expired and exceeded max attempts (worker likely died mid-run)'
+          ELSE 'orphaned: lease expired, releasing for re-claim (worker likely died mid-run)'
+        END
+    WHERE processed_at IS NULL
+      AND dead_lettered_at IS NULL
+      AND processing_at IS NOT NULL
+      AND processing_at < NOW() - (INTERVAL '1 second' * ${leaseSeconds})
+    RETURNING (attempts >= ${RUNTIME_MAX_ATTEMPTS}) AS dead_lettered
+  `)) as unknown as { rows: Array<{ dead_lettered: boolean }> };
+  const result = Array.isArray(rows)
+    ? (rows as unknown as Array<{ dead_lettered: boolean }>)
+    : rows.rows;
+  const deadLettered = result.filter((r) => r.dead_lettered).length;
+  return { reclaimed: result.length - deadLettered, deadLettered };
+}
+
+/**
  * Mark an event as fully processed (success path). Resets attempts so a
  * subsequently-failing replay starts with a fresh budget.
  */
@@ -87,6 +149,7 @@ export type FailureKind =
   | 'unknown_agent'
   | 'not_implemented'
   | 'agent_disabled'
+  | 'kill_switch'
   | 'runtime_error';
 
 /**
@@ -119,6 +182,22 @@ export async function markEventFailed(
   kind: FailureKind = 'runtime_error',
 ) {
   const db = getDb();
+
+  // Kill-switch refusal is NOT a failure of the work — the agent never ran
+  // because the portfolio switch was on. Release the lease without consuming
+  // an attempt so legit work isn't poisoned toward dead-letter just for being
+  // claimed during a stop. The top-level drain short-circuit normally prevents
+  // claiming at all while the switch is on; this handles a flip mid-drain.
+  if (kind === 'kill_switch') {
+    await db.execute(sql`
+      UPDATE agent_events
+      SET processing_at = NULL,
+          failure_kind = ${kind},
+          error = ${error}
+      WHERE id = ${id}
+    `);
+    return;
+  }
 
   if (TERMINAL_KINDS.has(kind)) {
     await db.execute(sql`
