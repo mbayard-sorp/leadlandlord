@@ -1,41 +1,5 @@
 import type { Bundle } from '../../lib/content';
-
-/**
- * Niche → schema.org subtype mapping per style guide §01 (SEO rules).
- * Defaults to LocalBusiness when no good match.
- */
-const NICHE_SUBTYPES: Record<string, string> = {
-  plumbing: 'Plumber',
-  plumber: 'Plumber',
-  hvac: 'HVACBusiness',
-  'air conditioning': 'HVACBusiness',
-  heating: 'HVACBusiness',
-  electrical: 'Electrician',
-  electrician: 'Electrician',
-  roofing: 'RoofingContractor',
-  roofer: 'RoofingContractor',
-  painting: 'HousePainter',
-  painter: 'HousePainter',
-  'house painter': 'HousePainter',
-  cleaning: 'HouseCleaning',
-  'house cleaning': 'HouseCleaning',
-  maid: 'HouseCleaning',
-  landscaping: 'LandscapingService',
-  landscape: 'LandscapingService',
-  'tree removal': 'TreeService',
-  'tree service': 'TreeService',
-  arborist: 'TreeService',
-  pest: 'PestControlService',
-  'pest control': 'PestControlService',
-  locksmith: 'Locksmith',
-  moving: 'MovingCompany',
-  'junk removal': 'MovingCompany',
-};
-
-function subtypeFor(niche: string): string {
-  const key = niche.toLowerCase().trim();
-  return NICHE_SUBTYPES[key] ?? Object.entries(NICHE_SUBTYPES).find(([k]) => key.includes(k))?.[1] ?? 'LocalBusiness';
-}
+import { serviceAreaLocality, subtypeFor } from './local-business-schema';
 
 interface Props {
   bundle: Bundle;
@@ -97,7 +61,7 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
     areaServed: [
       bundle.city,
       ...bundle.nearby_cities,
-      ...bundle.service_areas.map((a) => a.title.replace(/^.*?in\s+/i, '')),
+      ...bundle.service_areas.map((a) => serviceAreaLocality(a.title, bundle.niche, bundle.state)),
     ]
       .filter((c, i, arr) => c && arr.indexOf(c) === i)
       .map((name) => ({ '@type': 'City', name })),
