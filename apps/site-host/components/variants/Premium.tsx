@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
+import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -11,6 +12,8 @@ import { ReviewsSection } from '../shared/ReviewsSection';
 import { PhotoGallery } from '../shared/PhotoGallery';
 import { CertificationsRow } from '../shared/CertificationsRow';
 import { CallNowBadge } from '../shared/CallNowBadge';
+import { Phone } from '../icons/Phone';
+import { ScrollReveal } from '../motion/ScrollReveal';
 
 interface Props {
   bundle: Bundle;
@@ -31,6 +34,9 @@ const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
  * DM Serif Display + Cormorant italic + Source Serif 4. Cream + ink.
  * Full-bleed editorial hero, hairline rules, no cards, roman-numeral eyebrows.
  * For custom landscape, kitchen remodel, pool builders, fine carpentry.
+ *
+ * Voice: restrained, composed, understated luxury. Calm confidence. No urgency.
+ * Rhythm: hero → editorial lede/about → services → quiet proof → contact.
  */
 export function PremiumHome({
   bundle,
@@ -46,17 +52,13 @@ export function PremiumHome({
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
       : ['By appointment', 'Licensed & insured', 'Considered work'];
-  const areas = uniq([
-    bundle.city,
-    ...bundle.nearby_cities,
-    ...bundle.service_areas.map((a) => a.title),
-  ]).slice(0, 8);
-  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
-  const faqs = bundle.blog_posts
-    .filter((p) => /\?$/.test(p.title))
-    .slice(0, 6)
-    .map((p) => ({ q: p.title, a: p.meta_description }));
-  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
+
+  // Derivation via shared helpers (no more local uniq / inline filters)
+  const areas = deriveAreas(bundle).slice(0, 8);
+  const areaMap = areaSlugByTitle(bundle);
+  const faqs = deriveFaqs(bundle);
+  const blogTeasers = deriveBlogTeasers(bundle);
+  const review = firstReview(bundle);
 
   return (
     <>
@@ -69,17 +71,20 @@ export function PremiumHome({
           <span>
             {bundle.city} · {bundle.state}
           </span>
-          <span className="num">By appointment · ☎ {phone}</span>
+          <span className="num premium-utility-phone">
+            <Phone width={13} height={13} className="premium-utility-icon" />
+            {' '}{phone}
+          </span>
         </div>
 
         <header className="premium-header">
           <a href="/" className="premium-brand">
             {bundle.business_name}
           </a>
-          {/* SiteNav replaces the former inline .premium-nav; retains same CSS class */}
           <SiteNav bundle={bundle} variant="premium" className="premium-nav" />
         </header>
 
+        {/* ABOVE THE FOLD: hero — no ScrollReveal, no motion wrapper */}
         <section
           className="premium-hero"
           aria-labelledby="hero-h1"
@@ -91,7 +96,7 @@ export function PremiumHome({
               fill
               priority
               fetchPriority="high"
-              sizes="(max-width: 768px) 100vw, 1200px"
+              sizes="100vw"
               style={{ objectFit: 'cover' }}
             />
           ) : (
@@ -102,12 +107,10 @@ export function PremiumHome({
               <p className="premium-hero-eyebrow">
                 {bundle.city}, {bundle.state}
               </p>
-              {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
-              {/* SEO: render the exact targeted keyword phrase verbatim, title-cased. */}
+              {/* ADR 0002: H1 renders the targeted keyword phrase verbatim, title-cased. */}
               <h1 id="hero-h1" className="premium-h1">
                 {titleCaseKeyword(heroH1(bundle))}
               </h1>
-              {/* Trust line — license/insurance when fields present */}
               {(bundle.license_number || bundle.insurance_carrier) ? (
                 <p className="premium-trust-line">
                   By appointment
@@ -121,26 +124,32 @@ export function PremiumHome({
           </div>
         </section>
 
-        <section className="premium-lede-band" id="practice">
+        {/* BELOW THE FOLD: all sections wrapped in ScrollReveal */}
+
+        <ScrollReveal as="section" className="premium-lede-band" id="practice">
           <p className="premium-roman">{ROMAN[0]}. The Practice</p>
           <CertificationsRow bundle={bundle} variant="premium" />
           <p className="premium-lede">{bundle.home.meta_description}</p>
           <div className="premium-lede-aside">
-            <p className="premium-roman">Begin</p>
+            <p className="premium-roman">Enquire</p>
             <a href="/contact/" className="premium-link">
-              Request a visit →
+              Arrange a consultation →
             </a>
-            <span className="num">
-              ☎ <a href={tel}>{phone}</a>
+            <span className="num premium-lede-phone">
+              <Phone width={14} height={14} className="premium-lede-phone-icon" aria-hidden />
+              {' '}<a href={tel}>{phone}</a>
             </span>
+            {bundle.response_time_promise && (
+              <p className="premium-response-promise">{bundle.response_time_promise}</p>
+            )}
             <CallNowBadge bundle={bundle} />
           </div>
-        </section>
+        </ScrollReveal>
 
-        <section className="premium-services" id="services">
+        <ScrollReveal as="section" className="premium-services" id="services">
           <div>
             <p className="premium-roman">{ROMAN[1]}. Practice</p>
-            <h2 className="premium-h2">What we do</h2>
+            <h2 className="premium-h2">Our disciplines</h2>
           </div>
           <div className="premium-service-list">
             {bundle.services.map((s, i) => (
@@ -152,20 +161,32 @@ export function PremiumHome({
               </a>
             ))}
           </div>
-        </section>
+        </ScrollReveal>
 
-        {/* PhotoGallery — Portfolio section between Practice and Where */}
+        {/* Quiet proof slab — renders only when a real review exists */}
+        {review && (
+          <ScrollReveal as="section" className="premium-proof-slab" aria-label="Client note">
+            <blockquote className="premium-proof-quote">
+              <p className="premium-proof-text">{review.text}</p>
+              <footer className="premium-proof-attribution">
+                {review.author}
+                {/* locality is not a Review field — omit rather than fabricate */}
+              </footer>
+            </blockquote>
+          </ScrollReveal>
+        )}
+
         {bundle.photo_gallery.length > 0 && (
-          <section className="premium-portfolio">
+          <ScrollReveal as="section" className="premium-portfolio">
             <div>
               <p className="premium-roman">III. Portfolio</p>
               <h2 className="premium-h2">Selected work</h2>
             </div>
             <PhotoGallery bundle={bundle} variant="premium" />
-          </section>
+          </ScrollReveal>
         )}
 
-        <section className="premium-map" aria-label={`Map of ${bundle.city}, ${bundle.state}`}>
+        <ScrollReveal as="section" className="premium-map" aria-label={`Map of ${bundle.city}, ${bundle.state}`}>
           <div>
             <p className="premium-roman">{ROMAN[1]}½. Place</p>
             <h2 className="premium-h2">{bundle.city}, {bundle.state}</h2>
@@ -176,26 +197,25 @@ export function PremiumHome({
             state={bundle.state}
             height={420}
           />
-        </section>
+        </ScrollReveal>
 
-        <section className="premium-areas" id="where">
+        <ScrollReveal as="section" className="premium-areas" id="where">
           <div>
             <p className="premium-roman">{ROMAN[2]}. Where</p>
             <h2 className="premium-h2">Serving the {bundle.city} area</h2>
           </div>
           <ul className="premium-area-list">
             {areas.map((c) => {
-              const slug = areaSlugByTitle.get(c);
+              const slug = areaMap.get(c);
               return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
             })}
           </ul>
-        </section>
+        </ScrollReveal>
 
-        {/* ReviewsSection — CSS scroll-snap horizontal testimonial slider (between Where and Reading) */}
         <ReviewsSection bundle={bundle} variant="premium" title="Client notes" />
 
         {faqs.length > 0 && (
-          <section className="premium-faq" aria-label="Frequently asked questions">
+          <ScrollReveal as="section" className="premium-faq" aria-label="Frequently asked questions">
             <div>
               <p className="premium-roman">{ROMAN[3]}. Inquiry</p>
               <h2 className="premium-h2">Questions, answered</h2>
@@ -208,11 +228,11 @@ export function PremiumHome({
                 </div>
               ))}
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
         {bundle.info_pages.length > 0 && (
-          <section className="premium-learn-more" aria-label="Resources">
+          <ScrollReveal as="section" className="premium-learn-more" aria-label="Resources">
             <p className="premium-roman">{ROMAN[4]}. Reading</p>
             <h2 className="premium-h2">Notes from the studio</h2>
             <ul className="premium-learn-list">
@@ -226,13 +246,13 @@ export function PremiumHome({
                 </li>
               ))}
             </ul>
-          </section>
+          </ScrollReveal>
         )}
 
         {blogTeasers.length > 0 && (
-          <section className="premium-learn-more" aria-label="From the blog">
+          <ScrollReveal as="section" className="premium-learn-more" aria-label="From the blog">
             <p className="premium-roman">{ROMAN[4]}½. Field notes</p>
-            <h2 className="premium-h2">Recent articles</h2>
+            <h2 className="premium-h2">Recent writing</h2>
             <ul className="premium-learn-list">
               {blogTeasers.map((p) => (
                 <li key={p.slug}>
@@ -244,36 +264,37 @@ export function PremiumHome({
                 </li>
               ))}
             </ul>
-          </section>
+          </ScrollReveal>
         )}
 
-        <section className="premium-form-section" id="contact">
+        <ScrollReveal as="section" className="premium-form-section" id="contact">
           <div>
             <p className="premium-roman">{ROMAN[5]}. Inquire</p>
             <h2 className="premium-h2">Begin a conversation</h2>
             <p className="premium-form-sub">
-              Initial consultations are by appointment. Share a few details and we will be in touch.
+              Consultations are by arrangement. Share a few details and we will follow up at your convenience.
             </p>
           </div>
           <div className="premium-form-wrap">
             <LeadForm
               variant="premium"
-              submit="Send inquiry →"
+              submit="Send a note →"
               source="home-premium"
               siteId={siteId}
               siteSlug={siteSlug}
             />
           </div>
-        </section>
+        </ScrollReveal>
 
-        <section className="premium-cta">
-          <p className="premium-cta-eyebrow">Begin a project</p>
+        <ScrollReveal as="section" className="premium-cta">
+          <p className="premium-cta-eyebrow">Arrange a visit</p>
           <h2 className="premium-cta-h2">Initial consultations are by appointment.</h2>
           <a href={tel} className="premium-cta-phone num">
-            ☎ {phone}
+            <Phone width={18} height={18} className="premium-cta-phone-icon" aria-hidden />
+            {' '}{phone}
           </a>
           <CallNowBadge bundle={bundle} />
-        </section>
+        </ScrollReveal>
 
         <footer className="premium-footer">
           <TrustStrip bundle={bundle} variant="premium" style="inline" />
@@ -285,22 +306,15 @@ export function PremiumHome({
 
         <div className="sticky-mobile-bar surface-inverse">
           <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
-            ☎ {phone}
+            <Phone width={16} height={16} className="sticky-phone-icon" aria-hidden />
+            {' '}{phone}
           </a>
           <a href="/contact/" className="cta">
-            Visit
+            Enquire
           </a>
         </div>
         <div className="premium-mobile-spacer" aria-hidden />
       </div>
     </>
   );
-}
-
-function uniq<T>(arr: T[]): T[] {
-  return arr.filter((v, i, a) => a.indexOf(v) === i);
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

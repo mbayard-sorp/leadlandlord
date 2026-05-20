@@ -342,6 +342,66 @@
 [data-theme='classic'] .classic-area-chips li a { color: inherit; text-decoration: none; }
 [data-theme='classic'] .classic-area-chips li a:hover { text-decoration: underline; }
 
+/* proof strip — plain-text review, no review schema (ADR 0012) */
+[data-theme='classic'] .classic-proof-strip {
+  padding: 18px clamp(24px, 5vw, 64px);
+  background: var(--paper-2);
+  border-bottom: 2px solid var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+}
+[data-theme='classic'] .classic-proof-quote {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-style: italic;
+  color: var(--ink-2);
+  line-height: 1.55;
+  margin: 0;
+  flex: 1 1 260px;
+}
+[data-theme='classic'] .classic-proof-author {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  font-style: normal;
+  white-space: nowrap;
+}
+
+/* availability line in hero */
+[data-theme='classic'] .classic-availability {
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--accent);
+  font-weight: 700;
+  margin: 0 0 16px;
+}
+
+/* icon sizing helpers */
+[data-theme='classic'] .classic-utility-star {
+  vertical-align: middle;
+  color: var(--accent);
+}
+[data-theme='classic'] .classic-check-icon {
+  vertical-align: middle;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+[data-theme='classic'] .classic-phone-sub-icon {
+  vertical-align: middle;
+  opacity: 0.8;
+}
+[data-theme='classic'] .classic-contact-phone-icon {
+  vertical-align: middle;
+}
+[data-theme='classic'] .classic-hero-trust li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ─── SiteNav / classic-nav ────────────────────────────────────────────────── */
 [data-theme='classic'] .classic-nav {
   display: flex;
