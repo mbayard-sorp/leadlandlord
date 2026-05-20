@@ -9,16 +9,22 @@ export const dynamic = 'force-dynamic';
 
 // ─── Stage definitions ────────────────────────────────────────────────────────
 //
-// Lifecycle stages in display order. Each stage maps to EITHER:
-//   - an agent_events.type value (event-sourced stages: niche approval, deploy)
-//   - an agent_runs.agent name (sub-agent stages: keyword planner, content, tracking)
+// Lifecycle stages in display order, mirroring the real site-builder pipeline.
+// Each stage maps to EITHER:
+//   - an agent_events.type value (event-sourced stages: niche approval)
+//   - an agent_runs.agent name (sub-agent + parent-run stages)
 //
 // Source-of-truth mapping derived from:
 //   - packages/agents/src/operator/index.ts (niche.approved event)
-//   - packages/agents/src/site-builder/index.ts (site.deployed event, sub-agent calls)
+//   - packages/agents/src/site-builder/index.ts (parent run; row created at run
+//     start, then keyword-planner → content-engine → Sanity write → success)
 //   - packages/agents/src/keyword-planner/index.ts (name: 'keyword-planner')
 //   - packages/agents/src/content-engine/index.ts (name: 'content-engine')
-//   - packages/agents/src/tracking-setup/index.ts (name: 'tracking-setup')
+//
+// NOTE: tracking-number provisioning was removed from the build path (#89 — it's
+// assigned manually out of band), so there is no 'tracking' stage. The old
+// 'Site built' (site.deployed event) and 'Deployed' (site-builder succeeded)
+// stages fired near-simultaneously and are collapsed into a single 'Complete'.
 
 export interface Stage {
   id: string;
@@ -56,6 +62,10 @@ const STAGE_DEFS = [
     label: 'Site created',
     source: 'agent_run' as const,
     match: 'site-builder',
+    // The sites row + Sanity stub are created at the very start of the
+    // site-builder run, so any existing run means the site exists — mark done
+    // as soon as the run starts rather than waiting for the whole build.
+    requireStarted: true,
   },
   {
     id: 'keywords_planned',
@@ -70,23 +80,12 @@ const STAGE_DEFS = [
     match: 'content-engine',
   },
   {
-    id: 'site_built',
-    label: 'Site built',
-    source: 'event_type' as const,
-    match: 'site.deployed',
-  },
-  {
-    id: 'tracking_assigned',
-    label: 'Tracking assigned',
-    source: 'agent_run' as const,
-    match: 'tracking-setup',
-  },
-  {
-    id: 'deployed',
-    label: 'Deployed',
+    id: 'complete',
+    label: 'Complete',
     source: 'agent_run' as const,
     match: 'site-builder',
-    // site-builder reaching 'succeeded' = fully deployed
+    // site-builder reaching 'succeeded' = pages published to Sanity + fully
+    // finalized. Shows 'running' while the build is in flight.
     requireSucceeded: true,
   },
 ] as const;
@@ -120,26 +119,17 @@ export async function GET(
               'site-builder',
               'keyword-planner',
               'content-engine',
-              'tracking-setup',
             ]),
           ),
         )
         .orderBy(desc(agentRuns.startedAt))
         .limit(20),
-      // Fetch relevant agent_events for this site via payload->>'site_id' match.
-      // We look for both niche.approved (uses nicheId in payload) and site.deployed.
-      // Use raw SQL for the JSONB lookup to stay within Drizzle patterns.
+      // Fetch niche.approved events — the build trigger. niche.approved carries
+      // nicheId (no site_id), so we can't cleanly join to this site here; we
+      // accept the most recent one (handled in application code below).
       db.select()
         .from(agentEvents)
-        .where(
-          and(
-            inArray(agentEvents.type, ['niche.approved', 'site.deployed']),
-            // Cast to text match — both event payloads include site_id as a top-level key.
-            // niche.approved uses nicheId (no site_id) so we accept any niche.approved
-            // associated with this site via the site row's nicheId. We handle the join
-            // in application code below.
-          ),
-        )
+        .where(eq(agentEvents.type, 'niche.approved'))
         .orderBy(desc(agentEvents.createdAt))
         .limit(50),
     ]);
@@ -167,18 +157,12 @@ export async function GET(
       }
     }
 
-    // Build a lookup for event types
-    // For site.deployed: match payload.site_id === siteId
-    // For niche.approved: any niche.approved event (we can't easily join to sites.nicheId here)
+    // Build a lookup for event types. For niche.approved we accept the most
+    // recent one — closest we can get without the nicheId → site join.
     const eventsByType = new Map<string, (typeof eventRows)[number]>();
     for (const ev of eventRows) {
       if (eventsByType.has(ev.type)) continue;
-      const payload = ev.payload as Record<string, unknown>;
-      if (ev.type === 'site.deployed' && payload.site_id === siteId) {
-        eventsByType.set(ev.type, ev);
-      }
       if (ev.type === 'niche.approved') {
-        // Accept any niche.approved — closest we can get without the nicheId join
         eventsByType.set(ev.type, ev);
       }
     }
@@ -211,7 +195,14 @@ export async function GET(
       const run = latestRunByAgent.get(def.match);
       if (!run) return base;
 
-      // Special case: 'deployed' stage uses site-builder but only when succeeded
+      // Special case: 'site_created' is done as soon as the site-builder run
+      // exists (the row + Sanity stub are written first thing), regardless of
+      // whether the overall build later succeeds or fails.
+      if ('requireStarted' in def && def.requireStarted) {
+        return { ...base, status: 'done', startedAt: run.startedAt.toISOString() };
+      }
+
+      // Special case: 'complete' stage uses site-builder but only when succeeded
       if ('requireSucceeded' in def && def.requireSucceeded) {
         if (run.status === 'succeeded') {
           const startMs = run.startedAt.getTime();
