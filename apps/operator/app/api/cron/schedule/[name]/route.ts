@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm';
-import { getDb, agentEvents } from '@leadlandlord/db';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { getDb, agentEvents, agentBudgets } from '@leadlandlord/db';
 import { schedulers, type ScheduledEvent } from '@leadlandlord/agents/scheduler';
 import { log } from '@leadlandlord/shared/log';
 
@@ -62,12 +62,42 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
     return NextResponse.json({ ok: true, scheduler: name, candidates: 0, enqueued: 0 });
   }
 
+  const db = getDb();
+
+  // Drop candidates whose target agent is disabled. BaseAgent.run also blocks
+  // disabled agents, but only at drain time, after the row is already enqueued;
+  // it then just dead-letters as `agent_disabled`, growing agent_events
+  // unbounded for a paused agent. Enforcing here means a disabled agent accrues
+  // no queued work. A missing budget row counts as enabled (column is NOT NULL
+  // default true), matching run()'s `enabled === false` check.
+  const targetAgents = [...new Set(candidates.map((c) => c.agent))];
+  const disabledRows = await db
+    .select({ agent: agentBudgets.agent })
+    .from(agentBudgets)
+    .where(and(inArray(agentBudgets.agent, targetAgents), eq(agentBudgets.enabled, false)));
+  const disabled = new Set(disabledRows.map((r) => r.agent));
+
+  const live = candidates.filter((c) => !disabled.has(c.agent));
+  const skippedDisabled = candidates.length - live.length;
+  if (live.length === 0) {
+    log.info(
+      { scheduler: name, candidates: candidates.length, skippedDisabled, ms: Date.now() - startMs },
+      'scheduler: all candidates target disabled agents, nothing enqueued',
+    );
+    return NextResponse.json({
+      ok: true,
+      scheduler: name,
+      candidates: candidates.length,
+      skippedDisabled,
+      enqueued: 0,
+    });
+  }
+
   // Pull recent dedupe keys for this agent in one shot, filter client-side.
   // Cheaper than N round-trips for medium-sized candidate lists; if this
   // ever becomes hot we can move it to a single-statement INSERT…WHERE NOT
   // EXISTS, but the simple path is plenty for now.
-  const db = getDb();
-  const agentName = candidates[0]!.agent;
+  const agentName = live[0]!.agent;
   const recent = (await db.execute(sql`
     SELECT payload->>'__schedule_key' AS key
     FROM ${agentEvents}
@@ -78,16 +108,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
   const recentList = Array.isArray(recent) ? recent : recent.rows;
   const seen = new Set(recentList.map((r) => r.key));
 
-  const fresh = candidates.filter((c) => !seen.has(c.dedupeKey));
+  const fresh = live.filter((c) => !seen.has(c.dedupeKey));
   if (fresh.length === 0) {
     log.info(
-      { scheduler: name, candidates: candidates.length, ms: Date.now() - startMs },
+      { scheduler: name, candidates: candidates.length, skippedDisabled, ms: Date.now() - startMs },
       'scheduler all candidates already enqueued',
     );
     return NextResponse.json({
       ok: true,
       scheduler: name,
       candidates: candidates.length,
+      skippedDisabled,
       enqueued: 0,
     });
   }
@@ -105,6 +136,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
     {
       scheduler: name,
       candidates: candidates.length,
+      skippedDisabled,
       enqueued: fresh.length,
       ms: Date.now() - startMs,
     },
@@ -114,6 +146,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ name: string }>
     ok: true,
     scheduler: name,
     candidates: candidates.length,
+    skippedDisabled,
     enqueued: fresh.length,
   });
 }
