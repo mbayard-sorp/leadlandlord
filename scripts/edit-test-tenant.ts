@@ -35,12 +35,12 @@ const SITE_ID = '00000000-0000-0000-0000-000000000d4d';
 
 async function editTitle() {
   const sanity = createWriteClient({ dataset: 'development' });
-  const newTitle = `Junk Removal in Phase D City, ZZ — edit ${new Date().toISOString().slice(11, 19)}`;
+  const newTitle = `Junk Removal in Phase D City, ZZ - edit ${new Date().toISOString().slice(11, 19)}`;
   await sanity
     .patch(pageDocId(SITE_ID, 'home', 0))
     .set({ title: newTitle })
     .commit({ visibility: 'sync' });
-  console.log(`OK — home title is now: ${newTitle}`);
+  console.log(`OK - home title is now: ${newTitle}`);
 }
 
 async function setTheme(theme: ThemeName) {
@@ -49,7 +49,7 @@ async function setTheme(theme: ThemeName) {
     .patch(siteDocId(SITE_ID))
     .set({ theme: { _ref: themeDocId(theme), _type: 'reference' } })
     .commit({ visibility: 'sync' });
-  console.log(`OK — theme is now: ${theme}`);
+  console.log(`OK - theme is now: ${theme}`);
 }
 
 async function main() {

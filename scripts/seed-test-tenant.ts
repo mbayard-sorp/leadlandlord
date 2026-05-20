@@ -3,7 +3,7 @@
  * Seed FOUR fully-featured test tenants into the Sanity `development` dataset,
  * one per theme (classic / modern / premium / bright).
  *
- * Idempotent — uses deterministic IDs so re-running overwrites in place.
+ * Idempotent - uses deterministic IDs so re-running overwrites in place.
  *
  * Usage:  pnpm tsx scripts/seed-test-tenant.ts
  */
@@ -34,7 +34,7 @@ import { siteDocId, pageDocId, themeDocId, type ThemeName, type PageKind } from 
 const NOW = new Date().toISOString();
 
 // ---------------------------------------------------------------------------
-// Tenant definitions — one per theme
+// Tenant definitions - one per theme
 // ---------------------------------------------------------------------------
 
 interface ReviewSeed {
@@ -70,7 +70,7 @@ interface TenantDef {
 
 const TENANTS: TenantDef[] = [
   // -------------------------------------------------------------------------
-  // 1. classic — HVAC / Phoenix AZ
+  // 1. classic - HVAC / Phoenix AZ
   // -------------------------------------------------------------------------
   {
     siteId: '11110000-0000-0000-0000-000000000001',
@@ -86,14 +86,14 @@ const TENANTS: TenantDef[] = [
       {
         author: 'R. Navarro',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'google',
         date: '2025-11-15',
       },
       {
         author: 'S. Whitfield',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'google',
         date: '2025-10-03',
       },
@@ -105,7 +105,7 @@ const TENANTS: TenantDef[] = [
         slug: '/',
         title: 'HVAC Repair & Installation in Phoenix, AZ',
         metaDescription:
-          'Phoenix HVAC service — AC repair, furnace install, duct cleaning. Same-day dispatch. Licensed and insured.',
+          'Phoenix HVAC service - AC repair, furnace install, duct cleaning. Same-day dispatch. Licensed and insured.',
         mdx: '# HVAC Repair & Installation in Phoenix, AZ\n\nKeeping Phoenix comfortable all year long.',
       },
       {
@@ -129,7 +129,7 @@ const TENANTS: TenantDef[] = [
         index: 0,
         slug: '/services/ac-repair',
         title: 'AC Repair Phoenix',
-        metaDescription: 'Fast AC repair in Phoenix — same-day appointments available.',
+        metaDescription: 'Fast AC repair in Phoenix - same-day appointments available.',
         mdx: '### AC Repair\n\nDiagnosis and repair for all makes and models.',
       },
       {
@@ -200,7 +200,7 @@ const TENANTS: TenantDef[] = [
   },
 
   // -------------------------------------------------------------------------
-  // 2. modern — Solar / Austin TX
+  // 2. modern - Solar / Austin TX
   // -------------------------------------------------------------------------
   {
     siteId: '22220000-0000-0000-0000-000000000002',
@@ -216,14 +216,14 @@ const TENANTS: TenantDef[] = [
       {
         author: 'M. Torres',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'google',
         date: '2025-12-01',
       },
       {
         author: 'J. Kim',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'google',
         date: '2025-11-20',
       },
@@ -235,7 +235,7 @@ const TENANTS: TenantDef[] = [
         slug: '/',
         title: 'Solar Panel Installation in Austin, TX',
         metaDescription:
-          'Austin solar installation — residential and commercial panels, battery storage, EV chargers. NABCEP certified.',
+          'Austin solar installation - residential and commercial panels, battery storage, EV chargers. NABCEP certified.',
         mdx: '# Solar Panel Installation in Austin, TX\n\nCut your energy bill with local solar experts.',
       },
       {
@@ -283,7 +283,7 @@ const TENANTS: TenantDef[] = [
         index: 3,
         slug: '/services/commercial-solar',
         title: 'Commercial Solar Austin',
-        metaDescription: 'Commercial solar for Austin businesses — rooftop and ground-mount.',
+        metaDescription: 'Commercial solar for Austin businesses - rooftop and ground-mount.',
         mdx: '### Commercial Solar\n\nReduce operating costs with a commercial solar array.',
       },
       {
@@ -330,7 +330,7 @@ const TENANTS: TenantDef[] = [
   },
 
   // -------------------------------------------------------------------------
-  // 3. premium — Kitchen Remodel / Denver CO
+  // 3. premium - Kitchen Remodel / Denver CO
   // -------------------------------------------------------------------------
   {
     siteId: '33330000-0000-0000-0000-000000000003',
@@ -346,14 +346,14 @@ const TENANTS: TenantDef[] = [
       {
         author: 'C. Ohlson',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'direct',
         date: '2025-10-28',
       },
       {
         author: 'P. Reyes',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'google',
         date: '2025-09-14',
       },
@@ -365,7 +365,7 @@ const TENANTS: TenantDef[] = [
         slug: '/',
         title: 'Kitchen Remodel Denver, CO',
         metaDescription:
-          'Denver kitchen remodeling — design, demo, and build by a licensed general contractor. Fixed-price quotes.',
+          'Denver kitchen remodeling - design, demo, and build by a licensed general contractor. Fixed-price quotes.',
         mdx: '# Kitchen Remodel Denver, CO\n\nTransform your kitchen with Summit Design+Build.',
       },
       {
@@ -382,14 +382,14 @@ const TENANTS: TenantDef[] = [
         slug: '/contact',
         title: 'Request a Remodel Consultation',
         metaDescription: 'Schedule a free in-home design consultation with Summit Design+Build.',
-        mdx: '## Free Consultation\n\nWe come to you — design ideas and a fixed-price quote in one visit.',
+        mdx: '## Free Consultation\n\nWe come to you - design ideas and a fixed-price quote in one visit.',
       },
       {
         kind: 'service',
         index: 0,
         slug: '/services/full-kitchen-remodel',
         title: 'Full Kitchen Remodel Denver',
-        metaDescription: 'Complete kitchen gut and rebuild — layout, cabinets, counters, appliances.',
+        metaDescription: 'Complete kitchen gut and rebuild - layout, cabinets, counters, appliances.',
         mdx: '### Full Kitchen Remodel\n\nWe handle everything from permit to punch-list.',
       },
       {
@@ -405,7 +405,7 @@ const TENANTS: TenantDef[] = [
         index: 2,
         slug: '/services/countertop-install',
         title: 'Countertop Installation Denver',
-        metaDescription: 'Quartz, granite, quartzite, marble — template and install by Summit.',
+        metaDescription: 'Quartz, granite, quartzite, marble - template and install by Summit.',
         mdx: '### Countertop Installation\n\nWe template digitally for zero seam surprises.',
       },
       {
@@ -414,7 +414,7 @@ const TENANTS: TenantDef[] = [
         slug: '/services/bath-remodel',
         title: 'Bathroom Remodel Denver',
         metaDescription: 'Primary bath and guest bath remodeling by Summit Design+Build.',
-        mdx: '### Bathroom Remodel\n\nFull gut to finished tile — on schedule, on budget.',
+        mdx: '### Bathroom Remodel\n\nFull gut to finished tile - on schedule, on budget.',
       },
       {
         kind: 'service_area',
@@ -460,7 +460,7 @@ const TENANTS: TenantDef[] = [
   },
 
   // -------------------------------------------------------------------------
-  // 4. bright — Cleaning / Nashville TN
+  // 4. bright - Cleaning / Nashville TN
   // -------------------------------------------------------------------------
   {
     siteId: '44440000-0000-0000-0000-000000000004',
@@ -476,14 +476,14 @@ const TENANTS: TenantDef[] = [
       {
         author: 'A. Pemberton',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'google',
         date: '2025-12-10',
       },
       {
         author: 'L. Huang',
         rating: 5,
-        text: '[TESTIMONIAL — REPLACE]',
+        text: '[TESTIMONIAL - REPLACE]',
         source: 'yelp',
         date: '2025-11-30',
       },
@@ -495,7 +495,7 @@ const TENANTS: TenantDef[] = [
         slug: '/',
         title: 'House Cleaning Service in Nashville, TN',
         metaDescription:
-          'Nashville house cleaning — recurring maid service, deep cleans, move-in/out. Bonded, insured, background-checked.',
+          'Nashville house cleaning - recurring maid service, deep cleans, move-in/out. Bonded, insured, background-checked.',
         mdx: '# House Cleaning Service in Nashville, TN\n\nSpotless Nashville keeps your home guest-ready.',
       },
       {
@@ -519,7 +519,7 @@ const TENANTS: TenantDef[] = [
         index: 0,
         slug: '/services/recurring-cleaning',
         title: 'Recurring House Cleaning Nashville',
-        metaDescription: 'Weekly or bi-weekly maid service in Nashville — same team every visit.',
+        metaDescription: 'Weekly or bi-weekly maid service in Nashville - same team every visit.',
         mdx: '### Recurring Cleaning\n\nSame cleaner, same schedule, consistent results.',
       },
       {
@@ -527,7 +527,7 @@ const TENANTS: TenantDef[] = [
         index: 1,
         slug: '/services/deep-cleaning',
         title: 'Deep Cleaning Nashville',
-        metaDescription: 'One-time deep clean for Nashville homes — baseboards, inside appliances, grout.',
+        metaDescription: 'One-time deep clean for Nashville homes - baseboards, inside appliances, grout.',
         mdx: '### Deep Cleaning\n\nPerfect before a party, after a renovation, or just because.',
       },
       {
@@ -543,7 +543,7 @@ const TENANTS: TenantDef[] = [
         index: 3,
         slug: '/services/airbnb-turnover',
         title: 'Airbnb Turnover Cleaning Nashville',
-        metaDescription: 'Fast, reliable Airbnb turnovers in Nashville — laundry, restock, inspect.',
+        metaDescription: 'Fast, reliable Airbnb turnovers in Nashville - laundry, restock, inspect.',
         mdx: '### Airbnb Turnover\n\nSame-day turnaround available for short-term rentals.',
       },
       {
@@ -591,7 +591,7 @@ const TENANTS: TenantDef[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Deterministic review ID — no separate helper exported yet, so inline here.
+// Deterministic review ID - no separate helper exported yet, so inline here.
 // ---------------------------------------------------------------------------
 function reviewDocId(siteId: string, index: number): string {
   return `review-${siteId}-${index}`;
