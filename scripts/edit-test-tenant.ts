@@ -28,7 +28,8 @@ function findEnvFile(start: string, name: string): string | undefined {
 const envLocal = findEnvFile(__dirname, '.env.local');
 if (envLocal) loadEnv({ path: envLocal, override: true });
 
-import { createWriteClient, siteDocId, pageDocId, themeDocId, type ThemeName } from '@leadlandlord/sanity-schema';
+import { createWriteClient } from '@leadlandlord/sanity-schema/client';
+import { siteDocId, pageDocId, themeDocId, type ThemeName } from '@leadlandlord/sanity-schema/ids';
 
 const SITE_ID = '00000000-0000-0000-0000-000000000d4d';
 

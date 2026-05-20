@@ -35,7 +35,8 @@ if (envLocal) loadEnv({ path: envLocal, override: true });
 const envFile = findEnvFile(__dirname, '.env');
 if (envFile) loadEnv({ path: envFile, override: true });
 
-import { createWriteClient, themeDocId, THEME_NAMES, type ThemeName } from '@leadlandlord/sanity-schema';
+import { createWriteClient } from '@leadlandlord/sanity-schema/client';
+import { themeDocId, THEME_NAMES, type ThemeName } from '@leadlandlord/sanity-schema/ids';
 
 interface ThemeSeed {
   name: ThemeName;
