@@ -821,6 +821,16 @@ export const systemState = pgTable('system_state', {
   operatorEnabled: boolean('operator_enabled').notNull().default(false),
   lastOperatorRunAt: timestamp('last_operator_run_at', { withTimezone: true }),
   operatorMode: text('operator_mode').notNull().default('manual'),
+  // ──────────────────────────────────────────────────────────
+  // Niche-scoring priors (ADR 0009 Task B). Operator-overridable
+  // tuning knobs. NULL = fall back to the hardcoded default in the
+  // agents package (geoSharePrior 0.15, cpc ceiling 12, lead-price
+  // ceiling 100). Set via /operator/control so changes don't need a
+  // deploy. Stored as numeric strings by Drizzle.
+  // ──────────────────────────────────────────────────────────
+  geoSharePrior: numeric('geo_share_prior', { precision: 4, scale: 3 }),
+  rentabilityCpcCeiling: numeric('rentability_cpc_ceiling', { precision: 6, scale: 2 }),
+  rentabilityLeadPriceCeiling: numeric('rentability_lead_price_ceiling', { precision: 7, scale: 2 }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

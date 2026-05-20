@@ -125,6 +125,53 @@ describe('computeRentabilityScore', () => {
     const aboveCeiling = computeRentabilityScore({ contractor_count: 8, avg_cpc: 5, lead_benchmark_price: 200 });
     expect(atCeiling).toBeCloseTo(aboveCeiling, 5);
   });
+
+  // Task B: operator-overridable ceilings (omit-when-absent → defaults 12/100).
+  it('omitting cpc_ceiling/lead_price_ceiling matches the default ceilings (12/100)', () => {
+    const defaulted = computeRentabilityScore({ contractor_count: 8, avg_cpc: 6, lead_benchmark_price: 60 });
+    const explicit = computeRentabilityScore({
+      contractor_count: 8,
+      avg_cpc: 6,
+      lead_benchmark_price: 60,
+      cpc_ceiling: 12,
+      lead_price_ceiling: 100,
+    });
+    expect(defaulted).toBeCloseTo(explicit, 10);
+  });
+
+  it('a lower cpc_ceiling makes the same avg_cpc score higher (easier to saturate)', () => {
+    const base = computeRentabilityScore({ contractor_count: 8, avg_cpc: 6, lead_benchmark_price: 60 });
+    const tighter = computeRentabilityScore({
+      contractor_count: 8,
+      avg_cpc: 6,
+      lead_benchmark_price: 60,
+      cpc_ceiling: 6, // avg_cpc now hits the ceiling → full cpc sub-score
+    });
+    expect(tighter).toBeGreaterThan(base);
+  });
+
+  it('a higher lead_price_ceiling lowers the lead-price sub-score for a fixed price', () => {
+    const base = computeRentabilityScore({ contractor_count: 8, avg_cpc: 6, lead_benchmark_price: 60 });
+    const harder = computeRentabilityScore({
+      contractor_count: 8,
+      avg_cpc: 6,
+      lead_benchmark_price: 60,
+      lead_price_ceiling: 200, // 60/200 < 60/100
+    });
+    expect(harder).toBeLessThan(base);
+  });
+
+  it('a zero ceiling yields a zero sub-score (no divide-by-zero)', () => {
+    const s = computeRentabilityScore({
+      contractor_count: 8,
+      avg_cpc: 6,
+      lead_benchmark_price: 60,
+      cpc_ceiling: 0,
+      lead_price_ceiling: 0,
+    });
+    expect(Number.isFinite(s)).toBe(true);
+    expect(s).toBeGreaterThanOrEqual(0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

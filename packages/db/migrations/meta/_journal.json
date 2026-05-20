@@ -190,6 +190,13 @@
       "when": 1780600000000,
       "tag": "0026_niches_rentability",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1780700000000,
+      "tag": "0027_scoring_priors",
+      "breakpoints": true
     }
   ]
 }

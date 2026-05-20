@@ -6,6 +6,7 @@ import {
   updateOperatorTargets,
   updateOperatorMode,
   setOperatorEnabled,
+  updateScoringPriors,
 } from './_actions';
 
 interface Props {
@@ -26,6 +27,7 @@ export function ControlForms({ state }: Props) {
       <EnabledSection state={state} />
       <ModeSection state={state} />
       <TargetsSection state={state} />
+      <ScoringPriorsSection state={state} />
     </div>
   );
 }
@@ -135,6 +137,87 @@ function ModeSection({ state }: Props) {
         </button>
       </form>
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</p>}
+    </section>
+  );
+}
+
+function ScoringPriorsSection({ state }: Props) {
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<Msg>(null);
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setMsg(null);
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const r = await updateScoringPriors(fd);
+      setMsg({ ok: r.ok, text: r.message ?? '' });
+    });
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+      <header>
+        <p className="text-xs uppercase tracking-wide text-slate-500">Niche-scoring priors</p>
+        <p className="text-sm text-slate-400 mt-1">
+          Tuning knobs read by <code className="text-slate-300">validateNiche</code>. Leave a field
+          blank to use the built-in default. Changes apply to the next validation only — they do
+          not rescore existing rows.
+        </p>
+      </header>
+      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <label className="text-xs text-slate-400">
+          Geo-share prior (fraction, default 0.15)
+          <input
+            type="number"
+            min="0"
+            max="1"
+            step="0.001"
+            name="geoSharePrior"
+            defaultValue={state.geoSharePrior ?? ''}
+            placeholder="0.15"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+        </label>
+        <label className="text-xs text-slate-400">
+          Rentability CPC ceiling (USD, default 12)
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            name="rentabilityCpcCeiling"
+            defaultValue={state.rentabilityCpcCeiling ?? ''}
+            placeholder="12"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+        </label>
+        <label className="text-xs text-slate-400">
+          Rentability lead-price ceiling (USD, default 100)
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            name="rentabilityLeadPriceCeiling"
+            defaultValue={state.rentabilityLeadPriceCeiling ?? ''}
+            placeholder="100"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+        </label>
+        <div className="md:col-span-3">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white"
+          >
+            {pending ? 'Saving…' : 'Save priors'}
+          </button>
+          {msg && (
+            <span className={`ml-3 text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+              {msg.text}
+            </span>
+          )}
+        </div>
+      </form>
     </section>
   );
 }
