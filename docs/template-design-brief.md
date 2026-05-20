@@ -1,134 +1,67 @@
-# LeadLandlord — Tenant Site Template Design Brief
+# LeadLandlord - Tenant Site Template Design Brief
 
-## Context
+> Rewritten 2026-05-20 from a site-template engagement audit (taste-skill pack),
+> cross-checked by the SEO auditor and the technical architect.
+> Implementation architecture: see [ADR 0012](adr/0012-variant-engagement-architecture.md).
+> Heading hierarchy: [ADR 0002](adr/0002-heading-hierarchy.md). Trust-signal shape: [ADR 0001](adr/0001-trust-signal-data-shape.md).
 
-I run a portfolio of local lead-generation websites — one site per `niche × city` (e.g., "gutter cleaning Boise, ID", "junk removal Tucson, AZ"). Each site:
-- ranks in Google for local home-services searches
-- collects inbound phone calls and form leads via a tracking number
-- is rented to a single local business owner for $300–$5,000/month
-- needs to look like a real local small business, not a network site
+## What this is
 
-I'll be running 100+ of these. Today I have one functional template that's plain Tailwind prose. I need a real design.
+The design contract for the four tenant home variants in `apps/site-host`. Each tenant site
+is one `niche × city` lead-gen site that must look like a real local small business - never a
+network clone. We run 100+; cross-site visual + copy similarity is a **footprint** liability,
+so variant divergence is a feature, not a polish item.
 
-## What I'm asking for
+## Current architecture (do not redesign)
 
-**3–5 distinct template variants** as drop-in replacement React + Tailwind components for an existing Next.js 16 + Tailwind v4 setup (static export, no client-side data fetching). Variants should look meaningfully different so a portfolio of 100 sites doesn't look like clones — different layouts, color palettes, typography, hero treatments. Each variant should target a different niche category aesthetic:
+- **Next.js 16 App Router**, Server Components by default. The variant component tree ships **zero client JS** - keep it that way (one exception: the `ScrollReveal` motion leaf, ADR 0012).
+- Content flows: Sanity `site` doc → `sanityToBundle()` → `Bundle` (Zod, `lib/content.ts`) → variant home component, switched on `site.theme` in `app/page.tsx`.
+- Variants: `components/variants/{Classic,Modern,Premium,Bright}.tsx`.
+- Shared blocks: `components/shared/*` (`LeadForm`, `TrustStrip`, `ReviewsSection`, `PhotoGallery`, `CertificationsRow`, `GuaranteesList`, `CallNowBadge`, `MapEmbed`, `*JsonLd`).
+- Themes: CSS custom properties in `styles/themes/*.css`; layout in `styles/variants/*.css`.
+- SEO: per-host `robots.ts` + `sitemap.ts`, canonical via Next metadata `alternates`. Hero H1 renders the targeted keyword verbatim, server-side (ADR 0002). FAQ schema derived from `blog_posts` whose title ends in `?`.
 
-1. **Clean modern** — for tech-forward services (solar, EV charging, smart home)
-2. **Trade-classic** — for blue-collar trades (HVAC, plumbing, electrical, gutter cleaning)
-3. **Premium / curated** — for high-ticket (custom landscaping, kitchen remodel, pool builders)
-4. **Bright / approachable** — for residential personal services (cleaning, junk removal, pest)
-5. (Optional) **Rural / regional** — for ag-adjacent services (tree work, fencing, septic)
+## Per-variant style direction
 
-You can pick the variant count and categories — recommend what makes sense.
+Diverge the four so they read as four different businesses. CSS-token-only (ADR 0012 §5);
+no JSX/prop changes to achieve the look. Dials are `DESIGN_VARIANCE / MOTION_INTENSITY / VISUAL_DENSITY`.
 
-## Hard constraints
+| Variant | Direction | Dials | Niche fit | Identity cues |
+|---|---|---|---|---|
+| **classic** | Warm-Modern | 5 / 4 / 4 | HVAC, plumbing, roofing, gutter, electrical | Sunlit, human, composed. Warm neutrals (clay/oat/walnut) with the safety-orange accent kept. Friendly sans + warming serif. Process rails, paired image+quote bands. Warmer than the current hard-edged "truck door" look. |
+| **modern** | Swiss-System | 4 / 1 / 5 | solar, EV, smart-home, water-heater install | Rational, grid-led, near-static. Grotesk dominance, tabular numerals, uppercase tracked labels, one signal accent. Poster/modular hero, rule-separated modules, spec tables. Drop the decorative SVG-blob hero for a disciplined grid field. |
+| **premium** | Quiet-Luxury | 4 / 2 / 3 | remodels, custom landscape, pool builders | Status through restraint. Off-white/linen/stone/espresso, refined serif+sans, generous whitespace, slow rhythm. Arrival-scene hero (interior/material plate), quote slabs, material strips. Move hero to `next/image` (currently a CSS background). |
+| **bright** | Soft | 5 / 5 / 4 | cleaning, pest, pool service, junk removal | Tactile, layered, approachable - depth via surface/spacing/motion, NOT blob wallpaper or glassmorphism. Diffused matte light, friendly accent, layered feature islands, floating nav pill. Most motion of the four. |
 
-- **Stack:** Next.js 16 App Router, React 19, Tailwind v4 (CSS-first config via `@import 'tailwindcss'`), TypeScript strict, static export (`output: 'export'`). No client-side data fetching. Forms can `<form action="/api/lead" method="post">` to a thin route handler — but the hero, services list, etc. are all server-rendered from a content bundle at build time.
-- **Phone CTA is the primary conversion** — a clickable `tel:` link must be present in the header, hero, and a mobile-sticky bar. The number comes from `process.env.NEXT_PUBLIC_TRACKING_NUMBER` and rotates per site.
-- **No fake content.** Don't write fake reviews, fake testimonials, fake award badges, fake "since 1995" claims, fake license numbers, fake before/after photos. Use clearly-labeled placeholders the operator fills in later (e.g., `[TESTIMONIAL — REPLACE]`, `[YEARS-IN-BUSINESS]`, `[LICENSE #]`, `[BEFORE/AFTER PHOTO]`).
-- **Trust without lying.** Generic trust signals are fine: "Licensed and insured" (if user supplies), "Free quotes," "Local techs," "Same-week service." Brand logos (BBB, Google, Yelp) only as `<a>` placeholders the operator fills.
-- **No brand-name keywords.** Never reference Roto-Rooter, Mr. Rooter, Stanley Steemer, etc. Use generic descriptors.
-- **Mobile-first.** ~70% of local-service traffic is mobile. The mobile experience comes first; desktop is the upgrade.
-- **Lighthouse target:** ≥95 Performance, ≥95 Accessibility, ≥95 Best Practices, ≥95 SEO. Use semantic HTML, no client JS for above-the-fold content, lazy-load images, system fonts or `next/font` only.
-- **Each variant must have a distinct visual identity** in colors, typography, hero pattern, service-card treatment. Don't just swap accent colors.
+## Engagement improvements (audit outcome)
 
-## Page inventory (every variant needs all of these)
+Each item carries its SEO verdict and architecture constraint. Status reflects gate review.
 
-The site has these routes, all server-rendered from a single `content.json` at build time. Every variant must implement every route.
+1. **Motion** - APPROVED. CSS `@starting-style` for hero reveal; one `ScrollReveal` client leaf for below-fold sections; hover/press feedback. Respect `prefers-reduced-motion`. Hero/LCP/above-fold form excluded from motion. No animation library. (SEO: safe if H1/CTA render eagerly, no CLS.)
+2. **Replace emoji/glyph icons** - APPROVED. Hand-authored inline SVG server components in `components/icons/`. (SEO: neutral; decorative + `aria-hidden`.)
+3. **Differentiate section order + copy per variant** - APPROVED, highest priority. Inline-per-variant order; divergent hardcoded boilerplate; deterministic (never client-randomized). Keep the FAQ-from-`blog_posts` derivation. (SEO: safe only if server-side/deterministic; strong footprint win.)
+4. **Above-fold proof** - TEXT-ONLY. Real-locality testimonial + availability/response-time as **plain text**. **No review / `AggregateRating` / star schema** - reviews are placeholder; schema on fabricated reviews is a manual-action violation. Use `firstReview()` returning `null` when empty. Honors the no-fake-content rule below.
+5. **Image gallery / before-after, higher in page** - APPROVED. Requires `images.remotePatterns` populated, `alt` on every image, lazy-load all but LCP. (SEO: safe; later enables `image: [array]` on LocalBusiness.)
+6. **Stronger hero imagery** - APPROVED. All four variants use `next/image` with `priority` + viewport-aware `sizes`. (SEO: LCP win; Premium currently a CSS background.)
 
-```
-/                        Home (hero + services overview + service-areas + about teaser + CTA)
-/services/[slug]         Service detail (one per service offered)
-/service-areas/[city]    Service-area page (target city + nearby towns/neighborhoods)
-/about                   About / who we are
-/contact                 Contact (phone CTA + form + map placeholder)
-/blog/[slug]             FAQ-style blog posts (long-tail SEO)
-```
+## Hard constraints (unchanged)
 
-## Content data shape
+- **No fake content.** No fabricated reviews, testimonials, award badges, "since 1995" claims, license numbers, or before/after photos. Placeholders the operator fills, or render nothing. No fabricated review/rating schema (item 4).
+- **Phone CTA is the primary conversion** - clickable `tel:` in header, hero, after-services CTA, and mobile-sticky bar. Number is the per-site tracking number resolved server-side.
+- **No brand-name keywords** (Roto-Rooter, Stanley Steemer, etc.).
+- **GBP is the partner-contractor's real profile** - never fake-GBP automation.
+- **Mobile-first** - ~70% of local-service traffic is mobile.
+- **Lighthouse targets:** ≥95 across Performance / Accessibility / Best Practices / SEO. Semantic HTML, no client JS above the fold, lazy images, `next/font` only.
+- **Each variant a distinct visual identity** - colors, type, hero pattern, service-card treatment. Not just an accent swap.
 
-Templates receive a typed `Bundle` object. Every page object has `kind`, `slug`, `title`, `meta_description`, `mdx` (markdown body), `schema_org_jsonld` (object). Bundle has:
+## Conversion priority (rank-ordered)
 
-```ts
-type Bundle = {
-  niche: string;            // "gutter cleaning"
-  city: string;             // "Boise"
-  state: string;            // "ID"
-  business_name: string;    // "Boise Gutter Cleaning Pros"
-  home: Page;
-  services: Page[];         // 2–5 pages, each is one offered service
-  service_areas: Page[];    // 2–5 pages, each is one city/neighborhood
-  about: Page;
-  contact: Page;
-  blog_posts: Page[];       // 3–10 FAQ blog posts
-  generated_at: string;
-};
+1. Click the phone number (4 placements above).
+2. Submit the contact form (`LeadForm` → `/api/lead`, attributed by `siteId`).
+3. Read more / build trust - service, about, blog, info pages; each ends with a phone CTA.
+4. Local relevance - service-area pages, neighborhood mentions, "We serve {city} and nearby towns".
 
-type Page = {
-  kind: 'home' | 'service' | 'service_area' | 'about' | 'contact' | 'blog';
-  slug: string;
-  title: string;
-  meta_description: string;
-  mdx: string;               // markdown — render as HTML
-  schema_org_jsonld?: object; // emit as <script type="application/ld+json">
-};
-```
+## Out of scope for this brief
 
-The MDX body is plain markdown today (h1/h2/h3, paragraphs, lists, links, **bold**, *italic*). I'm OK adding a real MDX compiler later, but for now treat it as markdown. You can render it inline OR alongside variant-specific decorative sections (hero photos, service cards built from a static list, etc.).
-
-## Conversion priorities (rank-ordered)
-
-1. **Click the phone number** — biggest single conversion driver. Phone visible in 4 places: header, hero, after-services CTA, mobile-sticky bar.
-2. **Submit the contact form** — backup for after-hours. Form: name, phone, what-they-need-help-with, optional zip. POSTs to `/api/lead`.
-3. **Read more / build trust** — service detail pages, about page, blog posts. Each must end with a phone CTA.
-4. **Local relevance** — service-area pages, neighborhood mentions, "We serve {city} and {nearby1}, {nearby2}, {nearby3}".
-
-## Visual goals
-
-- Looks like a **single local small business**, not a SaaS landing page or a generic agency site.
-- Looks **trustworthy at a glance** — confident type, a hero photo (placeholder OK), explicit "we serve {city}", license/insured slot, response-time promise.
-- **Doesn't scream "lead gen template"** — vary the hero treatments, service-card layouts, color choices.
-- The first 600px (mobile fold) must contain: business name, niche+city headline ("Gutter Cleaning in Boise, ID"), one trust line ("Licensed and insured. Free quotes."), phone CTA, secondary form/contact CTA.
-- Use placeholder images via `https://images.unsplash.com/...` or `next/image` placeholders so I can swap to real photos per site.
-
-## Variant identity examples
-
-Don't take these literally — they're a starting point.
-
-- **Trade-classic:** dark navy + safety-orange accent, condensed sans + serif headline mix, bold capitalized headers, hero with a tradesperson photo overlay, service cards as numbered tile grid, big phone number in the header bar, "Family-owned. We answer the phone." trust line.
-- **Clean modern:** white/neutral with a single color accent (sky blue or emerald), large geometric hero with gradient, sans-serif throughout, card-based services with subtle icons, an inline FAQ accordion, soft shadows.
-- **Premium curated:** off-white background, serif display + clean sans body, full-bleed editorial hero photo, generous whitespace, "By appointment" tone, testimonial-quote section, slower visual rhythm.
-- **Bright approachable:** warm cream + a friendly accent (coral, teal), rounded everything, hand-drawn underline accents, illustration spots in service cards, conversational copy tone, prominent "Book online" + phone.
-
-## Deliverables format
-
-For each variant, deliver:
-
-1. **One screenshot or visual mockup** of the home page (mobile + desktop) so I can pick before going further.
-2. After I pick: **drop-in React + Tailwind v4 source** for the variant — `app/layout.tsx`, all 6 page files, a `components/` folder with the variant-specific shell + section components, and a `globals.css` with the Tailwind v4 setup + variant-specific CSS custom properties for colors and fonts.
-3. A short **README.md per variant** explaining: which niche categories it fits, the color/font tokens, any third-party assets used (with license notes), and any deliberate trade-offs.
-
-Codebase structure to match (I'll wire each variant into this):
-
-```
-apps/
-  site-template-classic/      # one app per variant
-  site-template-modern/
-  site-template-premium/
-  site-template-bright/
-```
-
-## What I already have that you should NOT recreate
-
-- A working Next.js 16 + Tailwind v4 app skeleton at `apps/site-template/` (current plain version).
-- A `lib/content.ts` loader that reads `content.json` and exports a typed `Bundle`.
-- A `materializeSite()` function in the agent that copies the chosen template to a temp dir and writes `content.json` + `.env.production` per site.
-- Tracking-number injection via `NEXT_PUBLIC_TRACKING_NUMBER`.
-- Schema.org JSON-LD rendering in the `PageBody` component.
-
-Your job is the visual + structural design + the per-variant section components. I'll handle wiring the new variants into the Site Builder agent's variant-selector.
-
-## Ask me clarifying questions before designing
-
-If anything's ambiguous (variant count, color directions, whether to use a UI library like shadcn, component library style, animation strategy) — ask before producing mockups. Better to iterate on direction than redo finished work.
+Wiring variant selection (handled by site-builder), the Content Engine system prompt, and any
+new Sanity schema. Per ADR 0012, none of these changes require new `Bundle`/Sanity fields.
