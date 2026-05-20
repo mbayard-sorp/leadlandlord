@@ -1,11 +1,46 @@
 import { sql, desc } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 import { getDb, agentRuns, agentEvents, type AgentRun, type AgentEvent } from '@leadlandlord/db';
-import { agentRegistry } from '@leadlandlord/agents';
+import { agentRegistry, agentMetadata } from '@leadlandlord/agents';
+import vercelConfig from '../../../vercel.json';
 import { AgentTogglesPanel } from './AgentTogglesPanel';
 import { loadAgentEnabledMap } from './_toggle-actions';
 
 export const revalidate = 30;
+
+const SCHEDULE_PATH_PREFIX = '/api/cron/schedule/';
+const WEEKDAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+
+/** Turn a 5-field cron expression into the cadence labels used in vercel.json. */
+function humanizeCron(expr: string): string {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return expr;
+  const [min, hour, dom, , dow] = parts as [string, string, string, string, string];
+
+  const everyMin = /^\*\/(\d+)$/.exec(min);
+  if (everyMin && hour === '*' && dom === '*' && dow === '*') {
+    return `Every ${everyMin[1]} min`;
+  }
+
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour)) {
+    const time = `${hour.padStart(2, '0')}:${min.padStart(2, '0')} UTC`;
+    if (dom === '*' && dow === '*') return `Daily ${time}`;
+    if (dom === '*' && /^\d+$/.test(dow)) return `${WEEKDAYS[Number(dow)] ?? `Day ${dow}`} ${time}`;
+  }
+
+  return expr;
+}
+
+/**
+ * Cadence keyed by scheduler name, derived from the live cron config so it
+ * never drifts from what's deployed. Scheduler name === agent name for every
+ * registry agent that runs on a schedule.
+ */
+const cadenceByAgent: Record<string, string> = Object.fromEntries(
+  (vercelConfig.crons ?? [])
+    .filter((c) => c.path.startsWith(SCHEDULE_PATH_PREFIX))
+    .map((c) => [c.path.slice(SCHEDULE_PATH_PREFIX.length), humanizeCron(c.schedule)]),
+);
 
 interface DailyAgentStats {
   agent: string;
@@ -66,6 +101,14 @@ export default async function AgentsPage() {
     loadAgentEnabledMap(),
   ]);
   const allAgents = Object.keys(agentRegistry).sort();
+  const agentInfo: Record<string, { description: string; cadence: string }> = {};
+  for (const name of allAgents) {
+    const meta = agentMetadata[name];
+    agentInfo[name] = {
+      description: meta?.description ?? '',
+      cadence: cadenceByAgent[name] ?? meta?.trigger ?? 'Event-driven',
+    };
+  }
 
   return (
     <div className="space-y-8">
@@ -76,7 +119,7 @@ export default async function AgentsPage() {
         </p>
       </header>
 
-      <AgentTogglesPanel agents={allAgents} initial={enabledMap} />
+      <AgentTogglesPanel agents={allAgents} info={agentInfo} initial={enabledMap} />
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">Today</h2>

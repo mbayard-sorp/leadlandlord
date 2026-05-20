@@ -1,5 +1,6 @@
 export * from './base';
 export * from './registry';
+export * from './metadata';
 export { SiteBuilder } from './site-builder/index';
 export { ContentEngine } from './content-engine/index';
 export { TrackingSetup } from './tracking-setup/index';
