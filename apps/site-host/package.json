@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@leadlandlord/db": "workspace:*",
@@ -32,6 +33,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
   }
 }
