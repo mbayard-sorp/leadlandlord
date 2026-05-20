@@ -13,6 +13,13 @@ export const SiteBuilderInput = z.object({
    * them. Used by the operator's "Re-target content" button.
    */
   skip_keyword_planning: z.boolean().optional(),
+  /**
+   * Force a fresh content generation, bumping the site's build_epoch so the
+   * cached content-engine run is bypassed. Set by the operator's "Re-target
+   * content" / "Regenerate" actions. A plain reaper retry leaves this unset so
+   * it reuses the cached run and finishes the unfinished tail in seconds.
+   */
+  force_content_refresh: z.boolean().optional(),
 });
 export type SiteBuilderInput = z.infer<typeof SiteBuilderInput>;
 
