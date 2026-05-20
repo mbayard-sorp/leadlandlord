@@ -51,14 +51,12 @@
 }
 [data-theme='premium'] .premium-nav a:hover { color: var(--ink); }
 
-/* full-bleed editorial hero */
+/* full-bleed editorial hero — next/image fill handles the image; background-color is the fallback tint */
 [data-theme='premium'] .premium-hero {
   position: relative;
   height: 70vh;
   min-height: 480px;
   background-color: #6c5d44;
-  background-size: cover;
-  background-position: center;
 }
 [data-theme='premium'] .premium-hero-overlay {
   position: absolute;
@@ -489,4 +487,82 @@
   font-family: var(--font-body);
   font-size: 0.8125rem;
   letter-spacing: 0.04em;
+}
+
+/* SVG icon alignment helpers — inline icons sit flush with surrounding text */
+[data-theme='premium'] .premium-utility-icon,
+[data-theme='premium'] .premium-lede-phone-icon,
+[data-theme='premium'] .premium-cta-phone-icon,
+[data-theme='premium'] .sticky-phone-icon {
+  vertical-align: middle;
+  display: inline-block;
+  position: relative;
+  top: -1px;
+}
+
+/* utility bar phone — keep compact */
+[data-theme='premium'] .premium-utility-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* lede aside phone */
+[data-theme='premium'] .premium-lede-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-theme='premium'] .premium-lede-phone a {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+[data-theme='premium'] .premium-lede-phone a:hover {
+  color: var(--ink);
+}
+
+/* response time promise — quiet, understated */
+[data-theme='premium'] .premium-response-promise {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin: 0;
+  text-transform: none;
+}
+
+/* CTA phone — icon + number inline */
+[data-theme='premium'] .premium-cta-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* quiet proof slab — plain text, restrained */
+[data-theme='premium'] .premium-proof-slab {
+  padding: clamp(48px, 6vw, 80px) clamp(24px, 5vw, 64px);
+  border-bottom: var(--hairline, 0.5px) solid var(--rule);
+  display: flex;
+  justify-content: center;
+}
+[data-theme='premium'] .premium-proof-quote {
+  margin: 0;
+  max-width: 52ch;
+  text-align: center;
+}
+[data-theme='premium'] .premium-proof-text {
+  font-family: var(--font-display-italic);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.45;
+  color: var(--ink);
+  margin: 0 0 16px;
+}
+[data-theme='premium'] .premium-proof-attribution {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }

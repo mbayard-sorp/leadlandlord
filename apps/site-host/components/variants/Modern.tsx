@@ -12,6 +12,16 @@ import { PhotoGallery } from '../shared/PhotoGallery';
 import { CertificationsRow } from '../shared/CertificationsRow';
 import { GuaranteesList } from '../shared/GuaranteesList';
 import { CallNowBadge } from '../shared/CallNowBadge';
+import { Phone } from '../icons/Phone';
+import { Check } from '../icons/Check';
+import { ScrollReveal } from '../motion/ScrollReveal';
+import {
+  deriveAreas,
+  areaSlugByTitle,
+  deriveFaqs,
+  deriveBlogTeasers,
+  firstReview,
+} from '../../lib/variant-utils';
 
 interface Props {
   bundle: Bundle;
@@ -25,31 +35,26 @@ interface Props {
   pageUrl?: string;
 }
 
-const SERVICE_ICONS = ['◉', '▦', '⌁', '◈', '◐', '◇', '✦', '◆'];
-
 /**
- * Variant B — Clean Modern.
- * Bricolage Grotesque + DM Sans, deep aqua, geometric SVG hero, soft-shadow
- * cards, FAQ accordion. For solar / EV / smart-home / water-heater install.
+ * Variant B — Modern / Swiss-System.
+ * Bricolage Grotesque + DM Sans, deep aqua, rule-separated modules, tabular
+ * numerals, uppercase tracked labels. Terse, spec-forward voice.
+ * For solar, EV, smart-home, water-heater install.
  */
 export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https://example.com' }: Props) {
   const tel = telHref(phone);
   const baseUrl = pageUrl.replace(/\/$/, '');
+
   const trust =
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
-      : ['Licensed & insured', 'Free quote in 24h', 'Federal tax credit help'];
-  const areas = uniq([
-    bundle.city,
-    ...bundle.nearby_cities,
-    ...bundle.service_areas.map((a) => a.title),
-  ]).slice(0, 12);
-  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
-  const faqs = bundle.blog_posts
-    .filter((p) => /\?$/.test(p.title))
-    .slice(0, 6)
-    .map((p) => ({ q: p.title, a: p.meta_description }));
-  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
+      : ['Licensed & insured', 'Free quote in 24 h', 'Federal tax credit help'];
+
+  const areas = deriveAreas(bundle);
+  const slugByTitle = areaSlugByTitle(bundle);
+  const faqs = deriveFaqs(bundle);
+  const blogTeasers = deriveBlogTeasers(bundle);
+  const review = firstReview(bundle);
 
   return (
     <>
@@ -65,11 +70,12 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </a>
           <div className="modern-header-cta">
             <a href={tel} className="modern-phone-pill num">
-              ☎ {phone}
+              <Phone width={16} height={16} className="modern-phone-icon" />
+              {phone}
             </a>
             <CallNowBadge bundle={bundle} />
             <a href="#contact" className="modern-cta-pill">
-              Get quote
+              Request quote
             </a>
           </div>
         </header>
@@ -77,6 +83,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
         {/* top nav — inserted immediately after header */}
         <SiteNav bundle={bundle} variant="modern" />
 
+        {/* HERO — above the fold, no ScrollReveal, no motion wrapper */}
         <section className="modern-hero" aria-labelledby="hero-h1">
           <svg
             className="modern-hero-svg"
@@ -126,89 +133,124 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
               <p className="modern-eyebrow">
                 {bundle.city}, {bundle.state}
               </p>
-              {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
-              {/* SEO: render the exact targeted keyword phrase, title-cased. */}
+              {/* ADR 0002: H1 renders targeted keyword verbatim, title-cased. */}
               <h1 id="hero-h1" className="modern-h1">
                 {titleCaseKeyword(heroH1(bundle))}
               </h1>
               <p className="modern-lede">{bundle.home.meta_description}</p>
               <div className="modern-hero-buttons">
                 <a href="#contact" className="modern-btn modern-btn-primary">
-                  Get free quote →
+                  Request quote
                 </a>
                 <a href={tel} className="modern-btn modern-btn-secondary num">
-                  ☎ {phone}
+                  <Phone width={16} height={16} aria-hidden />
+                  {phone}
                 </a>
               </div>
               <ul className="modern-trust">
                 {trust.slice(0, 4).map((t) => (
-                  <li key={t}>{t}</li>
+                  <li key={t}>
+                    <Check width={14} height={14} className="modern-trust-check" aria-hidden />
+                    {t}
+                  </li>
                 ))}
               </ul>
             </div>
 
+            {/* LeadForm is above the fold — no ScrollReveal */}
             <div className="modern-form-card">
-              <p className="modern-form-card-eyebrow">Free quote</p>
-              <h3 className="modern-form-card-h2">Same business day reply</h3>
+              <p className="modern-form-card-eyebrow">Free estimate</p>
+              <h3 className="modern-form-card-h2">Reply within one business day</h3>
               <p className="modern-form-card-sub">
-                Drop your details — no spam, no robocalls.
+                No spam. No unsolicited calls.
               </p>
-              <LeadForm variant="modern" submit="Get quote →" source="hero" siteId={siteId} siteSlug={siteSlug} />
+              <LeadForm variant="modern" submit="Submit request" source="hero" siteId={siteId} siteSlug={siteSlug} />
             </div>
           </div>
         </section>
 
-        {/* trust band — light surface, paper-2 */}
+        {/* trust band — above fold, no ScrollReveal */}
         <section className="modern-trust-band" aria-label="Trust signals">
           {trust.slice(0, 4).map((t) => (
             <div key={t} className="modern-trust-band-item">{t}</div>
           ))}
         </section>
 
-        {/* TrustStrip (counters) — below hero/trust band */}
+        {/* TrustStrip (counters) — below hero/trust band, above fold boundary */}
         <TrustStrip bundle={bundle} variant="modern" />
 
-        <section className="modern-services" id="services">
+        {/* First review proof — plain text only, no schema. ADR 0012 §4. */}
+        {review && (
+          <aside className="modern-proof-strip" aria-label="Customer review">
+            <blockquote className="modern-proof-quote">
+              <p className="modern-proof-text">&ldquo;{review.text}&rdquo;</p>
+              <footer className="modern-proof-attribution">
+                {review.author}
+                {bundle.city ? ` · ${bundle.city}` : ''}
+              </footer>
+            </blockquote>
+            {bundle.response_time_promise && (
+              <p className="modern-response-promise">{bundle.response_time_promise}</p>
+            )}
+          </aside>
+        )}
+
+        {/* If no review but response_time_promise exists, surface it alone */}
+        {!review && bundle.response_time_promise && (
+          <aside className="modern-proof-strip" aria-label="Response time">
+            <p className="modern-response-promise">{bundle.response_time_promise}</p>
+          </aside>
+        )}
+
+        {/* BELOW THE FOLD — wrap each section in ScrollReveal */}
+        <ScrollReveal as="section" className="modern-services" id="services">
           <header className="modern-section-head">
-            <p className="modern-eyebrow">What we install</p>
+            <p className="modern-eyebrow">Scope of work</p>
             <h2 className="modern-h2">Services</h2>
           </header>
           <div className="modern-services-grid">
             {bundle.services.map((s, i) => (
               <a key={s.slug} href={s.slug} className="modern-service-card">
-                <span className="modern-service-icon" aria-hidden>
-                  {SERVICE_ICONS[i % SERVICE_ICONS.length]}
+                <span className="modern-service-index" aria-hidden>
+                  {String(i + 1).padStart(2, '0')}
                 </span>
                 <h3 className="modern-service-title">{s.title}</h3>
                 <p className="modern-service-blurb">{s.meta_description}</p>
-                <span className="modern-service-link">Learn more →</span>
+                <span className="modern-service-link">Details</span>
               </a>
             ))}
           </div>
-        </section>
+        </ScrollReveal>
 
-        {/* ReviewsSection — grid between services and FAQ/areas */}
-        <ReviewsSection bundle={bundle} variant="modern" />
+        {/* ReviewsSection */}
+        <ScrollReveal className="modern-reviews-wrap">
+          <ReviewsSection bundle={bundle} variant="modern" />
+        </ScrollReveal>
 
-        {/* PhotoGallery — below ReviewsSection */}
-        <PhotoGallery bundle={bundle} variant="modern" />
+        {/* PhotoGallery */}
+        <ScrollReveal className="modern-gallery-wrap">
+          <PhotoGallery bundle={bundle} variant="modern" />
+        </ScrollReveal>
 
         {/* BIG phone block */}
-        <section className="modern-phone-block">
-          <p className="modern-phone-block-eyebrow">{bundle.niche} specialists</p>
-          <a href={tel} className="modern-phone-block-num num">{phone}</a>
+        <ScrollReveal as="section" className="modern-phone-block">
+          <p className="modern-phone-block-eyebrow">{bundle.niche} — direct line</p>
+          <a href={tel} className="modern-phone-block-num num">
+            <Phone width={28} height={28} className="modern-phone-block-icon" aria-hidden />
+            {phone}
+          </a>
           <CallNowBadge bundle={bundle} />
-          <p className="modern-phone-block-sub">Tap to call · same-day response · free quotes</p>
-        </section>
+          <p className="modern-phone-block-sub">Tap to call · same-day response · no charge for quotes</p>
+        </ScrollReveal>
 
         {(faqs.length > 0 || areas.length > 0) && (
-          <section className="modern-faq-areas" id="where">
+          <ScrollReveal as="section" className="modern-faq-areas" id="where">
             <div className="modern-faq">
               <p className="modern-eyebrow">Common questions</p>
               <h2 className="modern-h2">FAQ</h2>
               {faqs.length === 0 ? (
                 <p className="modern-lede" style={{ marginTop: 16 }}>
-                  Have a question? Just call — we'll answer it on the spot.
+                  Questions? Call — we answer on the first ring.
                 </p>
               ) : (
                 <div className="modern-faq-list">
@@ -222,11 +264,11 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
               )}
             </div>
             <div className="modern-areas">
-              <p className="modern-eyebrow">Service areas</p>
+              <p className="modern-eyebrow">Coverage</p>
               <h2 className="modern-h2">Where we work</h2>
               <ul className="modern-area-chips">
                 {areas.map((c) => {
-                  const slug = areaSlugByTitle.get(c);
+                  const slug = slugByTitle.get(c);
                   return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
                 })}
               </ul>
@@ -237,7 +279,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
                 height={300}
               />
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
         {/* fallback #where anchor when the combined section is absent */}
@@ -246,8 +288,8 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
         )}
 
         {bundle.info_pages.length > 0 && (
-          <section className="modern-learn-more" aria-label="Resources">
-            <p className="modern-eyebrow">Learn more</p>
+          <ScrollReveal as="section" className="modern-learn-more" aria-label="Resources">
+            <p className="modern-eyebrow">Reference</p>
             <h2 className="modern-h2">Local guides</h2>
             <div className="modern-learn-grid">
               {bundle.info_pages.slice(0, 6).map((p) => (
@@ -257,12 +299,12 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
                 </a>
               ))}
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
         {blogTeasers.length > 0 && (
-          <section className="modern-learn-more" aria-label="From the blog">
-            <p className="modern-eyebrow">From the blog</p>
+          <ScrollReveal as="section" className="modern-learn-more" aria-label="From the blog">
+            <p className="modern-eyebrow">Writing</p>
             <h2 className="modern-h2">Recent articles</h2>
             <div className="modern-learn-grid">
               {blogTeasers.map((p) => (
@@ -272,34 +314,37 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
                 </a>
               ))}
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
-        {/* CertificationsRow + GuaranteesList in footer-adjacent block */}
-        <div className="modern-trust-footer-block">
+        {/* CertificationsRow + GuaranteesList */}
+        <ScrollReveal className="modern-trust-footer-block">
           <CertificationsRow bundle={bundle} variant="modern" />
           <GuaranteesList bundle={bundle} />
-        </div>
+        </ScrollReveal>
 
-        <section className="modern-cta" id="contact">
-          <h2 className="modern-cta-h2">Ready for a quote?</h2>
-          <p className="modern-cta-sub">15-min phone call, no pressure.</p>
+        <ScrollReveal as="section" className="modern-cta" id="contact">
+          <p className="modern-eyebrow modern-cta-eyebrow">Start here</p>
+          <h2 className="modern-cta-h2">Get a quote</h2>
+          <p className="modern-cta-sub">15-minute call. No commitment.</p>
           <a href={tel} className="modern-cta-phone num">
-            ☎ {phone}
+            <Phone width={20} height={20} aria-hidden />
+            {phone}
           </a>
           <CallNowBadge bundle={bundle} />
-        </section>
+        </ScrollReveal>
 
         <footer className="modern-footer surface-inverse">
           <div>
-            © {new Date().getFullYear()} {bundle.business_name} · Licensed & insured
+            &copy; {new Date().getFullYear()} {bundle.business_name} &middot; Licensed &amp; insured
           </div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">
           <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
-            ☎ {phone}
+            <Phone width={16} height={16} aria-hidden />
+            {phone}
           </a>
           <a href="#contact" className="cta">
             Get quote
@@ -309,12 +354,4 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
       </div>
     </>
   );
-}
-
-function uniq<T>(arr: T[]): T[] {
-  return arr.filter((v, i, a) => a.indexOf(v) === i);
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

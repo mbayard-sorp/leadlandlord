@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
+import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -12,6 +13,9 @@ import { PhotoGallery } from '../shared/PhotoGallery';
 import { CertificationsRow } from '../shared/CertificationsRow';
 import { GuaranteesList } from '../shared/GuaranteesList';
 import { CallNowBadge } from '../shared/CallNowBadge';
+import { Phone } from '../icons/Phone';
+import { Check } from '../icons/Check';
+import { ScrollReveal } from '../motion/ScrollReveal';
 
 interface Props {
   bundle: Bundle;
@@ -26,17 +30,17 @@ interface Props {
 }
 
 const SERVICE_BG = ['bg-coral', 'bg-sun', 'bg-mint', 'bg-sky'] as const;
-// Deliberate: emoji + unicode glyphs are kept as Bright's "illustration spots"
-// per the design brief. They render fine on iOS/Android (the 70% mobile audience).
-// Replacing with inline SVG is a separate design exercise — do not swap to SVG
-// without a paired design pass.
-const SERVICE_ICONS = ['🏡', '✦', '⌂', '◐', '☘', '◇'];
 
 /**
  * Variant D — Bright Approachable.
  * Bricolage 700 + Plus Jakarta Sans. Cream + coral. Rotating pastel cards,
  * squiggle SVG underline on hero keyword, sticky-note callout, dashed dividers.
  * For cleaning, junk removal, pest, lawn care, dog walking, mobile detail.
+ *
+ * Footprint divergence (ADR 0012 §3): eyebrow/button copy is deliberately
+ * warmer and more conversational than Classic/Modern/Premium. Section order
+ * is: hero → trust band → services → gallery → phone strip → proof → FAQ
+ * → CTA/areas → info pages → blog → footer. (Other variants differ.)
  */
 export function BrightHome({
   bundle,
@@ -50,13 +54,15 @@ export function BrightHome({
   const trust =
     bundle.trust_signals.length > 0
       ? bundle.trust_signals
-      : ['Bonded', 'Insured', 'Same person every visit'];
-  const areas = uniq([
-    bundle.city,
-    ...bundle.nearby_cities,
-    ...bundle.service_areas.map((a) => a.title),
-  ]).slice(0, 10);
-  const areaSlugByTitle = new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
+      : ['Bonded & insured', 'You approve before we start', 'Same crew every time'];
+
+  // Foundation helpers — replaces inline uniq + derivation logic
+  const areas = deriveAreas(bundle);
+  const slugByTitle = areaSlugByTitle(bundle);
+  const faqs = deriveFaqs(bundle);
+  const blogTeasers = deriveBlogTeasers(bundle);
+  const review = firstReview(bundle);
+
   const initials = bundle.business_name
     .split(/\s+/)
     .map((w) => w[0])
@@ -64,13 +70,6 @@ export function BrightHome({
     .join('')
     .slice(0, 2)
     .toLowerCase();
-
-  // Pull FAQ from blog posts shaped as questions.
-  const faqs = bundle.blog_posts
-    .filter((p) => /\?$/.test(p.title))
-    .slice(0, 5)
-    .map((p) => ({ q: p.title, a: p.meta_description }));
-  const blogTeasers = bundle.blog_posts.filter((p) => !/\?$/.test(p.title)).slice(0, 6);
 
   // SEO: render the exact targeted keyword phrase verbatim as H1, with the
   // niche term underlined by the squiggle when it appears inside the phrase.
@@ -113,12 +112,13 @@ export function BrightHome({
             </span>
           </a>
           <div className="bright-header-cta">
-            <a href={tel} className="bright-phone-pill num">
-              ☎ {phone}
+            <a href={tel} className="bright-phone-pill num" aria-label={`Call ${phone}`}>
+              <Phone width={16} height={16} className="bright-phone-icon" />
+              {phone}
             </a>
             <CallNowBadge bundle={bundle} />
             <a href="#contact" className="bright-cta-pill">
-              Book online ✦
+              Get a free quote
             </a>
           </div>
         </header>
@@ -126,6 +126,7 @@ export function BrightHome({
         {/* top nav — inserted immediately after header */}
         <SiteNav bundle={bundle} variant="bright" />
 
+        {/* ABOVE THE FOLD — no ScrollReveal here */}
         <section className="bright-hero" aria-labelledby="hero-h1">
           <svg
             className="bright-hero-svg"
@@ -157,23 +158,29 @@ export function BrightHome({
               <p className="bright-eyebrow">
                 {bundle.niche} · {bundle.city}, {bundle.state}
               </p>
-              {/* ADR 0002: promoted from h2 to h1; sr-only h1 removed */}
+              {/* ADR 0002: H1 renders targeted keyword verbatim; squiggle underlines niche term */}
               <h1 id="hero-h1" className="bright-h1">
                 {renderHeroH1()}
               </h1>
               <p className="bright-lede">{bundle.home.meta_description}</p>
+              {/* response_time_promise: surface as friendly plain text when present */}
+              {bundle.response_time_promise && (
+                <p className="bright-response-promise">{bundle.response_time_promise}</p>
+              )}
               <div className="bright-hero-buttons">
                 <a href="#contact" className="bright-btn bright-btn-primary">
-                  Book online ✦
+                  Get a free quote
                 </a>
-                <a href={tel} className="bright-btn bright-btn-secondary num">
-                  ☎ {phone}
+                <a href={tel} className="bright-btn bright-btn-secondary num" aria-label={`Call ${phone}`}>
+                  <Phone width={18} height={18} />
+                  {phone}
                 </a>
               </div>
               <ul className="bright-trust">
-                {trust.slice(0, 4).map((t, i) => (
+                {trust.slice(0, 4).map((t) => (
                   <li key={t}>
-                    {['★', '♥', '✿', '☻'][i % 4]} {t}
+                    <Check width={16} height={16} className="bright-trust-check" />
+                    {t}
                   </li>
                 ))}
               </ul>
@@ -185,46 +192,47 @@ export function BrightHome({
                   <Image
                     src={bundle.hero_image_url}
                     alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
-                    width={280}
-                    height={280}
+                    fill
                     priority
                     fetchPriority="high"
-                    sizes="(max-width: 768px) 100vw, 1200px"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    sizes="(max-width: 768px) 280px, 280px"
+                    style={{ objectFit: 'cover' }}
                   />
                 ) : (
                   <div className="bright-hero-placeholder">[hero]</div>
                 )}
               </div>
               <div className="bright-sticky-note" aria-hidden>
-                same friendly crew, every visit ♥
+                same friendly crew, every visit
               </div>
             </div>
           </div>
         </section>
 
         {/* trust band — neighbor-with-a-crew tone, pastel chips */}
-        <section className="bright-trust-band" aria-label="Trust signals">
-          <p className="bright-trust-band-eyebrow">neighbor with a crew —</p>
+        <ScrollReveal as="section" className="bright-trust-band" aria-label="Trust signals">
+          <p className="bright-trust-band-eyebrow">your neighborhood crew —</p>
           <ul className="bright-trust-band-chips">
-            {trust.slice(0, 4).map((t, i) => (
+            {trust.slice(0, 4).map((t) => (
               <li key={t}>
-                <span aria-hidden>{['★', '♥', '✿', '☻'][i % 4]}</span> {t}
+                <Check width={14} height={14} aria-hidden />
+                {t}
               </li>
             ))}
           </ul>
-        </section>
+        </ScrollReveal>
 
         {/* TrustStrip (pills) — below hero */}
         <TrustStrip bundle={bundle} variant="bright" />
 
-        <section className="bright-services" id="services">
+        {/* services — section order: services before phone strip for Bright */}
+        <ScrollReveal as="section" className="bright-services" id="services">
           <div className="bright-section-head">
             <div>
               <p className="bright-eyebrow">What we do</p>
-              <h2 className="bright-h2">Services</h2>
+              <h2 className="bright-h2">Our services</h2>
             </div>
-            <span className="bright-section-aside">not sure? give us a ring →</span>
+            <span className="bright-section-aside">not sure which fits? just ask →</span>
           </div>
           <div className="bright-services-grid">
             {bundle.services.map((s, i) => (
@@ -235,28 +243,57 @@ export function BrightHome({
               >
                 <div className="bright-service-row">
                   <span className="bright-service-icon" aria-hidden>
-                    {SERVICE_ICONS[i % SERVICE_ICONS.length]}
+                    {/* Decorative index-based shape, no emoji */}
+                    {['◐', '◑', '◒', '◓', '◍', '◎'][i % 6]}
                   </span>
                   <h3 className="bright-service-title">{s.title}</h3>
                 </div>
                 <p className="bright-service-blurb">{s.meta_description}</p>
-                <span className="bright-service-link">See details →</span>
+                <span className="bright-service-link">Learn more →</span>
               </a>
             ))}
           </div>
-        </section>
+        </ScrollReveal>
 
         {/* PhotoGallery — below services */}
         <PhotoGallery bundle={bundle} variant="bright" />
 
+        {/* mid-page phone moment — friendly framing */}
+        <ScrollReveal as="section" className="bright-phone-strip" aria-label="Call us">
+          <p className="bright-phone-strip-eyebrow">prefer to talk? we love that</p>
+          <a href={tel} className="bright-phone-strip-num num" aria-label={`Call ${phone}`}>
+            <Phone width={32} height={32} className="bright-phone-strip-icon" />
+            {phone}
+          </a>
+          <p className="bright-phone-strip-sub">picked up by a real person, usually within a few rings</p>
+        </ScrollReveal>
+
+        {/* Proof element — firstReview plain text card. No review schema. */}
+        {review && (
+          <ScrollReveal as="section" className="bright-proof" aria-label="Customer story">
+            <div className="bright-proof-card">
+              <p className="bright-proof-quote">{review.text}</p>
+              <p className="bright-proof-attribution">
+                {review.author}
+                {review.source === 'google' || review.source === 'yelp'
+                  ? ` · via ${review.source.charAt(0).toUpperCase() + review.source.slice(1)}`
+                  : ''}
+              </p>
+            </div>
+          </ScrollReveal>
+        )}
+
+        {/* ReviewsSection — above FAQ */}
+        <ReviewsSection bundle={bundle} variant="bright" title="What our neighbors say" />
+
         {faqs.length > 0 && (
-          <section className="bright-faq" aria-label="Frequently asked questions">
+          <ScrollReveal as="section" className="bright-faq" aria-label="Frequently asked questions">
             <div className="bright-section-head">
               <div>
                 <p className="bright-eyebrow">good questions</p>
                 <h2 className="bright-h2">Glad you asked</h2>
               </div>
-              <span className="bright-section-aside">still curious? just call →</span>
+              <span className="bright-section-aside">still have one? just call →</span>
             </div>
             <div className="bright-faq-list">
               {faqs.map((f, i) => (
@@ -266,38 +303,27 @@ export function BrightHome({
                 </details>
               ))}
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
-        {/* mid-page phone moment — friendly framing */}
-        <section className="bright-phone-strip" aria-label="Call us">
-          <p className="bright-phone-strip-eyebrow">prefer to talk? we get it</p>
-          <a href={tel} className="bright-phone-strip-num num">
-            ☎ {phone}
-          </a>
-          <p className="bright-phone-strip-sub">usually answered in a few rings ♥</p>
-        </section>
-
-        {/* ReviewsSection — above CTA row */}
-        <ReviewsSection bundle={bundle} variant="bright" title="What our neighbors say" />
-
-        <section className="bright-cta-row" id="contact">
+        <ScrollReveal as="section" className="bright-cta-row" id="contact">
           <div className="bright-cta-card">
             <h2 className="bright-cta-h2">Ready when you are.</h2>
             <p className="bright-cta-sub">
-              Most weeks we have same-week openings. Drop your details — we'll text or call back same day.
+              Most weeks we have same-week openings. Drop your info and we will follow up same day.
             </p>
             <LeadForm
               variant="bright"
-              submit="Book it ✦"
+              submit="Send my request"
               source="home-cta"
               siteId={siteId}
               siteSlug={siteSlug}
             />
             <div className="bright-cta-or">
               <span>or just call —</span>
-              <a href={tel} className="bright-cta-phone num">
-                ☎ {phone}
+              <a href={tel} className="bright-cta-phone num" aria-label={`Call ${phone}`}>
+                <Phone width={16} height={16} />
+                {phone}
               </a>
               <CallNowBadge bundle={bundle} />
             </div>
@@ -308,7 +334,7 @@ export function BrightHome({
             <GuaranteesList bundle={bundle} />
             <ul className="bright-area-chips">
               {areas.map((c) => {
-                const slug = areaSlugByTitle.get(c);
+                const slug = slugByTitle.get(c);
                 return <li key={c}>{slug ? <a href={slug}>{c}</a> : c}</li>;
               })}
             </ul>
@@ -319,12 +345,12 @@ export function BrightHome({
               height={280}
             />
           </div>
-        </section>
+        </ScrollReveal>
 
         {bundle.info_pages.length > 0 && (
-          <section className="bright-learn-more" aria-label="Resources">
+          <ScrollReveal as="section" className="bright-learn-more" aria-label="Resources" delay={100}>
             <p className="bright-eyebrow">Learn more</p>
-            <h2 className="bright-h2">Tips & guides</h2>
+            <h2 className="bright-h2">Tips and guides</h2>
             <div className="bright-learn-grid">
               {bundle.info_pages.slice(0, 6).map((p) => (
                 <a key={p.slug} href={p.slug} className="bright-learn-card">
@@ -333,11 +359,11 @@ export function BrightHome({
                 </a>
               ))}
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
         {blogTeasers.length > 0 && (
-          <section className="bright-learn-more" aria-label="From the blog">
+          <ScrollReveal as="section" className="bright-learn-more" aria-label="From the blog" delay={100}>
             <p className="bright-eyebrow">From the blog</p>
             <h2 className="bright-h2">Recent articles</h2>
             <div className="bright-learn-grid">
@@ -348,34 +374,27 @@ export function BrightHome({
                 </a>
               ))}
             </div>
-          </section>
+          </ScrollReveal>
         )}
 
         <footer className="bright-footer surface-inverse">
           <div>
-            © {new Date().getFullYear()} {bundle.business_name} · Bonded & insured
+            &copy; {new Date().getFullYear()} {bundle.business_name} &middot; Bonded &amp; insured
           </div>
           <div>{areas.slice(0, 6).join(' · ')}</div>
         </footer>
 
         <div className="sticky-mobile-bar surface-inverse">
           <a href={tel} className="phone num" aria-label={`Call ${phone}`}>
-            ☎ {phone}
+            <Phone width={18} height={18} />
+            {phone}
           </a>
           <a href="#contact" className="cta">
-            Book
+            Book now
           </a>
         </div>
         <div className="bright-mobile-spacer" aria-hidden />
       </div>
     </>
   );
-}
-
-function uniq<T>(arr: T[]): T[] {
-  return arr.filter((v, i, a) => a.indexOf(v) === i);
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
