@@ -1,0 +1,47 @@
+{
+  "app/operator/agents/page.tsx": {
+    "react/no-unescaped-entities": {
+      "count": 1
+    }
+  },
+  "app/operator/backlinks/prospects/SiteCombobox.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "app/operator/niches/RunForm.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "app/operator/sites/[id]/DomainCandidatesPanel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "app/operator/sites/[id]/KeywordsPanel.tsx": {
+    "react/no-unescaped-entities": {
+      "count": 2
+    }
+  },
+  "app/operator/sites/[id]/actions.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "app/operator/sites/[id]/network/page.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "app/operator/sites/[id]/phone-actions.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "components/OperatorChrome.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  }
+}
