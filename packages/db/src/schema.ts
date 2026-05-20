@@ -1352,6 +1352,50 @@ export const phoneProvisions = pgTable(
   }),
 );
 
+/**
+ * ADR 0013 — First-Party Core Web Vitals Field Data Collection.
+ *
+ * Pre-aggregated daily rollups, one row per (site, day, metric). The p75_approx
+ * is an exponential moving average, not a true p75 — sufficient for trend
+ * detection, not SLA enforcement. Variant column is the primary observability
+ * axis: answers "is INP degrading on the premium template?" without joining to
+ * Sanity. Retention: 90 days (DELETE WHERE metric_date < NOW() - INTERVAL '90 days').
+ */
+export const cwvDailyRollups = pgTable(
+  'cwv_daily_rollups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** YYYY-MM-DD; stored as text for portability, matching seoMetricsDaily/ga4MetricsDaily convention. */
+    metricDate: text('metric_date').notNull(),
+    /** One of: LCP, CLS, INP, FCP, TTFB */
+    metricName: text('metric_name').notNull(),
+    sampleCount: integer('sample_count').notNull().default(0),
+    /** Sum of raw metric values — divide by sample_count for mean. */
+    valueSum: integer('value_sum').notNull().default(0),
+    /** Exponential moving average approximating p75. See ADR 0013 §2. */
+    p75Approx: integer('p75_approx').notNull().default(0),
+    ratingGood: integer('rating_good').notNull().default(0),
+    ratingNeedsImprovement: integer('rating_needs_improvement').notNull().default(0),
+    ratingPoor: integer('rating_poor').notNull().default(0),
+    /** Variant/theme name at collection time (classic|modern|premium|bright). Denormalised for fast group-by without Sanity join. */
+    variant: text('variant').notNull().default('classic'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteMetricDateUniq: uniqueIndex('cwv_daily_rollups_site_metric_date_uniq').on(
+      t.siteId,
+      t.metricDate,
+      t.metricName,
+    ),
+    siteDateIdx: index('cwv_daily_rollups_site_date_idx').on(t.siteId, t.metricDate),
+    variantMetricIdx: index('cwv_daily_rollups_variant_metric_idx').on(t.variant, t.metricName),
+  }),
+);
+
 // ────────────────────────────────────────────────────────────
 // Type exports
 // ────────────────────────────────────────────────────────────
@@ -1387,6 +1431,8 @@ export type LighthouseAudit = typeof lighthouseAudits.$inferSelect;
 export type NewLighthouseAudit = typeof lighthouseAudits.$inferInsert;
 export type DomainCandidate = typeof domainCandidates.$inferSelect;
 export type NewDomainCandidate = typeof domainCandidates.$inferInsert;
+export type CwvDailyRollup = typeof cwvDailyRollups.$inferSelect;
+export type NewCwvDailyRollup = typeof cwvDailyRollups.$inferInsert;
 export type AlertRule = typeof alertRules.$inferSelect;
 export type NewAlertRule = typeof alertRules.$inferInsert;
 export type AlertEvent = typeof alertEvents.$inferSelect;
