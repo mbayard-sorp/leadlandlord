@@ -4,13 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
 import { NicheHunterInput, computeScore, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from '@leadlandlord/agents/niche-hunter';
-import { getRentabilityPrior } from '@leadlandlord/agents/niche-hunter/lead-benchmarks';
+import { getRentabilityPrior, getLeadBenchmarkPrice, computeRentabilityScore } from '@leadlandlord/agents/niche-hunter/lead-benchmarks';
 import {
   getLocalKeywordMetrics,
   getSerpComposition,
   getPaidAdCount,
   getKeywordCandidates,
 } from '@leadlandlord/integrations/dataforseo';
+import { getContractorCount } from '@leadlandlord/integrations/google-places';
 import { log } from '@leadlandlord/shared/log';
 import { requireOperatorSession } from '@/lib/auth';
 
@@ -292,11 +293,15 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
   try {
     // A1: getKeywordCandidates is city-independent with 90-day cache (~$0.028
     // cold-miss per distinct niche). Run in parallel with the existing trio.
-    const [metrics, serpComposition, paidAdCount, clusterCandidates] = await Promise.all([
+    // B1: getContractorCount is a single Places Text Search call (~$0.017),
+    // cached 30 days. It runs here in validateNiche ONLY — never at brainstorm
+    // time. The Places call is independent of DFS so we run all 5 in parallel.
+    const [metrics, serpComposition, paidAdCount, clusterCandidates, contractor_count] = await Promise.all([
       getLocalKeywordMetrics({ keywords: seeds, location, forceRefresh: false }),
       getSerpComposition({ keyword: primaryKeyword, location, forceRefresh: false }),
       getPaidAdCount({ keyword: primaryKeyword }),
       getKeywordCandidates({ seed: row.niche }),
+      getContractorCount({ niche: row.niche, city: row.city, state: row.state }),
     ]);
 
     // Aggregate seed metrics the same way scoreCandidate() does.
@@ -330,7 +335,8 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
     // for calibration — only the demand input to computeScore changes.
     const demandVolume = Math.max(search_volume, clusterVolume * GEO_SHARE_PRIOR);
 
-    const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume };
+    // B1: store contractor_count in dfsRaw alongside DFS data for traceability.
+    const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume, contractor_count };
 
     // Recompute score using measured inputs and DEFAULT_WEIGHTS.
     // estAvgJobValueUsd and estCloseRate are numeric strings from Drizzle.
@@ -352,6 +358,14 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
       rentability_prior, // A3: wires rentability prior (weight 0.05)
     });
 
+    // C1: rentability score — separate from SEO winnability score.
+    const lead_benchmark_price = getLeadBenchmarkPrice(row.niche);
+    const rentability_score = computeRentabilityScore({
+      contractor_count,
+      avg_cpc,
+      lead_benchmark_price,
+    });
+
     await db
       .update(niches)
       .set({
@@ -362,13 +376,15 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
         validatedAt: new Date(),
         volumeSource: 'dataforseo',
         score: score.toFixed(2),
+        contractorCount: contractor_count,
+        rentabilityScore: rentability_score.toFixed(2),
       })
       .where(eq(niches.id, nicheId));
 
     revalidatePath('/operator/niches');
     return {
       ok: true,
-      message: `Validated — measured volume: ${search_volume}/mo, cluster: ${clusterVolume}, KD: ${Math.round(kd)}, score: ${score.toFixed(2)}.`,
+      message: `Validated — measured volume: ${search_volume}/mo, cluster: ${clusterVolume}, KD: ${Math.round(kd)}, score: ${score.toFixed(2)}, contractors: ${contractor_count}, rentability: ${rentability_score.toFixed(1)}.`,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -122,6 +122,8 @@ type NicheRow = {
   validatedAt: Date | null;
   dfsRaw: unknown;
   decision: string;
+  contractorCount: number | null;
+  rentabilityScore: string | null;
 };
 
 function VolCell({ row }: { row: NicheRow }) {
@@ -179,9 +181,11 @@ function Table({
             <Th>Niche</Th>
             <Th className="hidden md:table-cell">City</Th>
             <Th>Score</Th>
+            <Th className="hidden lg:table-cell">Rentability</Th>
             <Th className="hidden md:table-cell">Vol</Th>
             <Th className="hidden md:table-cell">Source</Th>
             <Th className="hidden md:table-cell">KD</Th>
+            <Th className="hidden lg:table-cell">Contractors</Th>
             <Th className="hidden lg:table-cell">Job $</Th>
             <Th className="hidden lg:table-cell">Close</Th>
             <Th className="hidden lg:table-cell">Rationale</Th>
@@ -199,6 +203,13 @@ function Table({
               </Td>
               <Td className="hidden md:table-cell">{r.city}, {r.state}</Td>
               <Td className="font-semibold">{r.score ?? '—'}</Td>
+              <Td className="hidden lg:table-cell">
+                {r.rentabilityScore !== null ? (
+                  <span className="font-medium text-violet-400">{r.rentabilityScore}</span>
+                ) : (
+                  <span className="text-slate-500">—</span>
+                )}
+              </Td>
               <Td className="hidden md:table-cell">
                 <VolCell row={r} />
               </Td>
@@ -209,6 +220,9 @@ function Table({
                 {r.dfsKd !== null ? (
                   <span>{r.dfsKd} <span className="text-slate-500 text-xs">DFS</span></span>
                 ) : (r.kd ?? '—')}
+              </Td>
+              <Td className="hidden lg:table-cell">
+                {r.contractorCount !== null ? r.contractorCount : <span className="text-slate-500">—</span>}
               </Td>
               <Td className="hidden lg:table-cell">${r.estAvgJobValueUsd ?? '—'}</Td>
               <Td className="hidden lg:table-cell">{r.estCloseRate ? `${(Number(r.estCloseRate) * 100).toFixed(0)}%` : '—'}</Td>

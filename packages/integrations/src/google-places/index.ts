@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
+import { withDataForSeoCache, stableKey } from '../dataforseo/cache';
 
 const PLACES_BASE = 'https://places.googleapis.com/v1';
 
@@ -120,6 +121,55 @@ export async function searchText(args: SearchTextArgs): Promise<{
     'google-places search',
   );
   return { places, nextPageToken: json.nextPageToken };
+}
+
+export interface ContractorCountArgs {
+  niche: string;
+  city: string;
+  state: string;
+  forceRefresh?: boolean;
+}
+
+/**
+ * Return the number of contractors (first-page Places results, capped at 20)
+ * for a given niche + city + state. Intended for rentability scoring in the
+ * operator `validateNiche` action — NEVER call this at niche-hunter generation
+ * time; it costs ~$0.017/call and must be operator-gated.
+ *
+ * Caching: responses are stored for 30 days via the shared external-API cache
+ * (endpoint namespace 'places-contractor-count'). A re-validation within 30
+ * days costs nothing.
+ *
+ * MOCK_AI bypass: returns 7 (a plausible mid-market count) so test/mock paths
+ * never hit the network. The cache layer itself also bypasses when MOCK_AI=true.
+ */
+export async function getContractorCount(args: ContractorCountArgs): Promise<number> {
+  if (process.env.MOCK_AI === 'true') {
+    log.info({ args }, 'google-places getContractorCount: MOCK_AI bypass, returning 7');
+    return 7;
+  }
+
+  const query = `${args.niche} in ${args.city}, ${args.state}`;
+  const cacheKey = stableKey([args.niche.toLowerCase(), args.city.toLowerCase(), args.state.toLowerCase()]);
+
+  const { value: count } = await withDataForSeoCache<number>({
+    endpoint: 'places-contractor-count',
+    key: cacheKey,
+    ttlDays: 30,
+    costUsd: 0.017,
+    forceRefresh: args.forceRefresh,
+    fetcher: async () => {
+      const { places } = await searchText({
+        query,
+        pageSize: 20,
+        excludeClosed: true,
+      });
+      log.info({ query, count: places.length }, 'google-places contractor count fetched');
+      return places.length;
+    },
+  });
+
+  return count;
 }
 
 /**

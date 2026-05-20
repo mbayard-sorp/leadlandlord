@@ -131,6 +131,12 @@ const TRADE_BENCHMARKS: TradeBenchmark[] = [
 const DEFAULT_RENTABILITY_PRIOR = 0.5;
 
 /**
+ * Neutral lead benchmark price (USD) returned when no trade matches.
+ * Represents a mid-range home-services lead where we have no specific data.
+ */
+const DEFAULT_LEAD_BENCHMARK_PRICE = 45;
+
+/**
  * Return a rentability prior (0..1) for the given niche string.
  *
  * Matching: case-insensitive, substring. When multiple benchmark entries
@@ -155,4 +161,99 @@ export function getRentabilityPrior(niche: string): number {
   }
 
   return best?.prior ?? DEFAULT_RENTABILITY_PRIOR;
+}
+
+/**
+ * Return the midpoint lead benchmark price (USD) for the given niche string.
+ *
+ * Uses the same substring-matching logic as getRentabilityPrior: case-insensitive,
+ * longest-keyword-wins. Returns DEFAULT_LEAD_BENCHMARK_PRICE (45) when no trade
+ * matches — a neutral midpoint representative of the broader home-services market.
+ */
+export function getLeadBenchmarkPrice(niche: string): number {
+  const lower = niche.toLowerCase();
+
+  let best: { keywordLength: number; price: number } | null = null;
+
+  for (const benchmark of TRADE_BENCHMARKS) {
+    for (const keyword of benchmark.keywords) {
+      if (lower.includes(keyword)) {
+        const midpoint = (benchmark.leadPriceRangeLow + benchmark.leadPriceRangeHigh) / 2;
+        if (best === null || keyword.length > best.keywordLength) {
+          best = { keywordLength: keyword.length, price: midpoint };
+        }
+      }
+    }
+  }
+
+  return best?.price ?? DEFAULT_LEAD_BENCHMARK_PRICE;
+}
+
+export interface RentabilityScoreInputs {
+  /** Number of contractors returned by Places Text Search (first page, max 20). */
+  contractor_count: number;
+  /** Average CPC from DataForSEO keyword metrics (0 when unavailable). */
+  avg_cpc: number;
+  /** Midpoint lead price from static benchmarks (USD). */
+  lead_benchmark_price: number;
+}
+
+/**
+ * Compute a 0..100 rentability score independently of the SEO winnability score.
+ *
+ * ADR 0009 Phase 2 / C1. This score is stored in `niches.rentability_score`
+ * and displayed alongside `score` (SEO winnability) so operators can evaluate
+ * both dimensions independently.
+ *
+ * Formula rationale (v1 heuristic, tunable):
+ *
+ * 1. Supply sub-score (weight 0.50): rewards a healthy-but-not-saturated
+ *    contractor market. Too few contractors (<3) means almost no one to rent to;
+ *    a moderate count (5-15) is ideal; very high (>=20, i.e. a full first page)
+ *    signals saturation and is penalized. We model this with a tent curve:
+ *      - 0..2:   score scales linearly from 0 to 0.40 (thin market)
+ *      - 3..14:  score scales linearly from 0.40 to 1.0 (sweet spot peaks at 14)
+ *      - 15..20: score scales linearly from 1.0 down to 0.30 (saturation)
+ *    The curve is intentionally asymmetric — saturation is less bad than a
+ *    completely empty market, but we still discount it materially.
+ *
+ * 2. CPC sub-score (weight 0.25): advertisers paying higher CPCs are signalling
+ *    that leads convert and the job value justifies ad spend. We normalize
+ *    against $12 (a typical high-CPC home-services ceiling in our data).
+ *    Formula: min(1, avg_cpc / 12).
+ *
+ * 3. Lead price sub-score (weight 0.25): higher benchmark lead prices mean
+ *    contractors in this trade are already conditioned to pay for leads.
+ *    We normalize against $100 (a high-end benchmark ceiling).
+ *    Formula: min(1, lead_benchmark_price / 100).
+ *
+ * All three sub-scores are in [0, 1]; the weighted sum is multiplied by 100.
+ */
+export function computeRentabilityScore(inputs: RentabilityScoreInputs): number {
+  const { contractor_count, avg_cpc, lead_benchmark_price } = inputs;
+
+  // Sub-score 1: supply curve (tent, peaks at count=14, weight 0.50)
+  const count = Math.max(0, Math.min(20, contractor_count));
+  let supplySub: number;
+  if (count <= 2) {
+    // 0..2: thin market. Scale 0 -> 0.40 linearly.
+    supplySub = (count / 2) * 0.4;
+  } else if (count <= 14) {
+    // 3..14: sweet spot. Scale 0.40 -> 1.0 linearly.
+    supplySub = 0.4 + ((count - 2) / 12) * 0.6;
+  } else {
+    // 15..20: saturation. Scale 1.0 -> 0.30 linearly.
+    supplySub = 1.0 - ((count - 14) / 6) * 0.7;
+  }
+
+  // Sub-score 2: CPC willingness-to-pay signal (weight 0.25)
+  // Ceiling $12 — CPCs above that are treated as max signal.
+  const cpcSub = Math.min(1, avg_cpc / 12);
+
+  // Sub-score 3: static lead-price benchmark (weight 0.25)
+  // Ceiling $100 — lead prices above that get max signal.
+  const leadPriceSub = Math.min(1, lead_benchmark_price / 100);
+
+  const raw = supplySub * 0.5 + cpcSub * 0.25 + leadPriceSub * 0.25;
+  return Math.min(100, Math.max(0, raw * 100));
 }
