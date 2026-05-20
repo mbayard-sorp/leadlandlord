@@ -160,14 +160,14 @@ function ScoringPriorsSection({ state }: Props) {
       <header>
         <p className="text-xs uppercase tracking-wide text-slate-500">Niche-scoring priors</p>
         <p className="text-sm text-slate-400 mt-1">
-          Tuning knobs read by <code className="text-slate-300">validateNiche</code>. Leave a field
+          Tuning knobs for <code className="text-slate-300">validateNiche</code>. Leave a field
           blank to use the built-in default. Changes apply to the next validation only — they do
           not rescore existing rows.
         </p>
       </header>
       <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <label className="text-xs text-slate-400">
-          Geo-share prior (fraction, default 0.15)
+          Cluster geo-share (display only — not a score input pending Phase 2)
           <input
             type="number"
             min="0"
@@ -176,8 +176,11 @@ function ScoringPriorsSection({ state }: Props) {
             name="geoSharePrior"
             defaultValue={state.geoSharePrior ?? ''}
             placeholder="0.15"
-            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100 opacity-60"
           />
+          <span className="block mt-1 text-slate-500">
+            Editing this field does not affect scores. Reserved for Phase 2 demand model.
+          </span>
         </label>
         <label className="text-xs text-slate-400">
           Rentability CPC ceiling (USD, default 12)

@@ -9,8 +9,8 @@ import {
   getSerpComposition,
   type KeywordMetrics,
 } from '@leadlandlord/integrations/dataforseo';
-import { ScoringConfig, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, type ScoringWeights } from './scoring-config';
-export { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from './scoring-config';
+import { ScoringConfig, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, resolveDemandVolume, type ScoringWeights } from './scoring-config';
+export { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
 import { isDenylisted } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
 import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
@@ -635,15 +635,13 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     // Stored in the same `kd` slot so DB, filters, and UI keep working.
     const kd = serp.difficulty;
 
-    // Resolve the demand signal: Google Ads volume is unreliable below ~100
-    // for hyperlocal long-tail (heavy bucketing). When DFS comes in low we
-    // fall back to Claude's brainstorm-time estimate range midpoint, which
-    // is typically closer to truth for these terms.
-    const dfsVolume = aggregated.search_volume;
-    const DFS_TRUST_FLOOR = 100;
-    const resolvedVolume = dfsVolume >= DFS_TRUST_FLOOR ? dfsVolume : claudeMid;
-    const volumeSource: 'dataforseo' | 'claude_estimate' =
-      dfsVolume >= DFS_TRUST_FLOOR ? 'dataforseo' : 'claude_estimate';
+    // Resolve the demand signal via the shared resolver (scoring-config.ts).
+    // SYNC: validateNiche in apps/operator/app/operator/niches/actions.ts calls
+    // the same resolveDemandVolume — neither path may duplicate this logic inline.
+    const { volume: resolvedVolume, source: volumeSource } = resolveDemandVolume(
+      aggregated.search_volume,
+      claudeMid,
+    );
 
     const score = computeScore({
       ...aggregated,
@@ -661,7 +659,7 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
         score,
         ad_count,
         kd,
-        dfs_volume: dfsVolume,
+        dfs_volume: aggregated.search_volume,
         claude_volume_low: c.est_monthly_searches_low,
         claude_volume_high: c.est_monthly_searches_high,
         resolved_volume: resolvedVolume,
@@ -823,6 +821,8 @@ interface ScoreInputs {
 export function computeScore(s: ScoreInputs): number {
   const weights = s.weights ?? DEFAULT_WEIGHTS;
 
+  // Saturates at 1.0 when search_volume >= DEMAND_SUB_SATURATION_CEILING (10,000).
+  // Inputs above that ceiling produce no additional score differentiation.
   const demandSub = Math.min(1, Math.log10(Math.max(1, s.search_volume + 1)) / 4); // log10(10000)=4 -> 1.0
   const kdInverse = (100 - Math.max(0, Math.min(100, s.kd))) / 100;
   const compInverse = 1 - Math.max(0, Math.min(1, s.competition));

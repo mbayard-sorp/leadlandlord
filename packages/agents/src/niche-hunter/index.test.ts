@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeCandidateSchema, computeScore } from './index';
 import { isDenylisted, NICHE_DENYLIST } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
-import { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from './scoring-config';
+import { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
 import { getRentabilityPrior } from './lead-benchmarks';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -401,38 +401,59 @@ describe('getRentabilityPrior', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ADR 0009 Phase 1 / A1 — Math.max demand blend
+// resolveDemandVolume — shared demand resolver (ADR 0009 amendment 2026-05-19)
+// Replaces the old A1 Math.max(dfs, clusterNational * GEO_SHARE_PRIOR) blend.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('A1 demand blend — Math.max(dfs_search_volume, clusterVolume * GEO_SHARE_PRIOR)', () => {
-  it('GEO_SHARE_PRIOR is 0.15', () => {
+describe('resolveDemandVolume', () => {
+  it('GEO_SHARE_PRIOR is still 0.15 (display-only, drawer cross-check)', () => {
     expect(GEO_SHARE_PRIOR).toBe(0.15);
   });
 
-  it('uses dfs_search_volume when it exceeds cluster estimate', () => {
-    const dfsVolume = 500;
-    const clusterVolume = 100; // 100 * 0.15 = 15 — well below dfs
-    const demand = Math.max(dfsVolume, clusterVolume * GEO_SHARE_PRIOR);
-    expect(demand).toBe(500);
+  it('DFS_TRUST_FLOOR is 100', () => {
+    expect(DFS_TRUST_FLOOR).toBe(100);
   });
 
-  it('uses cluster estimate when dfs_search_volume is low (hyperlocal bucket)', () => {
-    const dfsVolume = 10; // Google Ads bucketed to near-zero
-    const clusterVolume = 5000; // strong national cluster signal
-    const demand = Math.max(dfsVolume, clusterVolume * GEO_SHARE_PRIOR);
-    // 5000 * 0.15 = 750
-    expect(demand).toBeCloseTo(750, 5);
+  it('DEMAND_SUB_SATURATION_CEILING is 10_000', () => {
+    expect(DEMAND_SUB_SATURATION_CEILING).toBe(10_000);
   });
 
-  it('blend produces a higher score than raw 0-volume dfs alone', () => {
+  it('dfs=120, claude=200 -> { volume: 120, source: dataforseo }', () => {
+    expect(resolveDemandVolume(120, 200)).toEqual({ volume: 120, source: 'dataforseo' });
+  });
+
+  it('dfs=99, claude=150 -> { volume: 150, source: claude_estimate }', () => {
+    expect(resolveDemandVolume(99, 150)).toEqual({ volume: 150, source: 'claude_estimate' });
+  });
+
+  it('dfs=100 boundary -> { volume: 100, source: dataforseo } (inclusive floor)', () => {
+    expect(resolveDemandVolume(100, 200)).toEqual({ volume: 100, source: 'dataforseo' });
+  });
+
+  it('dfs=0, claude=80 -> { volume: 80, source: claude_estimate }', () => {
+    expect(resolveDemandVolume(0, 80)).toEqual({ volume: 80, source: 'claude_estimate' });
+  });
+
+  it('when dfs floors (20), produces a realistic demandSub instead of saturating', () => {
+    // Real-world: concrete patio / Everett WA. DFS=20, Claude=150.
+    // Old blend: Math.max(20, clusterNational=80960 * 0.15) = 12,144 -> demandSub=1.0
+    // New:       resolveDemandVolume(20, 150) -> 150 -> demandSub ~ 0.55
+    const { volume } = resolveDemandVolume(20, 150);
+    const demandSub = Math.min(1, Math.log10(Math.max(1, volume + 1)) / 4);
+    expect(demandSub).toBeGreaterThan(0.4);
+    expect(demandSub).toBeLessThan(1.0); // must not saturate
+  });
+
+  it('resolvedVolume feeds computeScore with a differentiating result (not pinned to 1.0)', () => {
     const base = {
       kd: 30, competition: 0.3, est_avg_job_value_usd: 500,
       est_close_rate: 0.35, ad_count: 3, weights: DEFAULT_WEIGHTS,
     };
-    const clusterVolume = 4000;
-    const blendedVolume = Math.max(0, clusterVolume * GEO_SHARE_PRIOR); // 600
-    const scoreLow = computeScore({ ...base, search_volume: 0 });
-    const scoreBlended = computeScore({ ...base, search_volume: blendedVolume });
-    expect(scoreBlended).toBeGreaterThan(scoreLow);
+    // Two niches with different Claude estimates should produce different scores
+    const { volume: vol150 } = resolveDemandVolume(20, 150);
+    const { volume: vol260 } = resolveDemandVolume(20, 260);
+    const score150 = computeScore({ ...base, search_volume: vol150 });
+    const score260 = computeScore({ ...base, search_volume: vol260 });
+    expect(score260).toBeGreaterThan(score150); // demand differentiates
   });
 });

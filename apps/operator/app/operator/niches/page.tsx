@@ -1,14 +1,11 @@
 import { desc, inArray } from 'drizzle-orm';
 import { getDb, niches, sites } from '@leadlandlord/db';
-import { GEO_SHARE_PRIOR } from '@leadlandlord/agents/niche-hunter';
+import { GEO_SHARE_PRIOR, resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
 import Link from 'next/link';
 import { RunForm } from './RunForm';
-import { DecisionButtons } from './DecisionButtons';
 import { StatusBar } from './StatusBar';
-import { BuildLink } from './BuildLink';
-import { ValidateButton } from './ValidateButton';
-import { RawResponseDrawer } from './RawResponseDrawer';
-import { CalibrationDrawer } from './CalibrationDrawer';
+import { NicheRow, type NicheRowData } from './NicheRow';
+import { CollapsibleSection } from './CollapsibleSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,17 +61,21 @@ export default async function NichesPage() {
         )}
       </Section>
 
-      <Section title={`Approved (${approved.length})`} muted>
+      <CollapsibleSection title="Approved" count={approved.length} muted>
         {approved.length === 0 ? (
           <Empty>No approved niches yet.</Empty>
         ) : (
           <Table rows={approved} showBuildLink siteByNiche={siteByNiche} />
         )}
-      </Section>
+      </CollapsibleSection>
 
-      <Section title={`Rejected (${rejected.length})`} muted>
-        {rejected.length === 0 ? <Empty>No rejected niches yet.</Empty> : <Table rows={rejected} />}
-      </Section>
+      <CollapsibleSection title="Rejected" count={rejected.length} muted>
+        {rejected.length === 0 ? (
+          <Empty>No rejected niches yet.</Empty>
+        ) : (
+          <Table rows={rejected} showDelete />
+        )}
+      </CollapsibleSection>
     </div>
   );
 }
@@ -106,76 +107,22 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-type NicheRow = {
-  id: string;
-  niche: string;
-  city: string;
-  state: string;
-  searchVolume: number | null;
-  kd: number | null;
-  estAvgJobValueUsd: string | null;
-  estCloseRate: string | null;
-  score: string | null;
-  rationale: string | null;
-  volumeSource: string;
-  estSearchVolume: number | null;
-  dfsSearchVolume: number | null;
-  dfsClusterVolume: number | null;
-  dfsKd: number | null;
-  validatedAt: Date | null;
-  dfsRaw: unknown;
-  decision: string;
-  contractorCount: number | null;
-  rentabilityScore: string | null;
-};
-
-function VolCell({ row }: { row: NicheRow }) {
-  const isValidated = row.volumeSource === 'dataforseo';
-  const estimate = row.estSearchVolume ?? row.searchVolume;
-
-  if (isValidated && row.dfsSearchVolume !== null) {
-    return (
-      <span className="text-xs">
-        {estimate !== null ? <span className="text-slate-400">{estimate} est</span> : null}
-        {estimate !== null ? <span className="text-slate-500"> → </span> : null}
-        <span className="text-emerald-400 font-medium">{row.dfsSearchVolume} DFS</span>
-      </span>
-    );
-  }
-
-  if (estimate !== null) {
-    return <span className="text-xs text-slate-400">{estimate} est</span>;
-  }
-
-  return <span className="text-slate-500">—</span>;
-}
-
-function SourceBadge({ volumeSource }: { volumeSource: string }) {
-  if (volumeSource === 'dataforseo') {
-    return (
-      <span className="inline-flex items-center rounded-full bg-emerald-900/50 px-2 py-0.5 text-xs font-medium text-emerald-300 border border-emerald-800">
-        validated
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400 border border-slate-700">
-      estimate
-    </span>
-  );
-}
-
 function Table({
   rows,
   showButtons = false,
   showBuildLink = false,
+  showDelete = false,
   siteByNiche,
 }: {
-  rows: NicheRow[];
+  rows: NicheRowData[];
   showButtons?: boolean;
   showBuildLink?: boolean;
+  showDelete?: boolean;
   siteByNiche?: Map<string, string>;
 }) {
+  // Base columns + the optional Decision / Build columns; used for the
+  // full-width calibration detail row's colSpan.
+  const colSpan = 9 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
       <table className="w-full text-sm">
@@ -184,13 +131,10 @@ function Table({
             <Th>Niche</Th>
             <Th className="hidden md:table-cell">City</Th>
             <Th>Score</Th>
-            <Th className="hidden lg:table-cell">Rentability</Th>
+            <Th className="hidden lg:table-cell">Rent.</Th>
             <Th className="hidden md:table-cell">Vol</Th>
             <Th className="hidden md:table-cell">Source</Th>
-            <Th className="hidden md:table-cell">KD</Th>
-            <Th className="hidden lg:table-cell">Contractors</Th>
             <Th className="hidden lg:table-cell">Job $</Th>
-            <Th className="hidden lg:table-cell">Close</Th>
             <Th className="hidden lg:table-cell">Rationale</Th>
             <Th>Validate</Th>
             {showButtons && <Th>Decision</Th>}
@@ -198,66 +142,30 @@ function Table({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-b border-slate-800/60 last:border-0">
-              <Td className="break-words">
-                {r.niche}
-                <div className="text-xs text-slate-500 md:hidden">{r.city}, {r.state}</div>
-              </Td>
-              <Td className="hidden md:table-cell">{r.city}, {r.state}</Td>
-              <Td className="font-semibold">{r.score ?? '—'}</Td>
-              <Td className="hidden lg:table-cell">
-                {r.rentabilityScore !== null ? (
-                  <span className="font-medium text-violet-400">{r.rentabilityScore}</span>
-                ) : (
-                  <span className="text-slate-500">—</span>
-                )}
-              </Td>
-              <Td className="hidden md:table-cell">
-                <VolCell row={r} />
-              </Td>
-              <Td className="hidden md:table-cell">
-                <SourceBadge volumeSource={r.volumeSource} />
-              </Td>
-              <Td className="hidden md:table-cell">
-                {r.dfsKd !== null ? (
-                  <span>{r.dfsKd} <span className="text-slate-500 text-xs">DFS</span></span>
-                ) : (r.kd ?? '—')}
-              </Td>
-              <Td className="hidden lg:table-cell">
-                {r.contractorCount !== null ? r.contractorCount : <span className="text-slate-500">—</span>}
-              </Td>
-              <Td className="hidden lg:table-cell">${r.estAvgJobValueUsd ?? '—'}</Td>
-              <Td className="hidden lg:table-cell">{r.estCloseRate ? `${(Number(r.estCloseRate) * 100).toFixed(0)}%` : '—'}</Td>
-              <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell">
-                {r.rationale}
-                <CalibrationDrawer
-                  claudeEstimate={r.estSearchVolume ?? r.searchVolume}
-                  dfsSeedVolume={r.dfsSearchVolume}
-                  clusterVolume={r.dfsClusterVolume}
-                  geoSharePrior={GEO_SHARE_PRIOR}
-                  score={r.score}
-                />
-                {r.dfsRaw != null && <RawResponseDrawer dfsRaw={r.dfsRaw} />}
-              </Td>
-              <Td>
-                <ValidateButton
-                  nicheId={r.id}
-                  alreadyValidated={r.volumeSource === 'dataforseo'}
-                />
-              </Td>
-              {showButtons && (
-                <Td>
-                  <DecisionButtons id={r.id} volumeSource={r.volumeSource} />
-                </Td>
-              )}
-              {showBuildLink && (
-                <Td>
-                  <BuildLink nicheId={r.id} initialSiteId={siteByNiche?.get(r.id) ?? null} />
-                </Td>
-              )}
-            </tr>
-          ))}
+          {rows.map((r) => {
+            // Compute demand resolution server-side so the client component never
+            // imports resolveDemandVolume (avoids bundling agents into the client).
+            // claudeMid mirrors validateNiche: estSearchVolume, falling back to
+            // searchVolume for legacy rows that predate the estSearchVolume column.
+            const { volume: demandUsed, source: demandSource } = resolveDemandVolume(
+              r.dfsSearchVolume ?? 0,
+              r.estSearchVolume ?? r.searchVolume ?? 0,
+            );
+            return (
+            <NicheRow
+              key={r.id}
+              row={r}
+              showButtons={showButtons}
+              showBuildLink={showBuildLink}
+              showDelete={showDelete}
+              siteId={siteByNiche?.get(r.id) ?? null}
+              colSpan={colSpan}
+              geoSharePrior={GEO_SHARE_PRIOR}
+              demandUsed={demandUsed}
+              demandSource={demandSource}
+            />
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -265,9 +173,5 @@ function Table({
 }
 
 function Th({ children, className = '' }: { children?: React.ReactNode; className?: string }) {
-  return <th className={`px-3 py-2 font-medium ${className}`}>{children}</th>;
-}
-
-function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+  return <th className={`px-2 py-2 font-medium ${className}`}>{children}</th>;
 }
