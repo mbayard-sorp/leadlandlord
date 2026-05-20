@@ -9,7 +9,6 @@ import {
 } from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
-import { TrackingSetup } from '../tracking-setup/index';
 import { KeywordPlanner } from '../keyword-planner/index';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { IntegrationError } from '@leadlandlord/shared/errors';
@@ -36,7 +35,6 @@ export type SiteBuilderProgressEvent =
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
-  private readonly trackingSetup = new TrackingSetup();
   private readonly keywordPlanner = new KeywordPlanner();
 
   /**
@@ -181,21 +179,12 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     );
     this.emit({ step: 'content_generated', pages: countPages(bundle) });
 
-    // 3. Provision tracking number (mocked when MOCK_TELEPHONY=true).
-    ctx.progress({ step: 4, total: 8, label: 'provisioning tracking number' });
-    // No dedupeKey override — tracking-setup's own dedupeKeyFn keys on site_id,
-    // so a retry reuses the already-provisioned number instead of leaking a new
-    // paid Twilio number. The number is independent of content, so it is NOT
-    // epoch-scoped: a content refresh must not reprovision a phone line.
-    const tracking = await this.trackingSetup.run(
-      { site_id: siteId },
-      { siteId, parentRunId: ctx.runId },
-    );
-    this.emit({
-      step: 'tracking_provisioned',
-      number: tracking.number,
-      provider: tracking.provider,
-    });
+    // Tracking-number provisioning is intentionally NOT part of the build path.
+    // It's a paid Twilio call with its own failure modes (and would otherwise
+    // run upstream of the Sanity write, so a telephony hiccup could block
+    // publishing fully-generated content). Operators assign a number manually
+    // from the site detail page; the TrackingSetup agent remains available for
+    // that out-of-band flow.
 
     // 3b. Provision a Klaviyo list for this site (idempotent — skips when one
     //     is already saved on the row, or when Klaviyo creds aren't set).
@@ -357,8 +346,6 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       .update(sites)
       .set({
         status: 'warming',
-        trackingNumber: tracking.number,
-        trackingProvider: tracking.provider,
         deployedAt,
         updatedAt: deployedAt,
       })
@@ -387,8 +374,8 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       pages_written: persisted.pagesWritten,
       theme: bundle.variant,
       hero_image_url: heroUrl,
-      tracking_number: tracking.number,
-      tracking_provider: tracking.provider,
+      tracking_number: null,
+      tracking_provider: null,
       deployed_at: deployedAt.toISOString(),
     };
   }

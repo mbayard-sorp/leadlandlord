@@ -15,8 +15,8 @@ interface DoneEvent {
   pages_written: number;
   theme: 'classic' | 'modern' | 'premium' | 'bright';
   hero_image_url: string | null;
-  tracking_number: string;
-  tracking_provider: string;
+  tracking_number: string | null;
+  tracking_provider: string | null;
   deployed_at: string;
   elapsed_ms: number;
 }
@@ -194,8 +194,14 @@ export function BuildForm() {
             </div>
             <div>
               <span className="text-slate-500">Tracking: </span>
-              <span className="font-mono">{done.tracking_number}</span>{' '}
-              <span className="text-slate-500">({done.tracking_provider})</span>
+              {done.tracking_number ? (
+                <>
+                  <span className="font-mono">{done.tracking_number}</span>{' '}
+                  <span className="text-slate-500">({done.tracking_provider})</span>
+                </>
+              ) : (
+                <span className="text-slate-500">not provisioned — assign manually</span>
+              )}
             </div>
             <div className="col-span-full">
               <span className="text-slate-500">Sanity doc: </span>
