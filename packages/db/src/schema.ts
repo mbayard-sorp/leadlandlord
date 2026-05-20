@@ -171,6 +171,17 @@ export const niches = pgTable(
     validatedAt: timestamp('validated_at', { withTimezone: true }),
     // Full raw DataForSEO response(s) captured at validation, for field discovery.
     dfsRaw: jsonb('dfs_raw'),
+    // ADR 0009 Phase 1 / A1: sum of search_volume across commercial/transactional
+    // phrases from getKeywordCandidates (Labs, 90-day cache, city-independent).
+    // Null until validateNiche runs. Used as a demand cross-check alongside
+    // dfsSearchVolume; see scoring-config.ts GEO_SHARE_PRIOR.
+    dfsClusterVolume: integer('dfs_cluster_volume'),
+    // ADR 0009 Phase 2 / B1: Google Places contractor count (first-page result
+    // count, capped at 20). Null until validateNiche runs. Cached 30 days.
+    contractorCount: integer('contractor_count'),
+    // ADR 0009 Phase 2 / C1: rentability score (0-100), separate from SEO
+    // winnability score. Computed from contractor_count + avg_cpc + lead price.
+    rentabilityScore: numeric('rentability_score', { precision: 6, scale: 2 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
   },

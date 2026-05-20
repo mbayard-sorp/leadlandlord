@@ -9,8 +9,8 @@ import {
   getSerpComposition,
   type KeywordMetrics,
 } from '@leadlandlord/integrations/dataforseo';
-import { ScoringConfig, DEFAULT_WEIGHTS, type ScoringWeights } from './scoring-config';
-export { DEFAULT_WEIGHTS } from './scoring-config';
+import { ScoringConfig, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, type ScoringWeights } from './scoring-config';
+export { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from './scoring-config';
 import { isDenylisted } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
 import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
@@ -615,7 +615,13 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     // Full DFS path (validate_with_dataforseo: true).
     const stateName = US_STATE_NAMES[c.state.toUpperCase()] ?? c.state;
     const location = `${c.city},${stateName},United States`;
-    const seeds = [c.niche, `${c.niche} ${c.city.toLowerCase()}`, `${c.niche} near me`];
+    // Volume seeds exclude "<niche> <city>": search_volume is already
+    // geo-scoped by `location`, so the city-in-query phrase returns ~0 and
+    // only adds noise. primaryKeyword (city-specific) is still used for the
+    // SERP + ad lookups, where city specificity is correct.
+    // SYNC: these two seeds must stay identical to validateNiche() in
+    // apps/operator/app/operator/niches/actions.ts. If you change one, change both.
+    const seeds = [c.niche, `${c.niche} near me`];
     const primaryKeyword = `${c.niche} ${c.city.toLowerCase()}`;
 
     const [metrics, serp, ad_count] = await Promise.all([
@@ -776,17 +782,41 @@ interface ScoreInputs {
   est_close_rate: number;
   ad_count: number;
   weights: ScoringWeights;
+  /**
+   * ADR 0009 Phase 1 / A2. Average CPC from DataForSEO keyword metrics.
+   * When present: sub-score = Math.min(1, avg_cpc / 15), weight 0.05.
+   * When absent (undefined): the CPC term is OMITTED ENTIRELY — the five
+   * legacy weights operate exactly as before and existing scores are
+   * unchanged. Do not pass 0 to silence — omit the field.
+   */
+  avg_cpc?: number;
+  /**
+   * ADR 0009 Phase 1 / A3. Rentability prior from getRentabilityPrior().
+   * Range 0..1; 0.5 is neutral (unknown trade). Weight 0.05.
+   * When absent (undefined): the rentability term is OMITTED ENTIRELY —
+   * legacy weights are unchanged. Do not pass 0.5 to silence — omit the
+   * field (or pass undefined) when you want the legacy behaviour.
+   */
+  rentability_prior?: number;
 }
 
 /**
  * Composite score using configurable weights.
  *
  * Dimension sub-scores (all 0..1 before weighting):
- *   demand         — log-scaled search volume
- *   serp_difficulty — KD-inverse x competition-inverse
- *   ad_presence    — ad_count / 10 (capped)
- *   city_size_fit  — job value relative to $500 benchmark
- *   niche_risk     — close rate (higher = lower risk)
+ *   demand           — log-scaled search volume
+ *   serp_difficulty  — KD-inverse x competition-inverse
+ *   ad_presence      — ad_count / 10 (capped)
+ *   city_size_fit    — job value relative to $500 benchmark
+ *   niche_risk       — close rate (higher = lower risk)
+ *
+ * Optional additive sub-scores (ADR 0009 Phase 1):
+ *   avg_cpc          — Math.min(1, avg_cpc / 15), weight 0.05
+ *   rentability_prior — 0..1 trade benchmark prior, weight 0.05
+ *
+ * Contract: when avg_cpc / rentability_prior are undefined the corresponding
+ * terms are skipped entirely. The five legacy weights sum to 1.0 and scores
+ * produced by legacy callers are identical to pre-Phase-1 behaviour.
  *
  * Raw sum is scaled by 100 so a "great" niche scores near 100.
  */
@@ -801,12 +831,24 @@ export function computeScore(s: ScoreInputs): number {
   const valueSub = Math.min(1, Math.max(0, s.est_avg_job_value_usd) / 500);
   const closeSub = Math.max(0.01, Math.min(1, s.est_close_rate));
 
-  const raw =
+  let raw =
     weights.demand * demandSub +
     weights.serp_difficulty * serpSub +
     weights.ad_presence * adSub +
     weights.city_size_fit * valueSub +
     weights.niche_risk * closeSub;
+
+  // A2: CPC sub-score — only added when avg_cpc is explicitly provided.
+  if (s.avg_cpc !== undefined) {
+    const cpcSub = Math.min(1, s.avg_cpc / 15);
+    raw += 0.05 * cpcSub;
+  }
+
+  // A3: Rentability prior sub-score — only added when explicitly provided.
+  if (s.rentability_prior !== undefined) {
+    const rentSub = Math.max(0, Math.min(1, s.rentability_prior));
+    raw += 0.05 * rentSub;
+  }
 
   return Number((raw * 100).toFixed(2));
 }

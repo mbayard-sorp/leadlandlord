@@ -8,6 +8,19 @@ export const DEFAULT_WEIGHTS = {
   niche_risk: 0.05,
 } as const;
 
+/**
+ * Geo-share prior: fraction of a national cluster's aggregate search volume
+ * that is attributed to a single market (city). Used in validateNiche to
+ * blend the DataForSEO Labs cluster volume with the geo-scoped 2-seed volume:
+ *
+ *   demand = Math.max(dfs_search_volume, cluster_volume * GEO_SHARE_PRIOR)
+ *
+ * 0.15 is a conservative prior (15% of national demand lands in the target city).
+ * Operator-overridable in future via a settings page (ADR 0009 Phase 2+).
+ * Until a settings UI exists this constant is the single source of truth.
+ */
+export const GEO_SHARE_PRIOR = 0.15;
+
 const WeightsSchema = z.object({
   demand: z.number().min(0).max(1),
   serp_difficulty: z.number().min(0).max(1),

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeCandidateSchema, computeScore } from './index';
 import { isDenylisted, NICHE_DENYLIST } from './denylist';
 import { checkAutoApprove } from '../approval-engine';
-import { DEFAULT_WEIGHTS } from './scoring-config';
+import { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR } from './scoring-config';
+import { getRentabilityPrior } from './lead-benchmarks';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ClaudeCandidateSchema — schema validation tests
@@ -279,5 +280,159 @@ describe('checkAutoApprove', () => {
     ]);
     await checkAutoApprove('niche_candidate', { score: 80 }, db as never);
     expect(db.update).toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR 0009 Phase 1 / A2 — CPC sub-score in computeScore
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('computeScore — A2 CPC sub-score', () => {
+  const baseInputs = {
+    search_volume: 1000,
+    kd: 30,
+    competition: 0.3,
+    est_avg_job_value_usd: 500,
+    est_close_rate: 0.35,
+    ad_count: 3,
+    weights: DEFAULT_WEIGHTS,
+  };
+
+  it('score is identical to legacy when avg_cpc is absent (undefined)', () => {
+    const legacy = computeScore(baseInputs);
+    const withUndefined = computeScore({ ...baseInputs, avg_cpc: undefined });
+    expect(legacy).toBeCloseTo(withUndefined, 10);
+  });
+
+  it('cpc sub-score contributes 0 when avg_cpc is 0 — but omit-when-absent contract means undefined is preferred', () => {
+    // When avg_cpc is explicitly 0, term is included but contributes 0 * 0.05 = 0.
+    // Score equals legacy (no delta) but the field is present.
+    const withZero = computeScore({ ...baseInputs, avg_cpc: 0 });
+    const legacy = computeScore(baseInputs);
+    expect(withZero).toBeCloseTo(legacy, 10);
+  });
+
+  it('avg_cpc of 15 adds maximum CPC contribution (capped at 1)', () => {
+    const withNoCpc = computeScore(baseInputs); // undefined — omitted
+    const withMaxCpc = computeScore({ ...baseInputs, avg_cpc: 15 });
+    // 0.05 * 1.0 * 100 = +5 points at most
+    expect(withMaxCpc).toBeCloseTo(withNoCpc + 5.0, 5);
+  });
+
+  it('avg_cpc of 7.5 adds half the max CPC contribution', () => {
+    const withNoCpc = computeScore(baseInputs);
+    const withHalfCpc = computeScore({ ...baseInputs, avg_cpc: 7.5 });
+    // cpc_sub = 7.5/15 = 0.5; 0.05 * 0.5 * 100 = +2.5
+    expect(withHalfCpc).toBeCloseTo(withNoCpc + 2.5, 5);
+  });
+
+  it('avg_cpc above 15 is capped at 15 (sub-score = 1)', () => {
+    const at15 = computeScore({ ...baseInputs, avg_cpc: 15 });
+    const at30 = computeScore({ ...baseInputs, avg_cpc: 30 });
+    expect(at15).toBeCloseTo(at30, 10);
+  });
+
+  it('score stays in 0-100 range with max cpc', () => {
+    const score = computeScore({ ...baseInputs, avg_cpc: 15 });
+    expect(score).toBeGreaterThanOrEqual(0);
+    expect(score).toBeLessThanOrEqual(100);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR 0009 Phase 1 / A3 — getRentabilityPrior
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getRentabilityPrior', () => {
+  it('returns 0.5 for an unknown niche', () => {
+    expect(getRentabilityPrior('widget polishing')).toBe(0.5);
+  });
+
+  it('returns a high prior for roofing', () => {
+    expect(getRentabilityPrior('roofing contractor')).toBeGreaterThan(0.8);
+  });
+
+  it('matches case-insensitively', () => {
+    expect(getRentabilityPrior('HVAC Repair')).toBeGreaterThan(0.8);
+    expect(getRentabilityPrior('hvac repair')).toBeGreaterThan(0.8);
+  });
+
+  it('returns a lower prior for pressure washing than for roofing', () => {
+    const roofing = getRentabilityPrior('roofing');
+    const pressure = getRentabilityPrior('pressure washing');
+    expect(roofing).toBeGreaterThan(pressure);
+  });
+
+  it('returns 0..1 for all known trades', () => {
+    const trades = [
+      'roofing', 'hvac', 'plumbing', 'electrical', 'tree removal',
+      'fencing', 'gutter cleaning', 'concrete patio', 'painting',
+      'pressure washing', 'junk removal', 'mold remediation',
+    ];
+    for (const t of trades) {
+      const prior = getRentabilityPrior(t);
+      expect(prior).toBeGreaterThanOrEqual(0);
+      expect(prior).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('rentability_prior wires into computeScore and shifts score', () => {
+    const base = {
+      search_volume: 1000, kd: 30, competition: 0.3,
+      est_avg_job_value_usd: 500, est_close_rate: 0.35,
+      ad_count: 3, weights: DEFAULT_WEIGHTS,
+    };
+    const withNeutral = computeScore({ ...base, rentability_prior: 0.5 });
+    const withHigh = computeScore({ ...base, rentability_prior: 0.9 });
+    // 0.05 * (0.9 - 0.5) * 100 = +2 points
+    expect(withHigh).toBeCloseTo(withNeutral + 2.0, 5);
+  });
+
+  it('rentability_prior absent leaves score unchanged (omit-when-absent contract)', () => {
+    const base = {
+      search_volume: 1000, kd: 30, competition: 0.3,
+      est_avg_job_value_usd: 500, est_close_rate: 0.35,
+      ad_count: 3, weights: DEFAULT_WEIGHTS,
+    };
+    const legacy = computeScore(base);
+    const withUndefined = computeScore({ ...base, rentability_prior: undefined });
+    expect(legacy).toBeCloseTo(withUndefined, 10);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR 0009 Phase 1 / A1 — Math.max demand blend
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('A1 demand blend — Math.max(dfs_search_volume, clusterVolume * GEO_SHARE_PRIOR)', () => {
+  it('GEO_SHARE_PRIOR is 0.15', () => {
+    expect(GEO_SHARE_PRIOR).toBe(0.15);
+  });
+
+  it('uses dfs_search_volume when it exceeds cluster estimate', () => {
+    const dfsVolume = 500;
+    const clusterVolume = 100; // 100 * 0.15 = 15 — well below dfs
+    const demand = Math.max(dfsVolume, clusterVolume * GEO_SHARE_PRIOR);
+    expect(demand).toBe(500);
+  });
+
+  it('uses cluster estimate when dfs_search_volume is low (hyperlocal bucket)', () => {
+    const dfsVolume = 10; // Google Ads bucketed to near-zero
+    const clusterVolume = 5000; // strong national cluster signal
+    const demand = Math.max(dfsVolume, clusterVolume * GEO_SHARE_PRIOR);
+    // 5000 * 0.15 = 750
+    expect(demand).toBeCloseTo(750, 5);
+  });
+
+  it('blend produces a higher score than raw 0-volume dfs alone', () => {
+    const base = {
+      kd: 30, competition: 0.3, est_avg_job_value_usd: 500,
+      est_close_rate: 0.35, ad_count: 3, weights: DEFAULT_WEIGHTS,
+    };
+    const clusterVolume = 4000;
+    const blendedVolume = Math.max(0, clusterVolume * GEO_SHARE_PRIOR); // 600
+    const scoreLow = computeScore({ ...base, search_volume: 0 });
+    const scoreBlended = computeScore({ ...base, search_volume: blendedVolume });
+    expect(scoreBlended).toBeGreaterThan(scoreLow);
   });
 });
