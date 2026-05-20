@@ -83,7 +83,7 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                   <td className="hidden md:table-cell">
                     {c.recordingUrl ? (
                       <audio
-                        src={c.recordingUrl}
+                        src={`/api/operator/calls/${c.id}/recording`}
                         controls
                         preload="none"
                         className="h-8 w-full sm:max-w-[200px]"
