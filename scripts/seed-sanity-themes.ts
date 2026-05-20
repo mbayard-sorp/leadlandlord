@@ -2,7 +2,7 @@
 /**
  * Seed the four theme docs into a Sanity dataset with deterministic IDs.
  *
- * Idempotent — re-running overwrites in place via createOrReplace.
+ * Idempotent - re-running overwrites in place via createOrReplace.
  *
  * Usage:
  *   pnpm tsx scripts/seed-sanity-themes.ts                  # seeds production
@@ -17,7 +17,7 @@ import { parseArgs } from 'node:util';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// Walk up from this file looking for .env.local — works inside git worktrees
+// Walk up from this file looking for .env.local - works inside git worktrees
 // where the worktree root has no .env.local but the main checkout does.
 function findEnvFile(start: string, name: string): string | undefined {
   let dir = start;
@@ -35,7 +35,8 @@ if (envLocal) loadEnv({ path: envLocal, override: true });
 const envFile = findEnvFile(__dirname, '.env');
 if (envFile) loadEnv({ path: envFile, override: true });
 
-import { createWriteClient, themeDocId, THEME_NAMES, type ThemeName } from '@leadlandlord/sanity-schema';
+import { createWriteClient } from '@leadlandlord/sanity-schema/client';
+import { themeDocId, THEME_NAMES, type ThemeName } from '@leadlandlord/sanity-schema/ids';
 
 interface ThemeSeed {
   name: ThemeName;
