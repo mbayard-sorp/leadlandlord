@@ -3,12 +3,18 @@
 import { useState, useTransition } from 'react';
 import { setAgentEnabled, setAllAgentsEnabled } from './_toggle-actions';
 
+interface AgentInfo {
+  description: string;
+  cadence: string;
+}
+
 interface Props {
   agents: string[];
+  info: Record<string, AgentInfo>;
   initial: Record<string, boolean>;
 }
 
-export function AgentTogglesPanel({ agents, initial }: Props) {
+export function AgentTogglesPanel({ agents, info, initial }: Props) {
   const [state, setState] = useState<Record<string, boolean>>(initial);
   const [pendingName, setPendingName] = useState<string | null>(null);
   const [bulkPending, setBulkPending] = useState<'on' | 'off' | null>(null);
@@ -82,17 +88,28 @@ export function AgentTogglesPanel({ agents, initial }: Props) {
           {agents.map((name) => {
             const enabled = state[name] !== false;
             const busy = pendingName === name || bulkPending !== null;
+            const meta = info[name];
             return (
               <li
                 key={name}
-                className="flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-900/40"
+                className="flex items-start justify-between gap-3 px-3 py-2 text-sm hover:bg-slate-900/40"
               >
-                <span className="font-mono">{name}</span>
+                <div className="min-w-0">
+                  <span className="font-mono">{name}</span>
+                  {meta?.description && (
+                    <p className="text-xs text-slate-400 mt-0.5">{meta.description}</p>
+                  )}
+                  {meta?.cadence && (
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 mt-0.5">
+                      {meta.cadence}
+                    </p>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => toggle(name)}
                   disabled={busy}
-                  className={`rounded px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+                  className={`shrink-0 rounded px-3 py-1 text-xs font-medium disabled:opacity-50 ${
                     enabled
                       ? 'bg-emerald-900/60 text-emerald-200 hover:bg-emerald-800/60'
                       : 'bg-red-900/60 text-red-200 hover:bg-red-800/60'
