@@ -134,6 +134,11 @@ export async function writeSiteToSanity(
         : undefined,
       // Keyword targeting (when content engine declared a cluster).
       primaryKeyword: ref.page.primary_keyword,
+      faqs: (ref.page.faqs ?? []).map((f, i) => ({
+        _key: `faq${i}`,
+        q: f.q,
+        a: f.a,
+      })),
       targetedKeywords: (ref.page.targeted_keywords ?? []).map((k, i) => ({
         _key: `tk${i}`,
         phrase: k.phrase,

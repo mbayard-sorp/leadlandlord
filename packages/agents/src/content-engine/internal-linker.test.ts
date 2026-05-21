@@ -10,6 +10,7 @@ function makePage(slug: string, kind: string, title: string, mdx: string): Conte
     meta_description: `${title} in test city`,
     mdx,
     targeted_keywords: [],
+    faqs: [],
   };
 }
 

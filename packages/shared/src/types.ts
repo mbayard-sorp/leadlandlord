@@ -49,6 +49,16 @@ export const Page = z.object({
   primary_keyword: z.string().optional(),
   /** Each declared targeted keyword. Max 12 to keep tool output bounded. */
   targeted_keywords: z.array(TargetedKeyword).max(12).default([]),
+  /**
+   * FAQ Q&A pairs. Rendered as a visible FAQ section + FAQPage JSON-LD on
+   * service and service-area pages — the surfaces LLM answer engines extract
+   * "<service> <city>" answers from. MUST be locally specific (city, service,
+   * business) and varied per site: identical Q&A across the network is both
+   * duplicate content and a footprint signal. Empty for kinds that don't use it.
+   * Kept lenient (no min lengths) so a weak answer never fails bundle parsing —
+   * answer quality is enforced by density-lint instead.
+   */
+  faqs: z.array(z.object({ q: z.string(), a: z.string() })).max(6).default([]),
 });
 export type Page = z.infer<typeof Page>;
 

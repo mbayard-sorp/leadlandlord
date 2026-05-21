@@ -225,3 +225,43 @@
 }
 .info-page-footer p { margin: 4px 0; color: var(--paper); }
 .info-page-footer-disclaimer { opacity: 0.7; font-size: 0.75rem; }
+
+/* FAQ section on service / service-area pages. Native <details> — no JS,
+ * accessible by default. Theme-agnostic via the same CSS variables. */
+.info-page-faq {
+  margin: clamp(24px, 5vw, 40px) 0;
+}
+.info-page-faq-heading {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  margin: 0 0 16px;
+  color: var(--ink);
+}
+.info-page-faq-item {
+  border-bottom: var(--border-rule, 1.5px) solid color-mix(in srgb, var(--ink) 18%, transparent);
+  padding: 12px 0;
+}
+.info-page-faq-q {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.info-page-faq-q::-webkit-details-marker { display: none; }
+.info-page-faq-q::after {
+  content: '+';
+  font-weight: 400;
+  color: var(--accent);
+}
+.info-page-faq-item[open] .info-page-faq-q::after { content: '−'; }
+.info-page-faq-a {
+  margin: 10px 0 2px;
+  font-family: var(--font-body);
+  line-height: 1.6;
+  color: var(--ink);
+}

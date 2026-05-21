@@ -61,34 +61,84 @@ export function lintBundle(
   const clusterMap = new Map((opts.clusters ?? []).map((c) => [c.cluster_key, c.primary_keyword]));
   const allPages = collectAllPages(bundle);
   for (const page of allPages) {
+    // FAQ lint runs for every page regardless of keyword targeting (it only
+    // fires on service / service-area kinds internally).
+    const faqViolations = lintFaqs(page);
+
     // Source of truth: only lint a page when its cluster_key matches one we
     // planned. Trusting page.primary_keyword alone is risky — the LLM has
     // been observed stamping the wrong cluster keyword on utility pages like
     // /services, which then makes the lint check a phrase the page could
     // never plausibly contain.
     const pageKw = page.cluster_key && clusterMap.get(page.cluster_key);
+    let violations: Violation[];
     if (!pageKw) {
       // Run phone-only lint for pages without a target cluster.
-      if (opts.phone) {
-        const violations = lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', {
-          ...opts,
-          primaryKeyword: '',
-          niche: bundle.niche,
-        });
-        if (violations.length > 0) results.push({ pageSlug: page.slug, violations });
-      }
-      continue;
+      violations = opts.phone
+        ? lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', {
+            ...opts,
+            primaryKeyword: '',
+            niche: bundle.niche,
+          })
+        : [];
+    } else {
+      violations = lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', {
+        ...opts,
+        primaryKeyword: pageKw,
+        niche: bundle.niche,
+      });
     }
-    const violations = lintPage(page.slug, page.mdx, page.title, page.meta_description ?? '', {
-      ...opts,
-      primaryKeyword: pageKw,
-      niche: bundle.niche,
-    });
-    if (violations.length > 0) {
-      results.push({ pageSlug: page.slug, violations });
+
+    const all = [...violations, ...faqViolations];
+    if (all.length > 0) {
+      results.push({ pageSlug: page.slug, violations: all });
     }
   }
   return results;
+}
+
+/**
+ * FAQ quality lint for service + service-area pages. Warn-only: the system
+ * prompt is what drives FAQ generation; this surfaces gaps (too few, thin, or
+ * duplicate answers) without failing the build. Local-specificity and
+ * cross-site variation can't be judged per-page here — those are enforced by
+ * the system prompt and the network footprint-review pass.
+ */
+export function lintFaqs(page: Page): Violation[] {
+  if (page.kind !== 'service' && page.kind !== 'service_area') return [];
+  const violations: Violation[] = [];
+  const faqs = page.faqs ?? [];
+  const min = page.kind === 'service' ? 3 : 2;
+  if (faqs.length < min) {
+    violations.push({
+      rule: 'faqs-missing',
+      severity: 'warn',
+      detail: `${page.kind} page "${page.slug}" has ${faqs.length} FAQ(s) — expected at least ${min}`,
+    });
+  }
+  faqs.forEach((f, i) => {
+    const words = f.a.trim().split(/\s+/).filter(Boolean).length;
+    if (words < 12) {
+      violations.push({
+        rule: 'faq-answer-thin',
+        severity: 'warn',
+        detail: `FAQ #${i + 1} on "${page.slug}" has a ${words}-word answer — thin; aim for 25-80 words`,
+      });
+    }
+  });
+  const seen = new Set<string>();
+  for (const f of faqs) {
+    const key = f.q.toLowerCase().trim();
+    if (seen.has(key)) {
+      violations.push({
+        rule: 'faq-duplicate',
+        severity: 'warn',
+        detail: `Duplicate FAQ question on "${page.slug}": "${f.q}"`,
+      });
+    }
+    seen.add(key);
+  }
+  return violations;
 }
 
 /**

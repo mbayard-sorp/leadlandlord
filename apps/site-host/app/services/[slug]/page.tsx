@@ -7,6 +7,7 @@ import { telHref, pageH1 } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
 import { Markdown } from '../../../components/shared/Markdown';
 import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
+import { PageFaq } from '../../../components/shared/PageFaq';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -97,6 +98,12 @@ export default async function ServicePage({ params }: Params) {
             <p className="info-page-lede">{page.meta_description}</p>
           )}
           <Markdown source={page.mdx} className="prose-site" phone={phone} />
+
+          <PageFaq
+            faqs={page.faqs ?? []}
+            heading={`Frequently asked questions about ${page.title.toLowerCase()}`}
+            phone={phone}
+          />
 
           <aside className="info-page-cta">
             <h2>Get a free quote on {page.title.toLowerCase()}</h2>

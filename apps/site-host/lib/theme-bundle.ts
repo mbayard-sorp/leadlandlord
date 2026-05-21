@@ -82,6 +82,7 @@ function pageToBundlePage(p: SanitySitePage | undefined | null, fallbackKind: st
     mdx: p.mdx ?? '',
     schema_org_jsonld: jsonLd,
     og_image_url: p.pageOgImageUrl ?? undefined,
+    faqs: (p.faqs ?? []).map((f) => ({ q: f.q, a: f.a })),
   };
 }
 
