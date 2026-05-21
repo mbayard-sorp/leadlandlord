@@ -75,6 +75,26 @@ export const page = defineType({
         'Denormalized from keywordCluster.primaryKeyword. The single phrase this page targets. Set by Content Engine via persist-sanity.',
     }),
     defineField({
+      name: 'faqs',
+      title: 'FAQs',
+      type: 'array',
+      description:
+        'Q&A pairs rendered as a visible FAQ section + FAQPage JSON-LD on service / service-area pages. Set by Content Engine. Must be locally specific and varied per site (footprint).',
+      of: [
+        {
+          type: 'object',
+          fields: [
+            defineField({ name: 'q', title: 'Question', type: 'string', validation: (r) => r.required() }),
+            defineField({ name: 'a', title: 'Answer', type: 'text', rows: 3, validation: (r) => r.required() }),
+          ],
+          preview: {
+            select: { title: 'q' },
+            prepare: ({ title }) => ({ title: title ?? '(no question)' }),
+          },
+        },
+      ],
+    }),
+    defineField({
       name: 'targetedKeywords',
       title: 'Targeted Keywords',
       type: 'array',

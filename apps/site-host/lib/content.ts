@@ -32,6 +32,8 @@ export const PageSchema = z.object({
    * render this as the on-page H1 verbatim — see `heroH1()`.
    */
   primary_keyword: z.string().optional(),
+  /** FAQ Q&A pairs rendered on service / service-area pages (see shared Page.faqs). */
+  faqs: z.array(z.object({ q: z.string(), a: z.string() })).optional(),
 });
 
 export const VariantSchema = z.enum(['classic', 'modern', 'premium', 'bright']);
