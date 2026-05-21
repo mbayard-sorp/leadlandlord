@@ -303,7 +303,9 @@ async function handleSubscriptionDeleted(event: any): Promise<void> {
     })
     .where(eq(tenants.id, tenant.id));
 
-  // Restore site to live (un-rent it) so a new tenant can be lined up.
+  // Restore site to live (un-rent it) so a new tenant can be lined up. No
+  // IndexNow ping here: the site was already activated + indexed on first
+  // go-live, and un-renting doesn't change its content or URL set.
   if (tenant.siteId) {
     await db
       .update(sites)

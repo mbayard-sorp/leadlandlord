@@ -67,6 +67,18 @@ export default function proxy(req: NextRequest) {
     return res;
   }
 
+  // IndexNow key file: GET /{32-hex}.txt → the per-host key handler. The
+  // strict 32-hex pattern means it never shadows /robots.txt, /sitemap.xml,
+  // real pages, or the [slug] route. Bing/Brave fetch this to verify ownership
+  // before accepting URL submissions.
+  const keyMatch = req.nextUrl.pathname.match(/^\/([a-f0-9]{32})\.txt$/);
+  if (keyMatch) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/api/indexnow-key';
+    url.searchParams.set('k', keyMatch[1]!);
+    return NextResponse.rewrite(url, { request: { headers } });
+  }
+
   // dev: subdomain → slug
   const sub = matchLocalSubdomain(host);
   if (sub) headers.set('x-site-slug', sub);

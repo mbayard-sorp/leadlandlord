@@ -29,7 +29,7 @@ const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, "pag
 
 const SITE_PROJECTION = `{
   _id, siteId, "slug": slug.current, businessName, niche, city, state, siteMode,
-  gaMeasurementId, robotsDisallow, generatedAt,
+  gaMeasurementId, robotsDisallow, indexnowKey, generatedAt,
   trustSignals, nearbyCities,
   "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
@@ -75,6 +75,7 @@ export interface SanitySite {
   siteMode?: 'thin' | 'content_rich' | null;
   gaMeasurementId?: string | null;
   robotsDisallow?: boolean | null;
+  indexnowKey?: string | null;
   generatedAt?: string | null;
   trustSignals?: string[] | null;
   nearbyCities?: string[] | null;
