@@ -26,6 +26,7 @@ import {
   seoRecommendations,
   lighthouseAudits,
   sites,
+  agentEvents,
   type NewSeoRecommendation,
   type SeoRecommendation,
 } from '@leadlandlord/db';
@@ -456,7 +457,56 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
       });
     }
 
+    // Notify IndexNow (Bing + Brave) that this URL changed, so it's recrawled
+    // and stays eligible for AI answer engines. Only content-meaningful edits
+    // qualify (title/meta rewrites, new pages) — schema fixes touch non-visible
+    // JSON-LD and the stub apply types make no content change. Raw insert (not
+    // ctx.emitNextStepEvent): this is a legitimate side-effect fan-out, not a
+    // pipeline step, and must fire even if seo-operator runs as a sub-agent
+    // (emitNextStepEvent would suppress it). See ADR 0015.
+    if (outcome === 'auto_applied') {
+      const urls = await this.contentUpdatedUrls(rec);
+      if (urls.length > 0) {
+        await db.insert(agentEvents).values({
+          agent: this.name,
+          type: 'site.content.updated',
+          targetAgent: 'indexnow-submitter',
+          payload: { site_id: rec.siteId, urls },
+        });
+        ctx.log.info({ recId: rec.id, urls }, 'emitted site.content.updated for IndexNow');
+      }
+    }
+
     return { mode: 'apply', recommendationId, status: outcome };
+  }
+
+  /**
+   * Absolute URL(s) to submit to IndexNow for an applied recommendation, or []
+   * when the edit doesn't warrant a recrawl ping. title/meta rewrites point at
+   * the page they patched (the GSC URL in actionPayload, already absolute);
+   * new_info_page is a brand-new URL built from the site's host + slug. All
+   * other types (schema_fix, the phase-2 stubs) return [].
+   */
+  private async contentUpdatedUrls(rec: SeoRecommendation): Promise<string[]> {
+    const payload = (rec.actionPayload ?? {}) as Record<string, unknown>;
+    if (rec.type === 'title_rewrite' || rec.type === 'meta_rewrite') {
+      const target = typeof payload.targetPage === 'string' ? payload.targetPage : rec.targetPage;
+      return target && target.startsWith('http') ? [target] : [];
+    }
+    if (rec.type === 'new_info_page') {
+      const slug = typeof payload.proposedSlug === 'string' ? payload.proposedSlug : '';
+      if (!slug) return [];
+      const db = getDb();
+      const [siteRow] = await db
+        .select({ domain: sites.domain })
+        .from(sites)
+        .where(eq(sites.id, rec.siteId))
+        .limit(1);
+      if (!siteRow?.domain) return [];
+      const path = slug.startsWith('/') ? slug : `/${slug}`;
+      return [`https://${siteRow.domain}${path}`];
+    }
+    return [];
   }
 
   /** Type-specific apply logic. Returns the outcome status. */
