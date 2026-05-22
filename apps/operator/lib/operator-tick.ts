@@ -98,6 +98,12 @@ export async function runOperatorTick(): Promise<TickResult> {
         const payload = ev.payload as Record<string, unknown>;
         const payloadSiteId =
           typeof payload?.site_id === 'string' ? payload.site_id : undefined;
+        // Optional per-event dedupe override. Lets a deliberate re-run (e.g. the
+        // IndexNow backfill script) force a fresh agent run past the agent's own
+        // dedupeKeyFn, which would otherwise collapse the re-emit into the
+        // cached prior success. Absent on normal events → no behavior change.
+        const payloadDedupeKey =
+          typeof payload?.dedupeKey === 'string' ? payload.dedupeKey : undefined;
         try {
           log.info(
             { agent: targetAgent, event_id: ev.id, site_id: payloadSiteId ?? null },
@@ -106,6 +112,7 @@ export async function runOperatorTick(): Promise<TickResult> {
           await agent.run(payload, {
             eventId: ev.id,
             siteId: payloadSiteId,
+            dedupeKey: payloadDedupeKey,
           });
           await markEventProcessed(ev.id);
           log.info({ agent: targetAgent, event_id: ev.id }, 'agent invocation succeeded');

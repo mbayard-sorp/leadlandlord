@@ -1,4 +1,4 @@
--- Local-content pipeline (ADR 0014): content_ideas domain table + per-site opt-in.
+-- Local-content pipeline (ADR 0016): content_ideas domain table + per-site opt-in.
 -- The local-content-scout proposes one row per idea (paired with an
 -- agent_approvals row, kind 'content_idea'); local-content-writer publishes
 -- approved ideas as info pages to Sanity. scout_run_id/writer_run_id link to

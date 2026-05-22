@@ -25,11 +25,11 @@ export function urlForImage(source: SanityImageSource) {
  * gives the whole render bundle. Slicing arrays at [0...50] guards against
  * pathological page counts blowing the GROQ projection size.
  */
-const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, "pageOgImageUrl": pageOgImage.asset->url }`;
+const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url }`;
 
 const SITE_PROJECTION = `{
   _id, siteId, "slug": slug.current, businessName, niche, city, state, siteMode,
-  gaMeasurementId, robotsDisallow, generatedAt,
+  gaMeasurementId, robotsDisallow, indexnowKey, generatedAt,
   trustSignals, nearbyCities,
   "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
@@ -61,6 +61,7 @@ export interface SanitySitePage {
   metaDescription: string;
   mdx: string;
   jsonLd?: string | null;
+  faqs?: Array<{ q: string; a: string }> | null;
   pageOgImageUrl?: string | null;
 }
 
@@ -75,6 +76,7 @@ export interface SanitySite {
   siteMode?: 'thin' | 'content_rich' | null;
   gaMeasurementId?: string | null;
   robotsDisallow?: boolean | null;
+  indexnowKey?: string | null;
   generatedAt?: string | null;
   trustSignals?: string[] | null;
   nearbyCities?: string[] | null;

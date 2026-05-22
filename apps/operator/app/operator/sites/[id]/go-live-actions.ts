@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
-import { getDb, sites } from '@leadlandlord/db';
+import { getDb, sites, agentEvents } from '@leadlandlord/db';
 import { log } from '@leadlandlord/shared/log';
 
 export interface GoLiveManualFlags {
@@ -63,6 +63,17 @@ export async function promoteSiteToLive(siteId: string): Promise<ActionResult> {
     .update(sites)
     .set({ status: 'live', updatedAt: new Date() })
     .where(eq(sites.id, siteId));
+
+  // Now indexable (the go-live checklist already required robotsDisallow=false).
+  // Kick the IndexNow submitter so Bing + Brave crawl the freshly-live URLs —
+  // this is what lets the site surface in ChatGPT/Claude search. Auto-dispatched
+  // (no approval gate): the operator's go-live click is the authorizing action.
+  await db.insert(agentEvents).values({
+    agent: 'operator',
+    type: 'site.activated',
+    targetAgent: 'indexnow-submitter',
+    payload: { site_id: siteId },
+  });
 
   log.info({ siteId, prevStatus: site.status }, 'site promoted to live');
   revalidatePath(`/operator/sites/${siteId}`);

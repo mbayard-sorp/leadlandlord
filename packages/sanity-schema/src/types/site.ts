@@ -62,6 +62,14 @@ export const site = defineType({
       description: 'When true, robots.txt blocks indexing. Default true during warming.',
     }),
     defineField({
+      name: 'indexnowKey',
+      title: 'IndexNow Key',
+      type: 'string',
+      readOnly: true,
+      description:
+        'Auto-generated on first activation. Served at /{key}.txt so Bing/Brave can verify ownership before accepting URL submissions. Do not edit.',
+    }),
+    defineField({
       name: 'trustSignals',
       title: 'Trust Signals',
       type: 'array',

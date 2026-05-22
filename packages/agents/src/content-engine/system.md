@@ -176,6 +176,11 @@ Every page object has:
 - `schema_org_jsonld`: JSON-LD object appropriate to the page kind
   (LocalBusiness for home/contact; Service for service pages; FAQPage for
   blog posts with FAQ sections; etc.)
+- `faqs`: array of `{ "q": "...", "a": "..." }` objects. REQUIRED on `service`
+  pages (3–5 pairs) and `service_area` pages (2–4 pairs). Omit (or `[]`) for
+  all other kinds. These render as a visible FAQ section + FAQPage structured
+  data, so they're how the page surfaces in AI answer engines. See "Per-page
+  FAQs" below for the content rules — they are strict.
 
 ## Page targets
 
@@ -241,6 +246,34 @@ Examples per niche:
   /pages/move-out-cleaning-checklist-austin-tx
 
 Page object same shape as services/blog_posts. Slugs MUST start with `/pages/`.
+
+## Per-page FAQs (`faqs` on service + service-area pages)
+
+Service and service-area pages carry a `faqs` array — the highest-leverage
+surface for AI answer engines (ChatGPT, Claude, Perplexity), which lift the
+single Q&A that directly answers a searcher's question. Get these right.
+
+- **Service pages: 3–5 pairs. Service-area pages: 2–4 pairs.**
+- Answer the questions a real searcher types: cost/pricing ranges, timing/how
+  long, what's included, "do you serve <my area>", licensing/guarantees,
+  seasonal concerns. Lead each answer with a direct 1–2 sentence answer, then
+  detail. Example Q: "How much does tree removal cost in Tucson?"
+- **Locally specific — this is mandatory, not stylistic.** Every Q or A must
+  reference something concrete: the city/neighborhood, this niche, the business
+  name, local climate/seasonality, regional pricing, or local regulations. A
+  question that would read identically on any site in the network is wrong.
+- **Vary across the portfolio.** Do NOT reuse a template set of questions with
+  the city swapped in. Different sites must get different questions, different
+  phrasings, and different answer structure. Identical or near-identical FAQ
+  across sites is duplicate content AND a network footprint signal — both get
+  the pages filtered out, which defeats the entire point of adding them.
+- Answers are 2–4 sentences (roughly 25–80 words). One-line answers read thin
+  and get dropped; keep them substantive and specific.
+- Use the `{{phone}}` placeholder if an answer references calling — never a
+  literal number (see Hard Rules).
+- The visible FAQ and the FAQPage structured data are generated from this one
+  array, so they always match. Do not also hand-write a `FAQPage` block into
+  `schema_org_jsonld` on these pages — it would duplicate.
 
 ## SEO requirements
 

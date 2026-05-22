@@ -1,4 +1,4 @@
-# ADR 0014 — Local Content Scout + Writer Agents
+# ADR 0016 — Local Content Scout + Writer Agents
 
 **Date:** 2026-05-21
 **Status:** Accepted
