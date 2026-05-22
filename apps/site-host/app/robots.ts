@@ -1,18 +1,24 @@
 import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../lib/site-context';
+import { fetchCorporateSite } from '../lib/sanity';
 
 /**
  * Per-host /robots.txt. Block all crawlers when the site doc has
  * robotsDisallow=true (default during warming).
  */
 export default async function robots(): Promise<MetadataRoute.Robots> {
-  const site = await resolveCurrentSite();
   const h = await headers();
   const host = h.get('x-site-host') ?? h.get('host') ?? 'localhost:3001';
   const protocol = host.startsWith('localhost') ? 'http' : 'https';
   const base = `${protocol}://${host}`;
-  const blockAll = site?.robotsDisallow ?? true;
+
+  // Corporate marketing site (leadslandlord.com). Unlike warming tenant sites,
+  // it should be crawlable by default — only block when explicitly disallowed.
+  const blockAll =
+    h.get('x-site-mode') === 'corporate'
+      ? ((await fetchCorporateSite())?.robotsDisallow ?? false)
+      : ((await resolveCurrentSite())?.robotsDisallow ?? true);
   return {
     rules: blockAll
       ? [{ userAgent: '*', disallow: '/' }]

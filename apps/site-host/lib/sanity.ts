@@ -194,3 +194,20 @@ export async function fetchCorporatePage(kind: string): Promise<CorporatePage | 
   const result = await sanity.fetch<CorporatePage | null>(CORPORATE_PAGE_QUERY, { kind });
   return result ?? null;
 }
+
+export interface CorporatePageStub {
+  kind: string;
+  updatedAt: string;
+}
+
+// Only published corporatePage docs (perspective: 'published'). The sitemap
+// must not advertise a kind whose Sanity doc is missing/draft — the route
+// notFound()s and Google records a soft 404.
+const CORPORATE_PAGE_LIST_QUERY = `*[_type=="corporatePage" && defined(kind)]{
+  kind, "updatedAt": _updatedAt
+}`;
+
+export async function fetchCorporatePageList(): Promise<CorporatePageStub[]> {
+  const result = await sanity.fetch<CorporatePageStub[] | null>(CORPORATE_PAGE_LIST_QUERY, {});
+  return result ?? [];
+}
