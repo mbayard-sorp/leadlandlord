@@ -25,6 +25,8 @@ import { MollyInbox } from './molly-inbox/index';
 import { MollyCopywriter } from './molly-copywriter/index';
 import { NetworkLinker } from './network-linker/index';
 import { WaveLauncher } from './wave-launcher/index';
+import { LocalContentScout } from './local-content-scout/index';
+import { LocalContentWriter } from './local-content-writer/index';
 import { IndexNowSubmitter } from './indexnow-submitter/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,6 +60,8 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'molly-copywriter': () => new MollyCopywriter(),
   'network-linker': () => new NetworkLinker(),
   'wave-launcher': () => new WaveLauncher(),
+  'local-content-scout': () => new LocalContentScout(),
+  'local-content-writer': () => new LocalContentWriter(),
   'indexnow-submitter': () => new IndexNowSubmitter(),
 };
 

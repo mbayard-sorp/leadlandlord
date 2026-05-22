@@ -229,6 +229,12 @@ export const sites = pgTable(
     /** thin = 6-8 pages (default); content_rich = ~28 pages (opt-in). */
     siteMode: siteModeEnum('site_mode').notNull().default('thin'),
     /**
+     * Per-site opt-in for the local-content-scout. Default false so the
+     * scheduler only fans out to sites explicitly enrolled in the content
+     * pilot; flip more sites true to expand the rollout. See content_ideas.
+     */
+    localContentEnabled: boolean('local_content_enabled').notNull().default(false),
+    /**
      * Stable per-build token. Anchors site-builder's expensive sub-agent
      * dedupe keys (content-engine, keyword-planner, compliance-guard) so a
      * reaper-triggered re-run reuses the cached agent_runs output instead of
@@ -1165,6 +1171,64 @@ export const autoApproveRules = pgTable('auto_approve_rules', {
   /** Usage telemetry: incremented on each auto-approval. */
   approvedCount: integer('approved_count').notNull().default(0),
 });
+
+/**
+ * Local-content pipeline domain table. The local-content-scout proposes one
+ * row per content idea (dual-writing an agent_approvals row, kind
+ * 'content_idea'); the local-content-writer drafts + publishes it to Sanity
+ * on approval. scoutRunId/writerRunId link to agent_runs.cost_usd so the
+ * operator can see research-vs-writing cost per published page.
+ *
+ * Footprint variance: archetype + voiceSeed are assigned by the scout
+ * (deterministic from siteId+week) and passed into generation so output
+ * structure/voice differs across the fleet.
+ */
+export const contentIdeas = pgTable(
+  'content_ideas',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** Human-readable topic, e.g. "When to schedule fall tree trimming in Tucson". */
+    topic: text('topic').notNull(),
+    /** URL-safe slug; the published info page renders at /pages/<topicSlug>. */
+    topicSlug: text('topic_slug').notNull(),
+    /** Primary long-tail keyword the page targets (must not collide with an owned cluster). */
+    targetKeyword: text('target_keyword').notNull(),
+    /** The "why now" angle — seasonal hook, local trend, demand gap. */
+    angle: text('angle'),
+    /** One of: seasonal | how_to | cost_guide | comparison | local_spotlight. */
+    archetype: text('archetype').notNull(),
+    /** Voice-rotation seed passed into the writer's prompt for stylistic variance. */
+    voiceSeed: text('voice_seed').notNull(),
+    rationale: text('rationale'),
+    /** pending | approved | rejected | published | auto_approved | expired */
+    status: text('status').notNull().default('pending'),
+    /** The paired agent_approvals row (unified inbox + rule matching). */
+    sourceApprovalId: uuid('source_approval_id').references(() => agentApprovals.id, {
+      onDelete: 'set null',
+    }),
+    /** agent_runs.id of the scout run that produced this idea (research cost). */
+    scoutRunId: uuid('scout_run_id').notNull(),
+    /** agent_runs.id of the writer run that published it (writing cost); null until published. */
+    writerRunId: uuid('writer_run_id'),
+    /** Sanity page doc ID once published. */
+    publishedPageDocId: text('published_page_doc_id'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (t) => ({
+    // Topic-level dedupe per site — the scout must never re-propose a slug it
+    // already raised for a site (cannibalization + footprint guard).
+    siteTopicUniq: uniqueIndex('content_ideas_site_topic_uniq').on(t.siteId, t.topicSlug),
+    siteStatusIdx: index('content_ideas_site_status_idx').on(t.siteId, t.status),
+  }),
+);
+
+export type ContentIdea = typeof contentIdeas.$inferSelect;
+export type NewContentIdea = typeof contentIdeas.$inferInsert;
 
 /**
  * A named group of sites that may cross-link via network-linker.

@@ -15,6 +15,9 @@ function payloadPreview(kind: string, payload: unknown): string {
   if (kind === 'niche_candidate') {
     return `${p.niche ?? '?'} / ${p.city ?? '?'}, ${p.state ?? '?'} — score ${p.score ?? '?'}`;
   }
+  if (kind === 'content_idea') {
+    return `${p.topic ?? '?'} — ${p.targetKeyword ?? '?'} (${p.archetype ?? '?'})`;
+  }
   return JSON.stringify(payload).slice(0, 80);
 }
 
@@ -110,6 +113,16 @@ export default async function ApprovalsPage({
                               className="text-xs text-indigo-400 hover:underline"
                             >
                               View niche queue
+                            </Link>
+                          </div>
+                        )}
+                        {row.kind === 'content_idea' && (
+                          <div className="mt-0.5">
+                            <Link
+                              href="/operator/approvals/content"
+                              className="text-xs text-indigo-400 hover:underline"
+                            >
+                              View content queue
                             </Link>
                           </div>
                         )}

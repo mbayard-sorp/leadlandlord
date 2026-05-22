@@ -109,4 +109,11 @@ export const agentMetadata: Record<string, AgentMeta> = {
     description: 'Advances a launch wave through its 7-stage pipeline (gated by approvals).',
     trigger: 'Event-driven (wave progression)',
   },
+  'local-content-scout': {
+    description: 'Proposes locally-relevant seasonal and gap content ideas for tenant sites, guarded against keyword cannibalization.',
+  },
+  'local-content-writer': {
+    description: 'Drafts and publishes an approved local content idea as an info page on the tenant site.',
+    trigger: 'Event-driven (content idea approved)',
+  },
 };

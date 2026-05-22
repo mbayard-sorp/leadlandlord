@@ -32,6 +32,7 @@ import { AgentActivityPanel } from './AgentActivityPanel';
 import { CollapsibleSection } from './CollapsibleSection';
 import { GoLiveChecklist, type GoLiveItem } from './GoLiveChecklist';
 import type { GoLiveManualFlags } from './go-live-actions';
+import { LocalContentToggle } from './LocalContentToggle';
 
 export const dynamic = 'force-dynamic';
 
@@ -198,6 +199,19 @@ export default async function SiteDetailPage({ params }: Params) {
           }}
           domainHosts={sanity?.domains.map((d) => d.host) ?? []}
         />
+      </section>
+
+      {/* 5b. Local content pilot */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Local content pilot
+        </h2>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3 space-y-2">
+          <p className="text-xs text-slate-500">
+            When enabled, the local-content-scout proposes locally-relevant article ideas for this site daily. Approved ideas are written and published automatically.
+          </p>
+          <LocalContentToggle siteId={site.id} enabled={site.localContentEnabled ?? false} />
+        </div>
       </section>
 
       {/* 6. Phone & integrations — now hosts PhoneProvisionPanel with AI recommender */}

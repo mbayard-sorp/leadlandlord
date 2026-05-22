@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SeoOperatorInput, SeoOperatorOutput, normalizeSeoOperatorInput, slugify } from './index';
-import { draftInfoPage } from './author-info-page';
+import { draftInfoPage } from '../shared/author-info-page';
 
 describe('seo-operator schema', () => {
   it('accepts canonical review input with default lookbackDays', () => {

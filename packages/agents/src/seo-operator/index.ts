@@ -57,7 +57,7 @@ async function loadSanity(): Promise<{
 }
 import { BaseAgent, type AgentContext } from '../base';
 import { ComplianceGuard } from '../compliance-guard/index';
-import { draftInfoPage } from './author-info-page';
+import { draftInfoPage } from '../shared/author-info-page';
 
 // ────────────────────────────────────────────────────────────
 // Schemas

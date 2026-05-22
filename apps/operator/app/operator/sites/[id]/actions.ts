@@ -21,6 +21,7 @@ import {
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
 import { CallClassifier } from '@leadlandlord/agents/call-classifier';
 import { log } from '@leadlandlord/shared/log';
+import { requireOperatorSession } from '@/lib/auth';
 import { randomUUID } from 'node:crypto';
 
 const PhoneAssignmentSchema = z.object({
@@ -571,6 +572,18 @@ export async function regenerateContent(siteId: string): Promise<ActionResult & 
 
 function hostKey(host: string): string {
   return host.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 63);
+}
+
+export async function setLocalContentEnabled(siteId: string, enabled: boolean): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!siteId) return { ok: false, message: 'missing site id' };
+  const db = getDb();
+  await db
+    .update(sites)
+    .set({ localContentEnabled: enabled, updatedAt: new Date() })
+    .where(eq(sites.id, siteId));
+  revalidatePath(`/operator/sites/${siteId}`);
+  return { ok: true };
 }
 
 /**
