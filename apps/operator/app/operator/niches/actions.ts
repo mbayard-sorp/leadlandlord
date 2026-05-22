@@ -83,7 +83,17 @@ export async function runNicheHunter(formData: FormData): Promise<ActionResult> 
     min_search_volume: minVol,
     max_kd: maxKd,
     min_avg_job_value_usd: minJob,
-    allowed_categories: ['home_services'],
+    allowed_categories: (() => {
+      const VALID_CATEGORIES = [
+        'home_services', 'auto', 'health', 'professional', 'pet', 'event', 'lifestyle',
+      ] as const;
+      const ALL_CATEGORIES = [...VALID_CATEGORIES];
+      const submitted = formData.getAll('allowed_categories').map(String);
+      const filtered = submitted.filter((c): c is typeof VALID_CATEGORIES[number] =>
+        (VALID_CATEGORIES as readonly string[]).includes(c)
+      );
+      return filtered.length > 0 ? filtered : ALL_CATEGORIES;
+    })(),
     geo_filter: states.length ? { states } : undefined,
   };
 

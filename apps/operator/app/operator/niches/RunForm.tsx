@@ -18,6 +18,16 @@ const STATIC_DEFAULTS: Record<string, string> = {
   city_population_max: '',
 };
 
+const ALL_CATEGORIES = [
+  { value: 'home_services', label: 'Home Services' },
+  { value: 'auto',          label: 'Auto' },
+  { value: 'health',        label: 'Health' },
+  { value: 'professional',  label: 'Professional' },
+  { value: 'pet',           label: 'Pet' },
+  { value: 'event',         label: 'Event' },
+  { value: 'lifestyle',     label: 'Lifestyle' },
+] as const;
+
 const STORAGE_KEY = 'niche-hunter:last-config:v1';
 
 function loadSavedConfig(): Record<string, string> {
@@ -99,6 +109,23 @@ export function RunForm() {
         <strong className="text-slate-200">Estimate-only mode (no DataForSEO spend).</strong>{' '}
         Scoring uses Claude&apos;s brainstorm-time volume and confidence estimates. Validate individual rows on demand after reviewing results.
       </p>
+      <div className="md:col-span-3 flex flex-col gap-1.5">
+        <span className="text-xs text-slate-400">Categories (default: all)</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {ALL_CATEGORIES.map(({ value, label }) => (
+            <label key={value} className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="allowed_categories"
+                value={value}
+                defaultChecked
+                className="h-4 w-4 rounded border border-slate-600 bg-slate-950 accent-emerald-500"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
       <Field
         label="States (comma-separated, e.g. AZ,NM)"
         name="states"
