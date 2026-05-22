@@ -12,6 +12,7 @@ import {
 import { ScoringConfig, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, resolveDemandVolume, type ScoringWeights } from './scoring-config';
 export { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
 import { isDenylisted } from './denylist';
+import { SERVICE_TAXONOMY, type ServiceCategory } from './service-taxonomy';
 import { checkAutoApprove } from '../approval-engine';
 import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
 
@@ -222,6 +223,9 @@ Avoid:
 - Niches dominated by Angie/HomeAdvisor/Thumbtack (they crowd local SERPs)
 - Niches requiring licensing the platform can't verify (medical, legal)
 - Niches with unstable demand or one-off purchases
+
+SERVICE TRADES LIST:
+A SERVICE TRADES list (grouped by category) is appended below. Consider it as your menu of trades. Given the provided states/cities, prefer trades likely WINNABLE TO GOOGLE PAGE 1 — i.e. low competition, dominated by small local operators, with year-round or predictably seasonal demand. Spread your picks across the allowed categories and across the trade list — do not over-index on saturated trades like roofing, HVAC, or tree removal. You MAY also propose adjacent, relevant trades not on the list if they look winnable.
 
 CONFIDENCE SCORE:
 For each candidate, set \`confidence_score\` (integer 1-10) reflecting how strongly you believe this niche×city is a real, winnable local SEO opportunity. We only spend real keyword-data API budget on the top-confidence picks, so calibrate honestly:
@@ -480,6 +484,10 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
     }
     filterDesc.push(`Minimum estimated avg job value: $${input.min_avg_job_value_usd}.`);
 
+    // Build a taxonomy slice containing ONLY the operator's allowed categories
+    // so the cached system block stays scoped to what's actually requested.
+    const taxonomyText = buildTaxonomySlice(input.allowed_categories as ServiceCategory[]);
+
     const userPrompt = `Generate exactly ${input.brainstorm_count} niche x city candidates.
 
 Filters:
@@ -495,7 +503,10 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
       model,
       max_tokens: 8000,
       temperature: 0.7,
-      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      system: [
+        { type: 'text', text: SYSTEM_PROMPT },
+        { type: 'text', text: taxonomyText, cache_control: { type: 'ephemeral' } },
+      ],
       tools: [
         {
           name: BRAINSTORM_TOOL_NAME,
@@ -757,6 +768,22 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
 }
 
 // ---- helpers --------------------------------------------------------------
+
+/**
+ * Render the SERVICE TRADES list for the cached system block, including ONLY
+ * the categories the operator allowed. Falls back to the full taxonomy if the
+ * allowed list is empty or contains no known categories.
+ */
+function buildTaxonomySlice(allowed: ServiceCategory[]): string {
+  const cats = (allowed.length ? allowed : (Object.keys(SERVICE_TAXONOMY) as ServiceCategory[]))
+    .filter((c): c is ServiceCategory => c in SERVICE_TAXONOMY);
+  const sections = (cats.length ? cats : (Object.keys(SERVICE_TAXONOMY) as ServiceCategory[]))
+    .map((cat) => {
+      const trades = SERVICE_TAXONOMY[cat];
+      return `## ${cat}\n${trades.map((t) => `- ${t}`).join('\n')}`;
+    });
+  return `SERVICE TRADES LIST (consider these; prefer trades winnable to Google page 1; spread picks across categories and trades; you may also propose adjacent winnable trades not listed):\n\n${sections.join('\n\n')}`;
+}
 
 function aggregateMetrics(metrics: KeywordMetrics[]): {
   search_volume: number;
