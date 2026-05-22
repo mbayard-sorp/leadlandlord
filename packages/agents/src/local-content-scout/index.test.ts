@@ -27,6 +27,7 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
   getLocalKeywordMetrics: vi.fn().mockResolvedValue([
     { keyword: 'tree removal near me', search_volume: 200, cpc: 2, competition: 0.3, monthly_searches: [] },
   ]),
+  dfsLocationName: vi.fn((city: string, state: string) => `${city},${state},United States`),
 }));
 
 // ---- Anthropic mock ----------------------------------------------------------

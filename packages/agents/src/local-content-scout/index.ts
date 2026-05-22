@@ -7,7 +7,7 @@ import {
   contentIdeas,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
-import { getLocalKeywordMetrics } from '@leadlandlord/integrations/dataforseo';
+import { getLocalKeywordMetrics, dfsLocationName } from '@leadlandlord/integrations/dataforseo';
 import { createReadClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
 import { checkAutoApprove } from '../approval-engine';
@@ -276,7 +276,7 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
       `${niche} ${city}`,
       `${niche} cost ${city}`,
     ];
-    const location = `${city}, ${state}, United States`;
+    const location = dfsLocationName(city, state);
 
     try {
       const metrics = await getLocalKeywordMetrics({ keywords: seeds, location });
