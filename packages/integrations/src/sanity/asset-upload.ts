@@ -1,4 +1,4 @@
-import { createWriteClient } from '@leadlandlord/sanity-schema';
+import { createWriteClient } from '@leadlandlord/sanity-schema/client';
 
 export interface UploadHeroImageResult {
   /** Sanity asset _id (e.g. `image-abc123-1536x896-jpg`). */
