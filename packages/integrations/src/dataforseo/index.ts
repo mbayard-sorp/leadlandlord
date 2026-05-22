@@ -1,6 +1,8 @@
 import { stableKey, withDataForSeoCache } from './cache';
 import { dfsPost } from './client';
 
+export { dfsLocationName, usStateName } from './location';
+
 /**
  * DataForSEO REST client — keyword/SERP endpoints.
  *
