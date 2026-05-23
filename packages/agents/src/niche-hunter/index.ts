@@ -90,7 +90,7 @@ export const NicheHunterInput = z.object({
     })
     .optional(),
   /** How many candidates Claude brainstorms before DataForSEO scoring. */
-  brainstorm_count: z.number().int().positive().max(100).default(50),
+  brainstorm_count: z.number().int().positive().max(60).default(50),
   /**
    * Max number of candidates that get sent through DataForSEO scoring. We
    * brainstorm wide (`brainstorm_count`) then have Claude self-rank, and
@@ -501,9 +501,15 @@ ${cityListText}
 
 Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with the candidates array.`;
 
+    // Output token budget scales with how many candidates we ask for. Empirically each
+    // candidate costs ~150 output tokens; we use ~220/candidate to leave headroom plus a
+    // 500-token base. Clamped to [2000, 16000] — 16000 is a conservative ceiling well under
+    // the model's max output limit, enough for brainstorm_count up to its capped 60.
+    const maxTokens = Math.min(16000, Math.max(2000, 500 + input.brainstorm_count * 220));
+
     const response = await client.messages.create({
       model,
-      max_tokens: 8000,
+      max_tokens: maxTokens,
       temperature: 0.7,
       system: [
         { type: 'text', text: SYSTEM_PROMPT },
@@ -527,6 +533,10 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
       cache_creation_input_tokens: response.usage.cache_creation_input_tokens ?? undefined,
     };
     ctx.recordUsage({ model, ...usage, cost_usd: estimateCostUsd(model, usage) });
+
+    if (response.stop_reason === 'max_tokens') {
+      throw new Error('niche-hunter: brainstorm truncated by output token ceiling (stop_reason=max_tokens) — reduce brainstorm_count or raise the max_tokens formula');
+    }
 
     const toolUse = response.content.find((b) => b.type === 'tool_use');
     if (!toolUse || toolUse.type !== 'tool_use' || toolUse.name !== BRAINSTORM_TOOL_NAME) {
