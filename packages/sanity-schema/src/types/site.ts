@@ -207,6 +207,20 @@ export const site = defineType({
       options: { hotspot: true },
     }),
     defineField({
+      name: 'logo',
+      title: 'Logo',
+      type: 'image',
+      options: { hotspot: true },
+      description: 'Square logo shown in the upper-left header. Upload a square image (e.g. 512x512). If empty, the default brand mark is shown.',
+    }),
+    defineField({
+      name: 'favicon',
+      title: 'Favicon',
+      type: 'image',
+      options: { hotspot: true },
+      description: 'Browser tab icon and apple-touch icon. Upload a square image (e.g. 512x512); simple, high-contrast marks read best at 32px. If empty, no custom favicon is emitted.',
+    }),
+    defineField({
       name: 'heroImagePrompt',
       title: 'Hero Image Prompt',
       type: 'text',

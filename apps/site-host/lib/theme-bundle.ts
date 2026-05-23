@@ -16,6 +16,8 @@ export function sanityToBundle(site: SanitySite): Bundle {
     variant: (site.theme ?? 'classic') as Variant,
     hero_image_prompt: site.heroImagePrompt ?? undefined,
     hero_image_url: site.heroImageUrl ?? undefined,
+    logo_url: site.logoUrl ?? undefined,
+    favicon_url: site.faviconUrl ?? undefined,
     nearby_cities: site.nearbyCities ?? [],
     trust_signals: site.trustSignals ?? [],
     home: pageToBundlePage(site.home, 'home'),
