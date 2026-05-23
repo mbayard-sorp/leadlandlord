@@ -35,3 +35,18 @@
   --surface-inverse-muted-fg: rgba(244, 236, 224, 0.65);
   --surface-inverse-accent-fg: var(--paper);
 }
+
+/* Palette alt1 — Brass. Introduces a hue while keeping cream paper + cream
+   accent foreground. Color vars only; type/radii inherit the base theme. */
+[data-theme='premium'][data-palette='alt1'] {
+  --accent: #7a5c12; /* deep brass */
+  --accent-fg: #f4ece0;
+  --accent-50: #e8dcc0;
+}
+
+/* Palette alt2 — Oxblood. */
+[data-theme='premium'][data-palette='alt2'] {
+  --accent: #6e1f23; /* oxblood */
+  --accent-fg: #f4ece0;
+  --accent-50: #ead8d2;
+}

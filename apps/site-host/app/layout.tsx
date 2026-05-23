@@ -52,6 +52,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const site = await resolveCurrentSite();
   const theme = site?.theme ?? 'classic';
+  const palette = site?.colorPalette ?? 'default';
   // Central GA4 by default — every tenant feeds the shared property tagged
   // with `site_id`. Per-tenant `gaMeasurementId` on a Sanity site doc
   // overrides for tenants who want their own analytics (rare; mostly for
@@ -61,7 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const bundle = site ? sanityToBundle(site) : null;
   const baseUrl = await currentRequestBaseUrl();
   return (
-    <html lang="en" className={allFontVars} data-theme={theme}>
+    <html lang="en" className={allFontVars} data-theme={theme} data-palette={palette}>
       <head>
         <link rel="preconnect" href="https://cdn.sanity.io" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://cdn.sanity.io" />
