@@ -37,6 +37,21 @@
   --surface-inverse-accent-fg: var(--accent);
 }
 
+/* Palette alt1 — Teal. Color vars only; type/radii inherit the base theme.
+   --coral-50 keeps its name but tracks the active accent tint. */
+[data-theme='bright'][data-palette='alt1'] {
+  --accent: #0e8f86; /* teal */
+  --accent-fg: #ffffff;
+  --coral-50: #d9f1ee;
+}
+
+/* Palette alt2 — Marigold. */
+[data-theme='bright'][data-palette='alt2'] {
+  --accent: #c2710c; /* deep marigold */
+  --accent-fg: #ffffff;
+  --coral-50: #fdebcf;
+}
+
 /* Squiggle underline used on H1 keyword in Bright variant. */
 [data-theme='bright'] .squiggle {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'><path d='M0 4 Q 10 0 20 4 T 40 4 T 60 4 T 80 4' fill='none' stroke='%23ef6a4f' stroke-width='2'/></svg>");
@@ -44,4 +59,10 @@
   background-position: bottom;
   background-size: 80px 8px;
   padding-bottom: 6px;
+}
+[data-theme='bright'][data-palette='alt1'] .squiggle {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'><path d='M0 4 Q 10 0 20 4 T 40 4 T 60 4 T 80 4' fill='none' stroke='%230e8f86' stroke-width='2'/></svg>");
+}
+[data-theme='bright'][data-palette='alt2'] .squiggle {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'><path d='M0 4 Q 10 0 20 4 T 40 4 T 60 4 T 80 4' fill='none' stroke='%23c2710c' stroke-width='2'/></svg>");
 }

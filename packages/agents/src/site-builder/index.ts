@@ -16,6 +16,7 @@ import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
 import { pickThemeForNiche } from './pick-theme';
+import { pickPaletteForSite } from './pick-palette';
 
 export type SiteBuilderProgressEvent =
   | { step: 'site_row_ready'; site_id: string }
@@ -28,7 +29,7 @@ export type SiteBuilderProgressEvent =
   | { step: 'network_joined'; network_slug: string }
   | { step: 'sanity_publish_started' }
   | { step: 'sanity_pages_written'; pages: number }
-  | { step: 'sanity_site_doc_written'; site_doc_id: string; theme: string }
+  | { step: 'sanity_site_doc_written'; site_doc_id: string; theme: string; color_palette: string }
   | { step: 'hero_image_started' }
   | { step: 'hero_image_done'; url: string | null }
   | { step: 'site_ready'; site_doc_id: string };
@@ -259,7 +260,9 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     }
 
     this.emit({ step: 'sanity_publish_started' });
-    const persisted = await writeSiteToSanity(siteId, bundle);
+    const persisted = await writeSiteToSanity(siteId, bundle, {
+      colorPalette: pickPaletteForSite(siteId),
+    });
     ctx.log.info(
       { pages: persisted.pagesWritten, txId: persisted.transactionId },
       'site + pages written to sanity',
@@ -269,6 +272,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       step: 'sanity_site_doc_written',
       site_doc_id: persisted.siteDocId,
       theme: bundle.variant,
+      color_palette: persisted.colorPalette,
     });
 
     // 6.5. Join the default network (idempotent). Looks up the 'default' network
@@ -362,6 +366,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         site_id: siteId,
         sanity_site_doc_id: persisted.siteDocId,
         theme: bundle.variant,
+        color_palette: persisted.colorPalette,
       },
     });
 
@@ -373,6 +378,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       sanity_site_doc_id: persisted.siteDocId,
       pages_written: persisted.pagesWritten,
       theme: bundle.variant,
+      color_palette: persisted.colorPalette,
       hero_image_url: heroUrl,
       tracking_number: null,
       tracking_provider: null,

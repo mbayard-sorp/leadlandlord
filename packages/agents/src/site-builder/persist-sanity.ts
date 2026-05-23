@@ -11,6 +11,12 @@ import { keywordClusterDocId } from '@leadlandlord/sanity-schema';
 export interface WriteSiteToSanityOptions {
   /** Override Sanity dataset (defaults to env). Used by dry-run for `development`. */
   dataset?: string;
+  /**
+   * Agent-picked color palette for the site (see `pick-palette.ts`). Written
+   * only when the site doc has no palette yet — an operator-set value already
+   * on the doc is preserved across rebuilds. Defaults to 'default'.
+   */
+  colorPalette?: 'default' | 'alt1' | 'alt2';
 }
 
 export interface WriteSiteToSanityResult {
@@ -22,6 +28,8 @@ export interface WriteSiteToSanityResult {
   transactionId: string;
   /** Total page docs written (home + about + contact + services + ...). */
   pagesWritten: number;
+  /** Palette actually persisted (operator override wins over the agent pick). */
+  colorPalette: 'default' | 'alt1' | 'alt2';
 }
 
 interface PageRef {
@@ -99,6 +107,16 @@ export async function writeSiteToSanity(
   opts: WriteSiteToSanityOptions = {},
 ): Promise<WriteSiteToSanityResult> {
   const client = createWriteClient(opts.dataset ? { dataset: opts.dataset } : {});
+
+  // Resolve the palette before the createOrReplace (which clobbers the whole
+  // doc). An operator may have swapped the palette in Studio after the first
+  // build — that value lives on the existing doc and must win over the agent
+  // pick so rebuilds don't reset their choice.
+  const existingSite = await client.getDocument(siteDocId(siteId));
+  const resolvedPalette =
+    (existingSite?.colorPalette as 'default' | 'alt1' | 'alt2' | undefined) ??
+    opts.colorPalette ??
+    'default';
 
   // Flatten the bundle into a single list of (kind, index, page) so we can
   // build deterministic IDs uniformly.
@@ -180,6 +198,7 @@ export async function writeSiteToSanity(
     city: bundle.city,
     state: bundle.state,
     theme: { _ref: themeDocId(bundle.variant), _type: 'reference' },
+    colorPalette: resolvedPalette,
     domains: [], // populated by the operator dashboard via Vercel Domains API
     robotsDisallow: true, // default during warming — operator flips when going live
     trustSignals: bundle.trust_signals ?? [],
@@ -224,6 +243,7 @@ export async function writeSiteToSanity(
     pageDocIds: pageIds,
     transactionId: res.transactionId,
     pagesWritten: pageIds.length,
+    colorPalette: resolvedPalette,
   };
 }
 

@@ -33,3 +33,17 @@
   --surface-inverse-muted-fg: rgba(251, 250, 246, 0.75);
   --surface-inverse-accent-fg: var(--accent);
 }
+
+/* Palette alt1 — Navy. Color vars only; type/radii inherit the base theme. */
+[data-theme='classic'][data-palette='alt1'] {
+  --accent: #1f4e8c; /* deep navy-blue */
+  --accent-fg: #ffffff;
+  --accent-50: #e8eff8;
+}
+
+/* Palette alt2 — Forest. */
+[data-theme='classic'][data-palette='alt2'] {
+  --accent: #176b35; /* forest green */
+  --accent-fg: #ffffff;
+  --accent-50: #e6f4ec;
+}

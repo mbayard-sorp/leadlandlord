@@ -35,3 +35,17 @@
   --surface-inverse-muted-fg: rgba(251, 250, 246, 0.6);
   --surface-inverse-accent-fg: var(--accent);
 }
+
+/* Palette alt1 — Indigo. Color vars only; type/radii inherit the base theme. */
+[data-theme='modern'][data-palette='alt1'] {
+  --accent: #4338ca; /* indigo */
+  --accent-fg: #ffffff;
+  --accent-50: #ebeafb;
+}
+
+/* Palette alt2 — Bronze amber. */
+[data-theme='modern'][data-palette='alt2'] {
+  --accent: #b45309; /* deep amber */
+  --accent-fg: #ffffff;
+  --accent-50: #fdf0dd;
+}

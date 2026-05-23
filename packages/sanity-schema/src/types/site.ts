@@ -48,6 +48,21 @@ export const site = defineType({
       validation: (r) => r.required(),
     }),
     defineField({
+      name: 'colorPalette',
+      title: 'Color Palette',
+      type: 'string',
+      description: 'Color variation within the base theme. Swap = no redeploy.',
+      options: {
+        list: [
+          { title: 'Default', value: 'default' },
+          { title: 'Alternate 1', value: 'alt1' },
+          { title: 'Alternate 2', value: 'alt2' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'default',
+    }),
+    defineField({
       name: 'domains',
       title: 'Domains',
       type: 'array',

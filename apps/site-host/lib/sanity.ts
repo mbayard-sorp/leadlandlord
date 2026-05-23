@@ -35,6 +35,7 @@ const SITE_PROJECTION = `{
   heroImagePrompt,
   "heroImageUrl": heroImage.asset->url,
   "theme": theme->name,
+  colorPalette,
   domains[]{ host, isPrimary, verified, attachedAt },
   home->${PAGE_PROJECTION},
   about->${PAGE_PROJECTION},
@@ -84,6 +85,7 @@ export interface SanitySite {
   heroImagePrompt?: string | null;
   heroImageUrl?: string | null;
   theme: 'classic' | 'modern' | 'premium' | 'bright';
+  colorPalette?: 'default' | 'alt1' | 'alt2' | null;
   domains?: Array<{ host: string; isPrimary?: boolean; verified?: boolean; attachedAt?: string }> | null;
   home: SanitySitePage;
   about: SanitySitePage;
