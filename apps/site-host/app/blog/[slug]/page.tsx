@@ -3,6 +3,7 @@ import { resolveCurrentSite } from '../../../lib/site-context';
 import { breadcrumbsJsonLd, buildPageMetadata } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
+import { substituteBundlePhone } from '../../../lib/phone';
 import { telHref, pageH1 } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
 import { Markdown } from '../../../components/shared/Markdown';
@@ -22,11 +23,11 @@ export default async function BlogPost({ params }: Params) {
   const { slug } = await params;
   const site = await resolveCurrentSite();
   if (!site) notFound();
-  const bundle = sanityToBundle(site);
+  const phone = await getTrackingNumber(site.siteId);
+  const bundle = substituteBundlePhone(sanityToBundle(site), phone);
   const page = bundle.blog_posts.find((p) => slugFromUrl(p.slug) === slug);
   if (!page) notFound();
 
-  const phone = await getTrackingNumber(site.siteId);
   const tel = telHref(phone);
 
   const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {

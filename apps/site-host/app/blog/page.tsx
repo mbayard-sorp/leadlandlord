@@ -3,6 +3,7 @@ import { buildPageMetadata, breadcrumbsJsonLd } from '../../lib/seo-meta';
 import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
+import { substituteBundlePhone } from '../../lib/phone';
 import { telHref } from '../../lib/content';
 
 /**
@@ -26,8 +27,8 @@ export default async function BlogIndex() {
     );
   }
 
-  const bundle = sanityToBundle(site);
   const phone = await getTrackingNumber(site.siteId);
+  const bundle = substituteBundlePhone(sanityToBundle(site), phone);
   const tel = telHref(phone);
 
   const breadcrumb = await breadcrumbsJsonLd([
