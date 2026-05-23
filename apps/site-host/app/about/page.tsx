@@ -3,6 +3,7 @@ import { resolveCurrentSite } from '../../lib/site-context';
 import { buildPageMetadata, breadcrumbsJsonLd } from '../../lib/seo-meta';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
+import { substituteBundlePhone } from '../../lib/phone';
 import { pageH1 } from '../../lib/content';
 import { SiteShell } from '../../components/SiteShell';
 import { PageBody } from '../../components/PageBody';
@@ -12,7 +13,7 @@ export default async function About() {
   const site = await resolveCurrentSite();
   if (!site) notFound();
   const [phone] = await Promise.all([getTrackingNumber(site.siteId)]);
-  const bundle = sanityToBundle(site);
+  const bundle = substituteBundlePhone(sanityToBundle(site), phone);
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
