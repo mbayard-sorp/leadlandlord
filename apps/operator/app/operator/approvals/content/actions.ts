@@ -36,7 +36,7 @@ export async function approveContentIdea(formData: FormData): Promise<ActionResu
     agent: 'operator',
     type: 'content.idea.approved',
     targetAgent: 'local-content-writer',
-    payload: { ideaId: idea.id, siteId: idea.siteId },
+    payload: { idea_id: idea.id, site_id: idea.siteId },
   });
 
   revalidatePath('/operator/approvals/content');
