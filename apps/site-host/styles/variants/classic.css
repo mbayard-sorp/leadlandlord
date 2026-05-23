@@ -42,6 +42,14 @@
   border: 2px solid var(--ink);
   border-radius: 2px;
 }
+[data-theme='classic'] .classic-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
+  flex-shrink: 0;
+}
 [data-theme='classic'] .classic-brand-name {
   font-family: var(--font-display);
   font-weight: 700;

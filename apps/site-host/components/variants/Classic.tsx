@@ -76,7 +76,9 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         {/* header — brand wordmark + phone pill */}
         <header className="classic-header">
           <a href="/" className="classic-brand">
-            <span className="classic-mark" aria-hidden />
+            {bundle.logo_url
+              ? <Image src={bundle.logo_url} alt="" width={28} height={28} className="classic-logo" />
+              : <span className="classic-mark" aria-hidden />}
             <span className="classic-brand-name">{bundle.business_name}</span>
           </a>
           <a href={tel} className="classic-phone-pill num">

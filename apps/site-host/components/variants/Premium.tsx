@@ -79,6 +79,9 @@ export function PremiumHome({
 
         <header className="premium-header">
           <a href="/" className="premium-brand">
+            {bundle.logo_url && (
+              <Image src={bundle.logo_url} alt="" width={32} height={32} className="premium-logo" />
+            )}
             {bundle.business_name}
           </a>
           <SiteNav bundle={bundle} variant="premium" className="premium-nav" />

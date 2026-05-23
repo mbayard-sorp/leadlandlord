@@ -36,6 +36,14 @@
   text-transform: lowercase;
   color: var(--ink);
 }
+[data-theme='bright'] .bright-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 999px;
+  display: block;
+  flex-shrink: 0;
+}
 [data-theme='bright'] .bright-brand-name {
   font-family: var(--font-display);
   font-weight: 700;

@@ -46,6 +46,12 @@ export async function generateMetadata(): Promise<Metadata> {
       ...(bundle.hero_image_url ? { images: [bundle.hero_image_url] } : {}),
     },
     robots: site.robotsDisallow ? { index: false, follow: false } : { index: true, follow: true },
+    ...(bundle.favicon_url ? {
+      icons: {
+        icon: [{ url: `${bundle.favicon_url}?w=32&h=32&fit=crop`, sizes: '32x32' }],
+        apple: [{ url: `${bundle.favicon_url}?w=180&h=180&fit=crop`, sizes: '180x180' }],
+      },
+    } : {}),
   };
 }
 

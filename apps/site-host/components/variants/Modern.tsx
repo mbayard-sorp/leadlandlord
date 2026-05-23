@@ -65,7 +65,9 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
       <div className="modern-shell">
         <header className="modern-header">
           <a href="/" className="modern-brand">
-            <span className="modern-mark" aria-hidden />
+            {bundle.logo_url
+              ? <Image src={bundle.logo_url} alt="" width={30} height={30} className="modern-logo" />
+              : <span className="modern-mark" aria-hidden />}
             <span className="modern-brand-name">{bundle.business_name}</span>
           </a>
           <div className="modern-header-cta">

@@ -101,9 +101,9 @@ export function BrightHome({
       <div className="bright-shell">
         <header className="bright-header">
           <a href="/" className="bright-brand">
-            <span className="bright-mark" aria-hidden>
-              {initials}
-            </span>
+            {bundle.logo_url
+              ? <Image src={bundle.logo_url} alt="" width={44} height={44} className="bright-logo" />
+              : <span className="bright-mark" aria-hidden>{initials}</span>}
             <span>
               <span className="bright-brand-name">{bundle.business_name}</span>
               <span className="bright-brand-sub">

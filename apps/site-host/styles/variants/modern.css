@@ -30,6 +30,14 @@
   background: var(--accent);
   border: 1px solid var(--ink);
 }
+[data-theme='modern'] .modern-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 999px;
+  display: block;
+  flex-shrink: 0;
+}
 [data-theme='modern'] .modern-brand-name {
   font-family: var(--font-display);
   font-weight: 600;
