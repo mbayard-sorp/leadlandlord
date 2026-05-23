@@ -86,6 +86,7 @@ export async function runNicheHunter(formData: FormData): Promise<ActionResult> 
     allowed_categories: (() => {
       const VALID_CATEGORIES = [
         'home_services', 'auto', 'health', 'professional', 'pet', 'event', 'lifestyle',
+        'legal', 'medical',
       ] as const;
       const ALL_CATEGORIES = [...VALID_CATEGORIES];
       const submitted = formData.getAll('allowed_categories').map(String);

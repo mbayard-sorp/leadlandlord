@@ -48,6 +48,8 @@ const CategoryEnum = z.enum([
   'pet',
   'event',
   'lifestyle',
+  'legal',
+  'medical',
 ]);
 
 export const ClaudeCandidateSchema = z.object({
@@ -225,7 +227,7 @@ Avoid:
 - Niches with unstable demand or one-off purchases
 
 SERVICE TRADES LIST:
-A SERVICE TRADES list (grouped by category) is appended below. Consider it as your menu of trades. Given the provided states/cities, prefer trades likely WINNABLE TO GOOGLE PAGE 1 — i.e. low competition, dominated by small local operators, with year-round or predictably seasonal demand. Spread your picks across the allowed categories and across the trade list — do not over-index on saturated trades like roofing, HVAC, or tree removal. You MAY also propose adjacent, relevant trades not on the list if they look winnable.
+A SERVICE TRADES list (grouped by category) is appended below. Consider it as your menu of trades. Given the provided states/cities, prefer trades likely WINNABLE TO GOOGLE PAGE 1 — i.e. low competition, dominated by small local operators, with year-round or predictably seasonal demand. Spread your picks across the allowed categories and across the trade list — do not over-index on saturated trades like roofing, HVAC, or tree removal. You MAY also propose adjacent, relevant trades not on the list if they look winnable. Licensed professions (legal, medical/dental) ARE in scope and worth proposing where a SPECIFIC practice area + city looks winnable (e.g. a narrow practice in a smaller metro) — don't reflexively skip the whole category because law/dental SEO is competitive nationally. Calibrate confidence_score to the specific niche×city, not the category's broad reputation; their high tenant lifetime value justifies pursuing winnable pockets.
 
 CONFIDENCE SCORE:
 For each candidate, set \`confidence_score\` (integer 1-10) reflecting how strongly you believe this niche×city is a real, winnable local SEO opportunity. We only spend real keyword-data API budget on the top-confidence picks, so calibrate honestly:

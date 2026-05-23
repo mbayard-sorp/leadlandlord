@@ -1,8 +1,15 @@
-// Seed taxonomy of local service-business trades, grouped by the 7 niche-hunter
+// Seed taxonomy of local service-business trades, grouped by the 9 niche-hunter
 // categories. Injected into the brainstorm system prompt to broaden scope beyond
 // the saturated home-services tropes the model defaults to. The category keys
 // here MUST stay in sync with the CategoryEnum defined in index.ts
-// (home_services, auto, health, professional, pet, event, lifestyle).
+// (home_services, auto, health, professional, pet, event, lifestyle, legal, medical).
+//
+// legal/medical are licensed professions. The platform does NOT verify licenses —
+// every site is rented to a real contractor/practice who brings their own license,
+// GBP, and regulated-profession ad compliance (bar/board disclaimers, no outcome
+// guarantees). Scope here is deliberately broad: any service business that could be
+// a viable long-term tenant belongs on the menu. Competition is gated downstream by
+// confidence_score, not excluded here.
 
 export type ServiceCategory =
   | 'home_services'
@@ -11,7 +18,9 @@ export type ServiceCategory =
   | 'professional'
   | 'pet'
   | 'event'
-  | 'lifestyle';
+  | 'lifestyle'
+  | 'legal'
+  | 'medical';
 
 export const SERVICE_TAXONOMY: Record<ServiceCategory, string[]> = {
   home_services: [
@@ -370,5 +379,69 @@ export const SERVICE_TAXONOMY: Record<ServiceCategory, string[]> = {
     'pool table moving',
     'gun cleaning services',
     'firewood delivery',
+  ],
+  legal: [
+    'personal injury lawyer',
+    'car accident lawyer',
+    'truck accident lawyer',
+    'motorcycle accident lawyer',
+    'slip and fall lawyer',
+    'workers compensation lawyer',
+    'dui lawyer',
+    'criminal defense lawyer',
+    'traffic ticket lawyer',
+    'expungement lawyer',
+    'divorce lawyer',
+    'family law attorney',
+    'child custody lawyer',
+    'estate planning attorney',
+    'probate lawyer',
+    'wills and trusts attorney',
+    'bankruptcy lawyer',
+    'immigration lawyer',
+    'employment lawyer',
+    'wrongful termination lawyer',
+    'real estate attorney',
+    'business attorney',
+    'medical malpractice lawyer',
+    'nursing home abuse lawyer',
+    'social security disability lawyer',
+    'landlord tenant attorney',
+    'mediation services',
+    'mobile notary signing agent',
+  ],
+  medical: [
+    'general dentist',
+    'cosmetic dentist',
+    'pediatric dentist',
+    'emergency dentist',
+    'dental implants',
+    'orthodontist',
+    'invisalign provider',
+    'oral surgeon',
+    'denture clinic',
+    'endodontist',
+    'periodontist',
+    'chiropractor',
+    'sports chiropractor',
+    'physical therapy clinic',
+    'sports physical therapy',
+    'occupational therapy',
+    'acupuncture clinic',
+    'podiatrist',
+    'dermatology clinic',
+    'optometrist',
+    'lasik eye surgery',
+    'audiologist hearing aids',
+    'urgent care clinic',
+    'primary care clinic',
+    'pediatric clinic',
+    'weight loss clinic',
+    'iv therapy clinic',
+    'hormone therapy clinic',
+    'mental health counseling',
+    'addiction treatment center',
+    'veterinary clinic',
+    'mobile veterinarian',
   ],
 };

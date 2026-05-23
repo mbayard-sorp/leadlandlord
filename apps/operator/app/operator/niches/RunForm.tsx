@@ -26,6 +26,8 @@ const ALL_CATEGORIES = [
   { value: 'pet',           label: 'Pet' },
   { value: 'event',         label: 'Event' },
   { value: 'lifestyle',     label: 'Lifestyle' },
+  { value: 'legal',         label: 'Legal' },
+  { value: 'medical',       label: 'Medical' },
 ] as const;
 
 const STORAGE_KEY = 'niche-hunter:last-config:v1';
