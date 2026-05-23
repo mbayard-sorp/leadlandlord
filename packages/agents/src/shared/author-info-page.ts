@@ -104,6 +104,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
   const system = [
     `You are an expert local-SEO content writer. You write helpful, accurate, non-promotional info pages for small local businesses.`,
     `Avoid: fake reviews, made-up awards, specific license numbers, claims like "best in state". The page should educate the reader about the topic and end with an honest CTA.`,
+    `CRITICAL — phone numbers: never write a literal phone number anywhere in the MDX or CTAs. Always use the placeholder token {{phone}} exactly as written (e.g. "Call us today at {{phone}}"). The site-host runtime substitutes the tenant's real tracking number at render. A literal number like (555) 123-4567 is a hard failure.`,
     `Tone: clear, neighborly, practical. Theme vibe: ${themeKey ?? 'classic'}.`,
     archetype ? `Content archetype: ${archetype}. Structure and angle the content accordingly.` : '',
     voiceInstruction(voiceSeed),
@@ -119,7 +120,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
     `- Meta description ≤155 chars, with a CTA.`,
     `- MDX body ${lengthTarget - 100}–${lengthTarget + 100} words, structured with H2/H3.`,
     `- The topic phrase should appear 3–5 times naturally (not stuffed).`,
-    `- End with a CTA inviting the reader to call or contact the business.`,
+    `- End with a CTA inviting the reader to call or contact the business, using the {{phone}} placeholder token (never a literal number).`,
     `- JSON-LD: Article schema for info, Service for service intent.`,
     ``,
     `Call ${DRAFT_TOOL_NAME} exactly once with the result.`,
