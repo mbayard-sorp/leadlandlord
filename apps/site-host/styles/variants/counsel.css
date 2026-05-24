@@ -175,6 +175,9 @@
   position: relative;
   border-bottom: var(--hairline) solid var(--rule-strong);
   overflow: hidden;
+  /* Mobile: a fill hero image is absolutely positioned and contributes no
+     height, so the panel needs an explicit box (matches illustration height). */
+  min-height: 260px;
 }
 @media (min-width: 900px) {
   [data-theme='counsel'] .counsel-hero-visual {
@@ -298,7 +301,7 @@
   align-items: center;
 }
 [data-theme='counsel'] .counsel-btn-primary {
-  padding: 14px 20px;
+  padding: 14px 22px;
   background: var(--ink);
   color: var(--paper);
   text-decoration: none;
@@ -308,10 +311,19 @@
   font-weight: 500;
   border-radius: var(--radius-button);
   white-space: nowrap;
-  transition: opacity 0.15s;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 [data-theme='counsel'] .counsel-btn-primary:hover {
-  opacity: 0.85;
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 2px 0 0 var(--accent-deep);
+}
+[data-theme='counsel'] .counsel-btn-primary:active {
+  transform: translateY(0);
+}
+[data-theme='counsel'] .counsel-btn-primary:focus-visible {
+  outline: 2px solid var(--accent-ink, var(--accent-deep));
+  outline-offset: 3px;
 }
 [data-theme='counsel'] .counsel-btn-phone {
   display: flex;
@@ -486,6 +498,12 @@
   font-family: var(--font-display);
   font-size: 1rem;
   color: var(--ink-3);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+[data-theme='counsel'] .counsel-practice-card:hover .counsel-practice-arrow,
+[data-theme='counsel'] .counsel-practice-card:focus-visible .counsel-practice-arrow {
+  transform: translateX(5px);
+  color: var(--accent-ink, var(--accent-deep));
 }
 [data-theme='counsel'] .counsel-practice-card h3 {
   font-family: var(--font-display);
@@ -791,7 +809,7 @@
   margin-top: 32px;
 }
 [data-theme='counsel'] .counsel-cta-btn-primary {
-  padding: 15px 24px;
+  padding: 15px 26px;
   background: var(--accent);
   color: var(--accent-fg);
   text-decoration: none;
@@ -800,10 +818,18 @@
   font-size: 1.0625rem;
   font-weight: 600;
   border-radius: var(--radius-button);
-  transition: opacity 0.15s;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 [data-theme='counsel'] .counsel-cta-btn-primary:hover {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -8px rgba(192, 154, 82, 0.6);
+}
+[data-theme='counsel'] .counsel-cta-btn-primary:active {
+  transform: translateY(0);
+}
+[data-theme='counsel'] .counsel-cta-btn-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 [data-theme='counsel'] .counsel-cta-btn-outline {
   padding: 15px 24px;
@@ -818,10 +844,15 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: background 0.15s;
+  transition: background 0.18s ease, border-color 0.18s ease;
 }
 [data-theme='counsel'] .counsel-cta-btn-outline:hover {
-  background: rgba(192, 154, 82, 0.1);
+  background: rgba(192, 154, 82, 0.12);
+  border-color: var(--surface-inverse-accent-fg);
+}
+[data-theme='counsel'] .counsel-cta-btn-outline:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 /* ── Contact section ─────────────────────────────────────────────── */
