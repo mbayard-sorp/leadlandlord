@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { setTheme } from './actions';
 
-type Theme = 'classic' | 'modern' | 'premium' | 'bright';
+type Theme = 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
 
 interface Props {
   siteId: string;
@@ -15,6 +15,8 @@ const THEMES: Array<{ value: Theme; label: string; blurb: string }> = [
   { value: 'modern', label: 'Modern', blurb: 'Clean SaaS-y — junk removal, moving, cleaning' },
   { value: 'premium', label: 'Premium', blurb: 'Editorial, serif — landscape, remodel, fine carpentry' },
   { value: 'bright', label: 'Bright', blurb: 'Friendly, "book online" — lawn, dog walking, tutoring' },
+  { value: 'haul', label: 'Haul', blurb: 'Bold, high-contrast — junk removal, hauling, demolition' },
+  { value: 'counsel', label: 'Counsel', blurb: 'Editorial serif, restrained — legal lead-gen, attorneys' },
 ];
 
 /**
