@@ -3,6 +3,7 @@ import { getDb, niches, sites } from '@leadlandlord/db';
 import { GEO_SHARE_PRIOR, resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
 import Link from 'next/link';
 import { RunForm } from './RunForm';
+import { SeedNicheForm } from './SeedNicheForm';
 import { StatusBar } from './StatusBar';
 import { NicheRow, type NicheRowData } from './NicheRow';
 import { CategoryFilter } from './CategoryFilter';
@@ -69,6 +70,8 @@ export default async function NichesPage({
       </header>
 
       <RunForm />
+
+      <SeedNicheForm />
 
       <div className="flex items-center gap-4">
         <div className="shrink-0">
