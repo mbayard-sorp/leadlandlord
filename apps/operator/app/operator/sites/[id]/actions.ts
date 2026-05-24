@@ -240,7 +240,7 @@ function emptyToNull(v: string | undefined): string | null {
 // Phase F — Sanity-backed actions on the site detail page
 // ────────────────────────────────────────────────────────────────────────────
 
-const ThemeName = z.enum(['classic', 'modern', 'premium', 'bright']);
+const ThemeName = z.enum(['classic', 'modern', 'premium', 'bright', 'haul', 'counsel']);
 type ThemeName = z.infer<typeof ThemeName>;
 
 export interface ActionResult {

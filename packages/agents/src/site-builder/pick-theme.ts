@@ -114,16 +114,46 @@ export const NICHE_THEME_MAP: Record<string, ThemeKey> = {
   'wills and trusts': 'counsel',
 };
 
+/**
+ * Category → theme fallback, applied only when the specific niche string
+ * isn't in `NICHE_THEME_MAP`. Catches legal niches whose exact wording the
+ * niche map doesn't enumerate (e.g. "medical malpractice lawyer") so the
+ * content engine still loads the counsel overlay — which carries
+ * NON-NEGOTIABLE legal-advertising constraints (ADR 0002, ADR 0012), not just
+ * styling. Keyed by the niches-table `category` value (see ServiceCategory).
+ * Medical has no dedicated variant yet, so it falls through to classic.
+ */
+export const CATEGORY_THEME_MAP: Record<string, ThemeKey> = {
+  legal: 'counsel',
+};
+
 function normalizeNiche(niche: string): string {
   return niche.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**
- * Resolve a niche string to a theme key. Whitespace-tolerant, case-
- * insensitive, falls back to `'classic'` on no match. Never throws.
+ * Resolve a niche to a theme key. The specific niche string wins; if it's
+ * unknown, fall back to the niche's category (e.g. legal → counsel); if that's
+ * also unknown, fall back to `'classic'`. Whitespace-tolerant, case-
+ * insensitive. Never throws.
+ *
+ * `category` is the niches-table `category` column (nullable text). Pass it so
+ * legal sites get counsel content even when the niche wording isn't in
+ * `NICHE_THEME_MAP` — a theme swap after the fact only re-skins CSS, it does
+ * not regenerate the (compliance-sensitive) copy.
  */
+export function pickTheme(niche: string, category?: string | null): ThemeKey {
+  const normalized = niche ? normalizeNiche(niche) : '';
+  const byNiche = normalized ? NICHE_THEME_MAP[normalized] : undefined;
+  if (byNiche) return byNiche;
+  if (category) {
+    const byCategory = CATEGORY_THEME_MAP[category.trim().toLowerCase()];
+    if (byCategory) return byCategory;
+  }
+  return 'classic';
+}
+
+/** Back-compat wrapper: niche-only resolution with no category fallback. */
 export function pickThemeForNiche(niche: string): ThemeKey {
-  if (!niche) return 'classic';
-  const normalized = normalizeNiche(niche);
-  return NICHE_THEME_MAP[normalized] ?? 'classic';
+  return pickTheme(niche);
 }

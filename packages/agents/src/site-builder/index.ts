@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { getDb, sites, agentEvents, networks, siteNetworkMemberships } from '@leadlandlord/db';
+import { getDb, sites, niches, agentEvents, networks, siteNetworkMemberships } from '@leadlandlord/db';
 import { imagen, klaviyo } from '@leadlandlord/integrations';
 import {
   createWriteClient,
@@ -15,7 +15,7 @@ import { IntegrationError } from '@leadlandlord/shared/errors';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
-import { pickThemeForNiche } from './pick-theme';
+import { pickTheme } from './pick-theme';
 import { pickPaletteForSite } from './pick-palette';
 
 export type SiteBuilderProgressEvent =
@@ -161,6 +161,22 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     // 3. Generate content bundle.
     ctx.progress({ step: 3, total: 8, label: 'generating site content' });
     this.emit({ step: 'content_started' });
+    // Theme drives which niche overlay the content engine loads, so it must be
+    // resolved BEFORE generation — a later theme swap only re-skins CSS, it
+    // does not regenerate copy. Prefer the niche's category (e.g. legal →
+    // counsel) when the specific niche string isn't in the theme map, so legal
+    // sites always get the compliance-constrained counsel overlay.
+    let category: string | null = null;
+    if (input.niche_id) {
+      const [nicheRow] = await db
+        .select({ category: niches.category })
+        .from(niches)
+        .where(eq(niches.id, input.niche_id))
+        .limit(1);
+      category = nicheRow?.category ?? null;
+    }
+    const theme = pickTheme(input.niche, category);
+    ctx.log.info({ niche: input.niche, category, theme }, 'theme resolved for content engine');
     const bundle = await this.contentEngine.run(
       {
         site_id: siteId,
@@ -169,7 +185,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         state: input.state.toUpperCase(),
         fast_mode: input.fast_mode ?? false,
         keyword_clusters: clusters,
-        theme: pickThemeForNiche(input.niche),
+        theme,
         site_mode: siteMode,
       },
       { siteId, parentRunId: ctx.runId, dedupeKey: `ce:${siteId}:${buildEpoch}` },
