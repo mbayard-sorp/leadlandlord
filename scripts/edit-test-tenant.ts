@@ -58,8 +58,8 @@ async function main() {
     await editTitle();
   } else if (cmd === 'theme') {
     const theme = process.argv[3] as ThemeName;
-    if (!['classic', 'modern', 'premium', 'bright'].includes(theme)) {
-      console.error('usage: edit-test-tenant.ts theme classic|modern|premium|bright');
+    if (!['classic', 'modern', 'premium', 'bright', 'haul', 'counsel'].includes(theme)) {
+      console.error('usage: edit-test-tenant.ts theme classic|modern|premium|bright|haul|counsel');
       process.exit(1);
     }
     await setTheme(theme);

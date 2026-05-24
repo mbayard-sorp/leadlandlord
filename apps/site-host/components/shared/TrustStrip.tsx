@@ -14,6 +14,8 @@ const VARIANT_DEFAULT_STYLE: Record<Variant, Style> = {
   modern: 'counters',
   bright: 'pills',
   premium: 'inline',
+  haul: 'pills',
+  counsel: 'inline',
 };
 
 /**

@@ -75,7 +75,7 @@ export type Page = z.infer<typeof Page>;
  *   bright   — warm cream + coral, rounded, friendly, "book online".
  *              For cleaning, junk removal, pest, lawn care, dog walking, etc.
  */
-export const VariantKind = z.enum(['classic', 'modern', 'premium', 'bright']);
+export const VariantKind = z.enum(['classic', 'modern', 'premium', 'bright', 'haul', 'counsel']);
 export type VariantKind = z.infer<typeof VariantKind>;
 
 export const ContentBundle = z.object({

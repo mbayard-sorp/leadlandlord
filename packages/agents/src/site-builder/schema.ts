@@ -30,7 +30,7 @@ export const SiteBuilderOutput = z.object({
   /** Number of page docs written (home + about + contact + services + ...). */
   pages_written: z.number().int().nonnegative(),
   /** Active theme — operator can swap from the dashboard without re-running. */
-  theme: z.enum(['classic', 'modern', 'premium', 'bright']),
+  theme: z.enum(['classic', 'modern', 'premium', 'bright', 'haul', 'counsel']),
   /** Color palette within the theme — operator can swap without re-running. */
   color_palette: z.enum(['default', 'alt1', 'alt2']),
   /** Hero image asset URL when generated, null when skipped (no API key) or failed. */

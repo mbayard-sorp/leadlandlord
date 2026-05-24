@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 
 interface TemplateEntry {
   template: string;
-  niches: Array<'trades' | 'modern' | 'premium' | 'bright' | 'all'>;
+  niches: Array<'trades' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel' | 'all'>;
 }
 
 const POOL: TemplateEntry[] = [
@@ -46,13 +46,28 @@ const POOL: TemplateEntry[] = [
   { template: 'Affordable {service} in {city}', niches: ['bright'] },
   { template: '{service} You Can Count On · {city}', niches: ['bright'] },
   { template: 'Friendly {service} in {city}', niches: ['bright'] },
+  // haul — blue-collar, fast, phone-first
+  { template: '{service} in {city} — Same-Day Pickup', niches: ['haul'] },
+  { template: '{city} {service} | Fast & Affordable', niches: ['haul'] },
+  { template: 'Cheap {service} in {city}', niches: ['haul'] },
+  { template: '{service} Near {city} · {trust_signal}', niches: ['haul'] },
+  // counsel — keyword-led, civic (ADR 0002: keyword verbatim)
+  { template: '{service} in {city}', niches: ['counsel'] },
+  { template: '{city} {service}', niches: ['counsel'] },
+  { template: '{service} Attorney in {city}', niches: ['counsel'] },
+  { template: 'Local {service} Lawyer · {city}', niches: ['counsel'] },
 ];
 
-const THEME_TO_NICHE: Record<string, 'trades' | 'modern' | 'premium' | 'bright'> = {
+const THEME_TO_NICHE: Record<
+  string,
+  'trades' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel'
+> = {
   classic: 'trades',
   modern: 'modern',
   premium: 'premium',
   bright: 'bright',
+  haul: 'haul',
+  counsel: 'counsel',
 };
 
 function hashPickIndex(seed: string, poolSize: number): number {

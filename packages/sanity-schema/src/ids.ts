@@ -6,9 +6,9 @@
 
 export type PageKind = 'home' | 'about' | 'contact' | 'service' | 'service_area' | 'blog' | 'info';
 
-export type ThemeName = 'classic' | 'modern' | 'premium' | 'bright';
+export type ThemeName = 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
 
-export const THEME_NAMES: readonly ThemeName[] = ['classic', 'modern', 'premium', 'bright'] as const;
+export const THEME_NAMES: readonly ThemeName[] = ['classic', 'modern', 'premium', 'bright', 'haul', 'counsel'] as const;
 
 export function siteDocId(siteId: string): string {
   return `site-${siteId}`;

@@ -85,7 +85,9 @@ Output the chosen value in the `variant` field.
 | classic   | HVAC, plumbing, electrical, gutter cleaning, roofing, fence install, septic, tree work, garage door, drain cleaning, water heater repair, pest control (wasps, rodents), foundation repair |
 | modern    | Solar install, EV charging install, smart-home install, water-heater install (tankless), heat pump install, home automation, security system install, EV pre-wiring |
 | premium   | Custom landscape design, kitchen remodel, bath remodel, custom pools, fine carpentry, custom closets, theater install, cellar conversion, hardscape & stone |
-| bright    | House cleaning, junk removal, move-out cleaning, pest control (sprays/recurring), lawn care, dog walking, mobile auto detail, holiday lights, pool cleaning, window cleaning |
+| bright    | House cleaning, move-out cleaning, pest control (sprays/recurring), lawn care, dog walking, mobile auto detail, holiday lights, pool cleaning, window cleaning |
+| haul      | Junk removal, junk hauling, dumpster rental, light demolition, debris removal, estate/property cleanouts, appliance removal, furniture removal, moving help |
+| counsel   | Legal lead-gen: family law, divorce, child custody, personal injury, bankruptcy, estate planning, DUI, criminal defense (lead-gen — no named attorney/firm) |
 
 If a niche could fit two variants, prefer the one most aligned with how a
 **price-shopping local homeowner would search**. When in doubt, default to
@@ -139,7 +141,7 @@ A single JSON object:
   "city": "...",
   "state": "..",
   "business_name": "...",
-  "variant": "classic" | "modern" | "premium" | "bright",
+  "variant": "classic" | "modern" | "premium" | "bright" | "haul" | "counsel",
   "hero_image_prompt": "...",
   "nearby_cities": ["..."],
   "trust_signals": ["..."],
