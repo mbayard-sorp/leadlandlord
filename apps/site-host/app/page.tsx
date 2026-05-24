@@ -8,6 +8,8 @@ import { ClassicHome } from '../components/variants/Classic';
 import { ModernHome } from '../components/variants/Modern';
 import { PremiumHome } from '../components/variants/Premium';
 import { BrightHome } from '../components/variants/Bright';
+import { HaulHome } from '../components/variants/Haul';
+import { CounselHome } from '../components/variants/Counsel';
 
 export default async function Home() {
   const site = await resolveCurrentSite();
@@ -26,6 +28,10 @@ export default async function Home() {
       return <PremiumHome {...props} />;
     case 'bright':
       return <BrightHome {...props} />;
+    case 'haul':
+      return <HaulHome {...props} />;
+    case 'counsel':
+      return <CounselHome {...props} />;
     case 'classic':
     default:
       return <ClassicHome {...props} />;

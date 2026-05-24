@@ -8,11 +8,15 @@
 @import '../styles/themes/modern.css' layer(themes);
 @import '../styles/themes/premium.css' layer(themes);
 @import '../styles/themes/bright.css' layer(themes);
+@import '../styles/themes/haul.css' layer(themes);
+@import '../styles/themes/counsel.css' layer(themes);
 
 @import '../styles/variants/classic.css' layer(variants);
 @import '../styles/variants/modern.css' layer(variants);
 @import '../styles/variants/premium.css' layer(variants);
 @import '../styles/variants/bright.css' layer(variants);
+@import '../styles/variants/haul.css' layer(variants);
+@import '../styles/variants/counsel.css' layer(variants);
 
 @import '../styles/components.css' layer(components);
 @import '../styles/info-page.css' layer(components);

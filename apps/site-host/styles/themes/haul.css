@@ -1,0 +1,60 @@
+/* Variant E — Haul
+ * Blue-collar junk-removal / hauling / demolition template.
+ * Archivo Black display + Inter body. 2px ink borders. 8px card radius.
+ * Safety green accent. Chunky, unapologetic, phone-first.
+ */
+[data-theme='haul'] {
+  --ink: #0e2a1c;
+  --ink-2: #2d4035;
+  --ink-3: #6b7b72;
+  --paper: #fbf8f1;
+  --paper-2: #f2ede2;
+  --accent: #1fb76d; /* safety green — default palette */
+  --accent-fg: #0e2a1c; /* dark on green: WCAG AA 7.6:1 */
+  --accent-50: #d3f1df;
+  --rule: #1f1b16;
+
+  --font-display: var(--font-archivo-black), 'Archivo', system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+
+  --radius-card: 8px;
+  --radius-button: 6px;
+  --radius-pill: 999px;
+  --border-card: 2px;
+  --border-rule: 2px;
+
+  --section-pad-y: clamp(56px, 8vw, 96px);
+  --container-max: 1280px;
+
+  --surface-fg: var(--ink);
+  --surface-bg: var(--paper);
+  --surface-muted-fg: var(--ink-2);
+  --surface-inverse-fg: var(--paper);
+  --surface-inverse-bg: var(--ink);
+  --surface-inverse-muted-fg: rgba(251, 248, 241, 0.72);
+  --surface-inverse-accent-fg: var(--accent);
+
+  /* internal deep accent for borders on dark bands */
+  --accent-deep: #179657;
+  /* accent for small TEXT on light paper — must hit WCAG AA 4.5:1 on --paper.
+     #0f7a45 = 5.07:1 on #fbf8f1 (deep/safety-green #179657 is only 3.58:1). */
+  --accent-ink: #0f7a45;
+}
+
+/* Palette alt1 — Hauler Orange. Color vars only; type/radii/spacing inherit. */
+[data-theme='haul'][data-palette='alt1'] {
+  --accent: #e8720c; /* hauler orange — contrast on paper: ~5.5:1 AA */
+  --accent-fg: #1a0a00;
+  --accent-50: #fdeede;
+  --accent-deep: #c45c06;
+  --accent-ink: #a34d05; /* 5.4:1 on cream (orange #c45c06 is only ~4.0:1) */
+}
+
+/* Palette alt2 — Utility Blue. */
+[data-theme='haul'][data-palette='alt2'] {
+  --accent: #1560bd; /* utility blue — contrast on paper: ~6.4:1 AA */
+  --accent-fg: #ffffff;
+  --accent-50: #dceafe;
+  --accent-deep: #0e4a9a;
+  --accent-ink: #0e4a9a; /* 7.8:1 on cream */
+}

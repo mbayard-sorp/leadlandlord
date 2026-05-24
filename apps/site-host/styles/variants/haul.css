@@ -1,0 +1,991 @@
+/* Variant E — Haul component styles
+ * All selectors scoped under .haul-shell.
+ * Visual signature: 2px ink borders, 8px radius, 6px green offset shadow on service cards,
+ * emoji icon circles, dark "how it works" band, utility bar, phone-CTA block.
+ */
+
+/* ── Shell & bottom spacer for sticky mobile bar ───────────────────────── */
+[data-theme='haul'] .haul-shell { padding-bottom: 64px; }
+@media (min-width: 768px) { [data-theme='haul'] .haul-shell { padding-bottom: 0; } }
+
+/* ── Utility bar ────────────────────────────────────────────────────────── */
+[data-theme='haul'] .haul-utility {
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: 8px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+[data-theme='haul'] .haul-utility-items {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+[data-theme='haul'] .haul-utility-phone {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-fg);
+  text-decoration: none;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+[data-theme='haul'] .haul-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 16px;
+}
+[data-theme='haul'] .haul-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+[data-theme='haul'] .haul-brand-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--accent);
+  border: 2.5px solid var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  box-shadow: 3px 3px 0 var(--ink);
+  flex-shrink: 0;
+}
+[data-theme='haul'] .haul-brand-name {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-brand-sub {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+[data-theme='haul'] .haul-header-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--radius-button);
+  box-shadow: 4px 4px 0 var(--ink);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+[data-theme='haul'] .haul-header-phone-label {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-fg);
+  opacity: 0.8;
+  line-height: 1;
+}
+[data-theme='haul'] .haul-header-phone-num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin-top: 2px;
+  color: var(--accent-fg);
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+[data-theme='haul'] .haul-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper);
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-hero {
+    grid-template-columns: 1.05fr 1fr;
+  }
+}
+[data-theme='haul'] .haul-hero-text {
+  padding: clamp(36px, 6vw, 72px) clamp(24px, 5vw, 64px);
+}
+[data-theme='haul'] .haul-eyebrow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--accent-50);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-eyebrow-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+[data-theme='haul'] .haul-h1 {
+  font-family: var(--font-display);
+  font-size: clamp(38px, 7.5vw, 76px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin: 18px 0 0;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-h1-accent {
+  color: var(--accent-deep, var(--accent));
+}
+[data-theme='haul'] .haul-lede {
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  margin: 20px 0 0;
+  color: var(--ink-2);
+  max-width: 52ch;
+}
+[data-theme='haul'] .haul-hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+  align-items: stretch;
+}
+[data-theme='haul'] .haul-hero-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 24px;
+  list-style: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+[data-theme='haul'] .haul-hero-trust li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-theme='haul'] .haul-check-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+/* hero image / illustration column */
+[data-theme='haul'] .haul-hero-visual {
+  position: relative;
+  border-top: 2px solid var(--ink);
+  overflow: hidden;
+  min-height: 260px;
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-hero-visual {
+    border-top: none;
+    border-left: 2px solid var(--ink);
+    min-height: 480px;
+  }
+}
+
+/* the SVG is the inner content; animate it, not the container */
+[data-theme='haul'] .haul-truck-wrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* same-day badge in the hero image column */
+[data-theme='haul'] .haul-hero-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: 9px 14px;
+  border-radius: var(--radius-button);
+  border: 2.5px solid var(--ink);
+  font-family: var(--font-display);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 4px 4px 0 var(--ink);
+  transform: rotate(3deg);
+}
+
+/* ── Phone CTA button (shared style) ───────────────────────────────────── */
+[data-theme='haul'] .haul-phone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--radius-button);
+  box-shadow: 4px 4px 0 var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+[data-theme='haul'] .haul-phone-btn-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+[data-theme='haul'] .haul-phone-btn-label {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--accent-fg);
+}
+[data-theme='haul'] .haul-phone-btn-num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin-top: 2px;
+  color: var(--accent-fg);
+}
+/* dark variant — used in CTA band */
+[data-theme='haul'] .haul-phone-btn-dark {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  box-shadow: none;
+}
+[data-theme='haul'] .haul-phone-btn-dark .haul-phone-btn-label {
+  color: var(--accent);
+}
+[data-theme='haul'] .haul-phone-btn-dark .haul-phone-btn-num {
+  color: var(--paper);
+}
+
+/* ── Secondary button (outline) ─────────────────────────────────────────── */
+[data-theme='haul'] .haul-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  padding: 14px 20px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--radius-button);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Trust strip — dark band (4-col desktop, 2-col mobile) ────────────── */
+[data-theme='haul'] .haul-trust-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-bottom: 2px solid var(--ink);
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-trust-strip {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+[data-theme='haul'] .haul-trust-cell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 20px;
+  border-right: 1px solid var(--accent-deep);
+}
+[data-theme='haul'] .haul-trust-cell:last-child { border-right: none; }
+@media (max-width: 767px) {
+  [data-theme='haul'] .haul-trust-cell:nth-child(even) { border-right: none; }
+  [data-theme='haul'] .haul-trust-cell:nth-child(-n+2) { border-bottom: 1px solid var(--accent-deep); }
+}
+[data-theme='haul'] .haul-trust-icon { font-size: 28px; flex-shrink: 0; }
+[data-theme='haul'] .haul-trust-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--surface-inverse-fg);
+}
+[data-theme='haul'] .haul-trust-sub {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--surface-inverse-muted-fg);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* ── Services section ────────────────────────────────────────────────────── */
+[data-theme='haul'] .haul-services {
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+  background: var(--paper);
+}
+[data-theme='haul'] .haul-services-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 44px;
+}
+[data-theme='haul'] .haul-section-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent-ink, var(--accent-deep));
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  margin: 0;
+}
+[data-theme='haul'] .haul-h2 {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 4.5vw, 48px);
+  line-height: 1.0;
+  margin: 10px 0 0;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-services-sub {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  max-width: 36ch;
+  line-height: 1.55;
+  margin: 0;
+}
+[data-theme='haul'] .haul-services-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 640px) {
+  [data-theme='haul'] .haul-services-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+  [data-theme='haul'] .haul-services-grid { grid-template-columns: repeat(3, 1fr); }
+}
+[data-theme='haul'] .haul-service-card {
+  display: block;
+  padding: 26px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  box-shadow: 6px 6px 0 var(--accent);
+  text-decoration: none;
+  color: var(--ink);
+  /* transition for hover lift — compositor-safe */
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+[data-theme='haul'] .haul-service-card:hover,
+[data-theme='haul'] .haul-service-card:focus-visible {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 var(--accent);
+  outline: none;
+}
+[data-theme='haul'] .haul-service-icon-wrap {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--accent-50);
+  border: 2px solid var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+}
+[data-theme='haul'] .haul-service-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.1;
+  margin: 18px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-service-blurb {
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  line-height: 1.55;
+  margin: 0 0 14px;
+}
+[data-theme='haul'] .haul-service-cta {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent-ink, var(--accent-deep));
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── How it works — dark band ────────────────────────────────────────────── */
+[data-theme='haul'] .haul-how {
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+  position: relative;
+  overflow: hidden;
+}
+[data-theme='haul'] .haul-how::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  right: -100px;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(31, 183, 109, 0.18), transparent 70%);
+  pointer-events: none;
+}
+[data-theme='haul'] .haul-how::after {
+  content: '';
+  position: absolute;
+  bottom: -120px;
+  left: -80px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(31, 183, 109, 0.12), transparent 70%);
+  pointer-events: none;
+}
+[data-theme='haul'] .haul-how-head {
+  text-align: center;
+  margin-bottom: 52px;
+  position: relative;
+}
+[data-theme='haul'] .haul-how .haul-section-eyebrow {
+  color: var(--accent);
+}
+[data-theme='haul'] .haul-how .haul-h2 {
+  color: var(--surface-inverse-fg);
+}
+[data-theme='haul'] .haul-how-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+  position: relative;
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-how-steps { grid-template-columns: repeat(3, 1fr); gap: 28px; }
+}
+/* mobile: list layout */
+@media (max-width: 767px) {
+  [data-theme='haul'] .haul-how-step { display: flex; gap: 18px; align-items: flex-start; }
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-how-step { text-align: center; }
+}
+[data-theme='haul'] .haul-how-step-num {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  border: 3px solid var(--surface-inverse-fg);
+  box-shadow: 5px 5px 0 rgba(31, 183, 109, 0.4);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-how-step-num {
+    width: 88px;
+    height: 88px;
+    font-size: 2.75rem;
+    margin: 0 auto;
+  }
+}
+[data-theme='haul'] .haul-how-step-title {
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  margin: 20px 0 10px;
+  color: var(--surface-inverse-fg);
+}
+@media (max-width: 767px) {
+  [data-theme='haul'] .haul-how-step-title { margin-top: 4px; }
+}
+[data-theme='haul'] .haul-how-step-body {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--surface-inverse-muted-fg);
+  line-height: 1.6;
+  margin: 0;
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-how-step-body { max-width: 28ch; margin: 0 auto; }
+}
+
+/* ── Bottom CTA + areas grid ─────────────────────────────────────────────── */
+[data-theme='haul'] .haul-cta-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  border-top: 2px solid var(--ink);
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-cta-row { grid-template-columns: 1.1fr 1fr; }
+}
+[data-theme='haul'] .haul-cta-band {
+  background: var(--accent);
+  padding: clamp(40px, 7vw, 80px) clamp(24px, 5vw, 64px);
+  border-bottom: 2px solid var(--ink);
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-cta-band {
+    border-bottom: none;
+    border-right: 2px solid var(--ink);
+  }
+}
+[data-theme='haul'] .haul-cta-h2 {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 5vw, 52px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--accent-fg);
+}
+[data-theme='haul'] .haul-cta-sub {
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  color: var(--accent-fg);
+  margin-top: 16px;
+  max-width: 50ch;
+  line-height: 1.55;
+}
+[data-theme='haul'] .haul-cta-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+  align-items: center;
+}
+[data-theme='haul'] .haul-areas-panel {
+  background: var(--paper-2);
+  padding: clamp(36px, 6vw, 64px) clamp(24px, 4vw, 48px);
+}
+[data-theme='haul'] .haul-areas-eyebrow {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  margin: 0;
+}
+[data-theme='haul'] .haul-areas-h3 {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 3vw, 28px);
+  line-height: 1.05;
+  margin: 8px 0 0;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-areas-list {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  margin-top: 16px;
+  line-height: 1.9;
+}
+[data-theme='haul'] .haul-zip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  list-style: none;
+  padding: 0;
+}
+[data-theme='haul'] .haul-zip-chip {
+  padding: 6px 12px;
+  background: var(--accent-50);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* ── Service-areas section (chips) ──────────────────────────────────────── */
+[data-theme='haul'] .haul-areas-section {
+  background: var(--paper-2);
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+[data-theme='haul'] .haul-area-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+[data-theme='haul'] .haul-area-chips li {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-button);
+  padding: 6px 14px;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--paper);
+}
+[data-theme='haul'] .haul-area-chips li a {
+  color: inherit;
+  text-decoration: none;
+}
+[data-theme='haul'] .haul-area-chips li a:hover { text-decoration: underline; }
+[data-theme='haul'] .haul-map-frame {
+  width: 100%;
+  margin-top: 24px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+/* ── FAQ ─────────────────────────────────────────────────────────────────── */
+[data-theme='haul'] .haul-faq {
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+  background: var(--paper);
+}
+[data-theme='haul'] .haul-faq-list {
+  margin: 24px 0 0;
+  padding: 0;
+}
+[data-theme='haul'] .haul-faq-item {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  padding: 14px 18px;
+  background: var(--paper);
+  margin-bottom: 10px;
+}
+[data-theme='haul'] .haul-faq-item summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.0625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+[data-theme='haul'] .haul-faq-item summary dt { display: inline; }
+[data-theme='haul'] .haul-faq-item dd {
+  margin: 10px 0 0;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+/* ── Blog / info-pages teasers ───────────────────────────────────────────── */
+[data-theme='haul'] .haul-learn {
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+  background: var(--paper-2);
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+[data-theme='haul'] .haul-learn-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 640px) { [data-theme='haul'] .haul-learn-list { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { [data-theme='haul'] .haul-learn-list { grid-template-columns: repeat(3, 1fr); } }
+[data-theme='haul'] .haul-learn-list a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 16px 18px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+  text-decoration: none;
+  color: var(--ink);
+  height: 100%;
+}
+[data-theme='haul'] .haul-learn-list a:hover { background: var(--accent-50); }
+[data-theme='haul'] .haul-learn-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+[data-theme='haul'] .haul-learn-arrow {
+  font-family: var(--font-display);
+  color: var(--accent-deep, var(--accent));
+  font-size: 1.25rem;
+  align-self: start;
+}
+[data-theme='haul'] .haul-learn-blurb {
+  grid-column: 1 / -1;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* ── Contact section (dark info + form) ─────────────────────────────────── */
+[data-theme='haul'] .haul-contact {
+  display: grid;
+  grid-template-columns: 1fr;
+  border-top: 2px solid var(--ink);
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-contact { grid-template-columns: 1fr 1fr; }
+}
+[data-theme='haul'] .haul-contact-info {
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+}
+[data-theme='haul'] .haul-contact-phone-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 4.5vw, 40px);
+  font-variant-numeric: tabular-nums;
+  color: var(--surface-inverse-accent-fg);
+  text-decoration: none;
+  line-height: 1;
+}
+[data-theme='haul'] .haul-contact-info p {
+  font-family: var(--font-body);
+  margin: 6px 0;
+  opacity: 0.85;
+  color: var(--surface-inverse-fg);
+}
+[data-theme='haul'] .haul-contact-areas {
+  font-size: 0.875rem;
+  opacity: 0.7;
+  margin-top: 14px;
+  color: var(--surface-inverse-fg);
+}
+[data-theme='haul'] .haul-contact-form {
+  background: var(--paper);
+  padding: var(--section-pad-y) clamp(24px, 5vw, 64px);
+}
+
+/* ── Proof strip (first real review) ────────────────────────────────────── */
+[data-theme='haul'] .haul-proof-strip {
+  padding: 18px clamp(24px, 5vw, 64px);
+  background: var(--paper-2);
+  border-bottom: 2px solid var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+}
+[data-theme='haul'] .haul-proof-quote {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-style: italic;
+  color: var(--ink-2);
+  line-height: 1.55;
+  margin: 0;
+  flex: 1 1 260px;
+}
+[data-theme='haul'] .haul-proof-author {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  font-style: normal;
+  white-space: nowrap;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+[data-theme='haul'] .haul-footer {
+  padding: 44px clamp(24px, 5vw, 64px) 28px;
+  border-top: 1px solid var(--accent-deep, var(--accent));
+}
+[data-theme='haul'] .haul-footer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+  margin-bottom: 28px;
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; }
+}
+[data-theme='haul'] .haul-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+[data-theme='haul'] .haul-footer-brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+[data-theme='haul'] .haul-footer-brand-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  color: var(--surface-inverse-fg);
+}
+[data-theme='haul'] .haul-footer-blurb {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--surface-inverse-muted-fg);
+  margin-top: 14px;
+  max-width: 40ch;
+  line-height: 1.6;
+}
+[data-theme='haul'] .haul-footer-col-heading {
+  font-family: var(--font-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+[data-theme='haul'] .haul-footer-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+[data-theme='haul'] .haul-footer-col li {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--surface-inverse-muted-fg);
+  padding: 3px 0;
+}
+[data-theme='haul'] .haul-footer-bottom {
+  border-top: 1px solid var(--accent-deep, var(--accent));
+  padding-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--surface-inverse-muted-fg);
+}
+
+/* ── Sticky mobile bar override ─────────────────────────────────────────── */
+[data-theme='haul'] .sticky-mobile-bar {
+  border-top: 2px solid var(--accent);
+}
+[data-theme='haul'] .sticky-mobile-bar .cta {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: var(--radius-button);
+}
+[data-theme='haul'] .haul-mobile-spacer { height: 64px; }
+@media (min-width: 768px) { [data-theme='haul'] .haul-mobile-spacer { display: none; } }
+
+/* ── Shared component overrides ─────────────────────────────────────────── */
+[data-theme='haul'] .trust-strip {
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+[data-theme='haul'] .trust-strip-chips-item {
+  background: var(--paper);
+  border-color: var(--ink);
+  border-radius: var(--radius-button);
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+[data-theme='haul'] .certifications-badge {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+}
+[data-theme='haul'] .review-card {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+}
+[data-theme='haul'] .photo-gallery-item {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-card);
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+
+/* Truck drive-in: animates the SVG element inside the fixed container */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes haul-truck-drive-in {
+    from { transform: translateX(-24px); opacity: 0.7; }
+    to   { transform: translateX(0);     opacity: 1; }
+  }
+  [data-theme='haul'] .haul-truck-svg {
+    animation: haul-truck-drive-in 600ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  }
+
+  /* Phone icon pulse — scale only, no layout shift */
+  @keyframes haul-phone-pulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.12); }
+  }
+  [data-theme='haul'] .haul-phone-pulse-icon {
+    display: inline-block;
+    animation: haul-phone-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Service card hover — deepened offset shadow via transform
+     (actual shadow value is static; transform creates the depth illusion) */
+  [data-theme='haul'] .haul-service-card {
+    transition: transform 140ms ease;
+  }
+  [data-theme='haul'] .haul-service-card:hover,
+  [data-theme='haul'] .haul-service-card:focus-visible {
+    transform: translate(-2px, -2px);
+  }
+}

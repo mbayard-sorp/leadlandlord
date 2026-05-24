@@ -1,0 +1,114 @@
+/* Variant F — Counsel
+ * Small-town legal lead-gen. Family law, divorce, PI, bankruptcy, estate, DUI.
+ * Editorial serif. Civic, calm, plain-language. "Talk to a local attorney."
+ *
+ * Type:  Source Serif 4 display (italic emphasis) / Inter body
+ * Color: Forest #1C3A2E + Brass #B08842 on Cream #F7F3EA
+ * Shape: 2-4px radii, hairline rules (1px), no shadows, no heavy borders.
+ */
+
+/* ── Contrast audit (WCAG AA threshold 4.5:1 for normal text) ──────────────
+ * Forest #1C3A2E on Cream #F7F3EA  → ~11.2:1  PASS
+ * Brass  #C09A52 on Forest #1C3A2E → ~4.56:1  PASS  (lightened from #B08842 which is 3.8:1)
+ * Forest #1C3A2E on Brass  #C09A52 → ~4.56:1  PASS  (accent-fg on accent bg)
+ * Cream  #F7F3EA on Forest #1C3A2E → ~11.2:1  PASS  (surface-inverse)
+ * Brass  #C09A52 on InkDeep #0E2419 → ~4.9:1  PASS  (utility bar, bottom CTA)
+ *
+ * NOTE: The design's raw brass #B08842 on forest #1C3A2E fails AA (3.8:1).
+ * We use #C09A52 (lightened +18% lightness) for any brass-on-dark-forest text.
+ * #B08842 is preserved only for decorative/large SVG elements and large headings
+ * where AA Large (3:1) applies.
+ */
+
+[data-theme='counsel'] {
+  /* Ink ramp */
+  --ink:    #1C3A2E; /* forest */
+  --ink-2:  #3A4F44;
+  --ink-3:  #7C7064;
+
+  /* Paper ramp */
+  --paper:   #F7F3EA; /* warm cream */
+  --paper-2: #E8DEC8; /* deeper cream */
+
+  /* Accent — brass. Use #C09A52 for text on dark backgrounds (AA-safe) */
+  --accent:    #C09A52; /* AA-safe brass for text/borders on DARK (forest) bands */
+  --accent-deep: #8E6B30; /* darker brass for emphasis (large text only) */
+  --accent-fg: #1C3A2E; /* forest on brass — 4.56:1 PASS */
+  --accent-50: #F2E9D4;
+  /* brass for small TEXT on LIGHT (cream) backgrounds. #C09A52 is only 2.37:1
+     on cream; #856226 = ~5:1 on #F7F3EA. Dark bands override section-marks to
+     --surface-inverse-accent-fg, so this is the light-surface value. */
+  --accent-ink: #856226;
+
+  /* Rule / divider */
+  --rule:        #C9BFAA; /* hairline warm gray */
+  --rule-strong: #1C3A2E; /* full forest for header/section separators */
+
+  /* Typography */
+  --font-display: var(--font-source-serif), 'Source Serif Pro', Georgia, serif;
+  --font-body:    var(--font-inter), system-ui, sans-serif;
+
+  /* Shape */
+  --radius-card:   3px;
+  --radius-button: 2px;
+  --radius-pill:   3px;
+  --border-card:   1px;
+  --border-rule:   1px;
+  --hairline:      1px;
+
+  /* Layout */
+  --section-pad-y:   clamp(64px, 9vw, 112px);
+  --container-max:   1200px;
+
+  /* Surface token map */
+  --surface-fg:              var(--ink);
+  --surface-bg:              var(--paper);
+  --surface-muted-fg:        var(--ink-2);
+  --surface-inverse-fg:      var(--paper);
+  --surface-inverse-bg:      var(--ink);
+  --surface-inverse-muted-fg: rgba(247, 243, 234, 0.72);
+  --surface-inverse-accent-fg: var(--accent); /* #C09A52 on #1C3A2E → 4.56:1 PASS */
+}
+
+/* Palette alt1 — Burgundy + Brass
+ * Burgundy #5C1A24 on cream: ~9.4:1  PASS
+ * Brass #C09A52 on burgundy: ~4.5:1  PASS (AA borderline, only large text body)
+ * Use cream (#F7F3EA) for surface-inverse-fg — same map.
+ */
+[data-theme='counsel'][data-palette='alt1'] {
+  --ink:    #5C1A24; /* burgundy — replaces forest for rule-strong, header accents */
+  --ink-2:  #7A3040;
+  --ink-3:  #9E6070;
+  --paper:   #F7F3EA;
+  --paper-2: #EDE0D8;
+  --accent:    #C09A52; /* brass stays */
+  --accent-fg: #5C1A24; /* burgundy on brass — check: ~4.5:1 large text PASS */
+  --accent-50: #F2E9D4;
+  --rule:        #D4B8B8;
+  --rule-strong: #5C1A24;
+  --surface-inverse-bg:      #5C1A24;
+  --surface-inverse-fg:      var(--paper);
+  --surface-inverse-muted-fg: rgba(247, 243, 234, 0.72);
+  --surface-inverse-accent-fg: var(--accent);
+}
+
+/* Palette alt2 — Navy + Brass
+ * Navy #1B2E4A on cream: ~13.2:1  PASS
+ * Brass #C09A52 on navy:  ~5.1:1  PASS
+ */
+[data-theme='counsel'][data-palette='alt2'] {
+  --ink:    #1B2E4A; /* navy */
+  --ink-2:  #2E4060;
+  --ink-3:  #6070A0;
+  --paper:   #F7F3EA;
+  --paper-2: #E4EAF0;
+  --accent:    #C09A52; /* brass stays */
+  --accent-fg: #1B2E4A; /* navy on brass — ~5.1:1 PASS */
+  --accent-50: #F2E9D4;
+  --rule:        #BEC8D8;
+  --rule-strong: #1B2E4A;
+  --surface-inverse-bg:      #1B2E4A;
+  --surface-inverse-fg:      var(--paper);
+  --surface-inverse-muted-fg: rgba(247, 243, 234, 0.72);
+  --surface-inverse-accent-fg: var(--accent);
+}
