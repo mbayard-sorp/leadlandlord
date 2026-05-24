@@ -28,8 +28,13 @@ describe('ClaudeCandidateSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects an invalid category (medical)', () => {
+  it('accepts the medical category (medical/dental niches are in scope)', () => {
     const result = ClaudeCandidateSchema.safeParse({ ...validCandidate, category: 'medical' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an invalid category', () => {
+    const result = ClaudeCandidateSchema.safeParse({ ...validCandidate, category: 'underwater_basket_weaving' });
     expect(result.success).toBe(false);
   });
 
