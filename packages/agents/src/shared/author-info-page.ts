@@ -27,7 +27,7 @@ export interface AuthorInfoPageArgs {
    * Theme key from the Sanity site doc. Currently informational only — passed
    * to the prompt so tone matches the site's design vibe.
    */
-  themeKey?: 'classic' | 'modern' | 'premium' | 'bright';
+  themeKey?: 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
   /** Content archetype guiding structure and intent. */
   archetype?: string;
   /** Voice seed for stylistic variance across sites. */

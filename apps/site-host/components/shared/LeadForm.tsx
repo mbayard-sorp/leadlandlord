@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 interface Props {
   /** Visual variant — controls input/button styling via CSS classes. */
-  variant: 'classic' | 'modern' | 'premium' | 'bright';
+  variant: 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
   /** Optional headline ("Get a free quote"). */
   heading?: string;
   /** Optional subhead ("Reply same business day"). */

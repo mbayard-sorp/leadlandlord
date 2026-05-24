@@ -14,7 +14,7 @@
  * system.md). Add a niche to `NICHE_THEME_MAP` to give it a non-default
  * variant.
  */
-export type ThemeKey = 'classic' | 'modern' | 'premium' | 'bright';
+export type ThemeKey = 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
 
 /**
  * Static niche → theme assignments. Keys are normalized (lowercased,
@@ -73,7 +73,6 @@ export const NICHE_THEME_MAP: Record<string, ThemeKey> = {
 
   // bright — recurring / friendly
   'house cleaning': 'bright',
-  'junk removal': 'bright',
   'move-out cleaning': 'bright',
   'move out cleaning': 'bright',
   'lawn care': 'bright',
@@ -83,6 +82,36 @@ export const NICHE_THEME_MAP: Record<string, ThemeKey> = {
   'holiday lights': 'bright',
   'pool cleaning': 'bright',
   'window cleaning': 'bright',
+
+  // haul — blue-collar hauling / removal / demo
+  'junk removal': 'haul',
+  'junk hauling': 'haul',
+  'hauling': 'haul',
+  'dumpster rental': 'haul',
+  'demolition': 'haul',
+  'demo': 'haul',
+  'debris removal': 'haul',
+  'estate cleanout': 'haul',
+  'property cleanout': 'haul',
+  'appliance removal': 'haul',
+  'furniture removal': 'haul',
+  'moving help': 'haul',
+
+  // counsel — small-town legal lead-gen
+  'family law': 'counsel',
+  'divorce': 'counsel',
+  'divorce attorney': 'counsel',
+  'personal injury': 'counsel',
+  'personal injury attorney': 'counsel',
+  'bankruptcy': 'counsel',
+  'bankruptcy attorney': 'counsel',
+  'estate planning': 'counsel',
+  'dui': 'counsel',
+  'dui attorney': 'counsel',
+  'criminal defense': 'counsel',
+  'family law attorney': 'counsel',
+  'custody': 'counsel',
+  'wills and trusts': 'counsel',
 };
 
 function normalizeNiche(niche: string): string {

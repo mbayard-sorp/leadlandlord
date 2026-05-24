@@ -69,6 +69,18 @@ const SEEDS: ThemeSeed[] = [
     description:
       'Warm, friendly, "book online". Cream + coral, rounded sans-serif. Lawn care, dog walking, tutoring, kids services.',
   },
+  {
+    name: 'haul',
+    displayName: 'Haul',
+    description:
+      'Blue-collar, phone-first. Safety green + forest slate, Archivo Black, emoji service grid, offset-shadow cards. Junk removal, hauling, dumpster, demolition, cleanouts.',
+  },
+  {
+    name: 'counsel',
+    displayName: 'Counsel',
+    description:
+      'Editorial, civic, calm. Forest + brass on cream, Source Serif 4, hairline rules, roman-numeral sections. Legal lead-gen: family law, divorce, PI, bankruptcy, estate, DUI.',
+  },
 ];
 
 function parseDataset(): string[] {

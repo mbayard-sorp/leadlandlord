@@ -88,7 +88,7 @@ export interface SanitySite {
   heroImageUrl?: string | null;
   logoUrl?: string | null;
   faviconUrl?: string | null;
-  theme: 'classic' | 'modern' | 'premium' | 'bright';
+  theme: 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
   colorPalette?: 'default' | 'alt1' | 'alt2' | null;
   domains?: Array<{ host: string; isPrimary?: boolean; verified?: boolean; attachedAt?: string }> | null;
   home: SanitySitePage;

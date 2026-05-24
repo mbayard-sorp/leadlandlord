@@ -15,6 +15,8 @@ export const theme = defineType({
           { title: 'Modern', value: 'modern' },
           { title: 'Premium', value: 'premium' },
           { title: 'Bright', value: 'bright' },
+          { title: 'Haul', value: 'haul' },
+          { title: 'Counsel', value: 'counsel' },
         ],
         layout: 'radio',
       },

@@ -7,6 +7,9 @@ import {
   Cormorant_Garamond,
   Source_Serif_4,
   Plus_Jakarta_Sans,
+  Inter,
+  Archivo,
+  Archivo_Black,
 } from 'next/font/google';
 
 /**
@@ -16,6 +19,8 @@ import {
  *   modern   : Bricolage Grotesque (display) + DM Sans (body)
  *   premium  : DM Serif Display + Cormorant Garamond (italic) + Source Serif 4 (body)
  *   bright   : Bricolage Grotesque (display) + Plus Jakarta Sans (body)
+ *   haul     : Archivo Black (display) + Archivo (sub) + Inter (body)
+ *   counsel  : Source Serif 4 (display) + Inter (body)
  *
  * Each font exposes a CSS variable. A site only renders one variant at a time
  * but we load all the variables on the root so themes/*.css can reference
@@ -79,6 +84,27 @@ export const plusJakarta = Plus_Jakarta_Sans({
   display: 'swap',
 });
 
+export const inter = Inter({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+export const archivo = Archivo({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-archivo',
+  display: 'swap',
+});
+
+export const archivoBlack = Archivo_Black({
+  subsets: ['latin'],
+  weight: ['400'],
+  variable: '--font-archivo-black',
+  display: 'swap',
+});
+
 export const allFontVars = [
   oswald.variable,
   publicSans.variable,
@@ -88,4 +114,7 @@ export const allFontVars = [
   cormorant.variable,
   sourceSerif.variable,
   plusJakarta.variable,
+  inter.variable,
+  archivo.variable,
+  archivoBlack.variable,
 ].join(' ');

@@ -34,7 +34,7 @@ export const ContentEngineInput = z.object({
    * (terminology, seasonality, tone) appended to the base prompt at runtime.
    * Optional — falls back to base prompt when omitted or unknown.
    */
-  theme: z.enum(['classic', 'modern', 'premium', 'bright']).optional(),
+  theme: z.enum(['classic', 'modern', 'premium', 'bright', 'haul', 'counsel']).optional(),
   /**
    * Pre-planned keyword clusters from Keyword Planner. When non-empty,
    * Content Engine must target each cluster with exactly one page and

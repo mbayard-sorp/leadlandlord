@@ -48,7 +48,7 @@ async function loadPage(url: string): Promise<PageReport> {
   const canonical = match(body, /<link\s+rel="canonical"\s+href="([^"]+)"/)?.[1] ?? null;
   const jsonLdCount = (body.match(/<script[^>]*type="application\/ld\+json"/g) ?? []).length;
   const hasLeadForm = /class="leadform/i.test(body) || /name="phone"/i.test(body);
-  const variantClasses = [...new Set([...body.matchAll(/class="(classic|modern|premium|bright)-[a-z-]+"/g)].map((m) => m[1]))];
+  const variantClasses = [...new Set([...body.matchAll(/class="(classic|modern|premium|bright|haul|counsel)-[a-z-]+"/g)].map((m) => m[1]))];
   return { status, title, metaDescription, canonical, jsonLdCount, hasLeadForm, variantClasses, bodyLen: body.length };
 }
 

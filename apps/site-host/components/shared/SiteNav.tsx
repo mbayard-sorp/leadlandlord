@@ -2,7 +2,7 @@ import type { Bundle } from '../../lib/content';
 
 interface Props {
   bundle: Bundle;
-  variant: 'classic' | 'modern' | 'bright' | 'premium';
+  variant: 'classic' | 'modern' | 'bright' | 'premium' | 'haul' | 'counsel';
   className?: string;
 }
 

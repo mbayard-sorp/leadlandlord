@@ -26,6 +26,8 @@ const THEME_TO_OVERLAY: Record<string, string> = {
   modern: 'modern',
   premium: 'premium',
   bright: 'bright',
+  haul: 'haul',
+  counsel: 'counsel',
 };
 
 const overlayCache = new Map<string, string | null>();

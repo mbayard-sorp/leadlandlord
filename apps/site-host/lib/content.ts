@@ -36,7 +36,7 @@ export const PageSchema = z.object({
   faqs: z.array(z.object({ q: z.string(), a: z.string() })).optional(),
 });
 
-export const VariantSchema = z.enum(['classic', 'modern', 'premium', 'bright']);
+export const VariantSchema = z.enum(['classic', 'modern', 'premium', 'bright', 'haul', 'counsel']);
 export type Variant = z.infer<typeof VariantSchema>;
 
 export const BundleSchema = z.object({

@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 
 interface PoolEntry {
   text: string;
-  niches: Array<'trades' | 'modern' | 'premium' | 'bright' | 'all'>;
+  niches: Array<'trades' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel' | 'all'>;
 }
 
 const POOL: PoolEntry[] = [
@@ -50,17 +50,34 @@ const POOL: PoolEntry[] = [
   { text: 'Background-checked staff', niches: ['bright'] },
   { text: 'Easy online booking', niches: ['bright'] },
   { text: 'Reschedule anytime', niches: ['bright'] },
+  // haul — blue-collar removal
+  { text: 'Same-day pickup', niches: ['haul'] },
+  { text: 'Upfront pricing', niches: ['haul'] },
+  { text: 'We do all the lifting', niches: ['haul'] },
+  { text: 'Eco-friendly disposal', niches: ['haul'] },
+  { text: 'No job too big', niches: ['haul'] },
+  // counsel — legal lead-gen (generic; no per-attorney claims, ADR 0012)
+  { text: 'Free, confidential consultation', niches: ['counsel'] },
+  { text: 'Calls returned same day', niches: ['counsel'] },
+  { text: 'Available 24/7', niches: ['counsel'] },
+  { text: 'No fee unless we win', niches: ['counsel'] },
+  { text: 'Strictly confidential', niches: ['counsel'] },
 ];
 
 /**
  * Maps theme key to niche tag for filtering. Falls back to 'all' so signals
  * tagged 'all' are always available regardless of unknown theme.
  */
-const THEME_TO_NICHE: Record<string, 'trades' | 'modern' | 'premium' | 'bright'> = {
+const THEME_TO_NICHE: Record<
+  string,
+  'trades' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel'
+> = {
   classic: 'trades',
   modern: 'modern',
   premium: 'premium',
   bright: 'bright',
+  haul: 'haul',
+  counsel: 'counsel',
 };
 
 function hashPickIndex(seed: string, poolSize: number): number {
