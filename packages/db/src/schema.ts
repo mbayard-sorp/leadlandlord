@@ -154,6 +154,9 @@ export const niches = pgTable(
     niche: text('niche').notNull(),
     city: text('city').notNull(),
     state: text('state').notNull(),
+    // One of the 9 niche-hunter CategoryEnum values, captured at brainstorm time.
+    // Nullable: legacy rows predate this column and stay null until re-run.
+    category: text('category'),
     searchVolume: integer('search_volume'),
     kd: integer('kd'),
     estAvgJobValueUsd: numeric('est_avg_job_value_usd', { precision: 10, scale: 2 }),

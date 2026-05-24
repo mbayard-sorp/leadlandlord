@@ -715,6 +715,7 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
           niche: c.niche,
           city: c.city,
           state: c.state,
+          category: c.category,
           searchVolume: c.search_volume,
           kd: Math.round(c.kd),
           estAvgJobValueUsd: c.est_avg_job_value_usd.toFixed(2),

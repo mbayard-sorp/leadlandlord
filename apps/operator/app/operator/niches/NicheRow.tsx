@@ -13,6 +13,7 @@ const SHOW_CALIBRATION = false;
 export type NicheRowData = {
   id: string;
   niche: string;
+  category: string | null;
   city: string;
   state: string;
   searchVolume: number | null;
@@ -37,18 +38,34 @@ function Td({ children, className = '' }: { children: React.ReactNode; className
   return <td className={`px-2 py-2 ${className}`}>{children}</td>;
 }
 
+export const CATEGORY_LABELS: Record<string, string> = {
+  home_services: 'Home Services',
+  auto: 'Auto',
+  health: 'Health',
+  professional: 'Professional',
+  pet: 'Pet',
+  event: 'Event',
+  lifestyle: 'Lifestyle',
+  legal: 'Legal',
+  medical: 'Medical',
+};
+
+function CategoryBadge({ category }: { category: string | null }) {
+  if (!category) return <span className="text-slate-600">—</span>;
+  const label = CATEGORY_LABELS[category] ?? category;
+  return (
+    <span className="inline-flex w-fit items-center rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 border border-slate-700">
+      {label}
+    </span>
+  );
+}
+
 function VolCell({ row }: { row: NicheRowData }) {
   const isValidated = row.volumeSource === 'dataforseo';
   const estimate = row.estSearchVolume ?? row.searchVolume;
 
   if (isValidated && row.dfsSearchVolume !== null) {
-    return (
-      <span className="text-xs">
-        {estimate !== null ? <span className="text-slate-400">{estimate} est</span> : null}
-        {estimate !== null ? <span className="text-slate-500"> → </span> : null}
-        <span className="text-emerald-400 font-medium">{row.dfsSearchVolume} DFS</span>
-      </span>
-    );
+    return <span className="text-xs font-medium text-emerald-400">{row.dfsSearchVolume} DFS</span>;
   }
 
   if (estimate !== null) {
@@ -56,21 +73,6 @@ function VolCell({ row }: { row: NicheRowData }) {
   }
 
   return <span className="text-slate-500">—</span>;
-}
-
-function SourceBadge({ volumeSource }: { volumeSource: string }) {
-  if (volumeSource === 'dataforseo') {
-    return (
-      <span className="inline-flex items-center rounded-full bg-emerald-900/50 px-2 py-0.5 text-xs font-medium text-emerald-300 border border-emerald-800">
-        validated
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400 border border-slate-700">
-      estimate
-    </span>
-  );
 }
 
 export function NicheRow({
@@ -95,11 +97,16 @@ export function NicheRow({
   demandSource: 'dataforseo' | 'claude_estimate';
 }) {
   const [calOpen, setCalOpen] = useState(false);
+  const [rationaleOpen, setRationaleOpen] = useState(false);
   const hasCalibration = row.dfsClusterVolume !== null;
+  const isValidated = row.volumeSource === 'dataforseo';
 
   return (
     <>
       <tr className="border-b border-slate-800/60 last:border-0">
+        <Td className="whitespace-nowrap align-middle">
+          <CategoryBadge category={row.category} />
+        </Td>
         <Td className="break-words">
           {row.niche}
           <div className="text-xs text-slate-500 md:hidden">
@@ -109,25 +116,37 @@ export function NicheRow({
         <Td className="hidden md:table-cell">
           {row.city}, {row.state}
         </Td>
-        <Td className="font-semibold">{row.score ?? '—'}</Td>
-        <Td className="hidden lg:table-cell">
+        <Td className="font-semibold align-middle">
+          {isValidated ? <span className="text-slate-600">—</span> : (row.score ?? '—')}
+        </Td>
+        <Td className="hidden lg:table-cell align-middle">
           {row.rentabilityScore !== null ? (
             <span className="font-medium text-violet-400">{row.rentabilityScore}</span>
           ) : (
             <span className="text-slate-500">—</span>
           )}
         </Td>
-        <Td className="hidden md:table-cell">
+        <Td className="hidden md:table-cell align-middle">
           <VolCell row={row} />
         </Td>
-        <Td className="hidden md:table-cell">
-          <SourceBadge volumeSource={row.volumeSource} />
-        </Td>
-        <Td className="hidden lg:table-cell">
+        <Td className="hidden lg:table-cell align-middle">
           {row.estAvgJobValueUsd ? `$${Number(row.estAvgJobValueUsd).toLocaleString()}` : '—'}
         </Td>
-        <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell">
-          <p className="line-clamp-2">{row.rationale}</p>
+        <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell align-top">
+          <div className="flex items-start gap-1.5">
+            <p className={`flex-1 ${rationaleOpen ? '' : 'line-clamp-3'}`}>{row.rationale}</p>
+            {row.rationale && (
+              <button
+                type="button"
+                onClick={() => setRationaleOpen((v) => !v)}
+                aria-label={rationaleOpen ? 'Collapse rationale' : 'Expand rationale'}
+                title={rationaleOpen ? 'Collapse' : 'Expand'}
+                className="mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-600 text-slate-300 leading-none hover:border-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              >
+                {rationaleOpen ? '−' : '+'}
+              </button>
+            )}
+          </div>
           {SHOW_CALIBRATION && hasCalibration && (
             <button
               type="button"
