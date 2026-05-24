@@ -296,6 +296,63 @@ export async function rejectNiche(formData: FormData): Promise<ActionResult> {
 }
 
 /**
+ * Insert a single {niche, city, state} row and immediately run a live
+ * DataForSEO validation on it. Skips insertion if the row already exists
+ * (unique index on niche+city+state) and re-validates instead.
+ */
+export async function seedAndValidateNiche(formData: FormData): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const sys = await getSystemState();
+  if (sys.killSwitch) {
+    const reason = sys.killSwitchReason ? ` (${sys.killSwitchReason})` : '';
+    return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
+  }
+
+  const niche = String(formData.get('niche') ?? '').trim();
+  const city  = String(formData.get('city')  ?? '').trim();
+  const state = String(formData.get('state') ?? '').trim().toUpperCase();
+
+  if (!niche) return { ok: false, message: 'Niche is required.' };
+  if (!city)  return { ok: false, message: 'City is required.' };
+  if (state.length !== 2) return { ok: false, message: 'State must be a two-letter code (e.g. AZ).' };
+
+  const db = getDb();
+
+  // Insert or skip if already exists.
+  const inserted = await db
+    .insert(niches)
+    .values({ niche, city, state })
+    .onConflictDoNothing({ target: [niches.niche, niches.city, niches.state] })
+    .returning({ id: niches.id });
+
+  let id: string;
+  let prefix: string;
+
+  if (inserted.length > 0) {
+    id = inserted[0]!.id;
+    prefix = `Seeded "${niche}" in ${city}, ${state}. `;
+  } else {
+    // Row already existed — resolve its id.
+    const [existing] = await db
+      .select({ id: niches.id })
+      .from(niches)
+      .where(and(eq(niches.niche, niche), eq(niches.city, city), eq(niches.state, state)))
+      .limit(1);
+    if (!existing) return { ok: false, message: 'Could not resolve existing niche row.' };
+    id = existing.id;
+    prefix = `"${niche}" in ${city}, ${state} already existed — re-validated. `;
+  }
+
+  const result = await validateNiche(id);
+  return {
+    ok: result.ok,
+    message: prefix + (result.message ?? ''),
+    nicheId: id,
+  };
+}
+
+/**
  * Validate a single niche row with a live DataForSEO "full trio" call.
  * Stores measured volume/difficulty in dfsSearchVolume/dfsKd, stores the
  * raw API response in dfsRaw, and recomputes score from measured inputs.
