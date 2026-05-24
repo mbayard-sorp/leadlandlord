@@ -5,13 +5,32 @@ import Link from 'next/link';
 import { RunForm } from './RunForm';
 import { StatusBar } from './StatusBar';
 import { NicheRow, type NicheRowData } from './NicheRow';
+import { CategoryFilter } from './CategoryFilter';
 import { CollapsibleSection } from './CollapsibleSection';
 
 export const dynamic = 'force-dynamic';
 
-export default async function NichesPage() {
+export default async function NichesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>;
+}) {
+  const { category } = await searchParams;
   const db = getDb();
-  const rows = await db.select().from(niches).orderBy(desc(niches.score)).limit(200);
+  const allRows = await db.select().from(niches).orderBy(desc(niches.score)).limit(200);
+
+  // Counts across every category (for the dropdown), computed before filtering.
+  const categoryCounts: Record<string, number> = {};
+  for (const r of allRows) {
+    const key = r.category ?? '__uncategorized__';
+    categoryCounts[key] = (categoryCounts[key] ?? 0) + 1;
+  }
+
+  const rows = category
+    ? allRows.filter((r) =>
+        category === '__uncategorized__' ? r.category === null : r.category === category,
+      )
+    : allRows;
 
   const pending = rows.filter((r) => r.decision === 'pending');
   const approved = rows.filter((r) => r.decision === 'approved' || r.decision === 'approved_dry_run');
@@ -51,7 +70,14 @@ export default async function NichesPage() {
 
       <RunForm />
 
-      <StatusBar />
+      <div className="flex items-center gap-4">
+        <div className="shrink-0">
+          <CategoryFilter counts={categoryCounts} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <StatusBar />
+        </div>
+      </div>
 
       <Section title={`Pending review (${pending.length})`}>
         {pending.length === 0 ? (
@@ -128,12 +154,12 @@ function Table({
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+            <Th>Category</Th>
             <Th>Niche</Th>
             <Th className="hidden md:table-cell">City</Th>
             <Th>Score</Th>
             <Th className="hidden lg:table-cell">Rent.</Th>
             <Th className="hidden md:table-cell">Vol</Th>
-            <Th className="hidden md:table-cell">Source</Th>
             <Th className="hidden lg:table-cell">Job $</Th>
             <Th className="hidden lg:table-cell">Rationale</Th>
             <Th>Validate</Th>

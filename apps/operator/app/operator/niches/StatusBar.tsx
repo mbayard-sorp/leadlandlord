@@ -5,6 +5,7 @@ import { getLatestNicheRunStatus, type NicheRunStatus } from './actions';
 
 export function StatusBar() {
   const [status, setStatus] = useState<NicheRunStatus | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -15,6 +16,9 @@ export function StatusBar() {
         const s = await getLatestNicheRunStatus();
         if (cancelled) return;
         setStatus(s);
+        // A fresh run should always be visible, even if the previous result
+        // was dismissed.
+        if (s.state === 'queued' || s.state === 'running') setDismissed(false);
         // When a run finishes, refresh the page so the new rows appear.
         if (prevState === 'running' && (s.state === 'succeeded' || s.state === 'failed')) {
           window.location.reload();
@@ -33,7 +37,10 @@ export function StatusBar() {
     };
   }, []);
 
-  if (!status || status.state === 'idle') return null;
+  if (!status || status.state === 'idle' || dismissed) return null;
+
+  const isTerminal =
+    status.state === 'succeeded' || status.state === 'failed' || status.state === 'dead_letter';
 
   const { color, dot, label } = stateStyles(status.state);
   const pct = status.step && status.total ? Math.round((status.step / status.total) * 100) : null;
@@ -47,9 +54,22 @@ export function StatusBar() {
           <span className="text-xs text-slate-400">step {status.step}/{status.total}</span>
         )}
         <span className="text-slate-200 truncate">{status.message}</span>
-        {status.costUsd !== undefined && status.costUsd > 0 && (
-          <span className="ml-auto text-xs text-slate-400">${status.costUsd.toFixed(3)}</span>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {status.costUsd !== undefined && status.costUsd > 0 && (
+            <span className="text-xs text-slate-400">${status.costUsd.toFixed(3)}</span>
+          )}
+          {isTerminal && (
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              aria-label="Dismiss"
+              title="Dismiss"
+              className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
       {pct !== null && (
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">

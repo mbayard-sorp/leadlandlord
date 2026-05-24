@@ -211,6 +211,13 @@
       "when": 1780900000000,
       "tag": "0030_content_ideas",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0031_niches_category",
+      "breakpoints": true
     }
   ]
 }
