@@ -342,6 +342,8 @@ export const calls = pgTable(
     /** Twilio Recording SID — set once recording status callback arrives. */
     twilioRecordingSid: text('twilio_recording_sid'),
     callerNumber: text('caller_number'),
+    /** Caller's name from Twilio CNAM lookup (param `CallerName`); often empty for mobile callers. */
+    callerName: text('caller_name'),
     /** Number that was called (the tracking number on the site). */
     calledNumber: text('called_number'),
     /** 'inbound' for tracked calls; 'outbound' reserved for Phase-6 outreach. */
