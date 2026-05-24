@@ -34,6 +34,9 @@ export async function POST(req: Request) {
   const calledSid = params.CalledSid; // PN... — the IncomingPhoneNumber SID Twilio dialed
   const calledNumber = params.Called || params.To;
   const callerNumber = params.From;
+  // CNAM lookup result — present only when caller-name lookup is enabled on the
+  // number and the lookup resolves (commonly blank for mobile callers).
+  const callerName = params.CallerName?.trim() || null;
   const callSid = params.CallSid;
 
   const db = getDb();
@@ -70,6 +73,7 @@ export async function POST(req: Request) {
       siteId: site.id,
       twilioCallSid: callSid,
       callerNumber,
+      callerName,
       calledNumber,
       direction: 'inbound',
       startedAt: new Date(),

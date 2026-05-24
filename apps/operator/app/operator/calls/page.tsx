@@ -64,16 +64,19 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                       {c.siteCity}, {c.siteState}
                     </div>
                   </td>
-                  <td className="font-mono text-xs">
+                  <td className="text-xs">
+                    {c.callerName ? (
+                      <div className="font-medium text-slate-200 break-words">{c.callerName}</div>
+                    ) : null}
                     {c.callerNumber ? (
                       <a
                         href={`tel:${c.callerNumber}`}
-                        className="text-sky-400 hover:text-sky-300"
+                        className="font-mono text-sky-400 hover:text-sky-300"
                       >
                         {c.callerNumber}
                       </a>
                     ) : (
-                      '—'
+                      !c.callerName && <span className="font-mono">—</span>
                     )}
                   </td>
                   <td className="text-slate-400 hidden md:table-cell">{c.durationS ? `${c.durationS}s` : '—'}</td>
