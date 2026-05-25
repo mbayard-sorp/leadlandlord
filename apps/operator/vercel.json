@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node scripts/vercel-migrate.mjs && next build",
   "crons": [
     { "path": "/api/cron/operator-tick", "schedule": "* * * * *" },
     { "path": "/api/cron/domain-verifier", "schedule": "*/5 * * * *" },
