@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadNicheOverlay, composeSystemPrompt, decorateSchemaWithClusterEnum } from './index';
+import { loadNicheOverlay, composeSystemPrompt, decorateSchemaWithClusterEnum, buildUserPrompt } from './index';
+import type { CompetitorBrief } from '../competitor-analyzer/schema';
 
 describe('content-engine niche overlays', () => {
   it('loadNicheOverlay returns non-empty content with Terminology section for classic', () => {
@@ -146,6 +147,64 @@ describe('decorateSchemaWithClusterEnum', () => {
     decorateSchemaWithClusterEnum(schema, slugs);
     const branches = schema.anyOf as Array<{ properties: Record<string, Record<string, unknown>> }>;
     expect(branches[0]!.properties.cluster_key!.enum).toEqual(slugs);
+  });
+});
+
+const basePools = {
+  trustSignals: ['Licensed & insured', 'Free quotes'],
+  headlineTemplate: '{service} in {city}',
+};
+
+const baseInput = {
+  site_id: '00000000-0000-0000-0000-000000000001',
+  niche: 'plumbing',
+  city: 'Austin',
+  state: 'TX',
+  keyword_clusters: [],
+  site_mode: 'thin' as const,
+};
+
+const sampleBrief: CompetitorBrief = {
+  analyzed_at: '2026-01-01T00:00:00Z',
+  competitors: [{ url: 'https://example.com', domain: 'example.com', serp_rank: 1 }],
+  page_inventory: ['/services', '/contact'],
+  topic_coverage: [
+    { topic: 'drain cleaning', prevalence: 0.9 },
+    { topic: 'water heater repair', prevalence: 0.5 },
+  ],
+  entities: ['Austin Water', 'Travis County'],
+  schema_types: ['LocalBusiness', 'FAQPage'],
+  content_gaps: ['emergency after-hours plumbing', 'slab leak detection'],
+  structural_bar: { median_word_count: 1200, has_faq: true, has_pricing: true, has_reviews: false },
+  keyword_opportunities: [
+    { keyword: 'plumber austin tx', volume: 2400, ranked_by_competitors: 3 },
+  ],
+};
+
+describe('buildUserPrompt competitor brief injection', () => {
+  it('omits competitor section when no brief is passed', () => {
+    const prompt = buildUserPrompt(baseInput, basePools);
+    expect(prompt).not.toContain('COMPETITOR BRIEF - CLEAR');
+  });
+
+  it('includes competitor section when a brief is passed', () => {
+    const prompt = buildUserPrompt({ ...baseInput, competitor_brief: sampleBrief }, basePools);
+    expect(prompt).toContain('COMPETITOR BRIEF - CLEAR THE INCUMBENTS');
+    expect(prompt).toContain('min_word_count=1200');
+    expect(prompt).toContain('include FAQ section');
+    expect(prompt).toContain('include pricing section');
+    expect(prompt).not.toContain('include reviews section');
+    expect(prompt).toContain('drain cleaning');
+    expect(prompt).toContain('emergency after-hours plumbing');
+    expect(prompt).toContain('plumber austin tx');
+    expect(prompt).toContain('LocalBusiness');
+    expect(prompt).toContain('/services');
+  });
+
+  it('does not expose the competitors provenance array in the prompt', () => {
+    const prompt = buildUserPrompt({ ...baseInput, competitor_brief: sampleBrief }, basePools);
+    expect(prompt).not.toContain('example.com');
+    expect(prompt).not.toContain('serp_rank');
   });
 });
 

@@ -28,6 +28,7 @@ import { WaveLauncher } from './wave-launcher/index';
 import { LocalContentScout } from './local-content-scout/index';
 import { LocalContentWriter } from './local-content-writer/index';
 import { IndexNowSubmitter } from './indexnow-submitter/index';
+import { CompetitorAnalyzer } from './competitor-analyzer/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -63,6 +64,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'local-content-scout': () => new LocalContentScout(),
   'local-content-writer': () => new LocalContentWriter(),
   'indexnow-submitter': () => new IndexNowSubmitter(),
+  'competitor-analyzer': () => new CompetitorAnalyzer(),
 };
 
 export function getAgent(name: string): AnyAgent {
