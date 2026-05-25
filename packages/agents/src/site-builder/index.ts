@@ -11,6 +11,8 @@ import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { KeywordPlanner } from '../keyword-planner/index';
 import { ComplianceGuard } from '../compliance-guard/index';
+import { CompetitorAnalyzer } from '../competitor-analyzer/index';
+import type { CompetitorBrief } from '../competitor-analyzer/schema';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
@@ -32,11 +34,14 @@ export type SiteBuilderProgressEvent =
   | { step: 'sanity_site_doc_written'; site_doc_id: string; theme: string; color_palette: string }
   | { step: 'hero_image_started' }
   | { step: 'hero_image_done'; url: string | null }
+  | { step: 'competitor_analysis_started' }
+  | { step: 'competitor_analysis_done'; competitors: number }
   | { step: 'site_ready'; site_doc_id: string };
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
   private readonly contentEngine = new ContentEngine();
   private readonly keywordPlanner = new KeywordPlanner();
+  private readonly competitorAnalyzer = new CompetitorAnalyzer();
 
   /**
    * Optional progress callback invoked at each step. Used by /operator/build
@@ -158,6 +163,41 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     clusters = await loadKeywordClustersForSite(siteId);
     ctx.log.info({ clusters: clusters.length }, 'clusters loaded for content engine');
 
+    // 2b. Competitor analysis -- non-fatal. A failure here must never abort
+    // the build; missing competitive intelligence is far preferable to a
+    // site that never deploys.
+    let competitorBrief: CompetitorBrief | undefined;
+    this.emit({ step: 'competitor_analysis_started' });
+    try {
+      const brief = await this.competitorAnalyzer.run(
+        {
+          site_id: siteId,
+          niche: input.niche,
+          city: input.city,
+          state: input.state.toUpperCase(),
+          niche_id: input.niche_id,
+        },
+        { siteId, parentRunId: ctx.runId, dedupeKey: `ca:${siteId}:${buildEpoch}` },
+      );
+      competitorBrief = brief;
+      // Persist the brief so operators can inspect it without re-running the agent.
+      await db
+        .update(sites)
+        .set({ competitorBrief: brief as unknown as Record<string, unknown> })
+        .where(eq(sites.id, siteId));
+      ctx.log.info(
+        { competitors: brief.competitors.length },
+        'competitor brief persisted',
+      );
+      this.emit({ step: 'competitor_analysis_done', competitors: brief.competitors.length });
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'competitor-analyzer failed -- proceeding without brief',
+      );
+      this.emit({ step: 'competitor_analysis_done', competitors: 0 });
+    }
+
     // 3. Generate content bundle.
     ctx.progress({ step: 3, total: 8, label: 'generating site content' });
     this.emit({ step: 'content_started' });
@@ -187,6 +227,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         keyword_clusters: clusters,
         theme,
         site_mode: siteMode,
+        competitor_brief: competitorBrief,
       },
       { siteId, parentRunId: ctx.runId, dedupeKey: `ce:${siteId}:${buildEpoch}` },
     );

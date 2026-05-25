@@ -229,6 +229,12 @@ export const sites = pgTable(
      * niche has been mined.
      */
     competitorSeeds: jsonb('competitor_seeds').$type<string[]>(),
+    /**
+     * Output from the Competitor Analyzer agent, persisted at build time.
+     * Null until the first successful analyzer run. Stored loosely typed so
+     * the db package does not take a hard dep on @leadlandlord/agents.
+     */
+    competitorBrief: jsonb('competitor_brief').$type<Record<string, unknown>>(),
     /** thin = 6-8 pages (default); content_rich = ~28 pages (opt-in). */
     siteMode: siteModeEnum('site_mode').notNull().default('thin'),
     /**
