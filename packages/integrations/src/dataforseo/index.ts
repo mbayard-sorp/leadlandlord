@@ -269,6 +269,13 @@ export interface SerpComposition {
   /** Domains of the top-10 organic results, for debugging/inspection. */
   top_domains: string[];
   /**
+   * Top-10 organic results with the aggregator/directory domains removed —
+   * i.e. the real local competitors we aim to outrank. Preserves the ranking
+   * page URL (not just the domain) so downstream agents can scrape the exact
+   * page that's winning. Ordered by SERP rank (best first).
+   */
+  top_local: Array<{ rank: number; domain: string; url: string }>;
+  /**
    * Derived 0-100 difficulty score replacing the old DataForSEO KD value.
    * Higher = harder. Stored in the `niches.kd` column so existing UI and
    * filters keep working without a schema migration.
@@ -309,6 +316,10 @@ export async function getSerpComposition(args: {
       has_local_pack: true,
       local_pack_count: 3,
       top_domains: ['mock-local-1.com', 'mock-local-2.com', 'yelp.com'],
+      top_local: [
+        { rank: 1, domain: 'mock-local-1.com', url: 'https://mock-local-1.com/services' },
+        { rank: 2, domain: 'mock-local-2.com', url: 'https://mock-local-2.com/' },
+      ],
       difficulty: 21,
     };
   }
@@ -343,13 +354,19 @@ async function fetchSerpCompositionFromApi(
       ],
     );
     const items = rows[0]?.items ?? [];
-    const organic = items.filter((it) => it.type === 'organic');
-    const topDomains = organic
-      .map((it) => (it.domain ?? (it.url ? safeDomain(it.url) : '')).toLowerCase())
-      .filter((d): d is string => Boolean(d))
-      .slice(0, 10);
+    const organic = items.filter((it) => it.type === 'organic').slice(0, 10);
+    const resolved = organic.map((it) => ({
+      domain: (it.domain ?? (it.url ? safeDomain(it.url) : '')).toLowerCase(),
+      url: it.url ?? '',
+      rank: it.rank_absolute ?? it.rank_group ?? 0,
+    }));
+    const topDomains = resolved.map((r) => r.domain).filter((d): d is string => Boolean(d));
     const aggregatorCount = topDomains.filter(isAggregator).length;
     const aggregator_share = topDomains.length ? aggregatorCount / topDomains.length : 0;
+
+    const top_local = resolved
+      .filter((r) => r.domain && r.url && !isAggregator(r.domain))
+      .map((r, i) => ({ rank: r.rank || i + 1, domain: r.domain, url: r.url }));
 
     const localPackItem = items.find((it) => it.type === 'local_pack');
     const localPackChildren = localPackItem?.items ?? [];
@@ -364,6 +381,7 @@ async function fetchSerpCompositionFromApi(
       has_local_pack,
       local_pack_count,
       top_domains: topDomains,
+      top_local,
       difficulty,
     };
   } catch (err) {
@@ -378,6 +396,7 @@ async function fetchSerpCompositionFromApi(
       has_local_pack: false,
       local_pack_count: 0,
       top_domains: [],
+      top_local: [],
       difficulty: 50,
     };
   }
