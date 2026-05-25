@@ -20,3 +20,4 @@ export { ChurnRecovery } from './churn-recovery/index';
 export { PortfolioAnalyst } from './portfolio-analyst/index';
 export { ComplianceGuard } from './compliance-guard/index';
 export { Operator } from './operator/index';
+export { CompetitorAnalyzer } from './competitor-analyzer/index';
