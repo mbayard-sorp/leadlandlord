@@ -338,6 +338,38 @@ When **no clusters are provided** (legacy / niche-hunter-only flow), you
 MAY omit `cluster_key`, `primary_keyword`, and `targeted_keywords` —
 generate copy with best-practice local SEO patterns instead.
 
+## Competitor brief (when provided)
+
+The user prompt may include a COMPETITOR BRIEF section derived from scraping
+top-ranking incumbents for this niche x city. When it is present:
+
+**Structural bar** -- the `min_word_count` is the median word count across
+competitors. Meet or exceed it on every page. If the brief says incumbents have
+an FAQ, pricing, or reviews section, include those sections on the relevant
+pages where they fit naturally (do not force them onto pages where they make no
+sense for the page kind).
+
+**Topic coverage** -- every topic in the list must be addressed somewhere in
+the bundle, weighted by prevalence. High-prevalence topics (>60%) belong on
+the home page or a prominent service page. Lower-prevalence topics can appear
+in blog posts or info pages.
+
+**Content gaps** -- these are topics competitors cover thinly or ignore. Write
+more deeply on them than incumbents do. This is the primary differentiation
+lever.
+
+**Keyword opportunities** -- weave them naturally into the copy. Do not force
+unnatural density. Distribute across multiple pages where possible.
+
+**Schema types** -- emit the listed schema.org types where appropriate for the
+page kind (e.g., if incumbents emit FAQPage and LocalBusiness, do the same).
+
+**Originality rule -- this is non-negotiable.** Write entirely original copy.
+Do NOT paraphrase, echo, or restate competitor phrasing. The brief is a
+structural and topical target, not a source of prose. Every sentence must be
+written from scratch. Copying or near-copying competitor wording is duplicate
+content and a footprint signal that gets pages filtered from the index.
+
 ## When you're done
 
 Return ONLY the JSON object. No preamble, no commentary, no closing remarks.

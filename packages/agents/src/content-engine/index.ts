@@ -534,13 +534,49 @@ interface HygienePools {
   headlineTemplate: string;
 }
 
-function buildUserPrompt(input: ContentEngineInput, pools: HygienePools): string {
+export function buildUserPrompt(input: ContentEngineInput, pools: HygienePools): string {
   const businessName =
     input.business_name ?? `${capitalize(input.city)} ${capitalize(input.niche)} Pros`;
   const clusterTable = renderClusterTable(input.keyword_clusters);
   const clusterSection = clusterTable
     ? `\n\nKEYWORD CLUSTERS — TARGETING REQUIREMENT:\nYou are given ${input.keyword_clusters.length} pre-planned keyword clusters from real search-volume data. EACH CLUSTER MUST BE TARGETED BY EXACTLY ONE PAGE. The page's H1, slug, meta_description, and first 100 words of body must include the cluster's primary_keyword verbatim. Each page must declare \`cluster_key\`, \`primary_keyword\`, and \`targeted_keywords\` fields. Match cluster.page_kind to the page kind you choose.\n\n${clusterTable}`
     : '\n\nNo pre-planned keyword clusters. Generate copy using best-practice local SEO patterns for the niche × city.';
+
+  const brief = input.competitor_brief;
+  const competitorSection = brief
+    ? (() => {
+        const bar = brief.structural_bar;
+        const barParts: string[] = [`min_word_count=${bar.median_word_count}`];
+        if (bar.has_faq) barParts.push('include FAQ section');
+        if (bar.has_pricing) barParts.push('include pricing section');
+        if (bar.has_reviews) barParts.push('include reviews section');
+
+        const topicLines = brief.topic_coverage
+          .sort((a, b) => b.prevalence - a.prevalence)
+          .map((t) => `  - ${t.topic} (${Math.round(t.prevalence * 100)}% of competitors)`)
+          .join('\n');
+
+        const gapLines = brief.content_gaps.map((g) => `  - ${g}`).join('\n');
+
+        const kwLines = brief.keyword_opportunities
+          .slice(0, 10)
+          .map((k) => `  - "${k.keyword}" vol=${k.volume} ranked_by=${k.ranked_by_competitors}`)
+          .join('\n');
+
+        const schemaLine = brief.schema_types.join(', ');
+        const pageInvLine = brief.page_inventory.join(', ');
+
+        return (
+          `\n\nCOMPETITOR BRIEF - CLEAR THE INCUMBENTS' BAR:\n` +
+          `Structural bar: ${barParts.join('; ')}\n` +
+          `Topic coverage (must address all):\n${topicLines}\n` +
+          `Content gaps (prioritize these, incumbents cover them poorly):\n${gapLines}\n` +
+          `Keyword opportunities (work into copy naturally):\n${kwLines}\n` +
+          `Schema types incumbents emit: ${schemaLine}\n` +
+          `Page patterns incumbents use: ${pageInvLine}`
+        );
+      })()
+    : '';
 
   const siteModeSection = input.site_mode === 'thin'
     ? `\nSITE MODE: thin. Generate ONLY: 1 home page (1,500-2,200 words), 1 services index, 4-6 service pages, 1 contact page, 3-5 FAQ blog posts. NO service-area pages. NO info pages. About page omitted unless business_name strongly suggests a specific identity.`
@@ -556,7 +592,7 @@ niche: ${input.niche}
 city: ${input.city}
 state: ${input.state}
 business_name: ${businessName}
-fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}${siteModeSection}${hygiene}${clusterSection}
+fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}${siteModeSection}${hygiene}${clusterSection}${competitorSection}
 
 Invoke the ${OUTPUT_TOOL_NAME} tool exactly once with the full bundle. Do not return prose — only the tool call.`;
 }

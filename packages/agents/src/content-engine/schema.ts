@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ContentBundle } from '@leadlandlord/shared/types';
+import { CompetitorBrief } from '../competitor-analyzer/schema';
 
 /**
  * One keyword cluster passed in from the Site Builder. Each cluster maps to
@@ -47,6 +48,12 @@ export const ContentEngineInput = z.object({
    * the existing ~28-page full-site output. Defaults to 'thin'.
    */
   site_mode: z.enum(['thin', 'content_rich']).default('thin'),
+  /**
+   * Optional output from the Competitor Analyzer agent. When present, the
+   * generation prompt is enriched with structural targets, topic coverage, and
+   * content gaps so the generated copy clears the incumbents' bar.
+   */
+  competitor_brief: CompetitorBrief.optional(),
 });
 export type ContentEngineInput = z.infer<typeof ContentEngineInput>;
 
