@@ -257,3 +257,76 @@ export async function requeueDeadLetter(id: string) {
       AND dead_lettered_at IS NOT NULL
   `);
 }
+
+/**
+ * Grace period before the content reconciler considers an approved idea
+ * "stuck". A normal writer run completes in ~1 min, so 5 min is ample headroom
+ * to avoid racing a still-in-flight dispatch.
+ */
+export const CONTENT_DISPATCH_GRACE_SECONDS = 300;
+
+/**
+ * Hard cap on how many `content.idea.approved` events may exist for a single
+ * idea (original emit + reconciler re-emits). Without it, an idea whose writer
+ * keeps failing would get a fresh event re-emitted every tick once the prior
+ * one dead-letters — a slow storm of dead rows. After this many, the idea is
+ * left for manual triage in the dead-letter UI.
+ */
+export const MAX_CONTENT_DISPATCH_EVENTS = 3;
+
+/**
+ * Defense-in-depth reconciler for the content approval → writer dispatch chain.
+ *
+ * Approval emits the `content.idea.approved` event inline inside the operator
+ * server action. If that single emit is lost (the action errored after the
+ * status flip but before the insert, or the event later dead-lettered), the
+ * idea sits in `approved` with no writer ever running and nothing recovers it —
+ * the event reaper only handles events that already exist.
+ *
+ * This finds ideas that are `approved`/`auto_approved`, have no writer run, are
+ * past the grace period, and have no live (non-dead-lettered) dispatch event,
+ * then re-emits the event so the next claim picks it up. Re-emit is safe
+ * against double-publish: the writer's dedupeKeyFn (`writer:idea:<id>`)
+ * collapses a duplicate into the cached successful run.
+ *
+ * Note: this does NOT recover ideas stuck in `pending` — a pending idea was
+ * never approved (the operator's click never committed). That failure mode is
+ * surfaced at the source by ContentApproveButtons error reporting.
+ *
+ * Returns the idea ids re-emitted, for logging.
+ */
+export async function reEmitStuckContentApprovals(
+  graceSeconds = CONTENT_DISPATCH_GRACE_SECONDS,
+): Promise<{ reEmitted: string[] }> {
+  const db = getDb();
+  const rows = (await db.execute(sql`
+    WITH stuck AS (
+      SELECT i.id AS idea_id, i.site_id
+      FROM content_ideas i
+      WHERE i.status IN ('approved', 'auto_approved')
+        AND i.writer_run_id IS NULL
+        AND i.decided_at IS NOT NULL
+        AND i.decided_at < NOW() - (INTERVAL '1 second' * ${graceSeconds})
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_events e
+          WHERE e.type = 'content.idea.approved'
+            AND e.payload->>'idea_id' = i.id::text
+            AND e.dead_lettered_at IS NULL
+        )
+        AND (
+          SELECT count(*) FROM agent_events e2
+          WHERE e2.type = 'content.idea.approved'
+            AND e2.payload->>'idea_id' = i.id::text
+        ) < ${MAX_CONTENT_DISPATCH_EVENTS}
+    )
+    INSERT INTO agent_events (agent, type, target_agent, payload)
+    SELECT 'operator', 'content.idea.approved', 'local-content-writer',
+           jsonb_build_object('idea_id', idea_id, 'site_id', site_id, 'reconciled', true)
+    FROM stuck
+    RETURNING payload->>'idea_id' AS idea_id
+  `)) as unknown as { rows: Array<{ idea_id: string }> };
+  const result = Array.isArray(rows)
+    ? (rows as unknown as Array<{ idea_id: string }>)
+    : rows.rows;
+  return { reEmitted: result.map((r) => r.idea_id) };
+}

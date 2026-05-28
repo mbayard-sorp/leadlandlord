@@ -7,18 +7,31 @@ export function ContentApproveButtons({ id }: { id: string }) {
   const [pending, startTransition] = useTransition();
   const [showReject, setShowReject] = useState(false);
   const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   function onApprove() {
+    setError(null);
     const fd = new FormData();
     fd.append('id', id);
-    startTransition(async () => { await approveContentIdea(fd); });
+    startTransition(async () => {
+      const res = await approveContentIdea(fd);
+      // On success the action revalidates the queue and this row drops off. On
+      // failure (e.g. an expired session returning {ok:false}) the row stays —
+      // surface it instead of silently no-op'ing, which previously stranded
+      // ideas as "pending" with no writer ever dispatched.
+      if (!res?.ok) setError(res?.message ?? 'Approve failed — try again.');
+    });
   }
 
   function onRejectConfirm() {
+    setError(null);
     const fd = new FormData();
     fd.append('id', id);
     fd.append('rejection_reason', reason);
-    startTransition(async () => { await rejectContentIdea(fd); });
+    startTransition(async () => {
+      const res = await rejectContentIdea(fd);
+      if (!res?.ok) setError(res?.message ?? 'Reject failed — try again.');
+    });
   }
 
   if (showReject) {
@@ -49,28 +62,32 @@ export function ContentApproveButtons({ id }: { id: string }) {
             Cancel
           </button>
         </div>
+        {error && <p className="text-xs text-rose-400">{error}</p>}
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        disabled={pending}
-        onClick={onApprove}
-        className="text-xs bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white px-2 py-1 rounded"
-      >
-        {pending ? '...' : 'Approve'}
-      </button>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => setShowReject(true)}
-        className="text-xs bg-rose-800 hover:bg-rose-700 disabled:opacity-50 text-white px-2 py-1 rounded"
-      >
-        Reject
-      </button>
+    <div className="flex flex-col gap-1 min-w-[160px]">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onApprove}
+          className="text-xs bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white px-2 py-1 rounded"
+        >
+          {pending ? '...' : 'Approve'}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => setShowReject(true)}
+          className="text-xs bg-rose-800 hover:bg-rose-700 disabled:opacity-50 text-white px-2 py-1 rounded"
+        >
+          Reject
+        </button>
+      </div>
+      {error && <p className="text-xs text-rose-400">{error}</p>}
     </div>
   );
 }

@@ -41,6 +41,7 @@ export async function approveContentIdea(formData: FormData): Promise<ActionResu
 
   revalidatePath('/operator/approvals/content');
   revalidatePath('/operator/approvals');
+  revalidatePath('/operator/content');
   return { ok: true, message: 'Approved. Writer dispatched.' };
 }
 
@@ -75,5 +76,6 @@ export async function rejectContentIdea(formData: FormData): Promise<ActionResul
 
   revalidatePath('/operator/approvals/content');
   revalidatePath('/operator/approvals');
+  revalidatePath('/operator/content');
   return { ok: true, message: 'Rejected.' };
 }

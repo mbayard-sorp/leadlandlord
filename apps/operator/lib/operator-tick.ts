@@ -4,6 +4,7 @@ import {
   markEventProcessed,
   markEventFailed,
   reapStaleLeases,
+  reEmitStuckContentApprovals,
 } from '@leadlandlord/db/queue';
 import { isKillSwitchActive } from '@leadlandlord/db/system-state';
 import { getAgent } from '@leadlandlord/agents/registry';
@@ -17,6 +18,7 @@ export interface TickResult {
   claimed: number;
   dispatched: string[];
   reaped?: { reclaimed: number; deadLettered: number };
+  reEmittedContent?: string[];
   skipped?: 'kill_switch';
 }
 
@@ -53,6 +55,14 @@ export async function runOperatorTick(): Promise<TickResult> {
   const reaped = await reapStaleLeases();
   if (reaped.reclaimed || reaped.deadLettered) {
     log.warn(reaped, 'operator-tick reaped stale leases');
+  }
+
+  // Recover approved content ideas whose dispatch event was lost or
+  // dead-lettered. Runs before claim so a re-emitted event is claimable this
+  // same tick. Safe against double-publish via the writer's dedupeKeyFn.
+  const { reEmitted } = await reEmitStuckContentApprovals();
+  if (reEmitted.length) {
+    log.warn({ reEmitted }, 'operator-tick re-emitted stuck content approvals');
   }
 
   const events = await claimEvents(BATCH_LIMIT);
@@ -141,5 +151,5 @@ export async function runOperatorTick(): Promise<TickResult> {
     })(),
   );
 
-  return { claimed: events.length, dispatched, reaped };
+  return { claimed: events.length, dispatched, reaped, reEmittedContent: reEmitted };
 }
