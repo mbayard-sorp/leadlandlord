@@ -20,13 +20,22 @@ const CORPORATE_KIND_META: Record<
   terms: { path: '/terms', changeFrequency: 'yearly', priority: 0.3 },
 };
 
+// Build a canonical sitemap URL. The site canonicalizes to NO trailing slash
+// (Next.js trailingSlash: false), so trailing-slash URLs 308-redirect. Sitemaps
+// must list the 200 target directly, not the redirect. Homepage stays "/".
+function canonical(base: string, path: string): string {
+  const slug = path.startsWith('/') ? path : `/${path}`;
+  const stripped = slug.replace(/\/+$/, '');
+  return `${base}${stripped === '' ? '/' : stripped}`;
+}
+
 async function corporateSitemap(base: string): Promise<MetadataRoute.Sitemap> {
   const pages = await fetchCorporatePageList();
   return pages
     .map((p) => {
       const meta = CORPORATE_KIND_META[p.kind];
       if (!meta) return null;
-      const url = `${base}${meta.path}`.replace(/\/?$/, '/');
+      const url = canonical(base, meta.path);
       return {
         url,
         lastModified: p.updatedAt ? new Date(p.updatedAt) : new Date(),
@@ -73,16 +82,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const bundle = sanityToBundle(site);
   const lastModified = bundle.generated_at ? new Date(bundle.generated_at) : new Date();
 
-  const normalize = (slug: string): string =>
-    `${base}${slug.startsWith('/') ? slug : `/${slug}`}`.replace(/\/?$/, '/');
+  const normalize = (slug: string): string => canonical(base, slug);
 
   const fixed: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified, changeFrequency: 'weekly', priority: 1 },
-    { url: `${base}/about/`, lastModified, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${base}/contact/`, lastModified, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${base}/about`, lastModified, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${base}/contact`, lastModified, changeFrequency: 'monthly', priority: 0.7 },
     // /blog index only when there are enough posts to avoid thin-content indexing
     ...(bundle.blog_posts.length >= 2
-      ? [{ url: `${base}/blog/`, lastModified, changeFrequency: 'weekly' as const, priority: 0.6 }]
+      ? [{ url: `${base}/blog`, lastModified, changeFrequency: 'weekly' as const, priority: 0.6 }]
       : []),
   ];
 
