@@ -46,7 +46,8 @@ export default function proxy(req: NextRequest) {
       path.startsWith('/leadslandlord') ||
       path === '/favicon.ico' ||
       path === '/sitemap.xml' ||
-      path === '/robots.txt';
+      path === '/robots.txt' ||
+      path === '/llms.txt';
     let res: NextResponse;
     if (!passthrough) {
       const url = req.nextUrl.clone();
