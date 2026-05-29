@@ -129,12 +129,17 @@ const OUTPUT_TOOL_NAME = 'output_content_bundle';
  * lambda budget, leaves agent_runs zombied at `running`, and the event only
  * recovers after the 900s lease reaper requeues it.
  *
- * 360s leaves headroom for: pre-call setup, post-call validation, internal
- * linker, and a density-lint retry within the same lambda. Throwing on
- * timeout converts the failure into a normal runtime_error so attempts
- * accounting + dead-letter logic kick in within minutes instead of an hour.
+ * 600s lets a full-size bundle (observed: 11-cluster thin sites stream ~80 KB
+ * / ~20k tokens, which can take 8-9 min on Sonnet) complete, while still
+ * throwing ~200s before the 800s lambda ceiling so the failure becomes a
+ * normal runtime_error with clean attempt accounting instead of a zombied
+ * `running` row that only the 900s lease reaper recovers.
+ *
+ * Note: a density-lint retry on top of a near-600s initial can exceed the
+ * lambda budget — that path fails cleanly and requeues. The common case
+ * (lint passes first shot) fits comfortably.
  */
-const STREAM_TIMEOUT_MS = 360_000;
+const STREAM_TIMEOUT_MS = 600_000;
 
 async function withStreamTimeout<T>(p: Promise<T>, phase: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
