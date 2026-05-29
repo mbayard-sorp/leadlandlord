@@ -122,6 +122,35 @@ export function decorateSchemaWithClusterEnum(
 
 const OUTPUT_TOOL_NAME = 'output_content_bundle';
 
+/**
+ * Absolute ceiling on a single Anthropic streaming call. The Vercel dispatcher
+ * caps at 800s; without an in-process timeout, a stuck `finalMessage()`
+ * (observed when tool-use streams stall near max_tokens) burns the entire
+ * lambda budget, leaves agent_runs zombied at `running`, and the event only
+ * recovers after the 900s lease reaper requeues it.
+ *
+ * 360s leaves headroom for: pre-call setup, post-call validation, internal
+ * linker, and a density-lint retry within the same lambda. Throwing on
+ * timeout converts the failure into a normal runtime_error so attempts
+ * accounting + dead-letter logic kick in within minutes instead of an hour.
+ */
+const STREAM_TIMEOUT_MS = 360_000;
+
+async function withStreamTimeout<T>(p: Promise<T>, phase: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`content-engine ${phase} stream timed out after ${STREAM_TIMEOUT_MS / 1000}s`)),
+      STREAM_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof ContentEngineOutput> {
   constructor() {
     super({
@@ -204,7 +233,7 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
         label: `receiving content from Claude (${Math.round(streamedChars / 1024)} KB streamed)`,
       });
     });
-    const response = await stream.finalMessage();
+    const response = await withStreamTimeout(stream.finalMessage(), 'initial');
     ctx.progress({ label: 'validating content bundle' });
 
     const usage = response.usage;
@@ -287,9 +316,15 @@ Every cluster_key listed in the keyword clusters table above must still be targe
 Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
 
       ctx.progress({ label: 'retrying content generation (density lint fix)' });
+      // Reset streamedChars so the retry KB metric reflects only the retry,
+      // not initial+retry combined.
+      streamedChars = 0;
       const retryStream = client.messages.stream({
         model,
-        max_tokens: 32_000,
+        // Bumped from 32k → 48k: the retry prompt appends violation context on
+        // top of the original, so the model needs headroom to emit the full
+        // bundle without hitting the cap. Sonnet 4.x supports up to 64k output.
+        max_tokens: 48_000,
         temperature: 0.2,
         system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         tools: [
@@ -306,7 +341,7 @@ Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
         streamedChars += partialJson.length;
         ctx.progress({ label: `retry: receiving content from Claude (${Math.round(streamedChars / 1024)} KB)` });
       });
-      const retryResponse = await retryStream.finalMessage();
+      const retryResponse = await withStreamTimeout(retryStream.finalMessage(), 'density-lint-retry');
       const retryUsage = retryResponse.usage;
       ctx.recordUsage({
         model,
