@@ -9,13 +9,14 @@ import {
 } from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
+import { generateLongformBody } from '../content-engine/index';
 import { KeywordPlanner } from '../keyword-planner/index';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { CompetitorAnalyzer } from '../competitor-analyzer/index';
 import type { CompetitorBrief } from '../competitor-analyzer/schema';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
-import { ensureSiteDocStub, writeSiteToSanity } from './persist-sanity';
+import { ensureSiteDocStub, writeSiteToSanity, patchLongformInSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
 import { pickTheme } from './pick-theme';
 import { pickPaletteForSite } from './pick-palette';
@@ -36,6 +37,8 @@ export type SiteBuilderProgressEvent =
   | { step: 'hero_image_done'; url: string | null }
   | { step: 'competitor_analysis_started' }
   | { step: 'competitor_analysis_done'; competitors: number }
+  | { step: 'longform_started' }
+  | { step: 'longform_done'; chars: number }
   | { step: 'site_ready'; site_doc_id: string };
 
 export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteBuilderOutput> {
@@ -69,6 +72,14 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
 
   protected async execute(input: SiteBuilderInput, ctx: AgentContext): Promise<SiteBuilderOutput> {
     const db = getDb();
+
+    // Long-form-only backfill: regenerate just the keyword-rich home intro and
+    // patch it onto the existing site doc. No keyword planning, content
+    // generation, compliance gate, hero image, or page writes — and the manual
+    // video fields are left untouched.
+    if (input.longform_only) {
+      return this.runLongformOnly(input, ctx);
+    }
 
     // 1. Insert/find site row.
     ctx.progress({ step: 1, total: 8, label: 'preparing site record' });
@@ -485,6 +496,73 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     }
   }
 
+  /**
+   * Regenerate only the long-form home intro for an existing site and patch it
+   * onto the Sanity site doc. Cheap (single ~3K-token call) and surgical — it
+   * never touches page docs, tracking, hero, or the manual video fields.
+   */
+  private async runLongformOnly(
+    input: SiteBuilderInput,
+    ctx: AgentContext,
+  ): Promise<SiteBuilderOutput> {
+    const siteId = input.site_id;
+    if (!siteId) throw new Error('site-builder: longform_only requires site_id');
+    const db = getDb();
+
+    // Resolve the niche category so the long-form generation loads the same
+    // niche overlay the full build would (e.g. legal → counsel).
+    let category: string | null = null;
+    if (input.niche_id) {
+      const [nicheRow] = await db
+        .select({ category: niches.category })
+        .from(niches)
+        .where(eq(niches.id, input.niche_id))
+        .limit(1);
+      category = nicheRow?.category ?? null;
+    }
+    const theme = pickTheme(input.niche, category);
+
+    ctx.progress({ step: 1, total: 2, label: 'loading keyword clusters' });
+    const clusters = await loadKeywordClustersForSite(siteId);
+
+    ctx.progress({ step: 2, total: 2, label: 'generating long-form intro' });
+    this.emit({ step: 'longform_started' });
+    const result = await generateLongformBody({
+      niche: input.niche,
+      city: input.city,
+      state: input.state.toUpperCase(),
+      theme,
+      keyword_clusters: clusters,
+    });
+    ctx.recordUsage({
+      model: result.model,
+      input_tokens: result.usage.input_tokens,
+      output_tokens: result.usage.output_tokens,
+      cache_read_input_tokens: result.usage.cache_read_input_tokens,
+      cache_creation_input_tokens: result.usage.cache_creation_input_tokens,
+      cost_usd: result.cost_usd,
+    });
+
+    await patchLongformInSanity(siteId, result.longform_body, result.generated_at);
+    ctx.log.info({ siteId, chars: result.longform_body.length }, 'long-form intro patched');
+    this.emit({ step: 'longform_done', chars: result.longform_body.length });
+
+    const row = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
+    const { theme: resolvedTheme, palette } = await readSiteThemePalette(siteId);
+
+    return {
+      site_id: siteId,
+      sanity_site_doc_id: siteDocId(siteId),
+      pages_written: 0,
+      theme: resolvedTheme,
+      color_palette: palette,
+      hero_image_url: null,
+      tracking_number: row?.trackingNumber ?? null,
+      tracking_provider: (row?.trackingProvider as 'twilio' | 'mock' | null) ?? null,
+      deployed_at: (row?.deployedAt ?? new Date()).toISOString(),
+    };
+  }
+
   private async upsertSite(input: SiteBuilderInput): Promise<string> {
     const db = getDb();
     if (input.site_id) return input.site_id;
@@ -508,6 +586,33 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       })
       .returning({ id: sites.id });
     return row!.id;
+  }
+}
+
+type ThemeName = 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
+const THEME_NAMES: readonly ThemeName[] = ['classic', 'modern', 'premium', 'bright', 'haul', 'counsel'];
+const PALETTES = ['default', 'alt1', 'alt2'] as const;
+
+/**
+ * Read the active theme name + color palette off the Sanity site doc (theme is
+ * a deref). Used by the long-form-only path to shape its output without
+ * re-running theme/palette selection. Defaults to classic/default.
+ */
+async function readSiteThemePalette(
+  siteId: string,
+): Promise<{ theme: ThemeName; palette: (typeof PALETTES)[number] }> {
+  try {
+    const doc = await createWriteClient().fetch<{ theme: string | null; palette: string | null } | null>(
+      `*[_id == $id][0]{ "theme": theme->name, "palette": colorPalette }`,
+      { id: siteDocId(siteId) },
+    );
+    const theme = THEME_NAMES.includes(doc?.theme as ThemeName) ? (doc!.theme as ThemeName) : 'classic';
+    const palette = (PALETTES as readonly string[]).includes(doc?.palette ?? '')
+      ? (doc!.palette as (typeof PALETTES)[number])
+      : 'default';
+    return { theme, palette };
+  } catch {
+    return { theme: 'classic', palette: 'default' };
   }
 }
 

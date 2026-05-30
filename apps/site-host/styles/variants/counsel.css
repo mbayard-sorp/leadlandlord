@@ -1031,3 +1031,7 @@
   font-weight: 600;
   font-size: 0.8125rem;
 }
+
+/* hero video + long-form intro — restrained/legal: hairline rules, measured body */
+[data-theme='counsel'] .counsel-longform { border-top: 1px solid var(--rule, var(--ink)); border-bottom: 1px solid var(--rule, var(--ink)); }
+[data-theme='counsel'] .counsel-video .ll-video-frame { border: 1px solid var(--rule, var(--ink)); border-radius: 2px; }

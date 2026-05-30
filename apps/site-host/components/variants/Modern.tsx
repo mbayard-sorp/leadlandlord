@@ -4,6 +4,8 @@ import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
+import { VideoEmbed } from '../shared/VideoEmbed';
+import { LongformSection } from '../shared/LongformSection';
 import { SiteNav } from '../shared/SiteNav';
 import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
 import { TrustStrip } from '../shared/TrustStrip';
@@ -170,6 +172,18 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             </div>
           </div>
         </section>
+
+        {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoEmbed
+          url={bundle.video_url}
+          description={bundle.video_description}
+          className="ll-video modern-video"
+        />
+        <LongformSection
+          body={bundle.longform_body}
+          phone={phone}
+          className="ll-longform modern-longform"
+        />
 
         {/* trust band — above fold, no ScrollReveal */}
         <section className="modern-trust-band" aria-label="Trust signals">

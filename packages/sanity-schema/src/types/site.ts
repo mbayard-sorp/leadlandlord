@@ -227,6 +227,35 @@ export const site = defineType({
       rows: 3,
     }),
     defineField({
+      name: 'videoUrl',
+      title: 'Hero Video URL (YouTube)',
+      type: 'string',
+      description:
+        'Optional YouTube URL (watch, youtu.be, or embed form). Renders as an embed directly under the hero. Manual entry — agents never set this.',
+    }),
+    defineField({
+      name: 'videoDescription',
+      title: 'Video Description',
+      type: 'text',
+      rows: 2,
+      description: 'Optional caption shown beneath the hero video.',
+    }),
+    defineField({
+      name: 'longformBody',
+      title: 'Long-form Home Intro (Markdown)',
+      type: 'text',
+      rows: 20,
+      description:
+        'Keyword-rich intro shown high on the home page. Markdown (##, ###, -, **bold**, [links]). Generated at build time; use "Generate long-form intro" in the operator to (re)create it.',
+    }),
+    defineField({
+      name: 'longformGeneratedAt',
+      title: 'Long-form Generated At',
+      type: 'datetime',
+      readOnly: true,
+      description: 'When the long-form intro was last generated.',
+    }),
+    defineField({
       name: 'home',
       title: 'Home Page',
       type: 'reference',

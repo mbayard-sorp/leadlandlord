@@ -576,3 +576,8 @@
   text-transform: uppercase;
   color: var(--ink-3);
 }
+
+/* hero video + long-form intro — editorial: hairline rule, larger serif body */
+[data-theme='premium'] .premium-longform { border-top: 1px solid var(--rule, var(--ink)); }
+[data-theme='premium'] .premium-longform .ll-longform-body { font-size: 1.125rem; }
+[data-theme='premium'] .premium-video .ll-video-frame { border: 1px solid var(--rule, var(--ink)); border-radius: 0; }

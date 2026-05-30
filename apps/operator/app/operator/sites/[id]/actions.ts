@@ -650,3 +650,36 @@ export async function retargetContent(siteId: string): Promise<ActionResult & { 
   revalidatePath(`/operator/sites/${siteId}`);
   return { ok: true, eventId };
 }
+
+/**
+ * Generate (or regenerate) the keyword-rich long-form home intro for a single
+ * site. Cheap, surgical path — runs Site Builder in `longform_only` mode, which
+ * regenerates just the intro from existing clusters and patches `longformBody`
+ * on the Sanity site doc. Page docs + the manual video fields are untouched.
+ *
+ * Used to backfill the long-form section onto sites built before the feature.
+ * Async via the agent_events queue — operator-tick claims and runs it.
+ */
+export async function generateLongform(siteId: string): Promise<ActionResult & { eventId?: string }> {
+  const db = getDb();
+  const site = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
+  if (!site) return { ok: false, message: 'site not found' };
+  const eventId = randomUUID();
+  await db.insert(agentEvents).values({
+    id: eventId,
+    agent: 'operator-dashboard',
+    type: 'content.longform-requested',
+    targetAgent: 'site-builder',
+    payload: {
+      site_id: siteId,
+      niche: site.niche,
+      city: site.city,
+      state: site.state,
+      niche_id: site.nicheId ?? undefined,
+      longform_only: true,
+    },
+  });
+  log.info({ siteId, eventId }, 'long-form generation enqueued');
+  revalidatePath(`/operator/sites/${siteId}`);
+  return { ok: true, eventId };
+}

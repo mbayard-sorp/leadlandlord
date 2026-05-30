@@ -4,6 +4,8 @@ import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { VideoEmbed } from '../shared/VideoEmbed';
+import { LongformSection } from '../shared/LongformSection';
 import { MapEmbed } from '../shared/MapEmbed';
 import { SiteNav } from '../shared/SiteNav';
 import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
@@ -208,6 +210,18 @@ export function BrightHome({
             </div>
           </div>
         </section>
+
+        {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoEmbed
+          url={bundle.video_url}
+          description={bundle.video_description}
+          className="ll-video bright-video"
+        />
+        <LongformSection
+          body={bundle.longform_body}
+          phone={phone}
+          className="ll-longform bright-longform"
+        />
 
         {/* trust band — neighbor-with-a-crew tone, pastel chips */}
         <ScrollReveal as="section" className="bright-trust-band" aria-label="Trust signals">

@@ -1,5 +1,6 @@
 import type { Bundle } from '../lib/content';
 import { substitutePhone } from '../lib/phone';
+import { renderMarkdown } from '../lib/markdown';
 
 interface Props {
   page: Bundle['home'];
@@ -9,9 +10,8 @@ interface Props {
 
 /**
  * Renders a page's MDX body as plain markdown using `dangerouslySetInnerHTML`.
- * Phase 1: minimal markdown→HTML conversion for headings/paragraphs/links/lists.
- * Phase 2 will swap to a real MDX compiler with custom components
- * (`<TrackingNumber />`, `<LeadForm />`, `<CallToAction />`).
+ * The markdown→HTML conversion lives in `lib/markdown.ts` (shared with the
+ * long-form home section).
  */
 export function PageBody({ page, phone }: Props) {
   const mdx = phone ? substitutePhone(page.mdx, phone) : page.mdx;
@@ -27,61 +27,4 @@ export function PageBody({ page, phone }: Props) {
       )}
     </article>
   );
-}
-
-function renderMarkdown(md: string): string {
-  // Strip frontmatter if present.
-  const noFrontmatter = md.replace(/^---[\s\S]*?---\n?/, '');
-  const lines = noFrontmatter.split('\n');
-  const out: string[] = [];
-  let inList = false;
-
-  for (const line of lines) {
-    if (/^# (.+)/.test(line)) {
-      flushList();
-      out.push(`<h1>${escapeHtml(line.replace(/^# /, ''))}</h1>`);
-    } else if (/^## (.+)/.test(line)) {
-      flushList();
-      out.push(`<h2>${escapeHtml(line.replace(/^## /, ''))}</h2>`);
-    } else if (/^### (.+)/.test(line)) {
-      flushList();
-      out.push(`<h3>${escapeHtml(line.replace(/^### /, ''))}</h3>`);
-    } else if (/^- (.+)/.test(line)) {
-      if (!inList) {
-        out.push('<ul>');
-        inList = true;
-      }
-      out.push(`<li>${inlineFormat(line.replace(/^- /, ''))}</li>`);
-    } else if (line.trim() === '') {
-      flushList();
-      out.push('');
-    } else {
-      flushList();
-      out.push(`<p>${inlineFormat(line)}</p>`);
-    }
-  }
-  flushList();
-  return out.join('\n');
-
-  function flushList() {
-    if (inList) {
-      out.push('</ul>');
-      inList = false;
-    }
-  }
-}
-
-function inlineFormat(s: string): string {
-  return escapeHtml(s)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
