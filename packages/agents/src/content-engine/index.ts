@@ -507,6 +507,31 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
     }
   }
 
+  // Coerce stringized Page fields back into Page objects. Observed in prod:
+  // model occasionally emits e.g. `contact` as a markdown string rather than
+  // the full Page shape. Zod then throws path:["contact"] expected object,
+  // which the dispatcher classifies as terminal validation_error → dead-letter
+  // on first attempt with no retry. Hit on site 11995865 (deck building /
+  // Medford, OR). Independent of cluster count; can recur on any build.
+  const singletonKindMap = { home: 'home', about: 'about', contact: 'contact' } as const;
+  for (const key of ['home', 'about', 'contact'] as const) {
+    bundle[key] = coercePage(bundle[key], { kind: singletonKindMap[key], slug: key });
+  }
+  const arrayKindMap = {
+    services: 'service',
+    service_areas: 'service_area',
+    blog_posts: 'blog',
+    info_pages: 'info',
+  } as const;
+  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
+    const arr = bundle[key];
+    if (Array.isArray(arr)) {
+      bundle[key] = arr.map((el, idx) =>
+        coercePage(el, { kind: arrayKindMap[key], slug: `${arrayKindMap[key]}-${idx + 1}` }),
+      );
+    }
+  }
+
   for (const key of ['home', 'about', 'contact'] as const) {
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);
   }
@@ -517,6 +542,31 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
     }
   }
   return bundle;
+}
+
+/**
+ * If the model emitted a Page-typed field as a string (or other non-object),
+ * coerce it into a minimum-viable Page so ContentBundle.parse doesn't throw a
+ * terminal validation_error. Strings are treated as the page body (mdx);
+ * required Page fields are backfilled with sensible defaults. If the value is
+ * already an object, pass it through untouched (later validation handles it).
+ */
+function coercePage(
+  value: unknown,
+  defaults: { kind: 'home' | 'about' | 'contact' | 'service' | 'service_area' | 'blog' | 'info'; slug: string },
+): unknown {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const mdx = typeof value === 'string' ? value : '';
+  const title = defaults.slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return {
+    kind: defaults.kind,
+    slug: defaults.slug,
+    title,
+    meta_description: title.slice(0, 160),
+    mdx,
+    targeted_keywords: [],
+    faqs: [],
+  };
 }
 
 function trimPage(p: unknown): unknown {
