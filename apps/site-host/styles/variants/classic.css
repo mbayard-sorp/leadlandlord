@@ -474,3 +474,7 @@
   border: 2px solid var(--ink);
   border-radius: 2px;
 }
+
+/* hero video + long-form intro — band on secondary paper, hard-edged rules */
+[data-theme='classic'] .classic-longform { background: var(--paper-2); border-top: var(--border-rule, 2px) solid var(--ink); border-bottom: var(--border-rule, 2px) solid var(--ink); }
+[data-theme='classic'] .classic-video .ll-video-frame { border-color: var(--ink); }

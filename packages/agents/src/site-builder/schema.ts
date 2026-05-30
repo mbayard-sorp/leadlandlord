@@ -20,6 +20,13 @@ export const SiteBuilderInput = z.object({
    * it reuses the cached run and finishes the unfinished tail in seconds.
    */
   force_content_refresh: z.boolean().optional(),
+  /**
+   * Long-form-only mode. When true, skip the entire build pipeline and only
+   * (re)generate the keyword-rich home intro, patching just `longformBody` /
+   * `longformGeneratedAt` on the existing Sanity site doc. Requires `site_id`.
+   * Drives the operator's "Generate long-form intro" backfill button.
+   */
+  longform_only: z.boolean().optional(),
 });
 export type SiteBuilderInput = z.infer<typeof SiteBuilderInput>;
 

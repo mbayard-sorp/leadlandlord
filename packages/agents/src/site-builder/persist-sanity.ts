@@ -118,6 +118,16 @@ export async function writeSiteToSanity(
     opts.colorPalette ??
     'default';
 
+  // Preserve operator-entered, manual-only fields across regen. The site doc is
+  // written with createOrReplace, which drops any field not re-supplied — so a
+  // re-target/regenerate would otherwise wipe a hand-entered video. The content
+  // engine never sets these, so the existing doc value always wins.
+  const videoUrl =
+    (bundle.video_url ?? (existingSite?.videoUrl as string | undefined)) || undefined;
+  const videoDescription =
+    (bundle.video_description ?? (existingSite?.videoDescription as string | undefined)) ||
+    undefined;
+
   // Flatten the bundle into a single list of (kind, index, page) so we can
   // build deterministic IDs uniformly.
   const refs: PageRef[] = [
@@ -210,6 +220,10 @@ export async function writeSiteToSanity(
     })),
     heroImagePrompt: bundle.hero_image_prompt ?? undefined,
     // heroImage asset is patched separately after generation — see SiteBuilder step 6.
+    videoUrl,
+    videoDescription,
+    longformBody: bundle.longform_body ?? undefined,
+    longformGeneratedAt: bundle.longform_generated_at ?? undefined,
     home: { _ref: pageDocId(siteId, 'home', 0), _type: 'reference' },
     about: { _ref: pageDocId(siteId, 'about', 0), _type: 'reference' },
     contact: { _ref: pageDocId(siteId, 'contact', 0), _type: 'reference' },
@@ -245,6 +259,26 @@ export async function writeSiteToSanity(
     pagesWritten: pageIds.length,
     colorPalette: resolvedPalette,
   };
+}
+
+/**
+ * Patch ONLY the long-form intro fields on an existing site doc. Used by the
+ * Site Builder's `longform_only` backfill path so a regeneration leaves every
+ * page doc and the manual video fields untouched.
+ */
+export async function patchLongformInSanity(
+  siteId: string,
+  longformBody: string,
+  generatedAt: string,
+  opts: WriteSiteToSanityOptions = {},
+): Promise<{ siteDocId: string; transactionId: string }> {
+  const client = createWriteClient(opts.dataset ? { dataset: opts.dataset } : {});
+  const siteRef = siteDocId(siteId);
+  const res = await client
+    .patch(siteRef)
+    .set({ longformBody, longformGeneratedAt: generatedAt })
+    .commit({ visibility: 'sync' });
+  return { siteDocId: siteRef, transactionId: res._rev ?? '' };
 }
 
 function bundleSlug(bundle: ContentBundle): string {

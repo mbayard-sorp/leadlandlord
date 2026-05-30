@@ -34,6 +34,7 @@ const SITE_PROJECTION = `{
   "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
   "heroImageUrl": heroImage.asset->url,
+  videoUrl, videoDescription, longformBody,
   "logoUrl": logo.asset->url,
   "faviconUrl": favicon.asset->url,
   "theme": theme->name,
@@ -86,6 +87,9 @@ export interface SanitySite {
   neighborhoods?: Array<{ name: string; googleMapsUrl: string }> | null;
   heroImagePrompt?: string | null;
   heroImageUrl?: string | null;
+  videoUrl?: string | null;
+  videoDescription?: string | null;
+  longformBody?: string | null;
   logoUrl?: string | null;
   faviconUrl?: string | null;
   theme: 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';

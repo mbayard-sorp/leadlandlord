@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import type { SanityKeywordClusterSummary } from '@/lib/sanity-read';
-import { repullKeywords, retargetContent } from './actions';
+import { repullKeywords, retargetContent, generateLongform } from './actions';
 
 interface Props {
   siteId: string;
@@ -54,6 +54,18 @@ export function KeywordsPanel({ siteId, clusters }: Props) {
       });
     });
   }
+  function onGenerateLongform() {
+    setMsg(null);
+    startTransition(async () => {
+      const r = await generateLongform(siteId);
+      setMsg({
+        ok: r.ok,
+        text: r.ok
+          ? `Long-form generation queued (event ${r.eventId?.slice(0, 8)}…). Site Builder will regenerate just the keyword-rich home intro within ~1 minute.`
+          : r.message ?? 'Long-form generation failed',
+      });
+    });
+  }
 
   const totalVolume = clusters.reduce((s, c) => s + (c.totalVolume ?? 0), 0);
   const covered = clusters.filter((c) => c.status === 'covered').length;
@@ -90,6 +102,15 @@ export function KeywordsPanel({ siteId, clusters }: Props) {
             className="rounded bg-blue-700 hover:bg-blue-600 disabled:opacity-50 px-3 py-1.5 text-xs font-medium text-white"
           >
             {pending ? '…' : 'Re-target content'}
+          </button>
+          <button
+            type="button"
+            onClick={onGenerateLongform}
+            disabled={pending}
+            title="Regenerate just the keyword-rich long-form home intro from existing clusters. Leaves pages and the video untouched."
+            className="rounded bg-violet-700 hover:bg-violet-600 disabled:opacity-50 px-3 py-1.5 text-xs font-medium text-white"
+          >
+            {pending ? '…' : 'Generate long-form intro'}
           </button>
         </div>
       </header>

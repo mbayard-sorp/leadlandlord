@@ -131,6 +131,26 @@ Examples:
   Only include phrases that DON'T require specific facts to be true
   (e.g., DON'T write "Since 1985" or "5,000+ homes served").
 
+## Long-form home intro — `longform_body`
+
+Output a `longform_body`: a keyword-rich, 400–700 word block of markdown that
+renders high on the home page (just under the hero/video, before the trust
+strip). Competitor home pages that rank well carry more on-page text — this is
+that text.
+
+- Anchor it on the **home cluster** (the cluster with `page_kind=home`): use
+  its `primary_keyword` verbatim in the opening sentence and weave its
+  supporting keywords + the niche/city + nearby areas in naturally across the
+  body. No keyword stuffing — it must read like an owner-operator wrote it.
+- Structure: 1–2 short intro paragraphs, then 2–3 `##` subsections (e.g. what's
+  included, why local matters, areas served) with paragraphs and the occasional
+  `-` bullet list. Nudge toward calling/requesting a quote.
+- **Markdown subset only** — the site-host renderer supports `##`, `###`,
+  `-` bullets, `**bold**`, and `[text](url)` links. Do NOT use `#` (the
+  variant renders its own H1), tables, images, blockquotes, or raw HTML.
+- Use the `{{phone}}` placeholder for any phone reference (never a literal
+  number). Same compliance rules as everything else.
+
 ## Output format
 
 A single JSON object:
@@ -143,6 +163,7 @@ A single JSON object:
   "business_name": "...",
   "variant": "classic" | "modern" | "premium" | "bright" | "haul" | "counsel",
   "hero_image_prompt": "...",
+  "longform_body": "Keyword-rich markdown intro (## subsections, bullets, **bold**, [links])",
   "nearby_cities": ["..."],
   "trust_signals": ["..."],
   "home": { "kind": "home", "slug": "/", "title": "...", "meta_description": "...", "mdx": "...", "schema_org_jsonld": {...} },

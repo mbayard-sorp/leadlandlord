@@ -1,6 +1,8 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { heroH1, telHref } from '../../lib/content';
+import { VideoEmbed } from '../shared/VideoEmbed';
+import { LongformSection } from '../shared/LongformSection';
 import {
   deriveAreas,
   areaSlugByTitle,
@@ -257,6 +259,18 @@ export function HaulHome({
             <div className="haul-hero-badge" aria-hidden>⚡ Same-Day Pickup</div>
           </div>
         </section>
+
+        {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoEmbed
+          url={bundle.video_url}
+          description={bundle.video_description}
+          className="ll-video haul-video"
+        />
+        <LongformSection
+          body={bundle.longform_body}
+          phone={phone}
+          className="ll-longform haul-longform"
+        />
 
         {/* ── Trust strip (dark) — right under hero, no ScrollReveal ── */}
         <TrustStrip bundle={bundle} variant="haul" />

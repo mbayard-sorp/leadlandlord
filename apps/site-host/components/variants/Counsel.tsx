@@ -2,6 +2,8 @@ import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
 import { heroH1, telHref } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, firstReview } from '../../lib/variant-utils';
+import { VideoEmbed } from '../shared/VideoEmbed';
+import { LongformSection } from '../shared/LongformSection';
 import { Phone } from '../icons/Phone';
 import { Check } from '../icons/Check';
 import { ScrollReveal } from '../motion/ScrollReveal';
@@ -175,6 +177,18 @@ export function CounselHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             </ul>
           </div>
         </section>
+
+        {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoEmbed
+          url={bundle.video_url}
+          description={bundle.video_description}
+          className="ll-video counsel-video"
+        />
+        <LongformSection
+          body={bundle.longform_body}
+          phone={phone}
+          className="ll-longform counsel-longform"
+        />
 
         {/* Credentials bar */}
         <div className="counsel-creds" aria-label="Credentials">

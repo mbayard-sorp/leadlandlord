@@ -1019,3 +1019,7 @@
     transform: translate(-2px, -2px);
   }
 }
+
+/* hero video + long-form intro — bold/utility: heavy rule, tinted band */
+[data-theme='haul'] .haul-longform { background: var(--paper-2); border-top: var(--border-rule, 3px) solid var(--accent); }
+[data-theme='haul'] .haul-video .ll-video-frame { border-width: 3px; border-color: var(--ink); border-radius: var(--radius-card, 6px); }

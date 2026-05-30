@@ -86,6 +86,22 @@ export const ContentBundle = z.object({
   variant: VariantKind.default('classic'),
   hero_image_prompt: z.string().optional(),
   hero_image_url: z.string().optional(),
+  /**
+   * Optional YouTube embed shown directly under the hero. Manual-entry only —
+   * operators paste a watch/share/embed URL into Sanity; agents never author
+   * these. Renders only when video_url is present.
+   */
+  video_url: z.string().optional(),
+  video_description: z.string().optional(),
+  /**
+   * Keyword-rich long-form home intro placed high on the page. Markdown
+   * (renderer subset: headings, bullets, bold, links). Generated from the home
+   * cluster at build time and backfillable via the long-form-only path.
+   * longform_body is optional so legacy bundles validate; longform_generated_at
+   * stamps when it was last produced.
+   */
+  longform_body: z.string().optional(),
+  longform_generated_at: z.string().optional(),
   nearby_cities: z.array(z.string()).default([]),
   trust_signals: z.array(z.string()).default([]),
   home: Page,

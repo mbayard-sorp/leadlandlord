@@ -490,6 +490,15 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   if (!Array.isArray(bundle.neighborhoods)) {
     bundle.neighborhoods = [];
   }
+  // Stamp when the long-form intro was produced so the operator + render layer
+  // can show freshness without re-deriving it.
+  if (
+    typeof bundle.longform_body === 'string' &&
+    bundle.longform_body.trim().length > 0 &&
+    !bundle.longform_generated_at
+  ) {
+    bundle.longform_generated_at = new Date().toISOString();
+  }
 
   // Defensive parse for page arrays. Claude occasionally serializes one of
   // services/service_areas/blog_posts/info_pages as a JSON-encoded string
@@ -689,6 +698,124 @@ business_name: ${businessName}
 fast_mode: ${input.fast_mode ? 'true (use abbreviated page targets)' : 'false (full bundle)'}${siteModeSection}${hygiene}${clusterSection}${competitorSection}
 
 Invoke the ${OUTPUT_TOOL_NAME} tool exactly once with the full bundle. Do not return prose — only the tool call.`;
+}
+
+// --- Long-form-only path ----------------------------------------------------
+//
+// Backfill / regenerate just the keyword-rich home intro without paying for a
+// full 32K-token bundle generation. Used by the Site Builder's `longform_only`
+// mode (operator "Generate long-form intro" button). Reuses the same Anthropic
+// client + cost estimator + theme overlay composition as the full path.
+
+const LONGFORM_TOOL_NAME = 'output_longform_intro';
+
+const LONGFORM_TOOL_SCHEMA = {
+  type: 'object',
+  properties: {
+    longform_body: {
+      type: 'string',
+      description:
+        'Keyword-rich markdown home intro (400–700 words). Subset: ##, ###, - bullets, **bold**, [text](url). No # H1, tables, images, or raw HTML.',
+    },
+  },
+  required: ['longform_body'],
+} as const;
+
+export interface GenerateLongformInput {
+  niche: string;
+  city: string;
+  state: string;
+  business_name?: string;
+  /** Theme key — selects the niche overlay appended to the system prompt. */
+  theme?: string;
+  keyword_clusters?: ContentEngineInput['keyword_clusters'];
+}
+
+export interface GenerateLongformResult {
+  longform_body: string;
+  generated_at: string;
+  model: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  };
+  cost_usd: number;
+}
+
+export async function generateLongformBody(
+  input: GenerateLongformInput,
+): Promise<GenerateLongformResult> {
+  const client = getAnthropicClient();
+  const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+  const businessName =
+    input.business_name ?? `${capitalize(input.city)} ${capitalize(input.niche)} Pros`;
+  const systemPrompt = composeSystemPrompt(input.theme);
+
+  const homeCluster = (input.keyword_clusters ?? []).find((c) => c.page_kind === 'home');
+  const clusterTable = renderClusterTable(input.keyword_clusters ?? []);
+  const clusterSection = homeCluster
+    ? `\n\nHOME KEYWORD CLUSTER (anchor the intro on this):\n- primary="${homeCluster.primary_keyword}" supporting=[${(homeCluster.supporting_keywords ?? []).slice(0, 8).join(', ')}]\n\nAll clusters for context:\n${clusterTable}`
+    : '\n\nNo keyword clusters available — use best-practice local SEO phrasing for the niche × city.';
+
+  const userPrompt = `Write ONLY the long-form home intro (\`longform_body\`) for a local lead-gen website. Follow the "Long-form home intro" section of your instructions exactly.
+
+niche: ${input.niche}
+city: ${input.city}
+state: ${input.state}
+business_name: ${businessName}${clusterSection}
+
+Invoke the ${LONGFORM_TOOL_NAME} tool exactly once. Do not return prose.`;
+
+  const response = await withStreamTimeout(
+    client.messages.create({
+      model,
+      max_tokens: 3_000,
+      temperature: 0.3,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      tools: [
+        {
+          name: LONGFORM_TOOL_NAME,
+          description: 'Output the keyword-rich long-form home intro. Call exactly once.',
+          input_schema: LONGFORM_TOOL_SCHEMA as never,
+        },
+      ],
+      tool_choice: { type: 'tool', name: LONGFORM_TOOL_NAME },
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+    'longform',
+  );
+
+  const toolUse = response.content.find(
+    (block): block is Extract<typeof block, { type: 'tool_use' }> =>
+      block.type === 'tool_use' && block.name === LONGFORM_TOOL_NAME,
+  );
+  const body =
+    toolUse && typeof (toolUse.input as { longform_body?: unknown }).longform_body === 'string'
+      ? ((toolUse.input as { longform_body: string }).longform_body).trim()
+      : '';
+  if (!body) {
+    throw new Error(
+      `Long-form generation: model did not return longform_body. Stop reason: ${response.stop_reason}.`,
+    );
+  }
+
+  const usage = {
+    input_tokens: response.usage.input_tokens,
+    output_tokens: response.usage.output_tokens,
+    cache_read_input_tokens: response.usage.cache_read_input_tokens ?? 0,
+    cache_creation_input_tokens: response.usage.cache_creation_input_tokens ?? 0,
+  };
+  const cost_usd = estimateCostUsd(model, usage);
+
+  return {
+    longform_body: body,
+    generated_at: new Date().toISOString(),
+    model,
+    usage,
+    cost_usd,
+  };
 }
 
 function renderClusterTable(clusters: ContentEngineInput['keyword_clusters']): string {

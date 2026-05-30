@@ -710,3 +710,7 @@
   font-family: var(--font-display);
   font-weight: 700;
 }
+
+/* hero video + long-form intro — friendly: rounded, warm band, chunky frame */
+[data-theme='bright'] .bright-longform { background: var(--paper-2); }
+[data-theme='bright'] .bright-video .ll-video-frame { border-width: 3px; border-radius: 22px; }
