@@ -138,8 +138,12 @@ const OUTPUT_TOOL_NAME = 'output_content_bundle';
  * Note: a density-lint retry on top of a near-600s initial can exceed the
  * lambda budget — that path fails cleanly and requeues. The common case
  * (lint passes first shot) fits comfortably.
+ *
+ * Override via CONTENT_ENGINE_STREAM_TIMEOUT_MS for off-lambda runs (e.g. the
+ * local completion script) where the 800s Vercel ceiling doesn't apply and a
+ * large bundle needs initial + retry to both run to completion uncapped.
  */
-const STREAM_TIMEOUT_MS = 600_000;
+const STREAM_TIMEOUT_MS = Number(process.env.CONTENT_ENGINE_STREAM_TIMEOUT_MS) || 600_000;
 
 async function withStreamTimeout<T>(p: Promise<T>, phase: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
