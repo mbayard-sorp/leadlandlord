@@ -254,7 +254,16 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
 
     // 5. Match each cluster's primary + supporting back to fetched candidate
     //    metrics so we persist real numbers (not Claude's hallucinated stats).
-    const enriched = clusters.map((c) => enrichClusterWithMetrics(c, fetched));
+    const enrichedRaw = clusters.map((c) => enrichClusterWithMetrics(c, fetched));
+
+    // 5b. Hard-cap cluster count to prevent content-engine from generating a
+    //     bundle big enough to exceed the 800s Vercel lambda ceiling. Thin
+    //     sites in particular were over-producing (observed 11 clusters on a
+    //     thin site → 87KB bundle → density-lint retry → zombied run).
+    //     Selection: always keep the `home` cluster, then fill remaining slots
+    //     with highest totalVolume. Drop the rest; log what was dropped.
+    const cap = input.site_mode === 'content_rich' ? 28 : 8;
+    const enriched = capClusters(enrichedRaw, cap, ctx);
 
     // 6. Persist to Sanity. createOrReplace so re-runs overwrite.
     ctx.progress({ label: `persisting ${enriched.length} clusters to Sanity` });
@@ -319,15 +328,17 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
       )
       .join('\n');
 
-    // thin: 6-12 clusters (1 home + 4-6 services + 3-5 FAQ blog posts, 0
-    // service-area, 0 info pages). content_rich: ~21 clusters full-site.
+    // thin: 6-8 clusters (1 home + ~3 services + ~3 FAQ blog posts, 0
+    // service-area, 0 info pages). Tight cap protects content-engine from
+    // exceeding the 800s Vercel lambda ceiling on the first stream + retry.
+    // content_rich: ~21 clusters full-site.
     const derivedTarget =
       input.target_clusters ??
-      (input.site_mode === 'thin' ? 9 : 21);
+      (input.site_mode === 'thin' ? 7 : 21);
 
     const thinModeInstruction =
       input.site_mode === 'thin'
-        ? `\nSITE MODE: thin. Generate ONLY: 1 home cluster, 4-6 service clusters, 3-5 blog/FAQ clusters. Do NOT generate service_area or info clusters. Total 6-12 clusters max.`
+        ? `\nSITE MODE: thin. Generate ONLY: 1 home cluster, 3 service clusters, 3 blog/FAQ clusters. Do NOT generate service_area or info clusters. HARD LIMIT: 8 clusters max — any over 8 will be dropped.`
         : '';
 
     const userPrompt = `Niche: ${input.niche}
@@ -428,6 +439,42 @@ interface EnrichedCluster {
   keywords: Array<KeywordCandidate & { role: 'primary' | 'secondary' | 'supporting' }>;
   totalVolume: number;
   rationale?: string;
+}
+
+function capClusters(
+  clusters: EnrichedCluster[],
+  cap: number,
+  ctx: AgentContext,
+): EnrichedCluster[] {
+  if (clusters.length <= cap) return clusters;
+  // Always retain the home cluster (there should be exactly one).
+  const home = clusters.filter((c) => c.page_kind === 'home');
+  const rest = clusters.filter((c) => c.page_kind !== 'home');
+  // Sort the rest by totalVolume desc; ties broken by primary_keyword for
+  // determinism so re-runs on the same input pick the same survivors.
+  rest.sort((a, b) =>
+    b.totalVolume - a.totalVolume ||
+    a.primary_keyword.localeCompare(b.primary_keyword),
+  );
+  const keepRest = rest.slice(0, Math.max(0, cap - home.length));
+  const kept = [...home, ...keepRest];
+  const dropped = [...rest.slice(Math.max(0, cap - home.length))];
+  if (dropped.length > 0) {
+    ctx.log.warn(
+      {
+        cap,
+        kept: kept.length,
+        dropped: dropped.length,
+        droppedKeys: dropped.map((c) => ({
+          cluster_key: c.cluster_key,
+          page_kind: c.page_kind,
+          totalVolume: c.totalVolume,
+        })),
+      },
+      'keyword-planner capped clusters — overflow dropped by lowest totalVolume',
+    );
+  }
+  return kept;
 }
 
 function enrichClusterWithMetrics(
