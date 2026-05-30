@@ -507,7 +507,21 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
     }
   }
 
+  // Same defensive JSON.parse for singleton Page fields. Claude occasionally
+  // serializes home/about/contact as JSON-encoded strings instead of objects
+  // (hit 2026-05-29 on deck-building/Medford build: contact came back as a
+  // string and zod rejected the bundle on path ["contact"]). Parse-or-drop
+  // mirrors the array branch above.
   for (const key of ['home', 'about', 'contact'] as const) {
+    const v = bundle[key];
+    if (typeof v === 'string') {
+      try {
+        const parsed = JSON.parse(v);
+        bundle[key] = parsed && typeof parsed === 'object' ? parsed : undefined;
+      } catch {
+        bundle[key] = undefined;
+      }
+    }
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);
   }
   for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
