@@ -3,12 +3,15 @@ import { unstable_cache } from 'next/cache';
 import {
   getDb,
   sites,
+  calls,
   portfolioSnapshots,
   type Site,
   type PortfolioSnapshot,
 } from '@leadlandlord/db';
 import { fetchPortfolioFromSanity, type SanityPortfolioRow } from '@/lib/sanity-read';
 import { PortfolioTable, type SanityInfo, type SiteSnapshot } from './PortfolioTable';
+
+type SiteWithCalls = Site & { calls30dLive: number };
 
 // Render on demand — this is the live operator dashboard. Prerendering
 // at build time couples the build to DB schema state (e.g. a new column
@@ -19,9 +22,19 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 30;
 
 const loadPortfolio = unstable_cache(
-  async (): Promise<Site[]> => {
+  async (): Promise<SiteWithCalls[]> => {
     const db = getDb();
-    return await db.select().from(sites).orderBy(desc(sites.createdAt)).limit(200);
+    const rows = await db
+      .select({
+        site: sites,
+        calls30dLive: sql<number>`COALESCE(COUNT(${calls.id}) FILTER (WHERE ${calls.startedAt} > NOW() - INTERVAL '30 days'), 0)::int`,
+      })
+      .from(sites)
+      .leftJoin(calls, eq(calls.siteId, sites.id))
+      .groupBy(sites.id)
+      .orderBy(desc(sites.createdAt))
+      .limit(200);
+    return rows.map((r) => ({ ...r.site, calls30dLive: Number(r.calls30dLive) }));
   },
   ['operator-portfolio'],
   { revalidate: 30, tags: ['portfolio'] },
@@ -87,7 +100,7 @@ export default async function PortfolioPage() {
     status: r.status,
     trackingNumber: r.trackingNumber ?? null,
     trackingProvider: r.trackingProvider ?? null,
-    calls30d: r.calls30d,
+    calls30d: r.calls30dLive,
     mrrUsd: String(r.mrrUsd),
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
   }));
