@@ -56,7 +56,16 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       name: 'site-builder',
       inputSchema: SiteBuilderInput,
       outputSchema: SiteBuilderOutput,
-      dedupeKeyFn: (i) => `${slug(i.niche)}:${slug(i.city)}:${i.state.toUpperCase()}`,
+      // Full builds dedupe on niche/city/state so the cluster.ready cascade
+      // collapses to one run (see incident 2026-05-07). Long-form-only requests
+      // are user-triggered, repeatable backfills that must NOT collide with the
+      // full-build cache — returning undefined falls back to the per-event key
+      // so each request actually runs runLongformOnly (redeliveries still dedupe
+      // via event:${eventId}).
+      dedupeKeyFn: (i) =>
+        i.longform_only
+          ? undefined
+          : `${slug(i.niche)}:${slug(i.city)}:${i.state.toUpperCase()}`,
       defaultDailyCapUsd: 15,
     });
   }
