@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/cron/operator-tick", "schedule": "* * * * *" },
+    { "path": "/api/cron/operator-tick", "schedule": "*/10 * * * *" },
     { "path": "/api/cron/domain-verifier", "schedule": "*/5 * * * *" },
 
     { "path": "/api/cron/schedule/tenant-prospector", "schedule": "0 14 * * 1" },

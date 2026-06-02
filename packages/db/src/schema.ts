@@ -688,6 +688,10 @@ export const agentRuns = pgTable(
     // by startedAt desc. Without this index a populated agent_runs table forces
     // a full scan + sort on every poll.
     siteStartedIdx: index('agent_runs_site_started_idx').on(t.siteId, t.startedAt),
+    // Operator overview sums today's runs/cost via `WHERE started_at >= CURRENT_DATE`
+    // with no agent/site filter, so the composite indexes above (leading column
+    // agent/site) don't help. A bare startedAt index keeps that query off a seq scan.
+    startedIdx: index('agent_runs_started_idx').on(t.startedAt),
   }),
 );
 
