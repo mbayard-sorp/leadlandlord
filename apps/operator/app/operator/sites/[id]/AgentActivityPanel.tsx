@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ActivityRun, ActivityResponse } from '../../../api/operator/sites/[id]/activity/route';
 
-const POLL_MS = 4000;
+const POLL_MS = 10000;
 
 interface Props {
   siteId: string;
