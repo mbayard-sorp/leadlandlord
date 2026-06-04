@@ -40,19 +40,42 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  /* Narrower side padding on small screens so the brand + the non-shrinking
+     phone button fit; the phone (Archivo-Black number) does not shrink, so the
+     header is allowed to wrap it to a second line rather than overflow the
+     viewport. */
+  padding: 14px 16px;
   border-bottom: 2px solid var(--ink);
   background: var(--paper);
   position: sticky;
   top: 0;
   z-index: 10;
-  gap: 16px;
+  gap: 12px 16px;
+  flex-wrap: wrap;
 }
 [data-theme='haul'] .haul-brand {
   display: flex;
   align-items: center;
   gap: 12px;
   text-decoration: none;
+  /* Let the brand block shrink and truncate instead of forcing header width. */
+  min-width: 0;
+  flex: 1 1 auto;
+}
+[data-theme='haul'] .haul-brand > div {
+  min-width: 0;
+}
+[data-theme='haul'] .haul-brand-name,
+[data-theme='haul'] .haul-brand-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (min-width: 768px) {
+  [data-theme='haul'] .haul-header {
+    padding: 16px 24px;
+    flex-wrap: nowrap;
+  }
 }
 [data-theme='haul'] .haul-brand-icon {
   width: 44px;
@@ -366,7 +389,12 @@
   gap: 14px;
   padding: 24px 20px;
   border-right: 1px solid var(--accent-deep);
+  /* Grid items default to min-width:auto, so a long uppercase title would push
+     the 2-col strip past the viewport on narrow phones. Let the cell (and its
+     text block) shrink so the label wraps instead of overflowing. */
+  min-width: 0;
 }
+[data-theme='haul'] .haul-trust-cell > div { min-width: 0; }
 [data-theme='haul'] .haul-trust-cell:last-child { border-right: none; }
 @media (max-width: 767px) {
   [data-theme='haul'] .haul-trust-cell:nth-child(even) { border-right: none; }
