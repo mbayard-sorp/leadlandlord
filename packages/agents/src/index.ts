@@ -21,3 +21,7 @@ export { PortfolioAnalyst } from './portfolio-analyst/index';
 export { ComplianceGuard } from './compliance-guard/index';
 export { Operator } from './operator/index';
 export { CompetitorAnalyzer } from './competitor-analyzer/index';
+export { GeoAeoAuditor } from './geo-aeo-auditor/index';
+export { LocalSeoOptimizer } from './local-seo-optimizer/index';
+export { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
+export { ContentDataAuditor } from './content-data-auditor/index';

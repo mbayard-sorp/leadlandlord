@@ -120,6 +120,26 @@ Examples:
   spillway pool in a Scottsdale backyard, desert plants and saguaros, warm
   pool lights, distant mountains, low angle from waterline, cinematic."
 
+## Article image prompts (blog + info pages)
+
+For EACH blog post and info page, output an `article_image_prompt` string
+(20–40 words): a concrete, photorealistic scene for that article's topic,
+grounded in the niche and city. Same constraints as the hero prompt (no faces
+in close-up, no text/logos — those are added automatically). The build pipeline
+generates one image per page from this prompt for Article JSON-LD; if you omit
+it, the page falls back to the site hero image. Keep each prompt distinct from
+the hero and from the other pages so the network doesn't share imagery.
+
+Example (blog "how often to clean gutters", Boise): "Close-up of a clogged
+residential gutter packed with autumn leaves on a Boise home, overcast morning
+light, shallow depth of field."
+
+## Do NOT author `same_as`, `latitude`, or `longitude`
+
+These fields are operator-entered or build-derived — NEVER invent them. Leave
+`same_as` as `[]` and omit `latitude`/`longitude`. Fabricating a Google Business
+Profile URL or a coordinate is a compliance violation.
+
 ## Nearby cities + trust signals
 
 - `nearby_cities`: 4–6 names of towns or neighborhoods within ~30 miles

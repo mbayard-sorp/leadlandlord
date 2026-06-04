@@ -17,6 +17,26 @@ export interface WriteSiteToSanityOptions {
    * on the doc is preserved across rebuilds. Defaults to 'default'.
    */
   colorPalette?: 'default' | 'alt1' | 'alt2';
+  /**
+   * Build-derived geo for the LocalBusiness `geo` (GeoCoordinates) JSON-LD.
+   * Both must be present to write. Build-derived values are fine to overwrite
+   * on rebuild; an operator override on the existing doc still wins (see
+   * `writeSiteToSanity`).
+   */
+  geo?: { latitude: number; longitude: number } | null;
+  /**
+   * Pre-generated per-page article image asset refs, keyed by page doc _id.
+   * Generated best-effort in site-builder BEFORE this write (mirrors the hero
+   * image upload) so the page createOrReplace can attach `articleImage`
+   * inline. Missing/absent entries leave `articleImage` unset (routes fall
+   * back to OG/hero).
+   */
+  articleImageAssetIds?: Map<string, string>;
+  /**
+   * Timestamp (ISO) stamped onto every page's `dateModified` so Article
+   * JSON-LD reflects this (re)generation. Defaults to now when absent.
+   */
+  dateModified?: string;
 }
 
 export interface WriteSiteToSanityResult {
@@ -128,6 +148,36 @@ export async function writeSiteToSanity(
     (bundle.video_description ?? (existingSite?.videoDescription as string | undefined)) ||
     undefined;
 
+  // sameAs + lat/lng are OPERATOR-ENTERED in Studio (real GBP / social URLs,
+  // or a hand-corrected coordinate). createOrReplace would otherwise wipe them
+  // on every rebuild — same carry-forward as videoUrl above. The content engine
+  // never authors sameAs, so any value on the existing doc always wins. For
+  // geo: build-derived coordinates are an acceptable default, but an operator
+  // override on the existing doc takes precedence over the freshly-derived one.
+  const existingSameAs = Array.isArray(existingSite?.sameAs)
+    ? (existingSite!.sameAs as string[])
+    : undefined;
+  const sameAs =
+    existingSameAs && existingSameAs.length > 0
+      ? existingSameAs
+      : bundle.same_as && bundle.same_as.length > 0
+        ? bundle.same_as
+        : undefined;
+  const existingLat = existingSite?.latitude as number | undefined;
+  const existingLng = existingSite?.longitude as number | undefined;
+  const latitude =
+    typeof existingLat === 'number'
+      ? existingLat
+      : opts.geo?.latitude ?? bundle.latitude;
+  const longitude =
+    typeof existingLng === 'number'
+      ? existingLng
+      : opts.geo?.longitude ?? bundle.longitude;
+
+  // Stamp page dateModified to this (re)generation so Article JSON-LD freshness
+  // is real. Build-time default is now; callers may pass an explicit timestamp.
+  const dateModified = opts.dateModified ?? new Date().toISOString();
+
   // Flatten the bundle into a single list of (kind, index, page) so we can
   // build deterministic IDs uniformly.
   const refs: PageRef[] = [
@@ -148,6 +198,10 @@ export async function writeSiteToSanity(
   for (const ref of refs) {
     const id = pageDocId(siteId, ref.kind, ref.index);
     pageIds.push(id);
+    // Per-page article image (blog/info only) — generated best-effort upstream
+    // and passed in by asset _id. Absent → leave articleImage unset so the
+    // route falls back to OG/hero.
+    const articleAssetId = opts.articleImageAssetIds?.get(id);
     tx.createOrReplace({
       _id: id,
       _type: 'page',
@@ -160,6 +214,12 @@ export async function writeSiteToSanity(
       jsonLd: ref.page.schema_org_jsonld != null
         ? JSON.stringify(ref.page.schema_org_jsonld)
         : undefined,
+      articleImage: articleAssetId
+        ? { _type: 'image', asset: { _type: 'reference', _ref: articleAssetId } }
+        : undefined,
+      // Article `dateModified` — stamped to this generation. Prefer a per-page
+      // value the pipeline set on the bundle, else the build-wide timestamp.
+      dateModified: ref.page.date_modified ?? dateModified,
       // Keyword targeting (when content engine declared a cluster).
       primaryKeyword: ref.page.primary_keyword,
       faqs: (ref.page.faqs ?? []).map((f, i) => ({
@@ -213,6 +273,13 @@ export async function writeSiteToSanity(
     robotsDisallow: true, // default during warming — operator flips when going live
     trustSignals: bundle.trust_signals ?? [],
     nearbyCities: bundle.nearby_cities ?? [],
+    // Geo (GeoCoordinates) — build-derived centroid, operator override wins.
+    // Only set when both are present (site-host requires both to emit `geo`).
+    latitude: typeof latitude === 'number' ? latitude : undefined,
+    longitude: typeof longitude === 'number' ? longitude : undefined,
+    // sameAs — operator-entered real profile URLs, carried forward across
+    // rebuilds (see resolution above). Undefined leaves the field untouched.
+    sameAs,
     neighborhoods: (bundle.neighborhoods ?? []).map((n, i) => ({
       _key: `n${i}`,
       name: n.name,

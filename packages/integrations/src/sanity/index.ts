@@ -17,5 +17,5 @@ export type { SanityClientOptions } from '@leadlandlord/sanity-schema/client';
 export { siteDocId, pageDocId, themeDocId } from '@leadlandlord/sanity-schema/ids';
 export type { PageKind, ThemeName } from '@leadlandlord/sanity-schema/ids';
 
-export { uploadHeroImage, uploadFile } from './asset-upload';
+export { uploadHeroImage, uploadArticleImage, uploadFile } from './asset-upload';
 export type { UploadHeroImageResult } from './asset-upload';

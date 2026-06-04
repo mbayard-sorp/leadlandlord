@@ -16,6 +16,21 @@ export const currentRequestBaseUrl = cache(async (): Promise<string> => {
   return `${proto}://${host}`;
 });
 
+/**
+ * Canonicalize a site-relative path to its 200-serving form: NO trailing slash
+ * (the site runs Next.js `trailingSlash: false`, so `/foo/` 308-redirects to
+ * `/foo`). The homepage stays `/`. This MUST match the slash handling in
+ * sitemap.ts / llms.txt so the canonical link tag, the sitemap entry, and the
+ * actual 200 URL all agree — a canonical pointing at a redirect is the bug this
+ * fixes. Mirrors the `canonical()` helpers in those routes; kept here as the
+ * shared source of truth for metadata + breadcrumb URLs.
+ */
+export function canonicalPath(path: string): string {
+  const slug = path.startsWith('/') ? path : `/${path}`;
+  const stripped = slug.replace(/\/+$/, '');
+  return stripped === '' ? '/' : stripped;
+}
+
 interface PageMetaInput {
   title: string;
   description: string;
@@ -42,7 +57,7 @@ interface PageMetaInput {
  */
 export function buildPageMetadata(opts: PageMetaInput): Metadata {
   const { title, description, path, ogType = 'website', image, publishedTime, siteName } = opts;
-  const canonical = path;
+  const canonical = canonicalPath(path);
   const images = image ? [image] : undefined;
 
   const og: NonNullable<Metadata['openGraph']> = {
@@ -88,7 +103,7 @@ export async function breadcrumbsJsonLd(items: BreadcrumbItem[]): Promise<object
       '@type': 'ListItem',
       position: idx + 1,
       name: item.name,
-      item: `${base}${item.path}`,
+      item: `${base}${canonicalPath(item.path)}`,
     })),
   };
 }

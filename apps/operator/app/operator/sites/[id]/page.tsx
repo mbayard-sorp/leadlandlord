@@ -7,10 +7,12 @@ import {
   calls,
   leads,
   domainCandidates,
+  siteOriginalDataInputs,
   type Site,
   type Call,
   type Lead,
   type DomainCandidate,
+  type SiteOriginalDataInputs,
 } from '@leadlandlord/db';
 import {
   fetchSanitySiteDetail,
@@ -33,6 +35,8 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { GoLiveChecklist, type GoLiveItem } from './GoLiveChecklist';
 import type { GoLiveManualFlags } from './go-live-actions';
 import { LocalContentToggle } from './LocalContentToggle';
+import { ProprietaryDataPanel } from './ProprietaryDataPanel';
+import { GeoSeoAuditPanel } from './GeoSeoAuditPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,13 +51,14 @@ interface SiteDetailData {
   sanity: SanitySiteDetail | null;
   keywordClusters: SanityKeywordClusterSummary[];
   domainCandidatesList: DomainCandidate[];
+  originalData: SiteOriginalDataInputs | null;
 }
 
 async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
   const db = getDb();
   const siteRow = (await db.select().from(sites).where(eq(sites.id, id)).limit(1))[0];
   if (!siteRow) return null;
-  const [recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList] = await Promise.all([
+  const [recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData] = await Promise.all([
     db.select().from(calls).where(eq(calls.siteId, id)).orderBy(desc(calls.startedAt)).limit(20),
     db.select().from(leads).where(eq(leads.siteId, id)).orderBy(desc(leads.createdAt)).limit(20),
     fetchSanitySiteDetail(id).catch(() => null),
@@ -69,15 +74,21 @@ async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
       )
       .orderBy(domainCandidates.rank)
       .limit(50),
+    db
+      .select()
+      .from(siteOriginalDataInputs)
+      .where(eq(siteOriginalDataInputs.siteId, id))
+      .limit(1)
+      .then((r) => r[0] ?? null),
   ]);
-  return { site: siteRow, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList };
+  return { site: siteRow, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData };
 }
 
 export default async function SiteDetailPage({ params }: Params) {
   const { id } = await params;
   const data = await loadSiteDetail(id);
   if (!data) notFound();
-  const { site, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList } = data;
+  const { site, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData } = data;
 
   const primaryHost = sanity?.domains.find((d) => d.isPrimary)?.host
     ?? sanity?.domains[0]?.host
@@ -251,6 +262,27 @@ export default async function SiteDetailPage({ params }: Params) {
         <AgentActivityPanel siteId={site.id} />
       </section>
 
+      {/* 8c. GEO / SEO audit history */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          GEO / SEO audit history
+        </h2>
+        <GeoSeoAuditPanel siteId={site.id} />
+      </section>
+
+      {/* 8d. Proprietary data inputs (grounds original/GEO content) */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Proprietary data
+        </h2>
+        <ProprietaryDataPanel
+          siteId={site.id}
+          initial={buildProprietaryInitial(originalData)}
+          updatedBy={originalData?.updatedBy ?? null}
+          updatedAt={originalData?.updatedAt ? new Date(originalData.updatedAt).toISOString() : null}
+        />
+      </section>
+
       {/* 8b. Network */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
@@ -298,6 +330,36 @@ export default async function SiteDetailPage({ params }: Params) {
       </CollapsibleSection>
     </div>
   );
+}
+
+/**
+ * Map a (possibly absent) siteOriginalDataInputs row into the JSON-textarea
+ * strings the ProprietaryDataPanel form expects. The GBP URL + socials are
+ * pulled back out of proprietaryFacts.sameAs into their own fields, and the
+ * remaining facts are re-serialized without sameAs so the round-trip is clean.
+ */
+function buildProprietaryInitial(row: SiteOriginalDataInputs | null) {
+  const facts = (row?.proprietaryFacts as Record<string, unknown> | null | undefined) ?? {};
+  const sameAsRaw = Array.isArray(facts.sameAs) ? (facts.sameAs as unknown[]).map(String) : [];
+  const gbpUrl = sameAsRaw.find((u) => /google|g\.page|maps\.app/i.test(u)) ?? '';
+  const socials = sameAsRaw.filter((u) => u !== gbpUrl);
+  const factsWithoutSameAs = { ...facts };
+  delete (factsWithoutSameAs as Record<string, unknown>).sameAs;
+
+  const pretty = (v: unknown): string =>
+    v == null || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0)
+      ? ''
+      : JSON.stringify(v, null, 2);
+
+  return {
+    caseStudyInputs: pretty(row?.caseStudyInputs),
+    firsthandInputs: pretty(row?.firsthandInputs),
+    contrarianTakes: pretty(row?.contrarianTakes),
+    proprietaryFacts: pretty(factsWithoutSameAs),
+    expertiseProfile: pretty(row?.expertiseProfile),
+    gbpUrl,
+    socials: socials.join('\n'),
+  };
 }
 
 function Pill({ children }: { children: React.ReactNode }) {

@@ -42,6 +42,15 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
       }))
     : undefined;
 
+  // geo + sameAs: emit only when real data is present (Phase 2 pipeline /
+  // operator-entered). Both lat & lng required for a valid GeoCoordinates node;
+  // sameAs holds the contractor's real GBP + socials — never fabricated.
+  const geo =
+    bundle.latitude != null && bundle.longitude != null
+      ? { '@type': 'GeoCoordinates', latitude: bundle.latitude, longitude: bundle.longitude }
+      : undefined;
+  const sameAs = bundle.same_as.length > 0 ? bundle.same_as : undefined;
+
   const json = {
     '@context': 'https://schema.org',
     '@type': subtype,
@@ -58,6 +67,8 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
       addressRegion: bundle.state,
       addressCountry: 'US',
     },
+    geo,
+    sameAs,
     areaServed: [
       bundle.city,
       ...bundle.nearby_cities,
@@ -89,6 +100,13 @@ interface FaqProps {
   questions: Array<{ q: string; a: string }>;
 }
 
+/**
+ * FAQPage JSON-LD. NOTE: since Google's April 2023 change, FAQ rich results are
+ * shown only for well-known authoritative gov/health sites — these tenant sites
+ * will NOT get FAQ rich snippets in the SERP. We keep this because it's still
+ * valid, parsed by answer engines (AEO), and reinforces entity understanding —
+ * but do not expect SERP real estate from it.
+ */
 export function FaqJsonLd({ questions }: FaqProps) {
   if (!questions.length) return null;
   const json = {

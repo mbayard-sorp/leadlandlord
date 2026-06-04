@@ -1540,3 +1540,136 @@ export type CrossSiteLink = typeof crossSiteLinks.$inferSelect;
 export type NewCrossSiteLink = typeof crossSiteLinks.$inferInsert;
 export type LinkRequest = typeof linkRequests.$inferSelect;
 export type NewLinkRequest = typeof linkRequests.$inferInsert;
+
+// ────────────────────────────────────────────────────────────
+// GEO / Local-SEO / Original-content auditors (Phase 3)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Time-series audit-score snapshots for the three recurring auditor agents
+ * (geo-aeo-auditor, local-seo-optimizer, content-data-auditor). One row per
+ * review run; recommendations themselves live in `seo_recommendations`. The
+ * `(siteId, auditor, auditedAt)` index drives the per-site improvement chart;
+ * `(auditor, auditedAt)` drives fleet-wide trend dashboards.
+ */
+export const geoSeoAudits = pgTable(
+  'geo_seo_audits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** 'geo_aeo' | 'content_data' | 'local_seo' */
+    auditor: text('auditor').notNull(),
+    /** agent_runs.id of the review run that produced this snapshot. No FK (house style). */
+    runId: uuid('run_id'),
+    /** 0-100 composite for this auditor. */
+    score: numeric('score', { precision: 5, scale: 2 }).notNull().default('0'),
+    /** Auditor-specific subscores, e.g. { llmsTxtCompleteness, schemaCoverage, ... }. */
+    subscores: jsonb('subscores').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    /** Raw evidence: failed checks, fetched JSON-LD, NAP diffs — for debugging + UI drill-down. */
+    findings: jsonb('findings').$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+    /** Count of recommendations emitted this run (quick UI badge). */
+    recommendationCount: integer('recommendation_count').notNull().default(0),
+    /** Reserved seam for deferred live answer-engine probing; null in v1. */
+    liveCitationProbe: jsonb('live_citation_probe').$type<Record<string, unknown>>(),
+    auditedAt: timestamp('audited_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteAuditorAuditedIdx: index('geo_seo_audits_site_auditor_audited_idx').on(
+      t.siteId,
+      t.auditor,
+      t.auditedAt,
+    ),
+    auditorAuditedIdx: index('geo_seo_audits_auditor_audited_idx').on(t.auditor, t.auditedAt),
+  }),
+);
+
+/**
+ * Operator-captured proprietary inputs that ground non-commodity content
+ * (case studies, firsthand reviews, contrarian takes). One row per site. Kept
+ * in Postgres (not Sanity) so raw proprietary inputs stay off the public
+ * dataset and on the agents' Postgres read path; rendered output still lands in
+ * Sanity via the normal pipeline.
+ */
+export const siteOriginalDataInputs = pgTable(
+  'site_original_data_inputs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** Case-study seeds: [{ problem, solution, outcome, city, jobType, photos? }]. */
+    caseStudyInputs: jsonb('case_study_inputs')
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Firsthand-review seeds: [{ subject, experience, verdict, comparisons[] }]. */
+    firsthandInputs: jsonb('firsthand_inputs')
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Contrarian seeds: [{ claim, reasoning, evidence }]. Never auto-generated. */
+    contrarianTakes: jsonb('contrarian_takes')
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Free-form vouched facts (hours, certifications, equipment, guarantees). */
+    proprietaryFacts: jsonb('proprietary_facts')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    /** E-E-A-T: who authored/vouches — drives author schema + bylines. */
+    expertiseProfile: jsonb('expertise_profile').$type<Record<string, unknown>>(),
+    updatedBy: text('updated_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteUniq: uniqueIndex('site_original_data_inputs_site_uniq').on(t.siteId),
+  }),
+);
+
+/**
+ * Computed network-aggregated metric snapshots, derived from data we already
+ * own (calls, DataForSEO cache, GSC). The content-data-auditor reads these as
+ * citation-safe facts (with sample sizes) instead of running ad-hoc
+ * aggregations at audit time. Per-site rows set `siteId`; per-niche aggregates
+ * set `niche` with `siteId` null.
+ */
+export const siteNetworkMetrics = pgTable(
+  'site_network_metrics',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    niche: text('niche'),
+    /** 'call_volume' | 'job_type_mix' | 'local_pricing' | 'serp_landscape' | 'seasonality' */
+    metricKind: text('metric_kind').notNull(),
+    /** Computed metric body, e.g. { median, p25, p75, byMonth[] }. */
+    value: jsonb('value').$type<Record<string, unknown>>().notNull(),
+    /** Underlying observation count — gate for "enough data to publish" (anti-fabrication). */
+    sampleSize: integer('sample_size').notNull().default(0),
+    /** Window the metric covers, e.g. 'last_90d'. */
+    window: text('window').notNull(),
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteKindComputedIdx: index('site_network_metrics_site_kind_computed_idx').on(
+      t.siteId,
+      t.metricKind,
+      t.computedAt,
+    ),
+    nicheKindComputedIdx: index('site_network_metrics_niche_kind_computed_idx').on(
+      t.niche,
+      t.metricKind,
+      t.computedAt,
+    ),
+  }),
+);
+
+export type GeoSeoAudit = typeof geoSeoAudits.$inferSelect;
+export type NewGeoSeoAudit = typeof geoSeoAudits.$inferInsert;
+export type SiteOriginalDataInputs = typeof siteOriginalDataInputs.$inferSelect;
+export type NewSiteOriginalDataInputs = typeof siteOriginalDataInputs.$inferInsert;
+export type SiteNetworkMetric = typeof siteNetworkMetrics.$inferSelect;
+export type NewSiteNetworkMetric = typeof siteNetworkMetrics.$inferInsert;

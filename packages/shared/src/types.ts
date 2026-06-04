@@ -41,6 +41,20 @@ export const Page = z.object({
   mdx: z.string(),
   schema_org_jsonld: z.unknown().optional(),
   /**
+   * Primary image URL for this page, emitted as Article `image` on blog / info
+   * pages (required for article rich-result eligibility). Generated per-page at
+   * build time; falls back to the site hero image when absent.
+   */
+  article_image_url: z.string().optional(),
+  /** Prompt used to generate `article_image_url`. */
+  article_image_prompt: z.string().optional(),
+  /**
+   * Last meaningful content update (ISO), emitted as Article `dateModified`.
+   * Stamped by the pipeline on (re)generation; falls back to the bundle's
+   * generated_at when absent.
+   */
+  date_modified: z.string().optional(),
+  /**
    * Stable cluster identifier this page targets. Optional only because
    * legacy bundles (pre-keyword-planner) won't have it.
    */
@@ -104,6 +118,18 @@ export const ContentBundle = z.object({
   longform_generated_at: z.string().optional(),
   nearby_cities: z.array(z.string()).default([]),
   trust_signals: z.array(z.string()).default([]),
+  /**
+   * Geo coordinates for LocalBusiness `geo` (GeoCoordinates). Derived at build
+   * time from the site's city/state centroid. Both must be present to emit.
+   */
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  /**
+   * Real, verifiable profile URLs for LocalBusiness `sameAs` — the partner
+   * contractor's actual Google Business Profile plus any real socials.
+   * Operator-entered; never fabricated.
+   */
+  same_as: z.array(z.string()).default([]),
   home: Page,
   services: z.array(Page),
   service_areas: z.array(Page),

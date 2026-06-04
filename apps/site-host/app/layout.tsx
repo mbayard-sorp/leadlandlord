@@ -5,6 +5,7 @@ import { resolveCurrentSite } from '../lib/site-context';
 import { currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { WebSiteJsonLd } from '../components/shared/WebSiteJsonLd';
+import { LocalBusinessRefJsonLd } from '../components/shared/LocalBusinessRefJsonLd';
 import { WebVitalsReporter } from '../components/shared/WebVitalsReporter';
 import './globals.css';
 
@@ -76,6 +77,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <a href="#main" className="skip-to-content">Skip to main content</a>
         {bundle && <WebSiteJsonLd name={bundle.business_name} url={baseUrl} />}
+        {bundle && <LocalBusinessRefJsonLd bundle={bundle} url={baseUrl} />}
         {children}
         {ga ? (
           <>

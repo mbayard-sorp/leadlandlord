@@ -37,6 +37,7 @@ ${buildLargeBody(['window cleaning', 'gutter cleaning', 'pressure washing', 'roo
     variant: 'bright',
     nearby_cities: [],
     trust_signals: [],
+    same_as: [],
     home: makePage('/', 'home', 'Baton Rouge Cleaning Services', homeMdx),
     about: makePage('/about', 'about', 'About Us', 'We are a local cleaning company.'),
     contact: makePage('/contact', 'contact', 'Contact Us', 'Contact us for a free quote.'),

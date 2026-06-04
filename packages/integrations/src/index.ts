@@ -12,6 +12,7 @@ export * as dataforseo from './dataforseo/index';
 export * as dataforseoBacklinks from './dataforseo/backlinks';
 export * as namecheap from './namecheap/index';
 export * as imagen from './imagen/index';
+export * as geocode from './geocode/index';
 export * as cloudflare from './cloudflare/index';
 export * as googleAuth from './google-auth/index';
 export * as googleSearchConsole from './google-search-console/index';
