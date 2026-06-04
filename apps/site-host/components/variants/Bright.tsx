@@ -126,7 +126,7 @@ export function BrightHome({
         </header>
 
         {/* top nav — inserted immediately after header */}
-        <SiteNav bundle={bundle} variant="bright" />
+        <SiteNav bundle={bundle} variant="bright" showAllPages />
 
         {/* ABOVE THE FOLD — no ScrollReveal here */}
         <section className="bright-hero" aria-labelledby="hero-h1">
