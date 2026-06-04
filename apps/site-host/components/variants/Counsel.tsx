@@ -122,7 +122,7 @@ export function CounselHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </header>
 
         {/* Top nav */}
-        <SiteNav bundle={bundle} variant="counsel" />
+        <SiteNav bundle={bundle} variant="counsel" showAllPages />
 
         {/* ── Hero — above fold, no ScrollReveal ── */}
         <section className="counsel-hero" aria-labelledby="hero-h1" id="counsel-main">

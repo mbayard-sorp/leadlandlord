@@ -85,7 +85,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
         </header>
 
         {/* top nav — inserted immediately after header */}
-        <SiteNav bundle={bundle} variant="modern" />
+        <SiteNav bundle={bundle} variant="modern" showAllPages />
 
         {/* HERO — above the fold, no ScrollReveal, no motion wrapper */}
         <section className="modern-hero" aria-labelledby="hero-h1">

@@ -126,7 +126,7 @@ export function HaulHome({
         </header>
 
         {/* ── Top nav ── */}
-        <SiteNav bundle={bundle} variant="haul" />
+        <SiteNav bundle={bundle} variant="haul" showAllPages />
 
         {/* ── Hero — above fold, no ScrollReveal, no motion wrapper ── */}
         <section className="haul-hero" aria-labelledby="hero-h1">

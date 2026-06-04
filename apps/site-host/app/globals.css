@@ -20,3 +20,10 @@
 
 @import '../styles/components.css' layer(components);
 @import '../styles/info-page.css' layer(components);
+
+/*
+ * Imported UNLAYERED (on purpose) so it wins over the `variants` layer — the
+ * dropdown-menu nav (SiteNav showAllPages) must beat each variant's nav
+ * overflow + link rules. Unlayered declarations outrank any cascade layer.
+ */
+@import '../styles/site-nav.css';

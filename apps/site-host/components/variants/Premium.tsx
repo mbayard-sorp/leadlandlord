@@ -86,7 +86,7 @@ export function PremiumHome({
             )}
             {bundle.business_name}
           </a>
-          <SiteNav bundle={bundle} variant="premium" className="premium-nav" />
+          <SiteNav bundle={bundle} variant="premium" className="premium-nav" showAllPages />
         </header>
 
         {/* ABOVE THE FOLD: hero — no ScrollReveal, no motion wrapper */}

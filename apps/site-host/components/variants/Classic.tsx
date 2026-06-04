@@ -90,7 +90,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </header>
 
         {/* top nav */}
-        <SiteNav bundle={bundle} variant="classic" />
+        <SiteNav bundle={bundle} variant="classic" showAllPages />
 
         {/* hero — above fold, no ScrollReveal, no motion wrapper */}
         <section className="classic-hero" aria-labelledby="hero-h1">
