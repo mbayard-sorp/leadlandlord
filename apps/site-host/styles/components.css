@@ -234,10 +234,17 @@
   right: 0;
   bottom: 0;
   z-index: 50;
+  /* left/right:0 already pins this to the viewport; max-width is a belt-and-
+     suspenders guard so the bar can never exceed the viewport even if an
+     ancestor ever establishes a wider containing block. */
+  max-width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  gap: 12px;
+  /* 10px block padding + 44px min tap target = 64px bar, matching the
+     per-variant *-mobile-spacer so no content hides behind the bar. */
+  padding: 10px 16px;
   background: var(--ink);
   color: var(--paper);
   border-top: 2px solid var(--ink);
@@ -250,10 +257,27 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* Allow the phone link to shrink inside the flex row; the number stays on
+     one line and ellipsizes rather than forcing the bar wider than the
+     viewport. */
+  min-width: 0;
   font-weight: 700;
   font-size: 0.9375rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 44px tap target only for the direct-child phone layout (classic/modern/
+   premium/bright/haul). Counsel nests .phone under an eyebrow label inside a
+   stacked block, so it sets its own height — don't force 44px there. */
+.sticky-mobile-bar > .phone {
+  min-height: 44px;
 }
 .sticky-mobile-bar .cta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   padding: 6px 14px;
   border-radius: 999px;
   background: var(--accent);
