@@ -23,6 +23,12 @@ export function sanityToBundle(site: SanitySite): Bundle {
     favicon_url: site.faviconUrl ?? undefined,
     nearby_cities: site.nearbyCities ?? [],
     trust_signals: site.trustSignals ?? [],
+    // Structured-data geo/sameAs. Phase 2 adds the Sanity fields + GROQ
+    // projection that populate these; until then they're absent (geo) / empty
+    // (sameAs) so the JSON-LD emitters simply skip the geo + sameAs nodes.
+    latitude: site.latitude ?? undefined,
+    longitude: site.longitude ?? undefined,
+    same_as: site.sameAs ?? [],
     home: pageToBundlePage(site.home, 'home'),
     about: pageToBundlePage(site.about, 'about') ?? blank,
     contact: pageToBundlePage(site.contact, 'contact') ?? blank,
@@ -86,7 +92,8 @@ function pageToBundlePage(p: SanitySitePage | undefined | null, fallbackKind: st
     meta_description: p.metaDescription ?? '',
     mdx: p.mdx ?? '',
     schema_org_jsonld: jsonLd,
-    og_image_url: p.pageOgImageUrl ?? undefined,
+    og_image_url: p.articleImageUrl ?? p.pageOgImageUrl ?? undefined,
+    date_modified: p.dateModified ?? undefined,
     faqs: (p.faqs ?? []).map((f) => ({ q: f.q, a: f.a })),
   };
 }

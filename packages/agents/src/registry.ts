@@ -29,6 +29,10 @@ import { LocalContentScout } from './local-content-scout/index';
 import { LocalContentWriter } from './local-content-writer/index';
 import { IndexNowSubmitter } from './indexnow-submitter/index';
 import { CompetitorAnalyzer } from './competitor-analyzer/index';
+import { GeoAeoAuditor } from './geo-aeo-auditor/index';
+import { LocalSeoOptimizer } from './local-seo-optimizer/index';
+import { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
+import { ContentDataAuditor } from './content-data-auditor/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -65,6 +69,10 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'local-content-writer': () => new LocalContentWriter(),
   'indexnow-submitter': () => new IndexNowSubmitter(),
   'competitor-analyzer': () => new CompetitorAnalyzer(),
+  'geo-aeo-auditor': () => new GeoAeoAuditor(),
+  'local-seo-optimizer': () => new LocalSeoOptimizer(),
+  'network-metrics-aggregator': () => new NetworkMetricsAggregator(),
+  'content-data-auditor': () => new ContentDataAuditor(),
 };
 
 export function getAgent(name: string): AnyAgent {

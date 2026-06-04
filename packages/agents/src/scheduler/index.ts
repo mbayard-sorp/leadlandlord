@@ -17,6 +17,10 @@ import { scheduleMollyNudge } from './molly-nudge';
 import { scheduleNetworkLinker } from './network-linker';
 import { scheduleWaveProgression } from './wave-progression';
 import { scheduleLocalContentScout } from './local-content-scout';
+import { scheduleGeoAeoAuditor } from './geo-aeo-auditor';
+import { scheduleLocalSeoOptimizer } from './local-seo-optimizer';
+import { scheduleNetworkMetricsAggregator } from './network-metrics-aggregator';
+import { scheduleContentDataAuditor } from './content-data-auditor';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -42,6 +46,10 @@ export const schedulers: Record<string, Scheduler> = {
   'network-linker': scheduleNetworkLinker,
   'wave-progression': scheduleWaveProgression,
   'local-content-scout': scheduleLocalContentScout,
+  'geo-aeo-auditor': scheduleGeoAeoAuditor,
+  'local-seo-optimizer': scheduleLocalSeoOptimizer,
+  'network-metrics-aggregator': scheduleNetworkMetricsAggregator,
+  'content-data-auditor': scheduleContentDataAuditor,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';

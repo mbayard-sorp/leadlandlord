@@ -27,6 +27,12 @@ export const PageSchema = z.object({
   schema_org_jsonld: z.unknown().optional(),
   og_image_url: z.string().url().optional(),
   /**
+   * Last-modified timestamp for this page, surfaced as Article `dateModified`.
+   * Optional: populated by the pipeline (Phase 2); falls back to the bundle's
+   * generated_at on routes when absent.
+   */
+  date_modified: z.string().optional(),
+  /**
    * Exact keyword phrase this page targets (from the assigned KeywordCluster).
    * Content Engine sets this when keyword clusters are passed in. Variants
    * render this as the on-page H1 verbatim — see `heroH1()`.
@@ -54,6 +60,19 @@ export const BundleSchema = z.object({
   favicon_url: z.string().optional(),
   nearby_cities: z.array(z.string()).default([]),
   trust_signals: z.array(z.string()).default([]),
+  /**
+   * Geo coordinates for LocalBusiness `geo` (GeoCoordinates). Optional:
+   * populated by the pipeline (Phase 2) from the site's city/state centroid.
+   * Both must be present for the emitter to render a geo node.
+   */
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  /**
+   * Real, verifiable profile URLs for LocalBusiness `sameAs` — the partner
+   * contractor's actual Google Business Profile plus any real socials. Operator-
+   * entered; never fabricated. Optional/empty until supplied.
+   */
+  same_as: z.array(z.string().url()).default([]),
   home: PageSchema,
   services: z.array(PageSchema),
   service_areas: z.array(PageSchema),

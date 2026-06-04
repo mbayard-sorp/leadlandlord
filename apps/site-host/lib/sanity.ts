@@ -25,11 +25,12 @@ export function urlForImage(source: SanityImageSource) {
  * gives the whole render bundle. Slicing arrays at [0...50] guards against
  * pathological page counts blowing the GROQ projection size.
  */
-const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url }`;
+const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url, "articleImageUrl": articleImage.asset->url, "dateModified": dateModified }`;
 
 const SITE_PROJECTION = `{
   _id, siteId, "slug": slug.current, businessName, niche, city, state, siteMode,
   gaMeasurementId, robotsDisallow, indexnowKey, generatedAt,
+  latitude, longitude, sameAs,
   trustSignals, nearbyCities,
   "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
@@ -67,6 +68,9 @@ export interface SanitySitePage {
   jsonLd?: string | null;
   faqs?: Array<{ q: string; a: string }> | null;
   pageOgImageUrl?: string | null;
+  articleImageUrl?: string | null;
+  /** ISO timestamp surfaced as Article `dateModified`. Phase 2 populates it. */
+  dateModified?: string | null;
 }
 
 export interface SanitySite {
@@ -82,6 +86,10 @@ export interface SanitySite {
   robotsDisallow?: boolean | null;
   indexnowKey?: string | null;
   generatedAt?: string | null;
+  /** Geo + sameAs for LocalBusiness structured data. Phase 2 populates these. */
+  latitude?: number | null;
+  longitude?: number | null;
+  sameAs?: string[] | null;
   trustSignals?: string[] | null;
   nearbyCities?: string[] | null;
   neighborhoods?: Array<{ name: string; googleMapsUrl: string }> | null;

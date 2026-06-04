@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
-import { breadcrumbsJsonLd, buildPageMetadata } from '../../../lib/seo-meta';
+import { breadcrumbsJsonLd, buildPageMetadata, currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { substituteBundlePhone } from '../../../lib/phone';
 import { telHref, pageH1 } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
+import { serviceAreaLocality } from '../../../components/shared/local-business-schema';
 import { Markdown } from '../../../components/shared/Markdown';
 import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
 import { PageFaq } from '../../../components/shared/PageFaq';
@@ -29,13 +30,21 @@ export default async function ServiceAreaPage({ params }: Params) {
   if (!page) notFound();
 
   const tel = telHref(phone);
+  const base = await currentRequestBaseUrl();
+  // Clean the LLM-authored page title down to a bare locality ("Henderson, NV")
+  // for areaServed; fall back to the raw title only if nothing locality-like
+  // survives. The @id ties this back to the single business entity (defined
+  // site-wide in layout.tsx) rather than spawning a second, thinner node.
+  const locality = serviceAreaLocality(page.title, bundle.niche, bundle.state) || page.title;
 
   const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
+    '@id': `${base}/#localbusiness`,
     name: bundle.business_name,
     description: page.meta_description,
-    areaServed: page.title,
+    telephone: phone,
+    areaServed: { '@type': 'City', name: locality },
   };
 
   const breadcrumb = await breadcrumbsJsonLd([

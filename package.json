@@ -18,7 +18,8 @@
     "db:migrate-recover": "pnpm --filter @leadlandlord/db migrate-recover",
     "db:studio": "pnpm --filter @leadlandlord/db studio",
     "dry-run": "tsx scripts/dry-run.ts",
-    "backfill-indexnow": "tsx scripts/backfill-indexnow.ts"
+    "backfill-indexnow": "tsx scripts/backfill-indexnow.ts",
+    "backfill-structured-data": "tsx scripts/backfill-structured-data.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

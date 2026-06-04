@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { getDb, sites, niches, agentEvents, networks, siteNetworkMemberships } from '@leadlandlord/db';
-import { imagen, klaviyo } from '@leadlandlord/integrations';
+import { imagen, klaviyo, geocode } from '@leadlandlord/integrations';
 import {
   createWriteClient,
   siteDocId,
+  pageDocId,
   uploadHeroImage,
+  uploadArticleImage,
 } from '@leadlandlord/integrations/sanity';
+import type { Page } from '@leadlandlord/shared/types';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { generateLongformBody } from '../content-engine/index';
@@ -336,9 +339,42 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       }
     }
 
+    // Derive geo for LocalBusiness JSON-LD from city/state. Best-effort and
+    // optional — geocodeCityState never throws and falls back to a state
+    // centroid, but if it somehow returns null we just don't write geo. An
+    // operator override on the existing site doc still wins inside persist.
+    let geo: { latitude: number; longitude: number } | null = null;
+    try {
+      geo = await geocode.geocodeCityState(input.city, input.state.toUpperCase());
+      if (geo) ctx.log.info({ siteId, ...geo }, 'geo derived for LocalBusiness');
+    } catch (err) {
+      // geocodeCityState already swallows errors, but belt-and-suspenders.
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'geo derivation failed — proceeding without geo',
+      );
+    }
+
+    // Per-page article images for blog + info pages. Expensive (one Imagen
+    // call + upload per page), so gated: only on content_rich sites, and capped
+    // at ARTICLE_IMAGE_MAX (default 8) per build. MOCK_AI / missing image keys
+    // skip generation entirely (generateHeroImageBuffer returns null). Asset
+    // _ids are keyed by deterministic page doc id and handed to persist so the
+    // page write attaches `articleImage` inline; failures leave it empty (the
+    // route falls back to the hero image).
+    const articleImageAssetIds = await this.generateArticleImages(
+      siteId,
+      bundle,
+      siteMode,
+      ctx,
+    );
+
     this.emit({ step: 'sanity_publish_started' });
     const persisted = await writeSiteToSanity(siteId, bundle, {
       colorPalette: pickPaletteForSite(siteId),
+      geo,
+      articleImageAssetIds,
+      dateModified: new Date().toISOString(),
     });
     ctx.log.info(
       { pages: persisted.pagesWritten, txId: persisted.transactionId },
@@ -503,6 +539,81 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       );
       return undefined;
     }
+  }
+
+  /**
+   * Generate one article image per blog/info page and upload it to Sanity.
+   * Returns a map of page doc _id → asset _id for `writeSiteToSanity` to attach
+   * `articleImage` inline. Best-effort throughout:
+   *
+   *   - Cost gate: only runs on content_rich sites (thin sites are cheap-by-
+   *     design and lean on the hero image). Hard-capped at ARTICLE_IMAGE_MAX
+   *     (default 8) pages per build so a 28-page site can't balloon image spend.
+   *   - MOCK_AI / no image key: generateHeroImageBuffer returns null → the page
+   *     is skipped and falls back to the hero image at render time.
+   *   - Any per-page failure is logged and skipped; never aborts the build.
+   *
+   * The prompt is `page.article_image_prompt` when the content engine recorded
+   * one, else a deterministic niche/city scene fallback.
+   */
+  private async generateArticleImages(
+    siteId: string,
+    bundle: { niche: string; city: string; blog_posts: Page[]; info_pages: Page[] },
+    siteMode: string,
+    ctx: AgentContext,
+  ): Promise<Map<string, string>> {
+    const assetIds = new Map<string, string>();
+
+    // Cost gate: thin sites skip per-page images entirely.
+    if (siteMode !== 'content_rich') {
+      ctx.log.info({ siteId, siteMode }, 'article images skipped — not content_rich');
+      return assetIds;
+    }
+    // MOCK_AI short-circuit (also enforced inside generateHeroImageBuffer, but
+    // skip the loop work + logging noise).
+    if (process.env.MOCK_AI === 'true') {
+      ctx.log.info({ siteId }, 'article images skipped — MOCK_AI');
+      return assetIds;
+    }
+
+    const max = Number(process.env.ARTICLE_IMAGE_MAX) || 8;
+    // (kind, index, page) so we can rebuild the deterministic page doc id.
+    const candidates: Array<{ kind: 'blog' | 'info'; index: number; page: Page }> = [
+      ...bundle.blog_posts.map((page, index) => ({ kind: 'blog' as const, index, page })),
+      ...bundle.info_pages.map((page, index) => ({ kind: 'info' as const, index, page })),
+    ].slice(0, max);
+
+    if (candidates.length === 0) return assetIds;
+
+    let generated = 0;
+    let skipped = 0;
+    for (const { kind, index, page } of candidates) {
+      const prompt =
+        page.article_image_prompt?.trim() ||
+        `Editorial photo for an article about ${page.title} — ${bundle.niche} in ${bundle.city}. Realistic on-site scene, no text.`;
+      try {
+        const img = await imagen.generateHeroImageBuffer(prompt, { aspectRatio: '16:9' });
+        if (!img) {
+          skipped++;
+          continue;
+        }
+        const pageId = pageDocId(siteId, kind, index);
+        const uploaded = await uploadArticleImage(siteId, pageId, img.buffer);
+        assetIds.set(pageId, uploaded.assetId);
+        generated++;
+      } catch (err) {
+        skipped++;
+        ctx.log.warn(
+          { err: err instanceof Error ? err.message : err, kind, index },
+          'article image generation/upload failed — skipping page',
+        );
+      }
+    }
+    ctx.log.info(
+      { siteId, generated, skipped, candidates: candidates.length, cap: max },
+      'article images done',
+    );
+    return assetIds;
   }
 
   /**

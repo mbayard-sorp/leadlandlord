@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
-import { breadcrumbsJsonLd, buildPageMetadata } from '../../../lib/seo-meta';
+import { breadcrumbsJsonLd, buildPageMetadata, canonicalPath, currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { substituteBundlePhone } from '../../../lib/phone';
 import { telHref, pageH1 } from '../../../lib/content';
+import { parseJsonLd } from '../../../lib/jsonld';
 import { Markdown } from '../../../components/shared/Markdown';
 import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
 
@@ -28,17 +29,26 @@ export default async function InfoPage({ params }: Params) {
   if (!page) notFound();
 
   const tel = telHref(phone);
+  const base = await currentRequestBaseUrl();
+  const canonical = `${base}${canonicalPath(`/pages/${slug}/`)}`;
+  const articleImage = page.og_image_url ?? bundle.hero_image_url;
+  const datePublished = bundle.generated_at;
 
-  const jsonLd = {
+  // Content Engine can override per-page via schema_org_jsonld (parity with the
+  // service / blog / service-area routes); otherwise emit a complete Article.
+  const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: page.title,
     description: page.meta_description,
+    ...(articleImage ? { image: new URL(articleImage, base).toString() } : {}),
     author: { '@type': 'Organization', name: bundle.business_name },
     publisher: { '@type': 'Organization', name: bundle.business_name },
-    datePublished: bundle.generated_at,
+    datePublished,
+    dateModified: page.date_modified ?? datePublished,
+    mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
     inLanguage: 'en-US',
-    isPartOf: { '@type': 'WebSite', name: bundle.business_name },
+    isPartOf: { '@type': 'WebSite', '@id': `${base}/#website` },
   };
 
   const breadcrumb = await breadcrumbsJsonLd([

@@ -68,6 +68,21 @@ export const page = defineType({
       description: 'Per-page Open Graph image. Falls back to site hero image when absent.',
     }),
     defineField({
+      name: 'articleImage',
+      title: 'Article Image',
+      type: 'image',
+      options: { hotspot: true },
+      description:
+        'Primary image for blog / info (Article) JSON-LD `image` — required for article rich-result eligibility. Generated per-page at build time; falls back to OG/hero image when absent.',
+    }),
+    defineField({
+      name: 'dateModified',
+      title: 'Date Modified',
+      type: 'datetime',
+      description:
+        'Last meaningful content update, emitted as Article `dateModified`. Set by the pipeline on (re)generation; falls back to the site generatedAt when absent.',
+    }),
+    defineField({
       name: 'primaryKeyword',
       title: 'Primary Keyword',
       type: 'string',

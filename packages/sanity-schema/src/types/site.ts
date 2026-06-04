@@ -28,6 +28,27 @@ export const site = defineType({
     defineField({ name: 'city', title: 'City', type: 'string' }),
     defineField({ name: 'state', title: 'State', type: 'string' }),
     defineField({
+      name: 'latitude',
+      title: 'Latitude',
+      type: 'number',
+      description:
+        'Geo coordinate emitted as LocalBusiness `geo` (GeoCoordinates). Derived from city/state centroid at build time; both lat & lng must be set to emit.',
+    }),
+    defineField({
+      name: 'longitude',
+      title: 'Longitude',
+      type: 'number',
+      description: 'Geo coordinate emitted as LocalBusiness `geo` (GeoCoordinates).',
+    }),
+    defineField({
+      name: 'sameAs',
+      title: 'Same As (Profile URLs)',
+      type: 'array',
+      of: [{ type: 'url' }],
+      description:
+        "LocalBusiness `sameAs` — the partner contractor's REAL Google Business Profile plus any real social profiles. Operator-entered; never fabricated.",
+    }),
+    defineField({
       name: 'siteMode',
       title: 'Site Mode',
       type: 'string',

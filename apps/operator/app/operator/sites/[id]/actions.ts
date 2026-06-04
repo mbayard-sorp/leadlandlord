@@ -4,7 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, sites, calls, agentEvents, type Call, type Site } from '@leadlandlord/db';
+import {
+  getDb,
+  sites,
+  calls,
+  agentEvents,
+  siteOriginalDataInputs,
+  type Call,
+  type Site,
+} from '@leadlandlord/db';
 import { updateNumber } from '@leadlandlord/integrations/twilio';
 import {
   attachDomain as vercelAttachDomain,
@@ -572,6 +580,138 @@ export async function regenerateContent(siteId: string): Promise<ActionResult & 
 
 function hostKey(host: string): string {
   return host.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 63);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 3f — Proprietary data inputs (GEO / original-content grounding)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse a JSON textarea into an array of plain objects. Empty/whitespace input
+ * → []. Invalid JSON throws so the caller can surface a clear field-level error.
+ */
+function parseJsonArray(raw: string | undefined, field: string): Array<Record<string, unknown>> {
+  const trimmed = (raw ?? '').trim();
+  if (trimmed === '') return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${field}: not valid JSON`);
+  }
+  if (!Array.isArray(parsed)) throw new Error(`${field}: expected a JSON array`);
+  return parsed.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x));
+}
+
+/**
+ * Parse a JSON textarea into a plain object. Empty/whitespace input → {}.
+ */
+function parseJsonObject(raw: string | undefined, field: string): Record<string, unknown> {
+  const trimmed = (raw ?? '').trim();
+  if (trimmed === '') return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${field}: not valid JSON`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${field}: expected a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+const ProprietaryDataSchema = z.object({
+  site_id: z.string().uuid(),
+});
+
+/**
+ * Upsert the per-site `siteOriginalDataInputs` row (one row per site, enforced
+ * by the `site_original_data_inputs_site_uniq` unique index). The agents read
+ * these proprietary inputs from Postgres to ground non-commodity content
+ * (case studies, firsthand reviews, contrarian takes, E-E-A-T bylines, sameAs).
+ *
+ * The five jsonb columns are captured as JSON textareas in the UI; the GBP URL
+ * + socials are folded into `proprietaryFacts.sameAs` so the site renderer can
+ * emit them as the org schema `sameAs[]`.
+ *
+ * `updatedBy` is set to 'operator' — the operator session is an opaque HMAC
+ * cookie with no user identity, so there is no finer-grained actor to record.
+ */
+export async function saveProprietaryData(formData: FormData): Promise<ActionResult> {
+  try {
+    await requireOperatorSession();
+  } catch {
+    return { ok: false, message: 'unauthorized' };
+  }
+  const parsed = ProprietaryDataSchema.safeParse({ site_id: formData.get('site_id') });
+  if (!parsed.success) return { ok: false, message: 'invalid site id' };
+  const siteId = parsed.data.site_id;
+
+  let caseStudyInputs: Array<Record<string, unknown>>;
+  let firsthandInputs: Array<Record<string, unknown>>;
+  let contrarianTakes: Array<Record<string, unknown>>;
+  let proprietaryFacts: Record<string, unknown>;
+  let expertiseProfile: Record<string, unknown>;
+  try {
+    caseStudyInputs = parseJsonArray(nullable(formData.get('case_study_inputs')), 'Case studies');
+    firsthandInputs = parseJsonArray(nullable(formData.get('firsthand_inputs')), 'Firsthand notes');
+    contrarianTakes = parseJsonArray(nullable(formData.get('contrarian_takes')), 'Contrarian takes');
+    proprietaryFacts = parseJsonObject(nullable(formData.get('proprietary_facts')), 'Proprietary facts');
+    expertiseProfile = parseJsonObject(nullable(formData.get('expertise_profile')), 'Expertise profile');
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'invalid JSON' };
+  }
+
+  // Fold the contractor's real GBP URL + social links into proprietaryFacts.sameAs.
+  // These feed the rendered site's organization-schema `sameAs[]`.
+  const gbpUrl = emptyToNull(nullable(formData.get('gbp_url')));
+  const socials = (emptyToNull(nullable(formData.get('socials'))) ?? '')
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const sameAs = [...(gbpUrl ? [gbpUrl] : []), ...socials];
+  if (sameAs.length > 0) {
+    proprietaryFacts = { ...proprietaryFacts, sameAs };
+  }
+
+  const db = getDb();
+  const now = new Date();
+  try {
+    await db
+      .insert(siteOriginalDataInputs)
+      .values({
+        siteId,
+        caseStudyInputs,
+        firsthandInputs,
+        contrarianTakes,
+        proprietaryFacts,
+        expertiseProfile,
+        updatedBy: 'operator',
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: siteOriginalDataInputs.siteId,
+        set: {
+          caseStudyInputs,
+          firsthandInputs,
+          contrarianTakes,
+          proprietaryFacts,
+          expertiseProfile,
+          updatedBy: 'operator',
+          updatedAt: now,
+        },
+      });
+  } catch (err) {
+    log.error(
+      { err: err instanceof Error ? err.message : err, siteId },
+      'saveProprietaryData failed',
+    );
+    return { ok: false, message: err instanceof Error ? err.message : 'save failed' };
+  }
+
+  revalidatePath(`/operator/sites/${siteId}`);
+  return { ok: true };
 }
 
 export async function setLocalContentEnabled(siteId: string, enabled: boolean): Promise<ActionResult> {
