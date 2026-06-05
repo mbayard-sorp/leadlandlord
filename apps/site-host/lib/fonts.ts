@@ -8,9 +8,9 @@ import {
   Source_Serif_4,
   Plus_Jakarta_Sans,
   Inter,
-  Archivo,
   Archivo_Black,
 } from 'next/font/google';
+import type { Variant } from './content';
 
 /**
  * Per-variant font loadout from style-guides.html.
@@ -91,13 +91,6 @@ export const inter = Inter({
   display: 'swap',
 });
 
-export const archivo = Archivo({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-archivo',
-  display: 'swap',
-});
-
 export const archivoBlack = Archivo_Black({
   subsets: ['latin'],
   weight: ['400'],
@@ -105,16 +98,16 @@ export const archivoBlack = Archivo_Black({
   display: 'swap',
 });
 
-export const allFontVars = [
-  oswald.variable,
-  publicSans.variable,
-  bricolage.variable,
-  dmSans.variable,
-  dmSerifDisplay.variable,
-  cormorant.variable,
-  sourceSerif.variable,
-  plusJakarta.variable,
-  inter.variable,
-  archivo.variable,
-  archivoBlack.variable,
-].join(' ');
+const THEME_FONTS: Record<Variant, Array<{ variable: string }>> = {
+  classic: [oswald, publicSans],
+  modern:  [bricolage, dmSans],
+  premium: [dmSerifDisplay, cormorant, sourceSerif],
+  bright:  [bricolage, plusJakarta],
+  haul:    [archivoBlack, inter],
+  counsel: [sourceSerif, inter],
+};
+
+export function fontVarsForTheme(theme: Variant | null | undefined): string {
+  const fonts = THEME_FONTS[theme ?? 'classic'] ?? THEME_FONTS.classic;
+  return fonts.map((f) => f.variable).join(' ');
+}

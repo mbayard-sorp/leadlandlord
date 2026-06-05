@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
-import { allFontVars } from '../lib/fonts';
+import { fontVarsForTheme } from '../lib/fonts';
 import { resolveCurrentSite } from '../lib/site-context';
 import { currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
@@ -14,6 +14,25 @@ import './globals.css';
  * / OG via their own `generateMetadata()`. The metadataBase resolves relative
  * URLs in canonical / OG image references using the current Host header.
  */
+const THEME_COLORS: Record<string, string> = {
+  classic: '#0f1620',
+  modern:  '#101418',
+  premium: '#171411',
+  bright:  '#231b14',
+  haul:    '#0e2a1c',
+  counsel: '#1C3A2E',
+};
+
+export async function generateViewport(): Promise<Viewport> {
+  const site = await resolveCurrentSite();
+  const theme = site?.theme ?? 'classic';
+  return {
+    themeColor: THEME_COLORS[theme] ?? THEME_COLORS.classic,
+    width: 'device-width',
+    initialScale: 1,
+  };
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const site = await resolveCurrentSite();
   if (!site) {
@@ -69,11 +88,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const bundle = site ? sanityToBundle(site) : null;
   const baseUrl = await currentRequestBaseUrl();
   return (
-    <html lang="en" className={allFontVars} data-theme={theme} data-palette={palette}>
-      <head>
-        <link rel="preconnect" href="https://cdn.sanity.io" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://cdn.sanity.io" />
-      </head>
+    <html lang="en" className={fontVarsForTheme(theme)} data-theme={theme} data-palette={palette}>
       <body>
         <a href="#main" className="skip-to-content">Skip to main content</a>
         {bundle && <WebSiteJsonLd name={bundle.business_name} url={baseUrl} />}
