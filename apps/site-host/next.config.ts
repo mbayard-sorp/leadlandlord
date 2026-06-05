@@ -52,6 +52,7 @@ const config: NextConfig = {
   // Allow them through next/image so we get auto width/srcset/lazy loading.
   // URLs are operator-supplied via Sanity, never end-user input.
   images: {
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       { protocol: 'https', hostname: '**.public.blob.vercel-storage.com' },
       { protocol: 'https', hostname: 'cdn.sanity.io' },
