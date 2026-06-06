@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { desc } from 'drizzle-orm';
 import { getDb, calls, sites, type Call } from '@leadlandlord/db';
+import { SiteFilter, type SiteOption } from './SiteFilter';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +20,41 @@ export default async function CallsPage({ searchParams }: SearchParams) {
   const sp = await searchParams;
   const rows = await loadCallsSimple(sp);
 
+  // Distinct sites present in the full unfiltered set for the dropdown.
+  // We reuse the already-loaded rows but build options from all calls regardless
+  // of the current site_id filter so the dropdown always shows all sites.
+  const allRows = await loadCallsSimple({ classification: sp.classification });
+  const siteMap = new Map<string, SiteOption>();
+  for (const r of allRows) {
+    if (!siteMap.has(r.siteId)) {
+      siteMap.set(r.siteId, {
+        id: r.siteId,
+        label: `${r.siteNiche} — ${r.siteCity}, ${r.siteState}`,
+      });
+    }
+  }
+  const siteOptions = [...siteMap.values()].sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+
+  // KPI helpers
+  const totalCalls = rows.length;
+  const wonCount = rows.filter((r) => r.classification === 'won').length;
+  const winRate = totalCalls > 0 ? Math.round((wonCount / totalCalls) * 100) : 0;
+  const voicemailCount = rows.filter((r) => r.isVoicemail).length;
+  const rowsWithDuration = rows.filter((r) => r.durationS != null && r.durationS > 0);
+  const avgDurationS =
+    rowsWithDuration.length > 0
+      ? Math.round(rowsWithDuration.reduce((sum, r) => sum + (r.durationS ?? 0), 0) / rowsWithDuration.length)
+      : 0;
+
+  function formatDuration(s: number): string {
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -27,7 +64,38 @@ export default async function CallsPage({ searchParams }: SearchParams) {
         </p>
       </header>
 
-      <FilterBar current={sp.classification} />
+      {/* KPI summary */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Total calls</p>
+          <p className="text-2xl font-semibold mt-2">{totalCalls}</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Won</p>
+          <p className="text-2xl font-semibold mt-2 text-emerald-300">{wonCount}</p>
+          <p className="text-xs text-slate-500 mt-1">{winRate}% win rate</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Voicemails</p>
+          <p className="text-2xl font-semibold mt-2">{voicemailCount}</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Avg duration</p>
+          <p className="text-2xl font-semibold mt-2">
+            {rowsWithDuration.length > 0 ? formatDuration(avgDurationS) : '—'}
+          </p>
+          {rowsWithDuration.length > 0 && (
+            <p className="text-xs text-slate-500 mt-1">across {rowsWithDuration.length} calls</p>
+          )}
+        </div>
+      </section>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <FilterBar current={sp.classification} currentSiteId={sp.site_id} />
+        <Suspense>
+          <SiteFilter sites={siteOptions} current={sp.site_id} />
+        </Suspense>
+      </div>
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center text-sm text-slate-400">
@@ -40,6 +108,7 @@ export default async function CallsPage({ searchParams }: SearchParams) {
               <tr>
                 <th>When</th>
                 <th>Site</th>
+                <th>Caller</th>
                 <th>From</th>
                 <th className="hidden md:table-cell">Dur</th>
                 <th>Class</th>
@@ -64,19 +133,23 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                       {c.siteCity}, {c.siteState}
                     </div>
                   </td>
-                  <td className="text-xs">
+                  <td>
                     {c.callerName ? (
-                      <div className="font-medium text-slate-200 break-words">{c.callerName}</div>
-                    ) : null}
+                      <span className="text-slate-200">{c.callerName}</span>
+                    ) : (
+                      <span className="text-slate-600">—</span>
+                    )}
+                  </td>
+                  <td className="text-xs font-mono">
                     {c.callerNumber ? (
                       <a
                         href={`tel:${c.callerNumber}`}
-                        className="font-mono text-sky-400 hover:text-sky-300"
+                        className="text-sky-400 hover:text-sky-300"
                       >
                         {c.callerNumber}
                       </a>
                     ) : (
-                      !c.callerName && <span className="font-mono">—</span>
+                      <span className="text-slate-600">—</span>
                     )}
                   </td>
                   <td className="text-slate-400 hidden md:table-cell">{c.durationS ? `${c.durationS}s` : '—'}</td>
@@ -161,12 +234,22 @@ const CLASSIFICATIONS = [
   'no_voicemail',
 ] as const;
 
-function FilterBar({ current }: { current: string | undefined }) {
+function FilterBar({
+  current,
+  currentSiteId,
+}: {
+  current: string | undefined;
+  currentSiteId: string | undefined;
+}) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <>
       {CLASSIFICATIONS.map((c) => {
         const active = (current ?? 'all') === c;
-        const href = c === 'all' ? '/operator/calls' : `/operator/calls?classification=${c}`;
+        const params = new URLSearchParams();
+        if (c !== 'all') params.set('classification', c);
+        if (currentSiteId) params.set('site_id', currentSiteId);
+        const qs = params.toString();
+        const href = `/operator/calls${qs ? `?${qs}` : ''}`;
         return (
           <Link
             key={c}
@@ -181,7 +264,7 @@ function FilterBar({ current }: { current: string | undefined }) {
           </Link>
         );
       })}
-    </div>
+    </>
   );
 }
 
