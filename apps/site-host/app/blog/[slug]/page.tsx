@@ -6,6 +6,7 @@ import { getTrackingNumber } from '../../../lib/tracking';
 import { substituteBundlePhone } from '../../../lib/phone';
 import { telHref, pageH1 } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
+import Image from 'next/image';
 import { Markdown } from '../../../components/shared/Markdown';
 import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
 
@@ -87,6 +88,20 @@ export default async function BlogPost({ params }: Params) {
           <h1 className="info-page-h1">{pageH1(page)}</h1>
           {page.meta_description && (
             <p className="info-page-lede">{page.meta_description}</p>
+          )}
+          {page.og_image_url && (
+            <figure className="info-page-figure">
+              <Image
+                src={page.og_image_url}
+                alt={page.title}
+                width={720}
+                height={405}
+                priority
+                fetchPriority="high"
+                sizes="(max-width: 768px) 100vw, 720px"
+                className="info-page-image"
+              />
+            </figure>
           )}
           <Markdown source={page.mdx} className="prose-site" phone={phone} />
 
