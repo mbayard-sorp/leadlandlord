@@ -23,6 +23,7 @@ import { ensureSiteDocStub, writeSiteToSanity, patchLongformInSanity } from './p
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
 import { pickTheme } from './pick-theme';
 import { pickPaletteForSite } from './pick-palette';
+import { logoPrompt } from './logo-prompt';
 
 export type SiteBuilderProgressEvent =
   | { step: 'site_row_ready'; site_id: string }
@@ -38,6 +39,8 @@ export type SiteBuilderProgressEvent =
   | { step: 'sanity_site_doc_written'; site_doc_id: string; theme: string; color_palette: string }
   | { step: 'hero_image_started' }
   | { step: 'hero_image_done'; url: string | null }
+  | { step: 'logo_image_started' }
+  | { step: 'logo_image_done'; assetId: string | null }
   | { step: 'competitor_analysis_started' }
   | { step: 'competitor_analysis_done'; competitors: number }
   | { step: 'longform_started' }
@@ -451,6 +454,64 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       }
       this.emit({ step: 'hero_image_done', url: heroUrl });
     }
+
+    // 7.5. Logo image — generate a flat-icon logo mark and patch it onto the
+    //      site doc. Placed after writeSiteToSanity + hero patch so we can
+    //      read the current doc state and skip operator-uploaded logos.
+    //      Non-fatal try/catch; MOCK_AI / missing key returns null → no-op.
+    this.emit({ step: 'logo_image_started' });
+    let logoAssetId: string | null = null;
+    try {
+      // Read the current site doc to check whether a logo already exists.
+      // Preserves any logo the operator uploaded in Studio.
+      const currentDoc = (await createWriteClient().getDocument(siteDocId(siteId))) as
+        | { logo?: { asset?: { _ref?: string } } }
+        | undefined;
+
+      if (currentDoc?.logo?.asset?._ref) {
+        ctx.log.info({ siteId }, 'logo already exists — skipping logo generation (operator upload preserved)');
+      } else {
+        const { prompt: logoP, negativePrompt } = logoPrompt({
+          niche: input.niche,
+          businessName: bundle.business_name,
+          city: input.city,
+        });
+        const logoImg = await imagen.generateHeroImageBuffer(logoP, {
+          aspectRatio: '1:1',
+          negativePrompt,
+          // Flat symbolic mark — skip the hero-photo enrichment.
+          enrich: false,
+        });
+        if (logoImg) {
+          const uploaded = await uploadHeroImage(
+            siteId,
+            logoImg.buffer,
+            `logo-${siteId}.jpg`,
+            logoImg.contentType,
+          );
+          await createWriteClient()
+            .patch(siteDocId(siteId))
+            .set({
+              logo: {
+                _type: 'image',
+                asset: { _type: 'reference', _ref: uploaded.assetId },
+              },
+            })
+            .commit({ visibility: 'sync' });
+          logoAssetId = uploaded.assetId;
+          ctx.log.info(
+            { assetId: uploaded.assetId, size: uploaded.size, model: logoImg.model, provider: logoImg.provider },
+            'logo image uploaded to sanity',
+          );
+        }
+      }
+    } catch (err) {
+      ctx.log.warn(
+        { err: err instanceof Error ? err.message : err },
+        'logo image generation/upload failed — proceeding without it',
+      );
+    }
+    this.emit({ step: 'logo_image_done', assetId: logoAssetId });
 
     const deployedAt = new Date();
 

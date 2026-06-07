@@ -40,7 +40,17 @@ export interface HeroImageBuffer {
 
 export async function generateHeroImageBuffer(
   prompt: string,
-  opts: { aspectRatio?: '16:9' | '4:3' | '1:1' | '3:2'; negativePrompt?: string } = {},
+  opts: {
+    aspectRatio?: '16:9' | '4:3' | '1:1' | '3:2';
+    negativePrompt?: string;
+    /**
+     * When false, the prompt is sent verbatim — skipping the hero-photo
+     * enrichment ("Photorealistic… professional photography… no text or logos").
+     * Required for logo/icon generation, where that enrichment forces a photo
+     * and literally instructs the model not to draw a logo. Defaults true.
+     */
+    enrich?: boolean;
+  } = {},
 ): Promise<HeroImageBuffer | null> {
   // MOCK_AI: skip image generation entirely. Site-builder treats this as
   // non-fatal — the theme renders a placeholder background. Lets the full
@@ -54,12 +64,13 @@ export async function generateHeroImageBuffer(
   const order: Array<'google' | 'ai-gateway'> = forced ? [forced] : ['google', 'ai-gateway'];
 
   const aspectRatio = opts.aspectRatio ?? '16:9';
+  const enrich = opts.enrich ?? true;
   let lastErr: unknown = null;
 
   for (const provider of order) {
     if (provider === 'google' && googleKey) {
       try {
-        return await bufferViaGoogle(prompt, aspectRatio, googleKey);
+        return await bufferViaGoogle(prompt, aspectRatio, googleKey, enrich);
       } catch (err) {
         lastErr = err;
         log.warn(
@@ -70,7 +81,7 @@ export async function generateHeroImageBuffer(
     }
     if (provider === 'ai-gateway' && aiGatewayKey) {
       try {
-        return await bufferViaAiGateway(prompt, aspectRatio, aiGatewayKey, opts.negativePrompt);
+        return await bufferViaAiGateway(prompt, aspectRatio, aiGatewayKey, opts.negativePrompt, enrich);
       } catch (err) {
         lastErr = err;
         log.warn(
@@ -89,10 +100,11 @@ async function bufferViaGoogle(
   prompt: string,
   aspectRatio: '16:9' | '4:3' | '1:1' | '3:2',
   key: string,
+  enrich = true,
 ): Promise<HeroImageBuffer> {
   const model = process.env.GOOGLE_IMAGEN_MODEL ?? 'imagen-4.0-fast-generate-001';
   const body = {
-    instances: [{ prompt: enrichPrompt(prompt) }],
+    instances: [{ prompt: enrich ? enrichPrompt(prompt) : prompt }],
     parameters: { sampleCount: 1, aspectRatio, personGeneration: 'allow_adult' },
   };
   log.info({ model, aspectRatio, prompt: prompt.slice(0, 80) }, 'requesting hero image (google)');
@@ -129,12 +141,13 @@ async function bufferViaAiGateway(
   aspectRatio: '16:9' | '4:3' | '1:1' | '3:2',
   key: string,
   negativePrompt?: string,
+  enrich = true,
 ): Promise<HeroImageBuffer> {
   const model = process.env.IMAGEN_MODEL ?? 'google/imagen-4.0-fast-generate-001';
   const size = sizeForAspect(aspectRatio);
   const body = {
     model,
-    prompt: enrichPrompt(prompt),
+    prompt: enrich ? enrichPrompt(prompt) : prompt,
     n: 1,
     size,
     response_format: 'b64_json' as const,
