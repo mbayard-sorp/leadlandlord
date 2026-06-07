@@ -302,6 +302,16 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
           progressUpdatedAt: null,
         })
         .where(eq(agentRuns.id, runId));
+
+      // Credit whatever was spent before failure so the daily cap can trip.
+      // Wrapped in its own try/catch so a budget-write failure never masks
+      // the original error.
+      try {
+        await this.creditBudget(totalCost);
+      } catch (budgetErr) {
+        log.warn({ err: budgetErr instanceof Error ? budgetErr.message : budgetErr }, 'creditBudget failed on error path');
+      }
+
       if (err instanceof BudgetExceededError) throw err;
       throw new AgentRunError(this.name, message, err);
     }
