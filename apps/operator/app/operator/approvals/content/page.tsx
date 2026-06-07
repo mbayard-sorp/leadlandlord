@@ -1,6 +1,7 @@
 import { getDb, contentIdeas, sites, agentRuns, eq, asc } from '@leadlandlord/db';
 import Link from 'next/link';
 import { ContentApproveButtons } from './ContentApproveButtons';
+import { SiteFilter, type SiteOption } from './SiteFilter';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,10 +20,15 @@ function fmtUsd(val: string | number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
-export default async function ContentQueuePage() {
+export default async function ContentQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ site_id?: string }>;
+}) {
+  const sp = await searchParams;
   const db = getDb();
 
-  const [pending, allSites, allRuns] = await Promise.all([
+  const [allPending, allSites, allRuns] = await Promise.all([
     db.select().from(contentIdeas).where(eq(contentIdeas.status, 'pending')).orderBy(asc(contentIdeas.createdAt)),
     db.select().from(sites),
     db.select().from(agentRuns),
@@ -30,6 +36,20 @@ export default async function ContentQueuePage() {
 
   const siteById = new Map(allSites.map((s) => [s.id, s]));
   const runById = new Map(allRuns.map((r) => [r.id, r]));
+
+  // Build the dropdown from sites that actually have pending ideas, so the
+  // filter only offers sites worth selecting.
+  const siteOptions: SiteOption[] = Array.from(
+    new Map(
+      allPending.map((idea) => {
+        const site = siteById.get(idea.siteId);
+        const label = site ? `${site.niche} (${site.city}, ${site.state})` : idea.siteId;
+        return [idea.siteId, { id: idea.siteId, label }] as const;
+      }),
+    ).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label));
+
+  const pending = sp.site_id ? allPending.filter((idea) => idea.siteId === sp.site_id) : allPending;
 
   return (
     <div className="space-y-6">
@@ -46,6 +66,11 @@ export default async function ContentQueuePage() {
         <p className="text-sm text-slate-400 mt-1">
           Pending locally-relevant content ideas from the local-content-scout, awaiting operator decision.
         </p>
+        {siteOptions.length > 0 && (
+          <div className="mt-3">
+            <SiteFilter sites={siteOptions} current={sp.site_id} />
+          </div>
+        )}
       </header>
 
       {pending.length === 0 ? (
