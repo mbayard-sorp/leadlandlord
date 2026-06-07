@@ -162,16 +162,17 @@ export function logoPrompt(input: LogoPromptInput): LogoPromptResult {
   const container = pickByHash(CONTAINER_SHAPES, businessName + city) as string;
 
   const prompt = [
-    `A flat vector logo mark: ${motif} ${container}.`,
+    'A text-free symbol-only flat vector logo mark.',
+    'ABSOLUTELY NO TEXT OF ANY KIND anywhere in the image:',
+    'no letters, no words, no numbers, no monogram, no initials, no typography, no captions, no signage.',
+    `The mark is purely a graphic icon: ${motif} ${container}.`,
     `Color scheme: ${colorHint}.`,
     'Clean minimalist icon, solid flat shapes, no gradient, no shadow.',
-    'NO text, NO letters, NO words, NO monogram, NO initials, NO typography.',
-    'Isolated on a pure white background.',
-    'Professional business emblem style.',
+    'Isolated on a pure white background. Professional business emblem style.',
   ].join(' ');
 
   const negativePrompt =
-    'text, letters, words, typography, monogram, initials, watermark, photograph, realistic photo, people, faces, hands, complex illustration, 3D render, noise, texture, gradient, drop shadow';
+    'text, letters, words, numbers, characters, typography, font, monogram, initials, lettering, caption, label, signage, watermark, photograph, realistic photo, people, faces, hands, complex illustration, 3D render, noise, texture, gradient, drop shadow';
 
   return { prompt, negativePrompt };
 }
