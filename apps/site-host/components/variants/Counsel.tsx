@@ -9,6 +9,7 @@ import { Check } from '../icons/Check';
 import { ScrollReveal } from '../motion/ScrollReveal';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { VideoObjectJsonLd } from '../shared/VideoObjectJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
 import { SiteNav } from '../shared/SiteNav';
 import { SiteNavigationJsonLd } from '../shared/SiteNavigationJsonLd';
@@ -179,6 +180,7 @@ export function CounselHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
         </section>
 
         {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoObjectJsonLd bundle={bundle} url={pageUrl} />
         <VideoEmbed
           url={bundle.video_url}
           description={bundle.video_description}

@@ -1,5 +1,5 @@
 import type { Bundle } from '../../lib/content';
-import { subtypeFor } from './local-business-schema';
+import { buildLocalBusinessRef } from './local-business-schema';
 
 interface Props {
   bundle: Bundle;
@@ -11,7 +11,7 @@ interface Props {
  * Site-wide LocalBusiness node, mounted once in app/layout.tsx so the
  * `#localbusiness` entity is DEFINED on every page — not just the homepage.
  *
- * Why: WebSiteJsonLd (also in layout) references `publisher → #localbusiness`
+ * Why: WebSiteJsonLd (also in layout) references `publisher -> #localbusiness`
  * by @id, and the home variant emits the full LocalBusiness node. But Google
  * evaluates each page independently and won't resolve a cross-page @id, so on
  * /about, /services/*, /blog/*, etc. that publisher reference dangled. This
@@ -25,33 +25,7 @@ interface Props {
  * never carries conflicting @types.
  */
 export function LocalBusinessRefJsonLd({ bundle, url }: Props) {
-  const canonicalUrl = url.replace(/\/$/, '');
-  const subtype = subtypeFor(bundle.niche);
-
-  const geo =
-    bundle.latitude != null && bundle.longitude != null
-      ? { '@type': 'GeoCoordinates', latitude: bundle.latitude, longitude: bundle.longitude }
-      : undefined;
-  const sameAs = bundle.same_as.length > 0 ? bundle.same_as : undefined;
-
-  const json = {
-    '@context': 'https://schema.org',
-    '@type': subtype,
-    '@id': `${canonicalUrl}/#localbusiness`,
-    name: bundle.business_name,
-    url: `${canonicalUrl}/`,
-    image: bundle.hero_image_url ? new URL(bundle.hero_image_url, url).toString() : undefined,
-    address: {
-      '@type': 'PostalAddress',
-      addressLocality: bundle.city,
-      addressRegion: bundle.state,
-      addressCountry: 'US',
-    },
-    areaServed: { '@type': 'City', name: bundle.city },
-    geo,
-    sameAs,
-  };
-
+  const json = buildLocalBusinessRef(bundle, url);
   return (
     <script
       type="application/ld+json"

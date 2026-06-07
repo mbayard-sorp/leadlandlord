@@ -262,6 +262,13 @@ export const site = defineType({
       description: 'Optional caption shown beneath the hero video.',
     }),
     defineField({
+      name: 'videoUploadDate',
+      title: 'Video Upload Date',
+      type: 'date',
+      description:
+        'Date the video was originally uploaded to YouTube (YYYY-MM-DD). Required for VideoObject JSON-LD structured data — operator-entered. Leave blank until the video upload date is confirmed.',
+    }),
+    defineField({
       name: 'longformBody',
       title: 'Long-form Home Intro (Markdown)',
       type: 'text',

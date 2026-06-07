@@ -18,6 +18,7 @@ export function sanityToBundle(site: SanitySite): Bundle {
     hero_image_url: site.heroImageUrl ?? undefined,
     video_url: site.videoUrl ?? undefined,
     video_description: site.videoDescription ?? undefined,
+    video_upload_date: site.videoUploadDate ?? undefined,
     longform_body: site.longformBody ?? undefined,
     logo_url: site.logoUrl ?? undefined,
     favicon_url: site.faviconUrl ?? undefined,

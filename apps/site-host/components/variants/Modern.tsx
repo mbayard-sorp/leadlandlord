@@ -3,6 +3,7 @@ import type { Bundle } from '../../lib/content';
 import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { VideoObjectJsonLd } from '../shared/VideoObjectJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
 import { VideoEmbed } from '../shared/VideoEmbed';
 import { LongformSection } from '../shared/LongformSection';
@@ -174,6 +175,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
         </section>
 
         {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoObjectJsonLd bundle={bundle} url={pageUrl} />
         <VideoEmbed
           url={bundle.video_url}
           description={bundle.video_description}

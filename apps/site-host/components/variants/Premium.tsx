@@ -4,6 +4,7 @@ import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
+import { VideoObjectJsonLd } from '../shared/VideoObjectJsonLd';
 import { VideoEmbed } from '../shared/VideoEmbed';
 import { LongformSection } from '../shared/LongformSection';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -130,6 +131,7 @@ export function PremiumHome({
         </section>
 
         {/* video under hero (manual) + keyword-rich long-form intro */}
+        <VideoObjectJsonLd bundle={bundle} url={pageUrl} />
         <VideoEmbed
           url={bundle.video_url}
           description={bundle.video_description}

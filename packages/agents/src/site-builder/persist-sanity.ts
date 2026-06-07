@@ -147,6 +147,10 @@ export async function writeSiteToSanity(
   const videoDescription =
     (bundle.video_description ?? (existingSite?.videoDescription as string | undefined)) ||
     undefined;
+  // videoUploadDate is operator-entered in Studio — content engine never sets it.
+  // Carry forward the existing doc value across rebuilds (same pattern as videoUrl).
+  const videoUploadDate =
+    (existingSite?.videoUploadDate as string | undefined) || undefined;
 
   // sameAs + lat/lng are OPERATOR-ENTERED in Studio (real GBP / social URLs,
   // or a hand-corrected coordinate). createOrReplace would otherwise wipe them
@@ -289,6 +293,7 @@ export async function writeSiteToSanity(
     // heroImage asset is patched separately after generation — see SiteBuilder step 6.
     videoUrl,
     videoDescription,
+    videoUploadDate,
     longformBody: bundle.longform_body ?? undefined,
     longformGeneratedAt: bundle.longform_generated_at ?? undefined,
     home: { _ref: pageDocId(siteId, 'home', 0), _type: 'reference' },

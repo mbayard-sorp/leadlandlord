@@ -55,6 +55,8 @@ export const BundleSchema = z.object({
   hero_image_url: z.string().optional(),
   video_url: z.string().optional(),
   video_description: z.string().optional(),
+  /** ISO date (YYYY-MM-DD) the video was uploaded to YouTube. Required for VideoObject JSON-LD. Operator-entered in Sanity Studio. */
+  video_upload_date: z.string().optional(),
   longform_body: z.string().optional(),
   logo_url: z.string().optional(),
   favicon_url: z.string().optional(),
