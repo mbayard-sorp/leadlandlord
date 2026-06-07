@@ -69,6 +69,19 @@ export async function claimEvents(limit = 10): Promise<AgentEvent[]> {
 }
 
 /**
+ * Progress-freshness window used by the NOT EXISTS guard in reapStaleLeases.
+ * If an agent_run correlated to the event has emitted progress within this
+ * many seconds, the run is considered alive and the lease is NOT reclaimed.
+ *
+ * 180 s aligns with the operator monitoring threshold: the on-call alert fires
+ * after 3 min of stalled progress, so anything fresher than that is a live run.
+ * A genuinely dead worker stops writing progress rows, so its
+ * progress_updated_at goes stale (> 180 s) within 3 min of the crash and the
+ * lease is correctly reclaimed on the next reaper tick.
+ */
+export const PROGRESS_FRESHNESS_SECONDS = 180;
+
+/**
  * Reclaim events whose lease has gone stale (claimed but never resolved,
  * because the worker died mid-run). Without this, a crashed run leaves
  * `processing_at` set forever and `claimEvents` never re-claims the row.
@@ -77,6 +90,15 @@ export async function claimEvents(limit = 10): Promise<AgentEvent[]> {
  * event eventually dead-letters instead of looping. Once attempts reach
  * RUNTIME_MAX_ATTEMPTS the event is dead-lettered here; otherwise its lease is
  * released (`processing_at` cleared) so the next `claimEvents` picks it up.
+ *
+ * Progress-freshness guard: an event is NOT reclaimed if its correlated
+ * agent_run is still actively progressing. The correlation is
+ *   agent_runs.dedupe_key = 'event:' || agent_events.id::text
+ * matching the dedupeKey the dispatcher passes to BaseAgent.run(). If that run
+ * has ended_at IS NULL (still in flight) AND progress_updated_at is within
+ * PROGRESS_FRESHNESS_SECONDS (the run is alive, not merely stalled), we skip
+ * the reap. This prevents the orphan->reclaim->double-run loop that occurs
+ * when a slow-but-alive build (e.g. content-engine streaming) outlasts LEASE_SECONDS.
  *
  * Idempotency note: re-running an event must be safe. site-builder (the main
  * long-runner) is idempotent — `upsertSite`, deterministic Sanity IDs, and a
@@ -107,6 +129,12 @@ export async function reapStaleLeases(
       AND dead_lettered_at IS NULL
       AND processing_at IS NOT NULL
       AND processing_at < NOW() - (INTERVAL '1 second' * ${leaseSeconds})
+      AND NOT EXISTS (
+        SELECT 1 FROM agent_runs ar
+        WHERE ar.dedupe_key = 'event:' || agent_events.id::text
+          AND ar.ended_at IS NULL
+          AND ar.progress_updated_at > NOW() - (INTERVAL '1 second' * ${PROGRESS_FRESHNESS_SECONDS})
+      )
     RETURNING (attempts >= ${RUNTIME_MAX_ATTEMPTS}) AS dead_lettered
   `)) as unknown as { rows: Array<{ dead_lettered: boolean }> };
   const result = Array.isArray(rows)
