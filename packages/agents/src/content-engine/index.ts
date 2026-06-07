@@ -193,9 +193,11 @@ function resetBuildDeadline(): void {
  *
  * @param p          - The promise to race (a stream.finalMessage() call).
  * @param phase      - Label used in timeout error messages.
- * @param deadlineAt - Optional override epoch ms; defaults to the module-level
- *                     _buildDeadlineAt. Pass undefined for longform (standalone
- *                     one-shot worker — no shared deadline applies).
+ * @param deadlineAt - Optional override epoch ms; when omitted (undefined)
+ *                     defaults to the module-level _buildDeadlineAt (the shared
+ *                     on-lambda budget). Pass Infinity to opt OUT of the shared
+ *                     deadline for standalone one-shot calls (longform), where
+ *                     the stale module-level anchor would otherwise apply.
  */
 async function withStreamTimeout<T>(
   p: Promise<T>,
@@ -847,8 +849,13 @@ business_name: ${businessName}${clusterSection}
 
 Invoke the ${LONGFORM_TOOL_NAME} tool exactly once. Do not return prose.`;
 
-  // Pass deadlineAt=undefined: generateLongformBody runs as a standalone
-  // one-shot call on its own worker (no shared build deadline applies).
+  // Pass deadlineAt=Infinity: generateLongformBody runs as a standalone
+  // one-shot call (e.g. SiteBuilder.runLongformOnly), NOT through
+  // ContentEngine.execute(), so resetBuildDeadline() never re-anchors the
+  // module-level _buildDeadlineAt. On a warm lambda that anchor is stale (set
+  // at module load), so falling through to it via `undefined` would trip the
+  // 30s floor with a wildly negative budget. Infinity opts out entirely; the
+  // flat STREAM_TIMEOUT_MS still caps the single call.
   const response = await withStreamTimeout(
     client.messages.create({
       model,
@@ -866,7 +873,7 @@ Invoke the ${LONGFORM_TOOL_NAME} tool exactly once. Do not return prose.`;
       messages: [{ role: 'user', content: userPrompt }],
     }),
     'longform',
-    undefined, // no shared deadline — standalone worker, not the 800s build lambda
+    Infinity, // bypass the shared build deadline — standalone one-shot call
   );
 
   const toolUse = response.content.find(
