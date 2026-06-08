@@ -1,3 +1,5 @@
+import { renderMarkdown } from '../../lib/markdown';
+
 interface Props {
   /** YouTube URL in watch, youtu.be, shorts, or embed form. */
   url?: string;
@@ -30,7 +32,12 @@ export function VideoEmbed({ url, description, className }: Props) {
           allowFullScreen
         />
       </div>
-      {description ? <p className="ll-video-desc">{description}</p> : null}
+      {description && description.trim() ? (
+        <div
+          className="ll-video-desc"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(description) }}
+        />
+      ) : null}
     </section>
   );
 }
