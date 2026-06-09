@@ -26,10 +26,10 @@ describe('FLEET_DISPOSITION coverage', () => {
 describe('summarizeDisposition (the intended split)', () => {
   const s = summarizeDisposition();
 
-  it('matches the agreed disposition: 22 ON, 4 armed, 13 disabled', () => {
-    expect(s.enabled).toHaveLength(22);
+  it('matches the agreed disposition: 26 ON, 4 armed, 9 disabled', () => {
+    expect(s.enabled).toHaveLength(26);
     expect(s.armed).toHaveLength(4);
-    expect(s.disabled).toHaveLength(13);
+    expect(s.disabled).toHaveLength(9);
     expect(s.enabled.length + s.armed.length + s.disabled.length).toBe(
       Object.keys(FLEET_DISPOSITION).length,
     );
@@ -49,10 +49,11 @@ describe('summarizeDisposition (the intended split)', () => {
       'molly-digest',
       'wave-launcher',
       'backlink-copycat',
-      'citation-runner',
     ]) {
       expect(s.disabled).toContain(k);
     }
+    // citation-runner is now enabled (citations v1 pilot)
+    expect(s.enabled).toContain('citation-runner');
   });
 
   it('keeps caps sane (armed site-builder $10, owned content-engine $8)', () => {
