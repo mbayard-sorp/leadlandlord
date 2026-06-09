@@ -15,7 +15,6 @@
     "rank": "tsx scripts/rank-cities.ts"
   },
   "devDependencies": {
-    "@leadlandlord/integrations": "workspace:*",
     "@types/node": "^22.10.0",
     "dotenv": "^16.4.7",
     "typescript": "^5.7.0",
