@@ -4,7 +4,7 @@ import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
 import { substituteBundlePhone } from '../../lib/phone';
-import { telHref } from '../../lib/content';
+import { telHref, pageHref } from '../../lib/content';
 
 /**
  * /faq hub — the visible-nav entry point that links every standalone FAQ page.
@@ -34,7 +34,7 @@ export default async function FaqIndex() {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: 'FAQ', path: '/faq/' },
+    { name: 'FAQ', path: '/faq' },
   ]);
 
   const itemList = {
@@ -44,7 +44,7 @@ export default async function FaqIndex() {
     itemListElement: bundle.faq_pages.map((p, idx) => ({
       '@type': 'ListItem',
       position: idx + 1,
-      url: p.slug,
+      url: pageHref(p),
       name: p.title,
     })),
   };
@@ -76,7 +76,7 @@ export default async function FaqIndex() {
           </p>
           <Breadcrumbs items={[
             { name: bundle.business_name, url: '/' },
-            { name: 'FAQ', url: '/faq/' },
+            { name: 'FAQ', url: '/faq' },
           ]} />
           <h1 className="info-page-h1">
             {bundle.niche} questions, answered for {bundle.city}
@@ -88,7 +88,7 @@ export default async function FaqIndex() {
             <ul className="blog-index-list">
               {bundle.faq_pages.map((p) => (
                 <li key={p.slug} className="blog-index-item">
-                  <a href={p.slug} className="blog-index-link">
+                  <a href={pageHref(p)} className="blog-index-link">
                     <span className="blog-index-title">{p.title}</span>
                     {p.meta_description && (
                       <span className="blog-index-blurb">{p.meta_description}</span>
@@ -121,7 +121,7 @@ export async function generateMetadata() {
   const meta = buildPageMetadata({
     title: `FAQ — ${bundle.business_name}`,
     description: `Answers to common ${bundle.niche.toLowerCase()} questions in ${bundle.city}, ${bundle.state}.`,
-    path: '/faq/',
+    path: '/faq',
     siteName: bundle.business_name,
   });
 

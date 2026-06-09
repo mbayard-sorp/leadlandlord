@@ -49,8 +49,8 @@ export default async function ServiceAreaPage({ params }: Params) {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: 'Service Areas', path: '/service-areas/' },
-    { name: page.title, path: `/service-areas/${slug}/` },
+    { name: 'Service Areas', path: '/service-areas' },
+    { name: page.title, path: `/service-areas/${slug}` },
   ]);
 
   return (
@@ -80,8 +80,8 @@ export default async function ServiceAreaPage({ params }: Params) {
           </p>
           <Breadcrumbs items={[
             { name: bundle.business_name, url: '/' },
-            { name: 'Service Areas', url: '/service-areas/' },
-            { name: page.title, url: `/service-areas/${slug}/` },
+            { name: 'Service Areas', url: '/service-areas' },
+            { name: page.title, url: `/service-areas/${slug}` },
           ]} />
           <h1 className="info-page-h1">{pageH1(page)}</h1>
           {page.meta_description && (
@@ -129,7 +129,7 @@ export async function generateMetadata({ params }: Params) {
   return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    path: `/service-areas/${slug}/`,
+    path: `/service-areas/${slug}`,
     image: page.og_image_url ?? bundle.hero_image_url,
     siteName: bundle.business_name,
   });

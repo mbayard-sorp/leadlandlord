@@ -32,7 +32,7 @@ export default async function FlatServicePage({ params }: Params) {
 
   const tel = telHref(phone);
   const base = await currentRequestBaseUrl();
-  const canonical = `/${slug}/`;
+  const canonical = `/${slug}`;
 
   const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {
     '@context': 'https://schema.org',
@@ -130,7 +130,7 @@ export async function generateMetadata({ params }: Params) {
   return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    path: `/${slug}/`,
+    path: `/${slug}`,
     image: page.og_image_url ?? bundle.hero_image_url,
     siteName: bundle.business_name,
   });

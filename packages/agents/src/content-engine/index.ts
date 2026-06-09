@@ -123,34 +123,110 @@ export function decorateSchemaWithClusterEnum(
 const OUTPUT_TOOL_NAME = 'output_content_bundle';
 
 /**
- * Absolute ceiling on a single Anthropic streaming call. The Vercel dispatcher
- * caps at 800s; without an in-process timeout, a stuck `finalMessage()`
- * (observed when tool-use streams stall near max_tokens) burns the entire
- * lambda budget, leaves agent_runs zombied at `running`, and the event only
- * recovers after the 900s lease reaper requeues it.
+ * Flat per-stream ceiling used when running off-lambda (e.g. scripts/finish-site.ts)
+ * where the Vercel 800s worker ceiling does NOT apply. Explicitly setting this
+ * env var disables the shared deadline logic so large bundles can run initial +
+ * retry to completion uncapped.
  *
- * 600s lets a full-size bundle (observed: 11-cluster thin sites stream ~80 KB
- * / ~20k tokens, which can take 8-9 min on Sonnet) complete, while still
- * throwing ~200s before the 800s lambda ceiling so the failure becomes a
- * normal runtime_error with clean attempt accounting instead of a zombied
- * `running` row that only the 900s lease reaper recovers.
+ * When the env var is NOT set (the normal on-lambda path), the shared deadline
+ * governs instead and STREAM_TIMEOUT_MS acts as an upper bound per stream
+ * within whatever budget remains.
  *
- * Note: a density-lint retry on top of a near-600s initial can exceed the
- * lambda budget — that path fails cleanly and requeues. The common case
- * (lint passes first shot) fits comfortably.
- *
- * Override via CONTENT_ENGINE_STREAM_TIMEOUT_MS for off-lambda runs (e.g. the
- * local completion script) where the 800s Vercel ceiling doesn't apply and a
- * large bundle needs initial + retry to both run to completion uncapped.
+ * Default: 600s, which still fits a single stream on lambda with ~200s of
+ * headroom before the 800s Vercel ceiling.
  */
 const STREAM_TIMEOUT_MS = Number(process.env.CONTENT_ENGINE_STREAM_TIMEOUT_MS) || 600_000;
 
-async function withStreamTimeout<T>(p: Promise<T>, phase: string): Promise<T> {
+/**
+ * Whether we are running under an explicit off-lambda override. When true the
+ * shared deadline is disabled and every stream gets the flat STREAM_TIMEOUT_MS.
+ */
+const OFF_LAMBDA_OVERRIDE = process.env.CONTENT_ENGINE_STREAM_TIMEOUT_MS !== undefined;
+
+/**
+ * Shared build deadline for on-lambda runs.
+ *
+ * Budget math (all times in ms):
+ *   Vercel maxDuration:          800 000  (apps/operator/app/api/cron/agent/[name]/route.ts:16)
+ *   Overhead (lint + normalise
+ *   + Sanity persist + setup):  -  60 000
+ *   Available for streams:       740 000
+ *
+ * With a 30s floor check before each stream start, two back-to-back streams of
+ * up to ~355s each fit inside the 740s envelope with room to spare. The flat
+ * STREAM_TIMEOUT_MS=600s cap further limits any single stream, so the worst
+ * realistic path is initial(600) + retry is blocked by deadline check ~= safe.
+ *
+ * Initialised once per module load. Each execute() call reads the same epoch
+ * value so multiple concurrent runs on the same lambda instance share the same
+ * wall-clock deadline — acceptable because Vercel kills the whole instance at
+ * maxDuration regardless of which run is "in progress".
+ *
+ * Off-lambda: set to Infinity so min(STREAM_TIMEOUT_MS, Infinity - now) always
+ * resolves to STREAM_TIMEOUT_MS (the flat cap).
+ */
+let _buildDeadlineAt: number = OFF_LAMBDA_OVERRIDE ? Infinity : Date.now() + 740_000;
+
+/**
+ * Reset the shared deadline at the start of each execute() call. Necessary
+ * because the module may be reused across warm lambda invocations — each new
+ * agent run must get a fresh 740s window anchored to its own start time.
+ * No-op when OFF_LAMBDA_OVERRIDE is true (deadline stays Infinity).
+ */
+function resetBuildDeadline(): void {
+  if (!OFF_LAMBDA_OVERRIDE) {
+    _buildDeadlineAt = Date.now() + 740_000;
+  }
+}
+
+/**
+ * Race `p` against a timeout computed from whichever is tighter:
+ *   - the flat STREAM_TIMEOUT_MS ceiling, or
+ *   - the remaining time before the shared build deadline minus a 30s buffer.
+ *
+ * If the remaining budget is already below 30s, throws immediately with a
+ * clear "insufficient time budget" message so the run fails cleanly instead
+ * of starting a stream that the Vercel ceiling will kill mid-way.
+ *
+ * When OFF_LAMBDA_OVERRIDE is true (explicit env var set), `deadlineAt` is
+ * Infinity and the flat STREAM_TIMEOUT_MS applies without modification.
+ *
+ * @param p          - The promise to race (a stream.finalMessage() call).
+ * @param phase      - Label used in timeout error messages.
+ * @param deadlineAt - Optional override epoch ms; when omitted (undefined)
+ *                     defaults to the module-level _buildDeadlineAt (the shared
+ *                     on-lambda budget). Pass Infinity to opt OUT of the shared
+ *                     deadline for standalone one-shot calls (longform), where
+ *                     the stale module-level anchor would otherwise apply.
+ */
+async function withStreamTimeout<T>(
+  p: Promise<T>,
+  phase: string,
+  deadlineAt?: number,
+): Promise<T> {
+  const deadline = deadlineAt ?? _buildDeadlineAt;
+  const FLOOR_MS = 30_000; // minimum budget required to even attempt a stream
+  const remaining = deadline - Date.now();
+
+  if (remaining < FLOOR_MS) {
+    throw new Error(
+      `content-engine ${phase} stream aborted: insufficient time budget remaining ` +
+        `(${Math.round(remaining / 1000)}s < ${FLOOR_MS / 1000}s floor)`,
+    );
+  }
+
+  const effectiveTimeout = Math.min(STREAM_TIMEOUT_MS, remaining - FLOOR_MS);
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new Error(`content-engine ${phase} stream timed out after ${STREAM_TIMEOUT_MS / 1000}s`)),
-      STREAM_TIMEOUT_MS,
+      () =>
+        reject(
+          new Error(
+            `content-engine ${phase} stream timed out after ${Math.round(effectiveTimeout / 1000)}s`,
+          ),
+        ),
+      effectiveTimeout,
     );
   });
   try {
@@ -175,6 +251,11 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     input: ContentEngineInput,
     ctx: AgentContext,
   ): Promise<ContentEngineOutput> {
+    // Anchor the shared build deadline to this run's start time. Must be the
+    // very first statement so all withStreamTimeout calls below see a fresh
+    // 740s window regardless of lambda warm-reuse.
+    resetBuildDeadline();
+
     const client = getAnthropicClient();
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
 
@@ -772,6 +853,13 @@ business_name: ${businessName}${clusterSection}
 
 Invoke the ${LONGFORM_TOOL_NAME} tool exactly once. Do not return prose.`;
 
+  // Pass deadlineAt=Infinity: generateLongformBody runs as a standalone
+  // one-shot call (e.g. SiteBuilder.runLongformOnly), NOT through
+  // ContentEngine.execute(), so resetBuildDeadline() never re-anchors the
+  // module-level _buildDeadlineAt. On a warm lambda that anchor is stale (set
+  // at module load), so falling through to it via `undefined` would trip the
+  // 30s floor with a wildly negative budget. Infinity opts out entirely; the
+  // flat STREAM_TIMEOUT_MS still caps the single call.
   const response = await withStreamTimeout(
     client.messages.create({
       model,
@@ -789,6 +877,7 @@ Invoke the ${LONGFORM_TOOL_NAME} tool exactly once. Do not return prose.`;
       messages: [{ role: 'user', content: userPrompt }],
     }),
     'longform',
+    Infinity, // bypass the shared build deadline — standalone one-shot call
   );
 
   const toolUse = response.content.find(

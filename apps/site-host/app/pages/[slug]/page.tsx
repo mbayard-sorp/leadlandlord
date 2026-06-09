@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
-import { breadcrumbsJsonLd, buildPageMetadata, canonicalPath, currentRequestBaseUrl } from '../../../lib/seo-meta';
+import { breadcrumbsJsonLd, buildPageMetadata, currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { substituteBundlePhone } from '../../../lib/phone';
 import { telHref, pageH1 } from '../../../lib/content';
 import { parseJsonLd } from '../../../lib/jsonld';
+import Image from 'next/image';
 import { Markdown } from '../../../components/shared/Markdown';
 import { Breadcrumbs } from '../../../components/shared/Breadcrumbs';
 
@@ -30,7 +31,7 @@ export default async function InfoPage({ params }: Params) {
 
   const tel = telHref(phone);
   const base = await currentRequestBaseUrl();
-  const canonical = `${base}${canonicalPath(`/pages/${slug}/`)}`;
+  const canonical = `${base}/pages/${slug}`;
   const articleImage = page.og_image_url ?? bundle.hero_image_url;
   const datePublished = bundle.generated_at;
 
@@ -53,7 +54,7 @@ export default async function InfoPage({ params }: Params) {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: page.title, path: `/pages/${slug}/` },
+    { name: page.title, path: `/pages/${slug}` },
   ]);
 
   return (
@@ -83,11 +84,25 @@ export default async function InfoPage({ params }: Params) {
           </p>
           <Breadcrumbs items={[
             { name: bundle.business_name, url: '/' },
-            { name: page.title, url: `/pages/${slug}/` },
+            { name: page.title, url: `/pages/${slug}` },
           ]} />
           <h1 className="info-page-h1">{pageH1(page)}</h1>
           {page.meta_description && (
             <p className="info-page-lede">{page.meta_description}</p>
+          )}
+          {page.og_image_url && (
+            <figure className="info-page-figure">
+              <Image
+                src={page.og_image_url}
+                alt={page.title}
+                width={720}
+                height={405}
+                priority
+                fetchPriority="high"
+                sizes="(max-width: 768px) 100vw, 720px"
+                className="info-page-image"
+              />
+            </figure>
           )}
           <Markdown source={page.mdx} className="prose-site" phone={phone} />
 
@@ -125,7 +140,7 @@ export async function generateMetadata({ params }: Params) {
   return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    path: `/pages/${slug}/`,
+    path: `/pages/${slug}`,
     ogType: 'article',
     image: page.og_image_url ?? bundle.hero_image_url,
     publishedTime: bundle.generated_at,

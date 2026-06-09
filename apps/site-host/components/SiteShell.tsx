@@ -27,8 +27,8 @@ export function SiteShell({ children, businessName, niche, city, state, phone }:
           {businessName}
         </a>
         <nav className="site-page-nav">
-          <a href="/about/">About</a>
-          <a href="/contact/">Contact</a>
+          <a href="/about">About</a>
+          <a href="/contact">Contact</a>
           <a href={telHref(phone)} className="site-page-phone num">
             ☎ {phone}
           </a>

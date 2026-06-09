@@ -4,7 +4,7 @@ import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { getTrackingNumber } from '../../lib/tracking';
 import { substituteBundlePhone } from '../../lib/phone';
-import { telHref } from '../../lib/content';
+import { telHref, pageHref } from '../../lib/content';
 
 /**
  * /blog index page.
@@ -33,7 +33,7 @@ export default async function BlogIndex() {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: 'Blog', path: '/blog/' },
+    { name: 'Blog', path: '/blog' },
   ]);
 
   // ItemList of BlogPosting items for structured data
@@ -44,7 +44,7 @@ export default async function BlogIndex() {
     itemListElement: bundle.blog_posts.map((post, idx) => ({
       '@type': 'ListItem',
       position: idx + 1,
-      url: post.slug,
+      url: pageHref(post),
       name: post.title,
     })),
   };
@@ -76,7 +76,7 @@ export default async function BlogIndex() {
           </p>
           <Breadcrumbs items={[
             { name: bundle.business_name, url: '/' },
-            { name: 'Blog', url: '/blog/' },
+            { name: 'Blog', url: '/blog' },
           ]} />
           <h1 className="info-page-h1">Blog</h1>
 
@@ -86,7 +86,7 @@ export default async function BlogIndex() {
             <ul className="blog-index-list">
               {bundle.blog_posts.map((post) => (
                 <li key={post.slug} className="blog-index-item">
-                  <a href={post.slug} className="blog-index-link">
+                  <a href={pageHref(post)} className="blog-index-link">
                     <span className="blog-index-title">{post.title}</span>
                     {post.meta_description && (
                       <span className="blog-index-blurb">{post.meta_description}</span>
@@ -119,7 +119,7 @@ export async function generateMetadata() {
   const meta = buildPageMetadata({
     title: `Blog — ${bundle.business_name}`,
     description: `Articles and guides on ${bundle.niche} in ${bundle.city}, ${bundle.state}.`,
-    path: '/blog/',
+    path: '/blog',
     ogType: 'website',
     image: bundle.hero_image_url,
     siteName: bundle.business_name,

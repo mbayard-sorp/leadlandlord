@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
+import { heroH1, telHref, titleCaseKeyword, pageHref } from '../../lib/content';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
 import { MapEmbed } from '../shared/MapEmbed';
@@ -226,7 +226,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
           </header>
           <div className="modern-services-grid">
             {bundle.services.map((s, i) => (
-              <a key={s.slug} href={s.slug} className="modern-service-card">
+              <a key={s.slug} href={pageHref(s)} className="modern-service-card">
                 <span className="modern-service-index" aria-hidden>
                   {String(i + 1).padStart(2, '0')}
                 </span>
@@ -309,7 +309,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             <h2 className="modern-h2">Local guides</h2>
             <div className="modern-learn-grid">
               {bundle.info_pages.slice(0, 6).map((p) => (
-                <a key={p.slug} href={p.slug} className="modern-learn-card">
+                <a key={p.slug} href={pageHref(p)} className="modern-learn-card">
                   <span className="modern-learn-title">{p.title}</span>
                   <span className="modern-learn-blurb">{p.meta_description}</span>
                 </a>
@@ -324,7 +324,7 @@ export function ModernHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:/
             <h2 className="modern-h2">Recent articles</h2>
             <div className="modern-learn-grid">
               {blogTeasers.map((p) => (
-                <a key={p.slug} href={p.slug} className="modern-learn-card">
+                <a key={p.slug} href={pageHref(p)} className="modern-learn-card">
                   <span className="modern-learn-title">{p.title}</span>
                   <span className="modern-learn-blurb">{p.meta_description}</span>
                 </a>

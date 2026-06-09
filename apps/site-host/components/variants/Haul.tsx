@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { heroH1, telHref } from '../../lib/content';
+import { heroH1, telHref, pageHref } from '../../lib/content';
 import { VideoEmbed } from '../shared/VideoEmbed';
 import { LongformSection } from '../shared/LongformSection';
 import {
@@ -339,7 +339,7 @@ export function HaulHome({
           </div>
           <div className="haul-services-grid">
             {bundle.services.map((s, i) => (
-              <a key={s.slug} href={s.slug} className="haul-service-card">
+              <a key={s.slug} href={pageHref(s)} className="haul-service-card">
                 <div className="haul-service-icon-wrap" aria-hidden>
                   {serviceEmojis[i % serviceEmojis.length]}
                 </div>
@@ -488,7 +488,7 @@ export function HaulHome({
             <ul className="haul-learn-list">
               {bundle.info_pages.slice(0, 6).map((p) => (
                 <li key={p.slug}>
-                  <a href={p.slug}>
+                  <a href={pageHref(p)}>
                     <span className="haul-learn-title">{p.title}</span>
                     <span className="haul-learn-arrow">&rarr;</span>
                     <span className="haul-learn-blurb">{p.meta_description}</span>
@@ -507,7 +507,7 @@ export function HaulHome({
             <ul className="haul-learn-list">
               {derived.blogTeasers.map((p) => (
                 <li key={p.slug}>
-                  <a href={p.slug}>
+                  <a href={pageHref(p)}>
                     <span className="haul-learn-title">{p.title}</span>
                     <span className="haul-learn-arrow">&rarr;</span>
                     <span className="haul-learn-blurb">{p.meta_description}</span>
@@ -569,7 +569,7 @@ export function HaulHome({
               <div className="haul-footer-col-heading">Services</div>
               <ul>
                 {bundle.services.slice(0, 5).map((s) => (
-                  <li key={s.slug}><a href={s.slug} style={{ color: 'inherit', textDecoration: 'none' }}>{s.title}</a></li>
+                  <li key={s.slug}><a href={pageHref(s)} style={{ color: 'inherit', textDecoration: 'none' }}>{s.title}</a></li>
                 ))}
               </ul>
             </div>
@@ -579,7 +579,7 @@ export function HaulHome({
                 <li><a href="/about" style={{ color: 'inherit', textDecoration: 'none' }}>About</a></li>
                 <li><a href="/contact" style={{ color: 'inherit', textDecoration: 'none' }}>Contact</a></li>
                 {bundle.service_areas.slice(0, 3).map((a) => (
-                  <li key={a.slug}><a href={a.slug} style={{ color: 'inherit', textDecoration: 'none' }}>{a.title}</a></li>
+                  <li key={a.slug}><a href={pageHref(a)} style={{ color: 'inherit', textDecoration: 'none' }}>{a.title}</a></li>
                 ))}
               </ul>
             </div>

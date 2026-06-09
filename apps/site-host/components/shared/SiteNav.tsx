@@ -1,4 +1,5 @@
-import type { Bundle, Page } from '../../lib/content';
+import type { Bundle } from '../../lib/content';
+import { pageHref } from '../../lib/content';
 
 interface Props {
   bundle: Bundle;
@@ -17,26 +18,6 @@ interface MenuItem {
   href: string;
   title: string;
 }
-
-/**
- * Normalize a stored Sanity slug to its bare form (no surrounding slashes, no
- * known route prefix) so we can compose the canonical URL for each page kind.
- * Mirrors the per-route `slugFromUrl` helpers in app/.../[slug]/page.tsx.
- */
-function bareSlug(slug: string, prefix?: string): string {
-  let s = (slug ?? '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
-  if (prefix) {
-    if (s === prefix) s = '';
-    else if (s.startsWith(`${prefix}/`)) s = s.slice(prefix.length + 1);
-  }
-  return s;
-}
-
-const serviceHref = (p: Page) => `/${bareSlug(p.slug)}/`;
-const areaHref = (p: Page) => `/service-areas/${bareSlug(p.slug, 'service-areas')}/`;
-const infoHref = (p: Page) => `/pages/${bareSlug(p.slug, 'pages')}/`;
-const blogHref = (p: Page) => `/blog/${bareSlug(p.slug, 'blog')}/`;
-const faqHref = (p: Page) => `/faq/${bareSlug(p.slug, 'faq')}/`;
 
 /**
  * A single nav group (Services / Service Areas / Guides / Blog). One markup,
@@ -90,11 +71,11 @@ export function SiteNav({ bundle, variant, className, showAllPages }: Props) {
   const navClass = ['site-nav', `${variant}-nav`, className].filter(Boolean).join(' ');
 
   if (showAllPages) {
-    const serviceItems = bundle.services.map((p) => ({ href: serviceHref(p), title: p.title }));
-    const areaItems = bundle.service_areas.map((p) => ({ href: areaHref(p), title: p.title }));
-    const guideItems = bundle.info_pages.map((p) => ({ href: infoHref(p), title: p.title }));
-    const blogItems = bundle.blog_posts.map((p) => ({ href: blogHref(p), title: p.title }));
-    const faqItems = bundle.faq_pages.map((p) => ({ href: faqHref(p), title: p.title }));
+    const serviceItems = bundle.services.map((p) => ({ href: pageHref(p), title: p.title }));
+    const areaItems = bundle.service_areas.map((p) => ({ href: pageHref(p), title: p.title }));
+    const guideItems = bundle.info_pages.map((p) => ({ href: pageHref(p), title: p.title }));
+    const blogItems = bundle.blog_posts.map((p) => ({ href: pageHref(p), title: p.title }));
+    const faqItems = bundle.faq_pages.map((p) => ({ href: pageHref(p), title: p.title }));
     const showBlog = bundle.blog_posts.length >= 2;
     const showFaq = bundle.faq_pages.length >= 2;
 
@@ -133,26 +114,26 @@ export function SiteNav({ bundle, variant, className, showAllPages }: Props) {
           {showFaq && (
             <NavMenu
               label="FAQ"
-              href="/faq/"
-              items={[{ href: '/faq/', title: 'All questions' }, ...faqItems]}
+              href="/faq"
+              items={[{ href: '/faq', title: 'All questions' }, ...faqItems]}
             />
           )}
           {showBlog && (
             <NavMenu
               label="Blog"
-              href="/blog/"
-              items={[{ href: '/blog/', title: 'All articles' }, ...blogItems]}
+              href="/blog"
+              items={[{ href: '/blog', title: 'All articles' }, ...blogItems]}
             />
           )}
-          <a href="/about/">About</a>
-          <a href="/contact/">Contact</a>
+          <a href="/about">About</a>
+          <a href="/contact">Contact</a>
         </nav>
       </div>
     );
   }
 
   const firstService = bundle.services[0];
-  const servicesHref = firstService ? firstService.slug : '/#services';
+  const servicesHref = firstService ? pageHref(firstService) : '/#services';
   const showBlog = bundle.blog_posts.length >= 2;
   const showFaq = bundle.faq_pages.length >= 2;
 
@@ -161,10 +142,10 @@ export function SiteNav({ bundle, variant, className, showAllPages }: Props) {
       <a href="/">Home</a>
       <a href={servicesHref}>Services</a>
       <a href="/#where">Service Areas</a>
-      {showFaq && <a href="/faq/">FAQ</a>}
-      {showBlog && <a href="/blog/">Blog</a>}
-      <a href="/about/">About</a>
-      <a href="/contact/">Contact</a>
+      {showFaq && <a href="/faq">FAQ</a>}
+      {showBlog && <a href="/blog">Blog</a>}
+      <a href="/about">About</a>
+      <a href="/contact">Contact</a>
     </nav>
   );
 }

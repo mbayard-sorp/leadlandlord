@@ -71,6 +71,23 @@
   max-width: 60ch;
 }
 
+/* Agent-generated article image (blog posts + info pages). 16:9 to match the
+ * aspect ratio the backfill/site-builder generates. aspect-ratio + auto height
+ * reserves space to avoid CLS. */
+.info-page-figure {
+  margin: 0 0 28px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2, #f1f1f1);
+}
+.info-page-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
 /* Agent-authored markdown body (blog posts + info pages).
  * Targets HTML emitted by marked. Theme-agnostic — uses CSS vars. */
 .prose-site { font-family: var(--font-body); color: var(--ink); font-size: 1.0625rem; line-height: 1.65; }

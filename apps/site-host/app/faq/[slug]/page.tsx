@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentSite } from '../../../lib/site-context';
-import { breadcrumbsJsonLd, buildPageMetadata, canonicalPath, currentRequestBaseUrl } from '../../../lib/seo-meta';
+import { breadcrumbsJsonLd, buildPageMetadata, currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { getTrackingNumber } from '../../../lib/tracking';
 import { substituteBundlePhone } from '../../../lib/phone';
@@ -33,7 +33,7 @@ export default async function FaqPage({ params }: Params) {
 
   const tel = telHref(phone);
   const base = await currentRequestBaseUrl();
-  const canonical = `${base}${canonicalPath(`/faq/${slug}/`)}`;
+  const canonical = `${base}/faq/${slug}`;
   const answerText = mdToText(page.mdx) || page.meta_description;
 
   // Content Engine can override per-page via schema_org_jsonld; otherwise emit a
@@ -56,8 +56,8 @@ export default async function FaqPage({ params }: Params) {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: 'FAQ', path: '/faq/' },
-    { name: page.title, path: `/faq/${slug}/` },
+    { name: 'FAQ', path: '/faq' },
+    { name: page.title, path: `/faq/${slug}` },
   ]);
 
   return (
@@ -87,8 +87,8 @@ export default async function FaqPage({ params }: Params) {
           </p>
           <Breadcrumbs items={[
             { name: bundle.business_name, url: '/' },
-            { name: 'FAQ', url: '/faq/' },
-            { name: page.title, url: `/faq/${slug}/` },
+            { name: 'FAQ', url: '/faq' },
+            { name: page.title, url: `/faq/${slug}` },
           ]} />
           <h1 className="info-page-h1">{pageH1(page)}</h1>
           {page.meta_description && (
@@ -110,7 +110,7 @@ export default async function FaqPage({ params }: Params) {
           </aside>
 
           <p className="info-page-backlink">
-            <a href="/faq/">← All {bundle.niche.toLowerCase()} questions</a>
+            <a href="/faq">← All {bundle.niche.toLowerCase()} questions</a>
           </p>
         </div>
 
@@ -134,7 +134,7 @@ export async function generateMetadata({ params }: Params) {
   return buildPageMetadata({
     title: page.title,
     description: page.meta_description,
-    path: `/faq/${slug}/`,
+    path: `/faq/${slug}`,
     ogType: 'article',
     image: page.og_image_url ?? bundle.hero_image_url,
     publishedTime: bundle.generated_at,
