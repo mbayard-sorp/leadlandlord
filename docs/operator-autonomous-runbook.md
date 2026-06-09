@@ -1,9 +1,10 @@
 # Operator Autonomous Runbook (Phase F)
 
 The Operator orchestrator (`packages/agents/src/operator/index.ts`) runs every
-10 minutes via `/api/cron/schedule/operator` and dispatches the rest of the
-fleet. This runbook covers how to flip it on, what to watch in the first
-24 hours, and how to stop it cold if something goes sideways.
+10 minutes via the consolidated `/api/cron/tick` poll (which fans out the
+operator scheduler alongside the other sub-hourly pollers) and dispatches the
+rest of the fleet. This runbook covers how to flip it on, what to watch in the
+first 24 hours, and how to stop it cold if something goes sideways.
 
 ## Pre-flight checklist (do before flipping anything)
 
@@ -98,9 +99,11 @@ In escalating order of severity:
    dispatch. The operator agent itself also refuses (it goes through
    `BaseAgent.run` like everyone else).
 
-4. **Nuclear — yank the cron.** Remove the
-   `/api/cron/schedule/operator` entry from `apps/operator/vercel.json`,
-   redeploy. Last-resort lever; the kill switch should be enough.
+4. **Nuclear — yank the cron.** Remove the `/api/cron/tick` entry from
+   `apps/operator/vercel.json` and redeploy. Note this also stops the other
+   pollers folded into that tick (operator drain, network-linker, molly-inbox,
+   molly-nudge, domain-verifier, alert-evaluator). Last-resort lever; the kill
+   switch should be enough.
 
 ## Spend caps to set before going autonomous
 
