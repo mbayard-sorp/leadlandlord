@@ -52,6 +52,8 @@ const SEED: SeedRow[] = [
   // fleet-digest (orchestrator Phase 5): 0 13 * * * UTC ~= 6am MST. Avoids the
   // 14:00 molly-digest slot. Not in vercel.json — DB-driven from the start.
   { schedulerName: 'fleet-digest', targetAgent: 'fleet-digest', cadenceKind: 'cron', cronExpr: '0 13 * * *' },
+  // citation-runner (citations v1): weekly Monday 13:00 UTC ~= 6am MST, live sites only.
+  { schedulerName: 'citation-runner', targetAgent: 'citation-runner', cadenceKind: 'cron', cronExpr: '0 13 * * 1' },
 
   // Registered scheduler with no current timer — event/manual today. Parity.
   { schedulerName: 'wave-progression', targetAgent: 'wave-launcher', cadenceKind: 'manual' },
