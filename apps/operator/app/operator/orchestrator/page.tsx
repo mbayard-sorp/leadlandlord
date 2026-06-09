@@ -1,6 +1,7 @@
-import { listThreads, getThread, getOrchestratorEnabled } from './actions';
+import { listThreads, getThread, getOrchestratorEnabled, getGlobalBudget } from './actions';
 import { OrchestratorChat } from './OrchestratorChat';
 import { OrchestratorPower } from './OrchestratorPower';
+import { GlobalBudgetControl } from './GlobalBudgetControl';
 
 export const dynamic = 'force-dynamic';
 // Headroom for the multi-turn brain loop run inside postOrchestratorMessage.
@@ -12,10 +13,11 @@ export default async function OrchestratorPage({
   searchParams: Promise<{ thread?: string }>;
 }) {
   const { thread } = await searchParams;
-  const [threads, active, enabled] = await Promise.all([
+  const [threads, active, enabled, budget] = await Promise.all([
     listThreads(),
     thread ? getThread(thread) : Promise.resolve(null),
     getOrchestratorEnabled(),
+    getGlobalBudget(),
   ]);
 
   return (
@@ -29,7 +31,10 @@ export default async function OrchestratorPage({
             site live.
           </p>
         </div>
-        <OrchestratorPower enabled={enabled} />
+        <div className="flex flex-col items-end gap-2">
+          <OrchestratorPower enabled={enabled} />
+          <GlobalBudgetControl capUsd={budget.capUsd} spentTodayUsd={budget.spentTodayUsd} />
+        </div>
       </header>
       {!enabled && (
         <p className="rounded border border-red-800 bg-red-900/20 px-3 py-2 text-xs text-red-200">
