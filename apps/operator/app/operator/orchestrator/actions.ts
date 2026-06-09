@@ -14,6 +14,7 @@ import {
   getDb,
   orchestratorThreads,
   orchestratorMessages,
+  agentBudgets,
   eq,
   and,
   asc,
@@ -63,6 +64,49 @@ async function auth(): Promise<boolean> {
   }
 }
 
+/**
+ * The orchestrator master switch — agent_budgets.enabled for 'orchestrator'.
+ * A missing row defaults to ON. The same flag gates the chat brain (BaseAgent)
+ * and the tick-driven supervisory pass, so this one toggle stops both.
+ */
+export async function getOrchestratorEnabled(): Promise<boolean> {
+  if (!(await auth())) return true;
+  try {
+    const db = getDb();
+    const [row] = await db
+      .select({ enabled: agentBudgets.enabled })
+      .from(agentBudgets)
+      .where(eq(agentBudgets.agent, 'orchestrator'));
+    return row ? row.enabled : true;
+  } catch {
+    return true;
+  }
+}
+
+export async function setOrchestratorEnabled(
+  enabled: boolean,
+): Promise<{ ok: boolean; enabled: boolean; message?: string }> {
+  if (!(await auth())) return { ok: false, enabled: true, message: 'unauthorized' };
+  try {
+    const db = getDb();
+    await db
+      .insert(agentBudgets)
+      .values({ agent: 'orchestrator', enabled })
+      .onConflictDoUpdate({
+        target: agentBudgets.agent,
+        set: { enabled, updatedAt: new Date() },
+      });
+    revalidatePath('/operator/orchestrator');
+    return { ok: true, enabled };
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'setOrchestratorEnabled failed',
+    );
+    return { ok: false, enabled: !enabled, message: 'could not update the orchestrator switch' };
+  }
+}
+
 function friendlyError(err: unknown): string {
   if (err instanceof KillSwitchActiveError)
     return 'The kill switch is active, so the orchestrator is paused. Disable it on the operator home page to resume.';
@@ -71,7 +115,7 @@ function friendlyError(err: unknown): string {
   if (err instanceof BudgetExceededError)
     return 'The orchestrator reached its own daily spend cap. Raise its cap (agent_budgets) to continue today.';
   if (err instanceof AgentDisabledError)
-    return 'The orchestrator agent is disabled. Re-enable it (agent_budgets.enabled) to chat.';
+    return 'The orchestrator is turned off. Flip it back on with the toggle at the top of this page.';
   return `The orchestrator couldn't complete that: ${err instanceof Error ? err.message : String(err)}`;
 }
 
