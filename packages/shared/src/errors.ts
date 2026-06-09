@@ -9,8 +9,18 @@ export class NotImplementedError extends Error {
 export class BudgetExceededError extends Error {
   readonly code = 'BUDGET_EXCEEDED';
   constructor(agent: string, capUsd: number) {
-    super(`Agent "${agent}" exceeded its daily budget cap of $${capUsd.toFixed(2)}.`);
+    super(`Agent "${agent}" exceeded its budget cap of $${capUsd.toFixed(2)}.`);
     this.name = 'BudgetExceededError';
+  }
+}
+
+export class GlobalBudgetExceededError extends Error {
+  readonly code = 'GLOBAL_BUDGET_EXCEEDED';
+  constructor(capUsd: number) {
+    super(
+      `Portfolio-wide daily spend cap of $${capUsd.toFixed(2)} reached; pausing agent work until the next UTC day.`,
+    );
+    this.name = 'GlobalBudgetExceededError';
   }
 }
 

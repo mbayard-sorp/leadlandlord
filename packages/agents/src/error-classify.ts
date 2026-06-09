@@ -3,6 +3,7 @@ import {
   AgentRunError,
   AgentDisabledError,
   KillSwitchActiveError,
+  GlobalBudgetExceededError,
   NotImplementedError,
 } from '@leadlandlord/shared/errors';
 
@@ -17,6 +18,7 @@ export type AgentFailureKind =
   | 'not_implemented'
   | 'agent_disabled'
   | 'kill_switch'
+  | 'global_budget'
   | 'runtime_error';
 
 /**
@@ -34,6 +36,10 @@ export type AgentFailureKind =
  *    threw before the run row was inserted), so this is NOT a failure of the
  *    work. The queue treats it as a non-attempt-consuming lease release so the
  *    event stays claimable once the switch is flipped off.
+ *  - GlobalBudgetExceededError → global_budget. Same treatment as kill_switch:
+ *    the agent never ran (the portfolio daily cap tripped at the gate), so the
+ *    event is released without consuming an attempt and stays claimable until
+ *    the global counter resets at the next UTC day. Never dead-letters.
  *  - Anything else (integration timeouts, DB hiccups, bugs in execute) →
  *    runtime_error, eligible for backoff retry.
  *
@@ -45,11 +51,13 @@ export function classifyAgentError(err: unknown): AgentFailureKind {
   if (err instanceof ZodError) return 'validation_error';
   if (err instanceof AgentDisabledError) return 'agent_disabled';
   if (err instanceof KillSwitchActiveError) return 'kill_switch';
+  if (err instanceof GlobalBudgetExceededError) return 'global_budget';
   if (err instanceof AgentRunError) {
     if (err.underlying instanceof ZodError) return 'validation_error';
     if (err.underlying instanceof NotImplementedError) return 'not_implemented';
     if (err.underlying instanceof AgentDisabledError) return 'agent_disabled';
     if (err.underlying instanceof KillSwitchActiveError) return 'kill_switch';
+    if (err.underlying instanceof GlobalBudgetExceededError) return 'global_budget';
   }
   if (err instanceof NotImplementedError) return 'not_implemented';
   return 'runtime_error';
