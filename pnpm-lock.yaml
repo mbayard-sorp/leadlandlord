@@ -346,9 +346,6 @@ importers:
 
   packages/us-cities:
     devDependencies:
-      '@leadlandlord/integrations':
-        specifier: workspace:*
-        version: link:../integrations
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17

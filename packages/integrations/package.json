@@ -32,7 +32,6 @@
     "./brightlocal": "./src/brightlocal/index.ts",
     "./pagerduty": "./src/pagerduty/index.ts",
     "./firecrawl": "./src/firecrawl/index.ts",
-    "./census": "./src/census/index.ts",
     "./semrush": "./src/semrush/index.ts"
   },
   "scripts": {

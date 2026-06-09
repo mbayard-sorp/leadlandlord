@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCensusName } from './index';
+import { parseCensusName } from './census';
 
 describe('parseCensusName', () => {
   it('strips " city" suffix and state', () => {

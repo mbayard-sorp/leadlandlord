@@ -119,8 +119,9 @@ function sample<T>(arr: T[], n: number): T[] {
 }
 
 // ---------------------------------------------------------------------------
-// Census enrichment types (mirrors UsCityCensus in @leadlandlord/integrations
-// but kept local so us-cities has no runtime dep on integrations).
+// Census enrichment types. Canonical definition lives here — the enrichment
+// script (scripts/enrich-from-census.ts) and the Census client (src/census.ts)
+// are both within this package, so us-cities has no dependency on integrations.
 // ---------------------------------------------------------------------------
 
 export interface UsCityCensus {

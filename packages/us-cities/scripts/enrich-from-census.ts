@@ -38,9 +38,11 @@ import { config as loadDotenv } from 'dotenv';
   }
 }
 
-// We import from the workspace package — tsx resolves TypeScript sources directly.
-import { fetchAcsPlaces, parseCensusName } from '@leadlandlord/integrations/census';
-import type { UsCityCensus } from '@leadlandlord/integrations/census';
+// Census client + parser live in this package's own src — tsx resolves the
+// TypeScript sources directly. Keeping them here avoids a workspace dependency
+// cycle (@leadlandlord/integrations already depends on us-cities at runtime).
+import { fetchAcsPlaces, parseCensusName } from '../src/census';
+import type { UsCityCensus } from '../src/index';
 
 // ---------------------------------------------------------------------------
 // State FIPS table — 50 states + DC. Territories excluded per spec.
