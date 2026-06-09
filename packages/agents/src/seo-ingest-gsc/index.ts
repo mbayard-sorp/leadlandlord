@@ -13,9 +13,11 @@ import { getSearchAnalytics, type GscRow } from '@leadlandlord/integrations/goog
  *  2. ON CONFLICT (site_id, date, query, page) DO UPDATE — if dedupe is
  *     bypassed (e.g. caller forces it), the row updates instead of duplicating.
  *
- * GSC site identifier convention: domain properties use `sc-domain:<apex>`,
- * e.g. `sc-domain:example.com`. We always send the apex domain — `sites.domain`
- * is stored without scheme.
+ * GSC site identifier convention: we query the URL-prefix property
+ * `https://<apex>/`, which is the property type the service account is granted
+ * on. (Domain properties `sc-domain:<apex>` are a separate GSC property type
+ * with independent permission grants; the SA is not added to those.)
+ * `sites.domain` is stored without scheme.
  */
 export const SeoIngestGscInput = z.object({
   site_id: z.string().uuid(),
@@ -71,9 +73,11 @@ export class SeoIngestGsc extends BaseAgent<typeof SeoIngestGscInput, typeof Seo
       };
     }
 
-    // GSC domain property identifier. Strip scheme + trailing slash defensively
-    // even though `sites.domain` should already be apex.
-    const scDomain = `sc-domain:${site.domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
+    // GSC URL-prefix property identifier. Strip scheme + trailing slash
+    // defensively (sites.domain should already be apex), then build the
+    // canonical `https://<apex>/` form the service account is granted on.
+    const apex = site.domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const property = `https://${apex}/`;
 
     // Paginate. Most days a single site returns < 5000 rows, but high-traffic
     // sites can blow past that. Cap at 5 pages (25k rows) — well above any
@@ -87,7 +91,7 @@ export class SeoIngestGsc extends BaseAgent<typeof SeoIngestGscInput, typeof Seo
         label: `fetching GSC page ${page + 1} (startRow=${startRow})`,
       });
       const batch = await getSearchAnalytics({
-        domain: scDomain,
+        domain: property,
         startDate: input.date,
         endDate: input.date,
         dimensions: ['query', 'page'],
