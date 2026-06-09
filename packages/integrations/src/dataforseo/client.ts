@@ -1,4 +1,5 @@
 import { IntegrationError } from '@leadlandlord/shared/errors';
+import { acquireDataForSeoSlot } from './rate-limit';
 
 /**
  * Internal DataForSEO HTTP client shared by the keyword/SERP module
@@ -32,6 +33,8 @@ export async function dfsPost<TaskResult>(
   path: string,
   body: unknown,
 ): Promise<TaskResult[]> {
+  // Throttle to stay under DataForSEO's 10 req/s ceiling (default 8 rps).
+  await acquireDataForSeoSlot();
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     headers: {

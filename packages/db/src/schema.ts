@@ -886,6 +886,20 @@ export const systemState = pgTable('system_state', {
   geoSharePrior: numeric('geo_share_prior', { precision: 4, scale: 3 }),
   rentabilityCpcCeiling: numeric('rentability_cpc_ceiling', { precision: 6, scale: 2 }),
   rentabilityLeadPriceCeiling: numeric('rentability_lead_price_ceiling', { precision: 7, scale: 2 }),
+  // ──────────────────────────────────────────────────────────
+  // Portfolio-wide daily spend ceiling (orchestrator Phase 2).
+  // Enforced in BaseAgent.assertBudgetAvailable BEFORE the per-agent
+  // cap, so "bring the fleet online" can't blow the budget. The
+  // counter resets at the UTC-day boundary anchored on
+  // global_spend_reset_at. A cap of 0 disables the ceiling.
+  // ──────────────────────────────────────────────────────────
+  globalDailyCostCapUsd: numeric('global_daily_cost_cap_usd', { precision: 10, scale: 2 })
+    .notNull()
+    .default('50'),
+  globalSpentTodayUsd: numeric('global_spent_today_usd', { precision: 10, scale: 4 })
+    .notNull()
+    .default('0'),
+  globalSpendResetAt: timestamp('global_spend_reset_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

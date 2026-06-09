@@ -253,6 +253,13 @@
       "when": 1781500000000,
       "tag": "0036_agent_health",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1781600000000,
+      "tag": "0037_global_spend_cap",
+      "breakpoints": true
     }
   ]
 }
