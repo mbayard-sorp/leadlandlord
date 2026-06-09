@@ -1,5 +1,5 @@
-import { createReadClient } from '@leadlandlord/sanity-schema';
-import type { ClusterIntent, KeywordRole } from '@leadlandlord/sanity-schema';
+import { createReadClient } from '@leadlandlord/sanity-schema/client';
+import type { ClusterIntent, KeywordRole } from '@leadlandlord/sanity-schema/ids';
 
 /**
  * Shape passed from site-builder → content-engine. Trimmed down from the
