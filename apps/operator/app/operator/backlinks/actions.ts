@@ -339,6 +339,7 @@ export async function manuallyAcceptBacklink(id: string): Promise<ActionResult> 
  * → `draft_approved`. Delivery is R4.7 — no send happens here.
  */
 export async function approveDraft(id: string): Promise<ActionResult> {
+  await requireOperatorSession();
   const db = getDb();
   const row = (await db.select().from(backlinks).where(eq(backlinks.id, id)).limit(1))[0];
   if (!row) return { ok: false, message: 'backlink not found' };

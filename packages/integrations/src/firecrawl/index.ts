@@ -1,11 +1,12 @@
 /**
- * Firecrawl integration — R4.2 scope: receptivity scrape only.
+ * Firecrawl integration — R4.2 scope: receptivity scrape + contact discovery.
  *
  * Uses the Firecrawl HTTP API (https://api.firecrawl.dev/v1/scrape).
  * Requires env var: FIRECRAWL_API_KEY
  *
  * Cost: ~$0.005 per scrapeReceptivity call (3 URL attempts, Firecrawl
  * Starter tier pricing as of 2026-05). Cap at 3 URLs per domain to bound cost.
+ * scrapeContact uses the same per-request cost; probes up to 3 contact paths.
  *
  * R4.5 (sitemap + voice calibration) and R4.7 (published-URL verification)
  * will add more exports here. Keep this file small until those phases land.
@@ -121,6 +122,122 @@ export async function scrapeReceptivity(domain: string): Promise<ReceptivityResu
     signals,
     sampledUrls,
   };
+}
+
+// ── Contact paths probed by scrapeContact (order matters: most likely first) ──
+
+const CONTACT_PROBE_PATHS = ['/contact', '/about', '/write-for-us'];
+
+/**
+ * Email address regex — matches typical mailto/plain email patterns.
+ * Anchored to exclude image filenames, noreply, and example.com addresses.
+ */
+const EMAIL_REGEX = /\b([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})\b/g;
+
+/** Addresses we consider garbage and skip. */
+function isSpuriousEmail(email: string): boolean {
+  const lower = email.toLowerCase();
+  return (
+    lower.startsWith('noreply') ||
+    lower.startsWith('no-reply') ||
+    lower.startsWith('donotreply') ||
+    lower.endsWith('@example.com') ||
+    lower.endsWith('@domain.com') ||
+    // Filenames that contain @ (e.g. 2.0@2x.png)
+    /\.(png|jpg|gif|svg|webp|ico|pdf)$/i.test(lower)
+  );
+}
+
+/**
+ * Optional name extraction: look for a line near the email match that looks
+ * like a personal name (Title Case, 2-4 words). Returns the first plausible
+ * match or undefined.
+ */
+function extractNearbyName(text: string, emailIndex: number): string | undefined {
+  // Search a 300-char window before the email for a name-like token.
+  const window = text.slice(Math.max(0, emailIndex - 300), emailIndex);
+  // Match 2-4 Title Case words (likely a person name, not a heading).
+  const nameMatch = window.match(/([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})\s*[\n\r,|]/);
+  if (nameMatch) return nameMatch[1];
+  return undefined;
+}
+
+export interface ContactResult {
+  email: string;
+  name?: string;
+  sourceUrl: string;
+}
+
+/**
+ * Probe up to 3 contact-style paths on a domain to extract the first plausible
+ * email address and optionally a name. Used by MollyScorer to pre-fill
+ * contactEmail/contactName on top-5 flagged prospects.
+ *
+ * Probe order: /contact, /about, /write-for-us
+ * Stops as soon as a usable email is found. Returns null on any failure or when
+ * no email is found — never throws. Cost: up to 3 Firecrawl scrape credits.
+ *
+ * Skips addresses that look like noreply/example/image-filename false positives.
+ */
+export async function scrapeContact(domain: string): Promise<ContactResult | null> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) {
+    throw new IntegrationError('firecrawl', 'FIRECRAWL_API_KEY is not set');
+  }
+
+  const bare = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+  for (const path of CONTACT_PROBE_PATHS) {
+    const url = `https://${bare}${path}`;
+    try {
+      const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url,
+          formats: ['markdown'],
+          includeTags: ['p', 'h1', 'h2', 'h3', 'li', 'a', 'address'],
+          excludeTags: ['nav', 'script', 'style'],
+          onlyMainContent: true,
+          timeout: 15000,
+        }),
+      });
+
+      if (!res.ok) {
+        if (res.status !== 404) {
+          log.warn({ domain, path, status: res.status }, 'firecrawl scrapeContact non-ok');
+        }
+        continue;
+      }
+
+      const json = (await res.json()) as { success?: boolean; data?: { markdown?: string } };
+      if (!json.success || !json.data?.markdown) continue;
+
+      // Cap at 8 000 chars; contact pages rarely need more.
+      const text = json.data.markdown.slice(0, 8000);
+
+      // Find all email-like matches and return the first non-spurious one.
+      let match: RegExpExecArray | null;
+      const re = new RegExp(EMAIL_REGEX.source, 'g');
+      while ((match = re.exec(text)) !== null) {
+        const email = match[1]!;
+        if (isSpuriousEmail(email)) continue;
+
+        const name = extractNearbyName(text, match.index);
+        return { email, name, sourceUrl: url };
+      }
+    } catch (err) {
+      log.warn(
+        { domain, path, err: err instanceof Error ? err.message : err },
+        'firecrawl scrapeContact error — skipping path',
+      );
+    }
+  }
+
+  return null;
 }
 
 /**

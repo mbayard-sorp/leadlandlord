@@ -28,11 +28,15 @@ import {
   agentHealth,
   orchestratorThreads,
   orchestratorMessages,
+  backlinks,
+  backlinkProspects,
   eq,
   and,
+  or,
   desc,
   isNull,
   isNotNull,
+  sql,
 } from '@leadlandlord/db';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import { MOLLY_PERSONA } from '../molly/persona';
@@ -50,7 +54,12 @@ import { compileCron } from '../scheduler/cron';
  * future `niche.*` / `site.*` trigger types stay covered without a code change.
  */
 export const PROTECTED_REQUEUE_EVENT_PREFIXES = ['niche.', 'site.', 'sites.'] as const;
-export const PROTECTED_REQUEUE_EVENT_TYPES = new Set<string>(['domain.approval.granted']);
+export const PROTECTED_REQUEUE_EVENT_TYPES = new Set<string>([
+  'domain.approval.granted',
+  // The human-only backlink approval gate: requeuing this would re-trigger
+  // Molly's guest-post pitch pipeline without operator sign-off.
+  'prospect.approved',
+]);
 
 export function isProtectedEventType(type: string): boolean {
   if (PROTECTED_REQUEUE_EVENT_TYPES.has(type)) return true;
@@ -480,6 +489,110 @@ const getSchedules: OrchestratorTool = {
   },
 };
 
+const getLinkBuildingStatus: OrchestratorTool = {
+  name: 'get_link_building_status',
+  description:
+    'Link-building pipeline snapshot: guest-post prospect funnel counts, draft/pitch state, live links this month, and per-site citation coverage.',
+  kind: 'read',
+  input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  async execute() {
+    const db = getDb();
+
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    // ── Prospect funnel (backlink_prospects) ──
+    const allProspects = await db
+      .select({
+        status: backlinkProspects.status,
+        flaggedTop5At: backlinkProspects.flaggedTop5At,
+        metadata: backlinkProspects.metadata,
+      })
+      .from(backlinkProspects);
+
+    // awaiting_review = flagged_top5 rows that are not snoozed
+    const awaitingReview = allProspects.filter((p) => {
+      if (p.status !== 'flagged_top5') return false;
+      const meta = p.metadata as Record<string, unknown> | null;
+      const snoozedUntil = meta?.snoozedUntil;
+      if (typeof snoozedUntil === 'string') {
+        return new Date(snoozedUntil) <= now;
+      }
+      return true;
+    }).length;
+
+    const approvedPendingPitch = allProspects.filter((p) => p.status === 'approved').length;
+
+    // ── Pitch pipeline (backlinks guest_post rows) ──
+    const guestPostRows = await db
+      .select({ status: backlinks.status })
+      .from(backlinks)
+      .where(eq(backlinks.type, 'guest_post'));
+
+    const pitching = guestPostRows.filter((r) =>
+      ['submitted', 'awaiting_reply', 'reply_received'].includes(r.status),
+    ).length;
+
+    const needsAttention = guestPostRows.filter((r) =>
+      ['accepted', 'escalated', 'manual_review'].includes(r.status),
+    ).length;
+
+    const draftsPendingReview = guestPostRows.filter((r) =>
+      r.status === 'draft_pending_review',
+    ).length;
+
+    // ── Live this month (guest_post published/verified/live with acquiredAt or createdAt in range) ──
+    const liveThisMonthRows = await db
+      .select({ acquiredAt: backlinks.acquiredAt, createdAt: backlinks.createdAt })
+      .from(backlinks)
+      .where(
+        and(
+          eq(backlinks.type, 'guest_post'),
+          or(
+            eq(backlinks.status, 'published'),
+            eq(backlinks.status, 'verified'),
+            eq(backlinks.status, 'live'),
+          ),
+        ),
+      );
+
+    const liveThisMonth = liveThisMonthRows.filter((r) => {
+      const anchor = r.acquiredAt ?? r.createdAt;
+      return anchor && new Date(anchor) >= monthStart;
+    }).length;
+
+    // ── Citations: per-site totals and live count ──
+    const citationRows = (await db.execute(sql`
+      SELECT
+        site_id,
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE status = 'live') AS live_count
+      FROM backlinks
+      WHERE type IN ('citation', 'directory')
+      GROUP BY site_id
+    `)) as unknown as
+      | { rows: Array<{ site_id: string; total: string; live_count: string }> }
+      | Array<{ site_id: string; total: string; live_count: string }>;
+
+    const citationList = Array.isArray(citationRows) ? citationRows : citationRows.rows;
+    const citations = citationList.map((r) => ({
+      siteId: r.site_id,
+      total: Number(r.total),
+      live: Number(r.live_count),
+    }));
+
+    return {
+      awaitingReview,
+      approvedPendingPitch,
+      pitching,
+      needsAttention,
+      draftsPendingReview,
+      liveThisMonth,
+      citations,
+    };
+  },
+};
+
 // ---- Write tools (audit row BEFORE mutation) ----
 
 async function upsertEnabled(agent: string, enabled: boolean): Promise<void> {
@@ -733,6 +846,7 @@ export const ORCHESTRATOR_TOOLS: OrchestratorTool[] = [
   getBudgetStatus,
   getQueueState,
   getSchedules,
+  getLinkBuildingStatus,
   enableAgent,
   disableAgent,
   setAgentCap,
