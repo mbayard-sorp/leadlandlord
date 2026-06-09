@@ -47,6 +47,35 @@ export async function rejectApproval(formData: FormData): Promise<ActionResult> 
   return { ok: true, message: 'Rejected.' };
 }
 
+// Persists an operator edit to a molly_outreach approval's subject/body before
+// approval. The executor (executeMollyOutreach) re-reads the row at send time,
+// so writing the edited subject/body back into payload is what actually changes
+// the outbound email. The existing approveApproval action cannot carry an edited
+// body, hence this dedicated payload patch.
+export async function updateMollyOutreachBody(formData: FormData): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  const id = String(formData.get('id') ?? '');
+  const subject = String(formData.get('subject') ?? '');
+  const body = String(formData.get('body') ?? '');
+  if (!id) return { ok: false, message: 'missing approval id' };
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(agentApprovals)
+    .where(eq(agentApprovals.id, id))
+    .limit(1);
+  if (!row) return { ok: false, message: 'approval not found' };
+  if (row.kind !== 'molly_outreach') return { ok: false, message: 'not a molly outreach approval' };
+  if (row.status !== 'pending') return { ok: false, message: 'approval is no longer pending' };
+  const payload = (row.payload && typeof row.payload === 'object' ? row.payload : {}) as Record<string, unknown>;
+  await db
+    .update(agentApprovals)
+    .set({ payload: { ...payload, subject, body }, updatedAt: new Date() })
+    .where(eq(agentApprovals.id, id));
+  revalidatePath('/operator/approvals');
+  return { ok: true, message: 'Saved.' };
+}
+
 export async function createAutoApproveRule(formData: FormData): Promise<ActionResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
   const kind = String(formData.get('kind') ?? '');

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ApprovalButtons } from './ApprovalButtons';
 import { CrossLinkPlacementPreview } from './CrossLinkPlacementPreview';
 import { WaveStateTransitionPreview } from './WaveStateTransitionPreview';
+import { MollyOutreachApproval } from './MollyOutreachApproval';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,9 @@ function payloadPreview(kind: string, payload: unknown): string {
   }
   if (kind === 'content_idea') {
     return `${p.topic ?? '?'} — ${p.targetKeyword ?? '?'} (${p.archetype ?? '?'})`;
+  }
+  if (kind === 'molly_outreach') {
+    return `${p.pitchType ?? '?'} → ${p.toAddress ?? '?'} — ${String(p.subject ?? '').slice(0, 40)}`;
   }
   return JSON.stringify(payload).slice(0, 80);
 }
@@ -99,7 +103,9 @@ export default async function ApprovalsPage({
                     </span>
                   </Td>
                   <Td className="max-w-sm text-slate-300">
-                    {row.kind === 'cross_link_placement' ? (
+                    {row.kind === 'molly_outreach' ? (
+                      <MollyOutreachApproval id={row.id} payload={row.payload} />
+                    ) : row.kind === 'cross_link_placement' ? (
                       <CrossLinkPlacementPreview payload={row.payload} />
                     ) : row.kind === 'wave_state_transition' ? (
                       <WaveStateTransitionPreview payload={row.payload} />
@@ -131,7 +137,11 @@ export default async function ApprovalsPage({
                   </Td>
                   <Td className="text-slate-500 whitespace-nowrap">{ageLabel(row.createdAt)}</Td>
                   <Td>
-                    <ApprovalButtons id={row.id} />
+                    {row.kind === 'molly_outreach' ? (
+                      <span className="text-xs text-slate-600">see preview</span>
+                    ) : (
+                      <ApprovalButtons id={row.id} />
+                    )}
                   </Td>
                 </tr>
               ))}

@@ -14,6 +14,7 @@ import { scheduleOperator } from './operator';
 import { scheduleMollyDigest } from './molly-digest';
 import { scheduleMollyInbox } from './molly-inbox';
 import { scheduleMollyNudge } from './molly-nudge';
+import { scheduleMollyApprovals } from './molly-approvals';
 import { scheduleNetworkLinker } from './network-linker';
 import { scheduleWaveProgression } from './wave-progression';
 import { scheduleLocalContentScout } from './local-content-scout';
@@ -43,6 +44,7 @@ export const schedulers: Record<string, Scheduler> = {
   'molly-digest': scheduleMollyDigest,
   'molly-inbox': scheduleMollyInbox,
   'molly-nudge': scheduleMollyNudge,
+  'molly-approvals': scheduleMollyApprovals,
   'network-linker': scheduleNetworkLinker,
   'wave-progression': scheduleWaveProgression,
   'local-content-scout': scheduleLocalContentScout,
