@@ -17,10 +17,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 800;
 
 /**
- * Vercel Cron entry point — runs every minute. Drain logic lives in
- * lib/operator-tick.ts so operator-triggered "drain now" actions can share
- * the same code path. /api/cron/agent/[name] still exists for manual ops +
- * future external triggers, but Vercel Cron no longer dispatches through it.
+ * Manual / external drain entry point. The scheduled drain is driven by the
+ * consolidated /api/cron/tick poll (see vercel.json); this route no longer has
+ * its own cron line but remains for on-demand triggering. Drain logic lives in
+ * lib/operator-tick.ts so operator-triggered "drain now" actions share the same
+ * code path. /api/cron/agent/[name] still exists for manual ops + future
+ * external triggers, but Vercel Cron no longer dispatches through it.
  */
 export async function GET(req: Request) {
   const denied = assertCronAuthorized(req);
