@@ -178,6 +178,7 @@ export type FailureKind =
   | 'not_implemented'
   | 'agent_disabled'
   | 'kill_switch'
+  | 'global_budget'
   | 'runtime_error';
 
 /**
@@ -187,7 +188,7 @@ export type FailureKind =
  */
 export const RUNTIME_MAX_ATTEMPTS = 5;
 
-const TERMINAL_KINDS: ReadonlySet<FailureKind> = new Set([
+export const TERMINAL_KINDS: ReadonlySet<FailureKind> = new Set([
   'validation_error',
   'unknown_agent',
   'not_implemented',
@@ -195,6 +196,18 @@ const TERMINAL_KINDS: ReadonlySet<FailureKind> = new Set([
   // agent stays disabled would just produce a 5-attempt retry storm. The
   // operator manually replays via requeueDeadLetter once they re-enable.
   'agent_disabled',
+]);
+
+/**
+ * Kinds that release the lease WITHOUT consuming an attempt — the agent never
+ * ran, so the event must stay claimable and never drift toward dead-letter:
+ *  - kill_switch: portfolio switch was on.
+ *  - global_budget: portfolio-wide daily spend cap tripped at the gate; the
+ *    event resumes once the global counter resets at the next UTC day.
+ */
+export const RELEASE_WITHOUT_ATTEMPT_KINDS: ReadonlySet<FailureKind> = new Set([
+  'kill_switch',
+  'global_budget',
 ]);
 
 /**
@@ -211,12 +224,13 @@ export async function markEventFailed(
 ) {
   const db = getDb();
 
-  // Kill-switch refusal is NOT a failure of the work — the agent never ran
-  // because the portfolio switch was on. Release the lease without consuming
-  // an attempt so legit work isn't poisoned toward dead-letter just for being
-  // claimed during a stop. The top-level drain short-circuit normally prevents
-  // claiming at all while the switch is on; this handles a flip mid-drain.
-  if (kind === 'kill_switch') {
+  // kill_switch / global_budget are NOT failures of the work — the agent never
+  // ran (portfolio switch on, or the global daily spend cap tripped at the
+  // gate). Release the lease without consuming an attempt so legit work isn't
+  // poisoned toward dead-letter just for being claimed during a pause. The
+  // event stays claimable and resumes once the switch flips off / the global
+  // counter resets at the next UTC day.
+  if (RELEASE_WITHOUT_ATTEMPT_KINDS.has(kind)) {
     await db.execute(sql`
       UPDATE agent_events
       SET processing_at = NULL,

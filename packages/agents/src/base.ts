@@ -1,14 +1,35 @@
 import { randomUUID } from 'node:crypto';
 import { eq, and, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, agentRuns, agentBudgets, agentEvents, getSystemState } from '@leadlandlord/db';
+import { getDb, agentRuns, agentBudgets, agentEvents, systemState, getSystemState } from '@leadlandlord/db';
 import {
   AgentDisabledError,
   AgentRunError,
   BudgetExceededError,
+  GlobalBudgetExceededError,
   KillSwitchActiveError,
 } from '@leadlandlord/shared/errors';
 import { log as rootLog, type Logger } from '@leadlandlord/shared/log';
+
+/**
+ * Portfolio-wide daily spend gate (orchestrator Phase 2). A cap of <= 0 means
+ * "no global limit" (so setting the cap to 0 disables the ceiling rather than
+ * bricking the whole fleet). Otherwise the fleet pauses once cumulative spend
+ * for the UTC day reaches the cap.
+ */
+export function isOverGlobalBudget(spentTodayUsd: number, capUsd: number): boolean {
+  if (capUsd <= 0) return false;
+  return spentTodayUsd >= capUsd;
+}
+
+/**
+ * Per-agent monthly spend gate (orchestrator Phase 2). Same <= 0 == unlimited
+ * convention as the global cap.
+ */
+export function isOverMonthlyBudget(spentMonthUsd: number, capUsd: number): boolean {
+  if (capUsd <= 0) return false;
+  return spentMonthUsd >= capUsd;
+}
 
 export interface AgentContext {
   runId: string;
@@ -278,7 +299,10 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
       return validated;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const status = err instanceof BudgetExceededError ? 'budget_exceeded' : 'failed';
+      const status =
+        err instanceof BudgetExceededError || err instanceof GlobalBudgetExceededError
+          ? 'budget_exceeded'
+          : 'failed';
       log.error({ err: message }, 'agent run failed');
 
       if (progressTimer) {
@@ -312,7 +336,7 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         log.warn({ err: budgetErr instanceof Error ? budgetErr.message : budgetErr }, 'creditBudget failed on error path');
       }
 
-      if (err instanceof BudgetExceededError) throw err;
+      if (err instanceof BudgetExceededError || err instanceof GlobalBudgetExceededError) throw err;
       throw new AgentRunError(this.name, message, err);
     }
   }
@@ -331,12 +355,46 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
 
   protected async assertBudgetAvailable(): Promise<void> {
     const db = getDb();
-    // Atomic UTC-day reset: if the row's updated_at is from a prior UTC day,
-    // zero spent_today_usd before reading. Without this the cap permanently
-    // bricks an agent the first day it hits the limit.
+
+    // ── Portfolio-wide daily cap (checked before the per-agent gate) ──
+    // Atomic UTC-day reset of the global counter, anchored on
+    // global_spend_reset_at so it's independent of system_state.updated_at
+    // (which churns for kill-switch / operator writes). When the cap trips the
+    // whole fleet pauses until the next UTC day; the queue releases the event
+    // without consuming an attempt (failure_kind = global_budget).
+    await db.execute(sql`
+      UPDATE system_state
+      SET global_spent_today_usd = 0, global_spend_reset_at = NOW()
+      WHERE id = 'global'
+        AND (global_spend_reset_at IS NULL
+             OR date_trunc('day', global_spend_reset_at AT TIME ZONE 'UTC')
+                < date_trunc('day', NOW() AT TIME ZONE 'UTC'))
+    `);
+    const [g] = await db
+      .select({
+        spent: systemState.globalSpentTodayUsd,
+        cap: systemState.globalDailyCostCapUsd,
+      })
+      .from(systemState)
+      .where(eq(systemState.id, 'global'))
+      .limit(1);
+    if (g && isOverGlobalBudget(Number(g.spent), Number(g.cap))) {
+      throw new GlobalBudgetExceededError(Number(g.cap));
+    }
+
+    // ── Per-agent caps ──
+    // Atomic UTC reset: zero spent_today_usd on day rollover and
+    // spent_this_month_usd on month rollover. A month rollover always implies a
+    // day rollover, so the day-rolled WHERE clause covers both. Without this the
+    // cap permanently bricks an agent the first period it hits the limit.
     await db.execute(sql`
       UPDATE agent_budgets
-      SET spent_today_usd = 0, updated_at = NOW()
+      SET spent_today_usd = 0,
+          spent_this_month_usd = CASE
+            WHEN date_trunc('month', updated_at AT TIME ZONE 'UTC')
+               < date_trunc('month', NOW() AT TIME ZONE 'UTC')
+            THEN 0 ELSE spent_this_month_usd END,
+          updated_at = NOW()
       WHERE agent = ${this.name}
         AND date_trunc('day', updated_at AT TIME ZONE 'UTC') < date_trunc('day', NOW() AT TIME ZONE 'UTC')
     `);
@@ -354,6 +412,11 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
     if (spent >= cap) {
       throw new BudgetExceededError(this.name, cap);
     }
+    const monthlyCap = row ? Number(row.monthlyCostCapUsd) : 0;
+    const spentMonth = row ? Number(row.spentThisMonthUsd) : 0;
+    if (isOverMonthlyBudget(spentMonth, monthlyCap)) {
+      throw new BudgetExceededError(this.name, monthlyCap);
+    }
   }
 
   protected async creditBudget(amountUsd: number): Promise<void> {
@@ -365,6 +428,7 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         agent: this.name,
         dailyCostCapUsd: this.defaultDailyCapUsd.toFixed(2),
         spentTodayUsd: amountUsd.toFixed(4),
+        spentThisMonthUsd: amountUsd.toFixed(4),
       })
       .onConflictDoUpdate({
         target: agentBudgets.agent,
@@ -381,9 +445,38 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
               ELSE ${agentBudgets.spentTodayUsd} + ${amountUsd.toFixed(4)}::numeric
             END
           `,
+          // Same reset logic on the month boundary, so the monthly cap reads a
+          // true month-to-date total.
+          spentThisMonthUsd: sql`
+            CASE
+              WHEN date_trunc('month', ${agentBudgets.updatedAt} AT TIME ZONE 'UTC')
+                 < date_trunc('month', NOW() AT TIME ZONE 'UTC')
+              THEN ${amountUsd.toFixed(4)}::numeric
+              ELSE ${agentBudgets.spentThisMonthUsd} + ${amountUsd.toFixed(4)}::numeric
+            END
+          `,
           updatedAt: new Date(),
         },
       });
+
+    // Credit the portfolio-wide daily counter, resetting on the UTC-day
+    // boundary anchored on global_spend_reset_at (mirrors the assert path).
+    await db.execute(sql`
+      UPDATE system_state
+      SET global_spent_today_usd = CASE
+            WHEN global_spend_reset_at IS NULL
+              OR date_trunc('day', global_spend_reset_at AT TIME ZONE 'UTC')
+                 < date_trunc('day', NOW() AT TIME ZONE 'UTC')
+            THEN ${amountUsd.toFixed(4)}::numeric
+            ELSE global_spent_today_usd + ${amountUsd.toFixed(4)}::numeric END,
+          global_spend_reset_at = CASE
+            WHEN global_spend_reset_at IS NULL
+              OR date_trunc('day', global_spend_reset_at AT TIME ZONE 'UTC')
+                 < date_trunc('day', NOW() AT TIME ZONE 'UTC')
+            THEN NOW() ELSE global_spend_reset_at END,
+          updated_at = NOW()
+      WHERE id = 'global'
+    `);
   }
 }
 

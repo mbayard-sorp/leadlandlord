@@ -4,6 +4,7 @@ import {
   AgentRunError,
   AgentDisabledError,
   KillSwitchActiveError,
+  GlobalBudgetExceededError,
   NotImplementedError,
 } from '@leadlandlord/shared/errors';
 import { classifyAgentError } from './error-classify';
@@ -35,6 +36,15 @@ describe('classifyAgentError', () => {
   it('unwraps a NotImplementedError wrapped in AgentRunError', () => {
     const wrapped = new AgentRunError('x', 'fail', new NotImplementedError('hero'));
     expect(classifyAgentError(wrapped)).toBe('not_implemented');
+  });
+
+  it('classifies GlobalBudgetExceededError as global_budget', () => {
+    expect(classifyAgentError(new GlobalBudgetExceededError(50))).toBe('global_budget');
+  });
+
+  it('unwraps a GlobalBudgetExceededError wrapped in AgentRunError', () => {
+    const wrapped = new AgentRunError('content-engine', 'fail', new GlobalBudgetExceededError(40));
+    expect(classifyAgentError(wrapped)).toBe('global_budget');
   });
 
   it('falls back to runtime_error for unknown errors', () => {
