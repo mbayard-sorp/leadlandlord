@@ -812,6 +812,36 @@ export const agentHealth = pgTable('agent_health', {
 });
 
 /**
+ * DB-driven agent cadence (orchestrator Phase 3). SOURCE OF TRUTH for how
+ * often the 10-minute tick enqueues each scheduler — so the orchestrator can
+ * re-schedule agents without a Vercel redeploy.
+ *
+ * Keyed on the SCHEDULER registry name (packages/agents/src/scheduler), NOT
+ * the agent kind: the tick fires via runScheduler(scheduler_name), and
+ * schedulers are not 1:1 with agents (e.g. molly-nudge -> molly,
+ * wave-progression -> wave-launcher). target_agent records the registry kind a
+ * scheduler feeds, for the orchestrator UI/supervision (nullable; informational).
+ *
+ * Two independent gates, kept distinct:
+ *   - `paused` (here): stop enqueuing on cadence, but the agent still runs on
+ *     demand / events. A cadence-only suspend.
+ *   - `agent_budgets.enabled=false`: don't run the agent AT ALL (enforced at
+ *     enqueue in run-scheduler.ts + at the gate in BaseAgent.run).
+ */
+export const agentSchedules = pgTable('agent_schedules', {
+  schedulerName: text('scheduler_name').primaryKey(),
+  targetAgent: text('target_agent'),
+  cadenceKind: text('cadence_kind').notNull(), // 'cron' | 'poll' | 'event' | 'manual'
+  cronExpr: text('cron_expr'),
+  intervalMinutes: integer('interval_minutes'),
+  lastEnqueuedAt: timestamp('last_enqueued_at', { withTimezone: true }),
+  paused: boolean('paused').notNull().default(false),
+  managedBy: text('managed_by').notNull().default('human'), // 'human' | 'orchestrator'
+  notes: text('notes'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Single-row settings table for portfolio-wide controls. Keyed by a constant
  * `id = 'global'` so the operator dashboard can flip the kill switch without
  * needing a separate row per tenant. New flags get added as columns; the

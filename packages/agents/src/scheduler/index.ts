@@ -53,3 +53,4 @@ export const schedulers: Record<string, Scheduler> = {
 };
 
 export type { Scheduler, ScheduledEvent } from './types';
+export { compileCron, cronPrevFire, isCronDue, isPollDue } from './cron';
