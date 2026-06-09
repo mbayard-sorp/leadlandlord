@@ -15,7 +15,7 @@ ALTER TABLE "backlink_prospects"
   ADD COLUMN IF NOT EXISTS "contact_email" text,
   ADD COLUMN IF NOT EXISTS "contact_name"  text,
   ADD COLUMN IF NOT EXISTS "contact_state" text;
-
+--> statement-breakpoint
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -26,7 +26,7 @@ BEGIN
       CHECK ("contact_state" IS NULL OR "contact_state" IN ('found', 'guessed', 'missing'));
   END IF;
 END $$;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "backlink_niche_tastes" (
   "id"           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "niche"        text NOT NULL,
@@ -35,6 +35,6 @@ CREATE TABLE IF NOT EXISTS "backlink_niche_tastes" (
   "recorded_at"  timestamp with time zone NOT NULL DEFAULT now(),
   "prospect_id"  uuid REFERENCES "backlink_prospects"("id") ON DELETE SET NULL
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "backlink_niche_tastes_niche_recorded_idx"
   ON "backlink_niche_tastes" ("niche", "recorded_at");
