@@ -190,24 +190,3 @@ export const CrossLinkTopology = z.enum([
   'out-of-network',
 ]);
 export type CrossLinkTopology = z.infer<typeof CrossLinkTopology>;
-
-/**
- * Payload for `agent_approvals.kind = 'cross_link_placement'`. Emitted by
- * network-linker and rendered in the operator approvals inbox.
- */
-export const CrossLinkPlacementPayload = z.object({
-  sourceSiteId: z.string().uuid(),
-  sourcePageId: z.string(),
-  sourcePageSlug: z.string(),
-  targetSiteId: z.string().uuid(),
-  targetUrl: z.string().url(),
-  anchorText: z.string().min(1),
-  topology: CrossLinkTopology,
-  /** Sentence as it currently exists in the page MDX. */
-  beforeSentence: z.string(),
-  /** Sentence with the anchor inserted, as the LLM proposes. */
-  afterSentence: z.string(),
-  /** Optional reasoning string from the placement LLM for operator review. */
-  rationale: z.string().optional(),
-});
-export type CrossLinkPlacementPayload = z.infer<typeof CrossLinkPlacementPayload>;

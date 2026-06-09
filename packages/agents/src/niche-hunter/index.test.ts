@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ClaudeCandidateSchema, computeScore } from './index';
 import { isDenylisted, NICHE_DENYLIST } from './denylist';
-import { checkAutoApprove } from '../approval-engine';
 import { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
 import { getRentabilityPrior } from './lead-benchmarks';
 
@@ -163,128 +162,6 @@ describe('isDenylisted', () => {
 
   it('NICHE_DENYLIST has at least 8 entries', () => {
     expect(NICHE_DENYLIST.length).toBeGreaterThanOrEqual(8);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// checkAutoApprove — approval engine tests (mocked DB)
-// ─────────────────────────────────────────────────────────────────────────────
-
-vi.mock('@leadlandlord/db', () => {
-  return {
-    getDb: vi.fn(),
-    autoApproveRules: { kind: 'kind', active: 'active', id: 'id', approvedCount: 'approvedCount' },
-    niches: {
-      niche: 'niche', city: 'city', state: 'state', id: 'id',
-    },
-    agentApprovals: {},
-    eq: (a: unknown, b: unknown) => ({ type: 'eq', a, b }),
-    and: (...args: unknown[]) => ({ type: 'and', args }),
-  };
-});
-
-function makeMockDb(rules: Array<{ id: string; kind: string; matcher: unknown; active: boolean; approvedCount: number }>) {
-  const updateChain = {
-    set: vi.fn().mockReturnThis(),
-    where: vi.fn().mockResolvedValue(undefined),
-  };
-  return {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(rules),
-      }),
-    }),
-    update: vi.fn().mockReturnValue(updateChain),
-  };
-}
-
-describe('checkAutoApprove', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('returns matched=false when no rules exist', async () => {
-    const db = makeMockDb([]);
-    const result = await checkAutoApprove('niche_candidate', { score: 80 }, db as never);
-    expect(result.matched).toBe(false);
-    expect(result.ruleId).toBeUndefined();
-  });
-
-  it('matches a $gte rule when score meets threshold', async () => {
-    const db = makeMockDb([
-      { id: 'rule-1', kind: 'niche_candidate', matcher: { score: { $gte: 70 } }, active: true, approvedCount: 0 },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { score: 80 }, db as never);
-    expect(result.matched).toBe(true);
-    expect(result.ruleId).toBe('rule-1');
-  });
-
-  it('does not match a $gte rule when score is below threshold', async () => {
-    const db = makeMockDb([
-      { id: 'rule-1', kind: 'niche_candidate', matcher: { score: { $gte: 90 } }, active: true, approvedCount: 0 },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { score: 80 }, db as never);
-    expect(result.matched).toBe(false);
-  });
-
-  it('matches a $lte rule', async () => {
-    const db = makeMockDb([
-      { id: 'rule-2', kind: 'niche_candidate', matcher: { kd: { $lte: 30 } }, active: true, approvedCount: 0 },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { kd: 25 }, db as never);
-    expect(result.matched).toBe(true);
-  });
-
-  it('matches a $eq rule', async () => {
-    const db = makeMockDb([
-      { id: 'rule-3', kind: 'niche_candidate', matcher: { state: { $eq: 'TX' } }, active: true, approvedCount: 0 },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { state: 'TX' }, db as never);
-    expect(result.matched).toBe(true);
-  });
-
-  it('does not match $eq when value differs', async () => {
-    const db = makeMockDb([
-      { id: 'rule-3', kind: 'niche_candidate', matcher: { state: { $eq: 'TX' } }, active: true, approvedCount: 0 },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { state: 'AZ' }, db as never);
-    expect(result.matched).toBe(false);
-  });
-
-  it('matches multi-predicate rule when all conditions pass', async () => {
-    const db = makeMockDb([
-      {
-        id: 'rule-4',
-        kind: 'niche_candidate',
-        matcher: { score: { $gte: 60 }, kd: { $lte: 30 } },
-        active: true,
-        approvedCount: 0,
-      },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { score: 75, kd: 20 }, db as never);
-    expect(result.matched).toBe(true);
-  });
-
-  it('does not match multi-predicate rule when one condition fails', async () => {
-    const db = makeMockDb([
-      {
-        id: 'rule-4',
-        kind: 'niche_candidate',
-        matcher: { score: { $gte: 60 }, kd: { $lte: 30 } },
-        active: true,
-        approvedCount: 0,
-      },
-    ]);
-    const result = await checkAutoApprove('niche_candidate', { score: 75, kd: 40 }, db as never);
-    expect(result.matched).toBe(false);
-  });
-
-  it('increments approvedCount when rule matches', async () => {
-    const db = makeMockDb([
-      { id: 'rule-1', kind: 'niche_candidate', matcher: { score: { $gte: 70 } }, active: true, approvedCount: 5 },
-    ]);
-    await checkAutoApprove('niche_candidate', { score: 80 }, db as never);
-    expect(db.update).toHaveBeenCalled();
   });
 });
 

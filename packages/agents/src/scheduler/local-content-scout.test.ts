@@ -25,10 +25,6 @@ vi.mock('@leadlandlord/integrations/anthropic', () => ({
   estimateCostUsd: vi.fn().mockReturnValue(0),
 }));
 
-vi.mock('../approval-engine', () => ({
-  checkAutoApprove: vi.fn().mockResolvedValue({ matched: false }),
-}));
-
 import { scheduleLocalContentScout } from './local-content-scout';
 
 const SITE_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';

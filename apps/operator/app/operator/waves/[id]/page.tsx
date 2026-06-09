@@ -1,4 +1,4 @@
-import { getDb, waves, sites, crossSiteLinks, seoMetricsDaily, agentApprovals, sql, eq, and, inArray, gt } from '@leadlandlord/db';
+import { getDb, waves, sites, crossSiteLinks, seoMetricsDaily, sql, eq, and, inArray, gt } from '@leadlandlord/db';
 import { count, sum } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -32,13 +32,6 @@ function daysRemaining(date: Date | null): number | null {
   return Math.ceil(ms / 86_400_000);
 }
 
-interface PendingApproval {
-  id: string;
-  fromState: string;
-  toState: string;
-  createdAt: Date;
-}
-
 interface SiteCard {
   id: string;
   domain: string | null;
@@ -65,33 +58,6 @@ async function loadPageData(waveId: string) {
   if (!wave) return null;
 
   const siteIds = (wave.siteIds as string[]) ?? [];
-
-  // Pending approval for this wave
-  const approvalRows = await db
-    .select({
-      id: agentApprovals.id,
-      payload: agentApprovals.payload,
-      createdAt: agentApprovals.createdAt,
-    })
-    .from(agentApprovals)
-    .where(
-      and(
-        eq(agentApprovals.kind, 'wave_state_transition'),
-        eq(agentApprovals.status, 'pending'),
-        sql`${agentApprovals.payload}->>'waveId' = ${waveId}`,
-      ),
-    )
-    .limit(5);
-
-  const pendingApprovals: PendingApproval[] = approvalRows.map((r) => {
-    const p = (r.payload ?? {}) as Record<string, unknown>;
-    return {
-      id: r.id,
-      fromState: String(p.fromState ?? '?'),
-      toState: String(p.toState ?? '?'),
-      createdAt: r.createdAt,
-    };
-  });
 
   // Per-site data
   let siteCards: SiteCard[] = [];
@@ -175,7 +141,7 @@ async function loadPageData(waveId: string) {
     }));
   }
 
-  return { wave, pendingApprovals, siteCards };
+  return { wave, siteCards };
 }
 
 export default async function WaveDetailPage({
@@ -188,7 +154,7 @@ export default async function WaveDetailPage({
 
   if (!data) notFound();
 
-  const { wave, pendingApprovals, siteCards } = data;
+  const { wave, siteCards } = data;
   const transitions = (wave.transitions as WaveTransition[]) ?? [];
   const aging = daysRemaining(wave.agingUntil);
 
@@ -226,28 +192,7 @@ export default async function WaveDetailPage({
         </h2>
 
         <div className="space-y-2">
-          {pendingApprovals.map((a) => (
-            <div
-              key={a.id}
-              className="flex items-start gap-3 text-sm rounded border border-amber-700/40 bg-amber-900/10 px-3 py-2"
-            >
-              <span className="mt-0.5 w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-amber-300 font-medium">Pending approval</span>
-                <span className="text-slate-400">
-                  {' '}— {a.fromState} → {a.toState}
-                </span>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {relativeTime(a.createdAt)} &middot;{' '}
-                  <Link href="/operator/approvals?kind=wave_state_transition" className="text-indigo-400 hover:underline">
-                    Review in approvals
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {transitions.length === 0 && pendingApprovals.length === 0 && (
+          {transitions.length === 0 && (
             <p className="text-sm text-slate-500">No transitions recorded yet.</p>
           )}
 

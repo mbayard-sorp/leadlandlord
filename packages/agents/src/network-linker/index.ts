@@ -10,12 +10,9 @@ import {
   siteNetworkMemberships,
   crossSiteLinks,
   linkRequests,
-  agentApprovals,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { createReadClient } from '@leadlandlord/integrations/sanity';
-import { CrossLinkPlacementPayload } from '@leadlandlord/shared/types';
-import { checkAutoApprove } from '../approval-engine';
 import { getNetworkPeers, selectPeers, rotateAnchor, checkHygiene } from './network';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,8 +38,7 @@ export const NetworkLinkerOutput = z.object({
   candidatesEvaluated: z.number().int().nonnegative(),
   hygieneFailed: z.number().int().nonnegative(),
   llmSkipped: z.number().int().nonnegative(),
-  approvalsQueued: z.number().int().nonnegative(),
-  approvalsAutoApproved: z.number().int().nonnegative(),
+  linksPlaced: z.number().int().nonnegative(),
 });
 export type NetworkLinkerOutput = z.infer<typeof NetworkLinkerOutput>;
 
@@ -101,8 +97,7 @@ export class NetworkLinker extends BaseAgent<
           candidatesEvaluated: 0,
           hygieneFailed: 0,
           llmSkipped: 0,
-          approvalsQueued: 0,
-          approvalsAutoApproved: 0,
+          linksPlaced: 0,
         };
       }
       requestingSiteId = row.requestingSiteId;
@@ -181,8 +176,7 @@ export class NetworkLinker extends BaseAgent<
         candidatesEvaluated: 0,
         hygieneFailed: 0,
         llmSkipped: 0,
-        approvalsQueued: 0,
-        approvalsAutoApproved: 0,
+        linksPlaced: 0,
       };
     }
 
@@ -202,8 +196,7 @@ export class NetworkLinker extends BaseAgent<
         candidatesEvaluated: 0,
         hygieneFailed: 0,
         llmSkipped: 0,
-        approvalsQueued: 0,
-        approvalsAutoApproved: 0,
+        linksPlaced: 0,
       };
     }
 
@@ -259,8 +252,7 @@ export class NetworkLinker extends BaseAgent<
         candidatesEvaluated: peers.length,
         hygieneFailed: 0,
         llmSkipped: 0,
-        approvalsQueued: 0,
-        approvalsAutoApproved: 0,
+        linksPlaced: 0,
       };
     }
 
@@ -284,8 +276,7 @@ export class NetworkLinker extends BaseAgent<
 
     let hygieneFailed = 0;
     let llmSkipped = 0;
-    let approvalsQueued = 0;
-    let approvalsAutoApproved = 0;
+    let linksPlaced = 0;
 
     const MAX_ATTEMPTS = 3;
 
@@ -412,64 +403,30 @@ export class NetworkLinker extends BaseAgent<
         continue;
       }
 
-      // ── Build + queue approval ───────────────────────────────────────────
-
-      const approvalPayload = CrossLinkPlacementPayload.parse({
-        sourceSiteId: requestingSiteId,
-        sourcePageId,
-        sourcePageSlug: sourcePage.slug,
-        targetSiteId: peer.siteId,
-        targetUrl,
-        anchorText,
-        topology: peer.topology,
-        beforeSentence: placement.beforeSentence,
-        afterSentence: placement.afterSentence,
-        rationale: placement.rationale,
-      });
-
-      let approvalStatus = 'pending';
-      let ruleMatched: string | undefined;
+      // ── Place the cross-site link ────────────────────────────────────────
+      // No approval gate: write the crossSiteLinks row directly.
 
       try {
-        const autoResult = await checkAutoApprove('cross_link_placement', approvalPayload, db);
-        if (autoResult.matched) {
-          approvalStatus = 'auto_approved';
-          ruleMatched = autoResult.ruleId;
-        }
-      } catch (err) {
-        ctx.log.warn(
-          { err: err instanceof Error ? err.message : err },
-          'auto-approve check failed, defaulting to pending',
-        );
-      }
-
-      try {
-        await db.insert(agentApprovals).values({
-          agentRunId: ctx.runId,
-          kind: 'cross_link_placement',
-          payload: approvalPayload as object,
-          status: approvalStatus,
-          decidedBy:
-            approvalStatus === 'auto_approved'
-              ? `auto-rule:${ruleMatched ?? 'unknown'}`
-              : null,
-          decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
-          ruleMatched: ruleMatched ?? null,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        await db.insert(crossSiteLinks).values({
+          sourceSiteId: requestingSiteId,
+          sourcePageId,
+          targetSiteId: peer.siteId,
+          targetUrl,
+          anchorText,
+          status: 'active',
         });
 
-        approvalsQueued++;
-        if (approvalStatus === 'auto_approved') approvalsAutoApproved++;
+        linksPlaced++;
         ctx.log.info(
-          { peerSiteId: peer.siteId, anchorText, approvalStatus },
-          'cross_link_placement approval queued',
+          { peerSiteId: peer.siteId, anchorText },
+          'cross-site link placed',
         );
         // Successfully placed one link — done for this request.
         break;
       } catch (err: unknown) {
         // Postgres unique-violation (error code 23505) means the exact same
-        // (sourcePageId, targetUrl, anchorText) is already pending. This is the
-        // transactional dedup guard from the architect — treat as a silent skip.
+        // (sourcePageId, targetUrl, anchorText) already exists. Treat as a
+        // silent skip and try the next peer.
         const pgCode =
           err !== null &&
           typeof err === 'object' &&
@@ -480,9 +437,8 @@ export class NetworkLinker extends BaseAgent<
         if (pgCode === '23505') {
           ctx.log.info(
             { peerSiteId: peer.siteId, anchorText },
-            'duplicate cross_link_placement approval, skipping silently',
+            'duplicate cross-site link, skipping silently',
           );
-          // Do not increment approvalsQueued — it is a dup.
           continue;
         }
         throw err;
@@ -501,8 +457,7 @@ export class NetworkLinker extends BaseAgent<
       candidatesEvaluated: Math.min(MAX_ATTEMPTS, orderedPeers.length),
       hygieneFailed,
       llmSkipped,
-      approvalsQueued,
-      approvalsAutoApproved,
+      linksPlaced,
     };
   }
 }

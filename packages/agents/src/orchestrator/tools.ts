@@ -24,7 +24,6 @@ import {
   agentBudgets,
   agentRuns,
   agentEvents,
-  agentApprovals,
   agentSchedules,
   agentHealth,
   orchestratorThreads,
@@ -261,21 +260,17 @@ function requireThread(ctx: OrchestratorToolContext): string {
 const getFleetStatus: OrchestratorTool = {
   name: 'get_fleet_status',
   description:
-    'One-glance fleet summary: per-agent enabled state + health, global spend vs cap, queue depth, dead-letter count, pending niche approvals, and open orchestrator questions.',
+    'One-glance fleet summary: per-agent enabled state + health, global spend vs cap, queue depth, dead-letter count, and open orchestrator questions.',
   kind: 'read',
   input_schema: { type: 'object', properties: {}, additionalProperties: false },
   async execute() {
     const db = getDb();
-    const [budgets, health, sys, queued, dead, pendingApprovals, openQs] = await Promise.all([
+    const [budgets, health, sys, queued, dead, openQs] = await Promise.all([
       db.select().from(agentBudgets),
       db.select().from(agentHealth),
       getSystemState(),
       db.select({ id: agentEvents.id }).from(agentEvents).where(isNull(agentEvents.processedAt)),
       db.select({ id: agentEvents.id }).from(agentEvents).where(isNotNull(agentEvents.deadLetteredAt)),
-      db
-        .select({ id: agentApprovals.id, kind: agentApprovals.kind })
-        .from(agentApprovals)
-        .where(eq(agentApprovals.status, 'pending')),
       db
         .select({ id: orchestratorMessages.id })
         .from(orchestratorMessages)
@@ -294,8 +289,6 @@ const getFleetStatus: OrchestratorTool = {
       operatorMode: sys.operatorMode,
       queueDepth: queued.length,
       deadLetters: dead.length,
-      pendingNicheApprovals: pendingApprovals.filter((a) => a.kind === 'niche_candidate').length,
-      pendingApprovalsTotal: pendingApprovals.length,
       openQuestions: openQs.length,
       agents: budgets.map((b) => {
         const h = healthByAgent.get(b.agent);
@@ -473,29 +466,6 @@ const getQueueState: OrchestratorTool = {
         requeueable: !isProtectedEventType(d.type),
       })),
     };
-  },
-};
-
-const getPendingApprovals: OrchestratorTool = {
-  name: 'get_pending_approvals',
-  description:
-    'Items awaiting Mike’s decision (niche candidates, etc.). READ-ONLY — you cannot approve them; surface them to Mike instead.',
-  kind: 'read',
-  input_schema: { type: 'object', properties: {}, additionalProperties: false },
-  async execute() {
-    const db = getDb();
-    const rows = await db
-      .select({
-        id: agentApprovals.id,
-        kind: agentApprovals.kind,
-        createdAt: agentApprovals.createdAt,
-        expiresAt: agentApprovals.expiresAt,
-      })
-      .from(agentApprovals)
-      .where(eq(agentApprovals.status, 'pending'))
-      .orderBy(desc(agentApprovals.createdAt))
-      .limit(50);
-    return rows;
   },
 };
 
@@ -762,7 +732,6 @@ export const ORCHESTRATOR_TOOLS: OrchestratorTool[] = [
   getRecentRuns,
   getBudgetStatus,
   getQueueState,
-  getPendingApprovals,
   getSchedules,
   enableAgent,
   disableAgent,

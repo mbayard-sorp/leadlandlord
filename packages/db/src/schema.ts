@@ -1257,65 +1257,9 @@ export const alertEvents = pgTable(
 // ────────────────────────────────────────────────────────────
 
 /**
- * Every side-effecting agent action queues here before execution.
- * Auto-approve rules may flip status to 'auto_approved' immediately.
- */
-export const agentApprovals = pgTable(
-  'agent_approvals',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    agentRunId: uuid('agent_run_id')
-      .notNull()
-      .references(() => agentRuns.id, { onDelete: 'cascade' }),
-    /** e.g. 'niche_candidate', 'site_bundle', 'cross_link_placement', 'backlink_submission', 'citation_submission' */
-    kind: text('kind').notNull(),
-    /** The proposed action; shape varies by kind. */
-    payload: jsonb('payload').notNull(),
-    /** pending | approved | rejected | expired | auto_approved */
-    status: text('status').notNull().default('pending'),
-    /** Operator email or 'rule:<ruleId>' if auto-approved. */
-    decidedBy: text('decided_by'),
-    decidedAt: timestamp('decided_at', { withTimezone: true }),
-    /** Auto-approve rule ID, if any. */
-    ruleMatched: text('rule_matched'),
-    rejectionReason: text('rejection_reason'),
-    /** Default 7 days from createdAt. */
-    expiresAt: timestamp('expires_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    statusKindCreatedIdx: index('agent_approvals_status_kind_created_idx').on(
-      t.status,
-      t.kind,
-      t.createdAt,
-    ),
-    agentRunIdx: index('agent_approvals_agent_run_idx').on(t.agentRunId),
-  }),
-);
-
-/**
- * Operator-defined rules that auto-approve matching agentApprovals rows.
- * Each rule specifies a kind + JSON path predicates over payload.
- */
-export const autoApproveRules = pgTable('auto_approve_rules', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  /** Matches agentApprovals.kind. */
-  kind: text('kind').notNull(),
-  /** JSON path predicates over payload, e.g. { "payload.linkType": "out_of_network" }. */
-  matcher: jsonb('matcher').notNull(),
-  createdBy: text('created_by').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  active: boolean('active').notNull().default(true),
-  /** Usage telemetry: incremented on each auto-approval. */
-  approvedCount: integer('approved_count').notNull().default(0),
-});
-
-/**
  * Local-content pipeline domain table. The local-content-scout proposes one
- * row per content idea (dual-writing an agent_approvals row, kind
- * 'content_idea'); the local-content-writer drafts + publishes it to Sanity
- * on approval. scoutRunId/writerRunId link to agent_runs.cost_usd so the
+ * row per content idea; the local-content-writer drafts + publishes it to
+ * Sanity on approval. scoutRunId/writerRunId link to agent_runs.cost_usd so the
  * operator can see research-vs-writing cost per published page.
  *
  * Footprint variance: archetype + voiceSeed are assigned by the scout
@@ -1344,10 +1288,6 @@ export const contentIdeas = pgTable(
     rationale: text('rationale'),
     /** pending | approved | rejected | published | auto_approved | expired */
     status: text('status').notNull().default('pending'),
-    /** The paired agent_approvals row (unified inbox + rule matching). */
-    sourceApprovalId: uuid('source_approval_id').references(() => agentApprovals.id, {
-      onDelete: 'set null',
-    }),
     /** agent_runs.id of the scout run that produced this idea (research cost). */
     scoutRunId: uuid('scout_run_id').notNull(),
     /** agent_runs.id of the writer run that published it (writing cost); null until published. */
@@ -1652,10 +1592,6 @@ export type EmailSend = typeof emailSends.$inferSelect;
 export type NewEmailSend = typeof emailSends.$inferInsert;
 export type PhoneProvision = typeof phoneProvisions.$inferSelect;
 export type NewPhoneProvision = typeof phoneProvisions.$inferInsert;
-export type AgentApproval = typeof agentApprovals.$inferSelect;
-export type NewAgentApproval = typeof agentApprovals.$inferInsert;
-export type AutoApproveRule = typeof autoApproveRules.$inferSelect;
-export type NewAutoApproveRule = typeof autoApproveRules.$inferInsert;
 export type Network = typeof networks.$inferSelect;
 export type NewNetwork = typeof networks.$inferInsert;
 export type SiteNetworkMembership = typeof siteNetworkMemberships.$inferSelect;

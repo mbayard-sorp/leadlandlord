@@ -24,7 +24,6 @@ const EXPECTED_READ = [
   'get_recent_runs',
   'get_budget_status',
   'get_queue_state',
-  'get_pending_approvals',
   'get_schedules',
 ];
 const EXPECTED_WRITE = [

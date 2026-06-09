@@ -6,9 +6,7 @@ import { LocalContentScoutInput, LocalContentScoutOutput, isoWeek } from './inde
 vi.mock('@leadlandlord/db', () => ({
   getDb: vi.fn(),
   sites: { id: 'id', status: 'status', localContentEnabled: 'local_content_enabled', niche: 'niche', city: 'city', state: 'state' },
-  agentApprovals: { id: 'id', agentRunId: 'agent_run_id', kind: 'kind', status: 'status' },
   contentIdeas: { id: 'id', siteId: 'site_id', topicSlug: 'topic_slug', targetKeyword: 'target_keyword', status: 'status', scoutRunId: 'scout_run_id' },
-  autoApproveRules: { kind: 'kind', active: 'active', id: 'id', approvedCount: 'approved_count' },
   eq: (a: unknown, b: unknown) => ({ type: 'eq', a, b }),
   and: (...args: unknown[]) => ({ type: 'and', args }),
   sql: vi.fn(),
@@ -34,11 +32,6 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
 vi.mock('@leadlandlord/integrations/anthropic', () => ({
   getAnthropicClient: vi.fn(),
   estimateCostUsd: vi.fn().mockReturnValue(0.01),
-}));
-
-// ---- approval-engine mock ---------------------------------------------------
-vi.mock('../approval-engine', () => ({
-  checkAutoApprove: vi.fn().mockResolvedValue({ matched: false }),
 }));
 
 const SITE_ID = '11111111-1111-1111-1111-111111111111';
@@ -181,71 +174,36 @@ describe('LocalContentScout dedupeKeyFn', () => {
   });
 });
 
-// ---- Auto-approve emits downstream event ------------------------------------
+// ---- Idea persistence: status pending ---------------------------------------
 
-describe('auto-approve + emitNextStepEvent', () => {
-  it('emits content.idea.approved when auto-approve matches', async () => {
+describe('idea persistence', () => {
+  it('inserts ideas with status pending and does not emit a writer event', async () => {
     const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
 
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: true, ruleId: 'rule-42' });
-    vi.mocked(getDb).mockReturnValue(makeScoutDb() as never);
-
-    const { LocalContentScout } = await import('./index');
-    const scout = new LocalContentScout();
-    const emitSpy = vi.fn().mockResolvedValue(undefined);
-    const ctx: AgentContext = { ...MOCK_CTX, emitNextStepEvent: emitSpy };
-
-    await (scout as unknown as {
-      execute: (i: { site_id: string; idea_count: number }, ctx: AgentContext) => Promise<unknown>;
-    }).execute({ site_id: SITE_ID, idea_count: 1 }, ctx);
-
-    expect(emitSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'content.idea.approved',
-        targetAgent: 'local-content-writer',
-        payload: expect.objectContaining({ siteId: SITE_ID }),
-      }),
-    );
-  });
-
-  it('does NOT emit when auto-approve does not match', async () => {
-    const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
-
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: false });
-    vi.mocked(getDb).mockReturnValue(makeScoutDb() as never);
-
-    const { LocalContentScout } = await import('./index');
-    const scout = new LocalContentScout();
-    const emitSpy = vi.fn().mockResolvedValue(undefined);
-    const ctx: AgentContext = { ...MOCK_CTX, emitNextStepEvent: emitSpy };
-
-    await (scout as unknown as {
-      execute: (i: { site_id: string; idea_count: number }, ctx: AgentContext) => Promise<unknown>;
-    }).execute({ site_id: SITE_ID, idea_count: 1 }, ctx);
-
-    expect(emitSpy).not.toHaveBeenCalled();
-  });
-
-  it('auto-approved idea has status set to auto_approved', async () => {
-    const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
-
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: true, ruleId: 'rule-auto' });
+    const insertedValues: Array<Record<string, unknown>> = [];
     const mockDb = makeScoutDb();
+    mockDb.insert = vi.fn().mockImplementation(() => ({
+      values: vi.fn().mockImplementation((v: Record<string, unknown>) => {
+        insertedValues.push(v);
+        return {
+          onConflictDoNothing: vi.fn().mockReturnThis(),
+          returning: vi.fn().mockResolvedValue([{ id: 'idea-001' }]),
+        };
+      }),
+    })) as never;
     vi.mocked(getDb).mockReturnValue(mockDb as never);
 
     const { LocalContentScout } = await import('./index');
     const scout = new LocalContentScout();
+    const emitSpy = vi.fn().mockResolvedValue(undefined);
+    const ctx: AgentContext = { ...MOCK_CTX, emitNextStepEvent: emitSpy };
 
     await (scout as unknown as {
       execute: (i: { site_id: string; idea_count: number }, ctx: AgentContext) => Promise<unknown>;
-    }).execute({ site_id: SITE_ID, idea_count: 1 }, MOCK_CTX);
+    }).execute({ site_id: SITE_ID, idea_count: 1 }, ctx);
 
-    // update was called to set status = auto_approved
-    const setArg = mockDb._updateChain.set.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(setArg?.status).toBe('auto_approved');
+    expect(insertedValues[0]?.status).toBe('pending');
+    expect(emitSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -254,9 +212,6 @@ describe('auto-approve + emitNextStepEvent', () => {
 describe('cannibalization guard', () => {
   it('skips idea whose targetKeyword collides with an existing idea keyword', async () => {
     const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
-
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: false });
 
     // The mock will produce ideas like "tree removal cost guide tucson az"
     // We seed existing ideas with that exact phrase to force a skip.
@@ -279,9 +234,6 @@ describe('cannibalization guard', () => {
 
   it('proposes an idea whose targetKeyword does NOT collide', async () => {
     const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
-
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: false });
     vi.mocked(getDb).mockReturnValue(makeScoutDb() as never);
 
     const { LocalContentScout } = await import('./index');
@@ -300,8 +252,6 @@ describe('cannibalization guard', () => {
 describe('topic dedupe', () => {
   it('does not increment proposed when insert returns empty (conflict)', async () => {
     const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: false });
 
     // Build a dedicated mock where ALL inserts return [] (every idea conflicts).
     let selectCallCount = 0;
@@ -347,8 +297,6 @@ describe('topic dedupe', () => {
 describe('archetype and voiceSeed assignment', () => {
   it('inserts ideas with non-empty archetype and voiceSeed', async () => {
     const { getDb } = await import('@leadlandlord/db');
-    const { checkAutoApprove } = await import('../approval-engine');
-    vi.mocked(checkAutoApprove).mockResolvedValue({ matched: false });
 
     const insertedValues: Array<Record<string, unknown>> = [];
     let insertCallCount = 0;

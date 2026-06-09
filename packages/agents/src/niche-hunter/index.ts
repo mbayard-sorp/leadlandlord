@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
-import { getDb, niches, agentApprovals } from '@leadlandlord/db';
+import { getDb, niches } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import {
   getLocalKeywordMetrics,
@@ -13,7 +13,6 @@ import { ScoringConfig, DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, resolveDemandVolume, t
 export { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
 import { isDenylisted } from './denylist';
 import { SERVICE_TAXONOMY, type ServiceCategory } from './service-taxonomy';
-import { checkAutoApprove } from '../approval-engine';
 import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
 
 /**
@@ -33,11 +32,9 @@ import { listCities, rankCities } from '@leadlandlord/us-cities/loader';
  *      avg_job_value, est_close_rate, and ad_presence using configurable
  *      weights. Filtered by min_search_volume + max_kd thresholds.
  *   5. Persists top N as `niches` rows with decision='pending'.
- *   6. Dual-writes an `agentApprovals` row per niche (kind='niche_candidate').
- *      Auto-approve rules are checked; matching rules flip status to
- *      'auto_approved' immediately.
  *
- * Output is the same set the operator dashboard reads.
+ * Output is the same set the operator dashboard reads. The operator decides
+ * each niche via niches.decision on /operator/niches.
  */
 
 const CategoryEnum = z.enum([
@@ -384,9 +381,9 @@ export class NicheHunter extends BaseAgent<typeof NicheHunterInput, typeof Niche
       );
     }
 
-    // 4. Persist niches + dual-write agentApprovals.
+    // 4. Persist niches (decision 'pending'; operator decides on /operator/niches).
     ctx.progress({ step: 4, total: 4, label: `saving ${filtered.length} niches to queue` });
-    const persisted = await this.persistNiches(filtered, ctx);
+    const persisted = await this.persistNiches(filtered);
 
     return {
       niches: filtered.map((c) => ({
@@ -704,7 +701,7 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
     };
   }
 
-  private async persistNiches(scored: ScoredCandidate[], ctx: AgentContext): Promise<number> {
+  private async persistNiches(scored: ScoredCandidate[]): Promise<number> {
     if (scored.length === 0) return 0;
     const db = getDb();
     let count = 0;
@@ -733,48 +730,6 @@ Return your output by calling the ${BRAINSTORM_TOOL_NAME} tool exactly once with
 
       if (!inserted.length) continue;
       count++;
-      const nicheId = inserted[0]!.id;
-
-      // Dual-write: create agentApprovals row for operator review.
-      const approvalPayload = {
-        nicheId,
-        niche: c.niche,
-        city: c.city,
-        state: c.state,
-        score: c.score,
-        searchVolume: c.search_volume,
-        kd: c.kd,
-        adCount: c.ad_count,
-        estAvgJobValueUsd: c.est_avg_job_value_usd,
-        estCloseRate: c.est_close_rate,
-        rationale: c.rationale,
-      };
-
-      let approvalStatus = 'pending';
-      let ruleMatched: string | undefined;
-
-      try {
-        const autoResult = await checkAutoApprove('niche_candidate', approvalPayload);
-        if (autoResult.matched) {
-          approvalStatus = 'auto_approved';
-          ruleMatched = autoResult.ruleId;
-        }
-      } catch (err) {
-        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'niche-hunter: auto-approve check failed, defaulting to pending');
-      }
-
-      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-
-      await db.insert(agentApprovals).values({
-        agentRunId: ctx.runId,
-        kind: 'niche_candidate',
-        payload: approvalPayload,
-        status: approvalStatus,
-        decidedBy: approvalStatus === 'auto_approved' ? `rule:${ruleMatched ?? 'unknown'}` : null,
-        decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
-        ruleMatched: ruleMatched ?? null,
-        expiresAt,
-      }).onConflictDoNothing();
     }
     return count;
   }
