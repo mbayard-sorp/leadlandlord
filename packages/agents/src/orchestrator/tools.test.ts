@@ -10,6 +10,7 @@ import {
   resolveQuestionRecipient,
   buildQuestionDeepLink,
   renderQuestionEmail,
+  SELF_PROTECTED_AGENTS,
 } from './tools';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -75,6 +76,25 @@ describe('orchestrator tool allowlist (hard-constraint boundary)', () => {
       for (const sym of FORBIDDEN) if (text.includes(sym)) offenders.push({ file: entry, symbol: sym });
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('disable_agent self-protection', () => {
+  it('protects operator / orchestrator / fleet-digest', () => {
+    expect([...SELF_PROTECTED_AGENTS].sort()).toEqual(
+      ['fleet-digest', 'operator', 'orchestrator'].sort(),
+    );
+  });
+
+  it('refuses to disable a protected agent (no DB touched)', async () => {
+    const tool = getOrchestratorTool('disable_agent')!;
+    for (const agent of SELF_PROTECTED_AGENTS) {
+      const out = (await tool.execute(
+        { agent, reason: 'test' },
+        { threadId: 't', env: {} },
+      )) as { error?: string };
+      expect(out.error).toMatch(/refusing to disable/);
+    }
   });
 });
 

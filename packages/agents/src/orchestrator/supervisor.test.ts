@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   selectAgentsToDisable,
+  isOrchestratorEnabled,
   CONSECUTIVE_FAILURE_DISABLE_THRESHOLD,
   NEVER_AUTO_DISABLE,
 } from './supervisor';
@@ -55,5 +56,17 @@ describe('selectAgentsToDisable', () => {
     const rows = [row({ agent: 'maintenance', consecutiveFailures: 2 })];
     expect(selectAgentsToDisable(rows, 2)).toHaveLength(1);
     expect(selectAgentsToDisable(rows, 5)).toHaveLength(0);
+  });
+});
+
+describe('isOrchestratorEnabled (master switch; gates the supervisory pass)', () => {
+  it('defaults to ON when no budget row exists', () => {
+    expect(isOrchestratorEnabled(undefined)).toBe(true);
+  });
+  it('is ON when the row is enabled', () => {
+    expect(isOrchestratorEnabled({ enabled: true })).toBe(true);
+  });
+  it('is OFF when the row is disabled (the toggle)', () => {
+    expect(isOrchestratorEnabled({ enabled: false })).toBe(false);
   });
 });

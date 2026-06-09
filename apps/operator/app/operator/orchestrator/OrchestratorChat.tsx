@@ -26,9 +26,11 @@ function bubbleClass(m: ThreadMessage): string {
 export function OrchestratorChat({
   threads,
   active,
+  enabled = true,
 }: {
   threads: ThreadSummary[];
   active: { thread: ThreadSummary; messages: ThreadMessage[] } | null;
+  enabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -41,7 +43,7 @@ export function OrchestratorChat({
 
   function send() {
     const text = draft.trim();
-    if (!text || pending) return;
+    if (!text || pending || !enabled) return;
     setErr(null);
     setDraft('');
     startTransition(async () => {
@@ -56,7 +58,7 @@ export function OrchestratorChat({
   function answerQuestion() {
     if (!openQuestion) return;
     const text = answer.trim();
-    if (!text || pending) return;
+    if (!text || pending || !enabled) return;
     setErr(null);
     setAnswer('');
     startTransition(async () => {
@@ -152,7 +154,7 @@ export function OrchestratorChat({
                   />
                   <button
                     onClick={answerQuestion}
-                    disabled={pending}
+                    disabled={pending || !enabled}
                     className="rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-50 px-4 text-sm font-medium text-white"
                   >
                     {pending ? 'Sending…' : 'Answer'}
@@ -171,12 +173,19 @@ export function OrchestratorChat({
             onKeyDown={(e) => {
               if (e.key === 'Enter') send();
             }}
-            placeholder={active ? 'Message the orchestrator…' : 'Start a new conversation…'}
-            className="flex-1 rounded bg-slate-950 border border-slate-700 px-3 min-h-[44px] text-sm text-slate-100"
+            disabled={!enabled}
+            placeholder={
+              !enabled
+                ? 'Orchestrator is off — turn it on above to chat'
+                : active
+                  ? 'Message the orchestrator…'
+                  : 'Start a new conversation…'
+            }
+            className="flex-1 rounded bg-slate-950 border border-slate-700 px-3 min-h-[44px] text-sm text-slate-100 disabled:opacity-50"
           />
           <button
             onClick={send}
-            disabled={pending}
+            disabled={pending || !enabled}
             className="rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 px-4 text-sm font-medium text-white"
           >
             {pending ? 'Thinking…' : 'Send'}

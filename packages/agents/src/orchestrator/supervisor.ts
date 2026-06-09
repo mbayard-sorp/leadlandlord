@@ -36,6 +36,17 @@ export interface SupervisionResult {
   skipped?: string;
 }
 
+/**
+ * The orchestrator master switch. A missing agent_budgets row means "on"
+ * (default), so a fresh DB supervises until explicitly turned off. Toggled
+ * from /operator/orchestrator by flipping agent_budgets.enabled for
+ * 'orchestrator' — the SAME flag BaseAgent checks for the chat brain, so one
+ * lever stops both the brain and this tick-driven pass.
+ */
+export function isOrchestratorEnabled(row: { enabled: boolean } | undefined): boolean {
+  return row ? row.enabled : true;
+}
+
 /** Pure: pick which enabled agents have crossed the consecutive-failure threshold. */
 export function selectAgentsToDisable(
   rows: FleetHealthRow[],
@@ -65,6 +76,26 @@ interface SupervisionLogger {
  * no-op result rather than throwing into the tick.
  */
 export async function runSupervisionPass(logger?: SupervisionLogger): Promise<SupervisionResult> {
+  // Master switch: when the orchestrator is turned off (agent_budgets.enabled =
+  // false for 'orchestrator', toggled from /operator/orchestrator), the
+  // tick-driven supervision no-ops too. Fail-safe-on: if the flag can't be read,
+  // supervision still runs.
+  try {
+    const db = getDb();
+    const [orchRow] = await db
+      .select({ enabled: agentBudgets.enabled })
+      .from(agentBudgets)
+      .where(eq(agentBudgets.agent, 'orchestrator'));
+    if (!isOrchestratorEnabled(orchRow)) {
+      return { actions: [], skipped: 'orchestrator disabled' };
+    }
+  } catch (err) {
+    logger?.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'orchestrator: enabled-check failed; running supervision (fail-safe-on)',
+    );
+  }
+
   let rows: FleetHealthRow[];
   try {
     rows = await readFleetHealth();

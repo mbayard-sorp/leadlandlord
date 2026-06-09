@@ -58,6 +58,19 @@ export function isProtectedEventType(type: string): boolean {
   return PROTECTED_REQUEUE_EVENT_PREFIXES.some((p) => type.startsWith(p));
 }
 
+/**
+ * Agents the chat brain must not disable via the disable_agent tool: itself and
+ * the operator (it runs supervision) and the digest (must keep reporting). Mirror
+ * of supervisor.NEVER_AUTO_DISABLE; kept local to avoid a tools<->supervisor
+ * import cycle. Mike's /operator/orchestrator toggle bypasses the tool layer and
+ * can still turn the orchestrator off.
+ */
+export const SELF_PROTECTED_AGENTS: ReadonlySet<string> = new Set([
+  'operator',
+  'orchestrator',
+  'fleet-digest',
+]);
+
 // ────────────────────────────────────────────────────────────
 // Outbound question email (pure pieces are unit-tested)
 // ────────────────────────────────────────────────────────────
@@ -552,6 +565,11 @@ const disableAgent: OrchestratorTool = {
     const threadId = requireThread(ctx);
     const agent = String(input.agent);
     const reason = String(input.reason);
+    if (SELF_PROTECTED_AGENTS.has(agent)) {
+      return {
+        error: `refusing to disable "${agent}" — it is protected (operator/orchestrator/fleet-digest). The human can toggle the orchestrator off from /operator/orchestrator.`,
+      };
+    }
     const db = getDb();
     const [before] = await db.select({ enabled: agentBudgets.enabled }).from(agentBudgets).where(eq(agentBudgets.agent, agent));
     await recordAction(threadId, `Disabled agent ${agent}: ${reason}`, {
