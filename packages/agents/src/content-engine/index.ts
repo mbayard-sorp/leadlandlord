@@ -5,7 +5,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
-import { ContentBundle } from '@leadlandlord/shared/types';
+import { ContentBundle, Page } from '@leadlandlord/shared/types';
 import { getTrustSignals } from './trust-signal-pool';
 import { getHeadlineTemplate } from './headline-templates';
 import { lintBundle } from './density-lint';
@@ -820,6 +820,197 @@ Invoke the ${LONGFORM_TOOL_NAME} tool exactly once. Do not return prose.`;
     usage,
     cost_usd,
   };
+}
+
+// --- FAQ-pages-only path ----------------------------------------------------
+//
+// Generate ONLY the standalone `faq_pages` for a site without paying for a full
+// bundle generation. Used by `scripts/backfill-faq.ts` to retrofit FAQ pages
+// onto sites built before the FAQ kind shipped, and reusable by any future
+// "faq_only" site-builder mode. Reuses the same Anthropic client + cost
+// estimator + theme overlay as the full path, so the model follows the
+// "FAQ pages" section of system.md exactly.
+
+const FAQ_TOOL_NAME = 'output_faq_pages';
+
+const FAQ_TOOL_SCHEMA = {
+  type: 'object',
+  properties: {
+    faq_pages: {
+      type: 'array',
+      description: 'Standalone FAQ pages — ONE question per page. Title and slug ARE the question.',
+      items: {
+        type: 'object',
+        properties: {
+          slug: {
+            type: 'string',
+            description:
+              'URL path starting with /faq/ — the question as a slug (e.g. /faq/how-much-does-roof-repair-cost-in-owensboro).',
+          },
+          title: {
+            type: 'string',
+            description: 'The question, phrased exactly as a person types it into Google (include city/niche where natural).',
+          },
+          meta_description: { type: 'string', description: '<=160 char distillation of the direct answer.' },
+          mdx: {
+            type: 'string',
+            description:
+              '120–300 word answer. Lead with a direct 1–2 sentence answer, then local detail. Markdown subset: ##, - bullets, **bold**, [text](url). No # H1, tables, images, or raw HTML.',
+          },
+        },
+        required: ['slug', 'title', 'meta_description', 'mdx'],
+      },
+    },
+  },
+  required: ['faq_pages'],
+} as const;
+
+export interface GenerateFaqPagesInput {
+  niche: string;
+  city: string;
+  state: string;
+  business_name?: string;
+  /** Theme key — selects the niche overlay appended to the system prompt. */
+  theme?: string;
+  /** How many FAQ pages to produce (clamped 1–8). Default 5. */
+  count?: number;
+  /** Existing FAQ question titles to avoid duplicating on a re-run/overwrite. */
+  existing_questions?: string[];
+}
+
+export interface GenerateFaqPagesResult {
+  faq_pages: Page[];
+  generated_at: string;
+  model: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  };
+  cost_usd: number;
+}
+
+export async function generateFaqPages(
+  input: GenerateFaqPagesInput,
+): Promise<GenerateFaqPagesResult> {
+  const client = getAnthropicClient();
+  const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+  const businessName =
+    input.business_name ?? `${capitalize(input.city)} ${capitalize(input.niche)} Pros`;
+  const systemPrompt = composeSystemPrompt(input.theme);
+  const count = Math.min(Math.max(input.count ?? 5, 1), 8);
+  const avoid =
+    input.existing_questions && input.existing_questions.length > 0
+      ? `\n\nDo NOT repeat or paraphrase any of these existing questions:\n${input.existing_questions
+          .map((q) => `- ${q}`)
+          .join('\n')}`
+      : '';
+
+  const userPrompt = `Write ONLY standalone FAQ pages (\`faq_pages\`) for a local lead-gen website. Follow the "FAQ pages — \`faq_pages\` array" section of your instructions exactly: one question per page, the title and slug ARE the question, 120–300 word locally-specific answers.
+
+niche: ${input.niche}
+city: ${input.city}
+state: ${input.state}
+business_name: ${businessName}
+
+Produce exactly ${count} FAQ pages. Source questions from real local demand (cost, timing, permits, insurance, "do you serve <area>", warning signs, DIY-vs-pro, seasonal concerns). Every answer MUST reference something concrete to ${input.city}, ${input.state} or this niche — a generic answer that would read identically on any site is wrong.${avoid}
+
+Invoke the ${FAQ_TOOL_NAME} tool exactly once. Do not return prose.`;
+
+  const response = await withStreamTimeout(
+    client.messages.create({
+      model,
+      max_tokens: 4_000,
+      temperature: 0.5,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      tools: [
+        {
+          name: FAQ_TOOL_NAME,
+          description: 'Output the standalone FAQ pages. Call exactly once.',
+          input_schema: FAQ_TOOL_SCHEMA as never,
+        },
+      ],
+      tool_choice: { type: 'tool', name: FAQ_TOOL_NAME },
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+    'faq',
+  );
+
+  const toolUse = response.content.find(
+    (block): block is Extract<typeof block, { type: 'tool_use' }> =>
+      block.type === 'tool_use' && block.name === FAQ_TOOL_NAME,
+  );
+  const raw = toolUse ? (toolUse.input as { faq_pages?: unknown }).faq_pages : undefined;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error(
+      `FAQ generation: model did not return faq_pages. Stop reason: ${response.stop_reason}.`,
+    );
+  }
+
+  // Normalize + validate each entry into a Page. Slugs are forced under /faq/
+  // and de-duplicated so two questions never collide on the same URL (which
+  // would also collide their deterministic Sanity doc id).
+  const seen = new Set<string>();
+  const faq_pages: Page[] = raw.map((entry, i) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    const title = typeof o.title === 'string' && o.title.trim() ? o.title.trim() : `Question ${i + 1}`;
+    let slug = normalizeFaqSlug(
+      typeof o.slug === 'string' && o.slug.trim() ? o.slug : slugifyQuestion(title),
+    );
+    while (seen.has(slug)) slug = `${slug}-${i + 1}`;
+    seen.add(slug);
+    const meta =
+      typeof o.meta_description === 'string' && o.meta_description.trim()
+        ? o.meta_description.trim().slice(0, 160)
+        : title.slice(0, 160);
+    const mdx = typeof o.mdx === 'string' ? o.mdx.trim() : '';
+    return Page.parse({
+      kind: 'faq',
+      slug,
+      title,
+      meta_description: meta,
+      mdx,
+      targeted_keywords: [],
+      faqs: [],
+    });
+  });
+
+  const usage = {
+    input_tokens: response.usage.input_tokens,
+    output_tokens: response.usage.output_tokens,
+    cache_read_input_tokens: response.usage.cache_read_input_tokens ?? 0,
+    cache_creation_input_tokens: response.usage.cache_creation_input_tokens ?? 0,
+  };
+  const cost_usd = estimateCostUsd(model, usage);
+
+  return {
+    faq_pages,
+    generated_at: new Date().toISOString(),
+    model,
+    usage,
+    cost_usd,
+  };
+}
+
+/** Slugify a question title into a hyphenated path segment (no /faq/ prefix). */
+function slugifyQuestion(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[?'".,!:;()]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .replace(/-+$/g, '');
+}
+
+/** Force a slug under the /faq/ namespace, lowercased and trimmed. */
+function normalizeFaqSlug(slug: string): string {
+  let s = slug.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  if (s.startsWith('faq/')) s = s.slice(4);
+  s = s.toLowerCase().replace(/[^a-z0-9/]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!s) s = 'question';
+  return `/faq/${s}`;
 }
 
 function renderClusterTable(clusters: ContentEngineInput['keyword_clusters']): string {

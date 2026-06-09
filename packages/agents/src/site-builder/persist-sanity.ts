@@ -354,6 +354,60 @@ export async function patchLongformInSanity(
   return { siteDocId: siteRef, transactionId: res._rev ?? '' };
 }
 
+/**
+ * Patch ONLY the standalone FAQ pages onto an existing site. Used by the
+ * `backfill-faq` script to retrofit FAQ pages onto sites built before the FAQ
+ * kind shipped, without rebuilding them. Strictly additive to the site doc:
+ * writes the faq page docs (deterministic ids `page-${siteId}-faq-N`) and sets
+ * ONLY the site doc's `faqPages` reference array — every other field and page
+ * reference is left untouched (a `patch().set`, not a `createOrReplace`).
+ *
+ * The site doc MUST already exist (caller skips Postgres rows with no Sanity
+ * doc). Re-running with fewer pages leaves higher-index faq docs orphaned but
+ * unreferenced — same semantics as the full writeSiteToSanity.
+ */
+export async function patchFaqPagesInSanity(
+  siteId: string,
+  faqPages: Page[],
+  opts: WriteSiteToSanityOptions = {},
+): Promise<{ siteDocId: string; transactionId: string; pagesWritten: number }> {
+  const client = createWriteClient(opts.dataset ? { dataset: opts.dataset } : {});
+  const siteRef = siteDocId(siteId);
+  const dateModified = opts.dateModified ?? new Date().toISOString();
+  const tx = client.transaction();
+
+  faqPages.forEach((p, i) => {
+    tx.createOrReplace({
+      _id: pageDocId(siteId, 'faq', i),
+      _type: 'page',
+      site: { _ref: siteRef, _type: 'reference' },
+      kind: 'faq',
+      slug: p.slug,
+      title: p.title,
+      metaDescription: p.meta_description,
+      mdx: p.mdx,
+      dateModified: p.date_modified ?? dateModified,
+      faqs: [],
+      targetedKeywords: [],
+    });
+  });
+
+  // Set ONLY faqPages on the existing site doc — leave home/services/blog/etc.
+  // references and all other fields exactly as they are.
+  tx.patch(siteRef, (patch) =>
+    patch.set({
+      faqPages: faqPages.map((_, i) => ({
+        _key: `f${i}`,
+        _ref: pageDocId(siteId, 'faq', i),
+        _type: 'reference',
+      })),
+    }),
+  );
+
+  const res = await tx.commit({ visibility: 'sync' });
+  return { siteDocId: siteRef, transactionId: res.transactionId, pagesWritten: faqPages.length };
+}
+
 function bundleSlug(bundle: ContentBundle): string {
   const ns = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return `${ns(bundle.niche)}-${ns(bundle.city)}-${bundle.state.toLowerCase()}`;
