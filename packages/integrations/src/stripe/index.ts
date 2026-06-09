@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { stripeSecretKey } from '@leadlandlord/shared/env';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
+import { assertNotAuditing } from '../audit-guard';
 
 let cached: Stripe | null = null;
 
@@ -63,6 +64,7 @@ export interface CreateCheckoutResult {
  * for now; we'll have a "trial converted" page in a future commit.
  */
 export async function createCheckoutLink(args: CreateCheckoutArgs): Promise<CreateCheckoutResult> {
+  assertNotAuditing('stripe.createCheckoutLink');
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',

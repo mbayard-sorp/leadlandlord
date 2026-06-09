@@ -786,6 +786,32 @@ export const agentBudgets = pgTable('agent_budgets', {
 });
 
 /**
+ * Per-agent audit + failure tracking (orchestrator Phase 1). One row per
+ * registry kind (+ the deferred stubs), written by scripts/agent-audit.ts.
+ *
+ * Pure observability — no agent behavior reads this yet. ON/OFF still lives in
+ * agent_budgets.enabled. The Phase 3 operator supervisory pass will read
+ * consecutive_failures to auto-disable repeat-failure agents.
+ *
+ * audit_status ∈ 'pass' | 'fail' | 'needs_creds' | 'not_implemented' | 'skipped'
+ * (plain text, not an enum, so the audit can add states without a migration).
+ */
+export const agentHealth = pgTable('agent_health', {
+  agent: text('agent').primaryKey(),
+  auditStatus: text('audit_status').notNull(),
+  lastAuditAt: timestamp('last_audit_at', { withTimezone: true }),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+  lastFailureAt: timestamp('last_failure_at', { withTimezone: true }),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  lastError: text('last_error'),
+  /** Env var names the agent needs to do real work (one entry per requirement). */
+  requiredEnv: jsonb('required_env'),
+  notes: text('notes'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Single-row settings table for portfolio-wide controls. Keyed by a constant
  * `id = 'global'` so the operator dashboard can flip the kill switch without
  * needing a separate row per tenant. New flags get added as columns; the
