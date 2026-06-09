@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
+import { assertNotAuditing } from '../audit-guard';
 
 const RESEND_BASE = 'https://api.resend.com';
 
@@ -27,6 +28,7 @@ export interface SendEmailArgs {
  * Resend docs: https://resend.com/docs/api-reference/emails/send-email
  */
 export async function sendEmail(args: SendEmailArgs): Promise<{ messageId: string }> {
+  assertNotAuditing('resend.sendEmail');
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     throw new IntegrationError('resend', 'RESEND_API_KEY is required');

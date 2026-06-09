@@ -18,6 +18,7 @@
     "./outreach-agent": "./src/outreach-agent/index.ts",
     "./backlink-builder": "./src/backlink-builder/index.ts",
     "./registry": "./src/registry.ts",
+    "./audit": "./src/audit/health.ts",
     "./error-classify": "./src/error-classify.ts",
     "./scheduler": "./src/scheduler/index.ts",
     "./niche-hunter": "./src/niche-hunter/index.ts",

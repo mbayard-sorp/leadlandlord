@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
 import type { TrackingNumber } from '@leadlandlord/shared/types';
+import { assertNotAuditing } from '../audit-guard';
 
 const TWILIO_BASE = 'https://api.twilio.com/2010-04-01';
 
@@ -43,6 +44,7 @@ export interface ProvisionNumberArgs {
  * Twilio API docs: https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource
  */
 export async function provisionNumber(args: ProvisionNumberArgs): Promise<TrackingNumber> {
+  assertNotAuditing('twilio.provisionNumber');
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const useMock = !sid || !token || process.env.MOCK_TELEPHONY === 'true';
@@ -109,6 +111,7 @@ export interface UpdateNumberArgs {
 }
 
 export async function updateNumber(args: UpdateNumberArgs): Promise<void> {
+  assertNotAuditing('twilio.updateNumber');
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) {
@@ -227,6 +230,7 @@ export interface SendSmsArgs {
 }
 
 export async function sendSms(args: SendSmsArgs): Promise<{ sid: string }> {
+  assertNotAuditing('twilio.sendSms');
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) {
