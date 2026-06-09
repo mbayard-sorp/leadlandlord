@@ -2,7 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
-import { getDb, sites, agentApprovals } from '@leadlandlord/db';
+import { getDb, sites } from '@leadlandlord/db';
 import { createWriteClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { submitUrls } from '@leadlandlord/integrations/indexnow';
 import { IntegrationError } from '@leadlandlord/shared/errors';
@@ -24,9 +24,8 @@ import { IntegrationError } from '@leadlandlord/shared/errors';
  * the tenant domains unlinkable in IndexNow's public submission log.
  *
  * No approval gate: the authorizing human decision is the operator clicking
- * "promote to live" (a gated checklist). The submission is recorded as an
- * auto-approved `agent_approvals` row for the audit trail, matching how GSC
- * sitemap submission is treated (a notification, not a content mutation).
+ * "promote to live" (a gated checklist). The submission is a notification, not
+ * a content mutation, matching how GSC sitemap submission is treated.
  */
 
 export const IndexNowSubmitterInput = z.object({
@@ -141,16 +140,6 @@ export class IndexNowSubmitter extends BaseAgent<
     }
 
     const status = result.ok ? 'submitted' : 'rejected';
-
-    // Audit trail: auto-approved record of the submission (see class doc).
-    await db.insert(agentApprovals).values({
-      agentRunId: ctx.runId,
-      kind: 'indexnow_submit',
-      payload: { site_id: input.site_id, host, urlCount: result.submitted, statusCode: result.statusCode, status },
-      status: 'auto_approved',
-      decidedBy: 'policy:indexnow_auto',
-      decidedAt: new Date(),
-    });
 
     ctx.log.info(
       { siteId: input.site_id, host, submitted: result.submitted, statusCode: result.statusCode, status },

@@ -4,29 +4,22 @@
  * Orchestrates wave state progression through the 7-stage pipeline:
  *   draft → launching → aging → linking → backlinking → monitoring → completed
  *
- * All state transitions are gated by agentApprovals dual-write.
+ * State transitions are applied directly when the state machine's evidence
+ * conditions are met (no approval gate).
  * Cross-site link counts come from crossSiteLinks (source IN wave.siteIds, status='live').
  * Indexation checks use checkIndexationStatus from google-search-console.
- *
- * Recommended auto-approve rules (add via DB, not in code):
- *   { kind: 'wave_state_transition', matcher: { 'evidence.toState': { $eq: 'aging' } }, autoApprove: true }
- *     — building completed is mechanical, safe to auto-approve.
- *   { kind: 'wave_state_transition', matcher: { 'evidence.toState': { $eq: 'monitoring' }, 'evidence.skipBacklinks': { $eq: true } }, autoApprove: true }
- *     — until backlink agents land, auto-advance through backlinking.
  */
 
 import { z } from 'zod';
-import { eq, and, inArray, count, sql } from 'drizzle-orm';
+import { eq, and, inArray, count } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
 import {
   getDb,
   waves,
   sites,
   crossSiteLinks,
-  agentApprovals,
   type WaveTransition,
 } from '@leadlandlord/db';
-import { checkAutoApprove } from '../approval-engine';
 import { checkIndexationStatus } from '@leadlandlord/integrations/google-search-console';
 import { evaluateTransition, type WaveStateName } from './state-machine';
 
@@ -59,8 +52,6 @@ export const WaveLauncherOutput = z.object({
   currentState: z.string(),
   transitioned: z.boolean(),
   blockers: z.array(z.string()),
-  approvalId: z.string().uuid().optional(),
-  approvalStatus: z.string().optional(),
 });
 export type WaveLauncherOutput = z.infer<typeof WaveLauncherOutput>;
 
@@ -226,104 +217,12 @@ export class WaveLauncher extends BaseAgent<
   }): Promise<WaveLauncherOutput> {
     const { waveId, wave, previousState, toState, evidence, ctx, db } = args;
 
-    // Idempotency: check for an existing OPEN approval for this (waveId, toState).
-    const existingApprovals = await db
-      .select({ id: agentApprovals.id, status: agentApprovals.status })
-      .from(agentApprovals)
-      .where(
-        and(
-          eq(agentApprovals.kind, 'wave_state_transition'),
-          sql`${agentApprovals.payload}->>'waveId' = ${waveId}`,
-          sql`${agentApprovals.payload}->>'toState' = ${toState}`,
-          eq(agentApprovals.status, 'pending'),
-        ),
-      )
-      .limit(1);
-
-    if (existingApprovals.length > 0) {
-      ctx.log.info(
-        { waveId, toState, approvalId: existingApprovals[0]!.id },
-        'wave_transition_blocked: pending approval already exists',
-      );
-      return {
-        waveId,
-        mode: 'progress',
-        previousState,
-        currentState: previousState,
-        transitioned: false,
-        blockers: [`pending approval already exists for transition to ${toState}`],
-        approvalId: existingApprovals[0]!.id,
-        approvalStatus: 'pending',
-      };
-    }
-
-    const approvalPayload = {
-      waveId,
-      fromState: previousState,
-      toState,
-      evidence,
-      blockers: [],
-    };
-
-    let approvalStatus = 'pending';
-    let ruleMatched: string | undefined;
-
-    try {
-      const autoResult = await checkAutoApprove('wave_state_transition', approvalPayload, db);
-      if (autoResult.matched) {
-        approvalStatus = 'auto_approved';
-        ruleMatched = autoResult.ruleId;
-      }
-    } catch (err) {
-      ctx.log.warn(
-        { err: err instanceof Error ? err.message : err },
-        'auto-approve check failed, defaulting to pending',
-      );
-    }
-
-    const [approvalRow] = await db
-      .insert(agentApprovals)
-      .values({
-        agentRunId: ctx.runId,
-        kind: 'wave_state_transition',
-        payload: approvalPayload as object,
-        status: approvalStatus,
-        decidedBy:
-          approvalStatus === 'auto_approved'
-            ? `auto-rule:${ruleMatched ?? 'unknown'}`
-            : null,
-        decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
-        ruleMatched: ruleMatched ?? null,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      })
-      .returning({ id: agentApprovals.id });
-
-    const approvalId = approvalRow!.id;
-
-    if (approvalStatus !== 'auto_approved') {
-      ctx.log.info(
-        { waveId, fromState: previousState, toState, approvalId },
-        'wave_transition_blocked: pending operator approval',
-      );
-      return {
-        waveId,
-        mode: 'progress',
-        previousState,
-        currentState: previousState,
-        transitioned: false,
-        blockers: [`awaiting operator approval (id: ${approvalId})`],
-        approvalId,
-        approvalStatus: 'pending',
-      };
-    }
-
-    // Approved — write the state transition.
+    // No approval gate: the state transition always proceeds.
     const now = new Date();
     const newTransition: WaveTransition = {
       from: previousState,
       to: toState,
       at: now.toISOString(),
-      approvalId,
       evidence: JSON.stringify(evidence),
     };
 
@@ -341,8 +240,8 @@ export class WaveLauncher extends BaseAgent<
       .where(eq(waves.id, waveId));
 
     ctx.log.info(
-      { waveId, fromState: previousState, toState, approvalId },
-      'wave_transition_approved',
+      { waveId, fromState: previousState, toState },
+      'wave_transition_applied',
     );
 
     return {
@@ -352,8 +251,6 @@ export class WaveLauncher extends BaseAgent<
       currentState: toState,
       transitioned: true,
       blockers: [],
-      approvalId,
-      approvalStatus: 'auto_approved',
     };
   }
 

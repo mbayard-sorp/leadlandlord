@@ -47,7 +47,7 @@ NOT a switch:
 - **Renter** — synonymous with tenant.
 - **Prospect** — a potential tenant before they're paying.
 - **siteMode** — `thin` (6-8 pages, default) or `content_rich` (~28 pages, opt-in).
-- **Approval gate** — every side-effecting agent action queues to `agentApprovals` before execution unless an `autoApproveRule` matches.
+- **Approval gate** — the only enforced human gate is the niche/site-build decision: niches sit at `niches.decision='pending'` until Mike approves in `/operator/niches`, and no agent may create or launch a site. (The old generic `agentApprovals`/`autoApproveRules` inbox was removed 2026-06-09 — it mirrored decisions nothing consumed. Content ideas gate on `contentIdeas.status` via `/operator/approvals/content`.)
 - **Footprint** — observable similarity patterns across sites that make the network detectable as a network.
 
 ## Integrations & gotchas
@@ -58,7 +58,7 @@ NOT a switch:
 - Sanity writes go through deterministic doc IDs (`site-${siteId}`, `page-${siteId}-${kind}-${index}`); never use random IDs.
 - Vercel multi-tenant routing keys off the `Host` header in apps/site-host/proxy.ts; new domain attachment requires DNS + Vercel domain registration.
 - GBP (Google Business Profile) is NOT registered by us. We use the partner-contractor's real GBP. Do not implement fake-GBP automation.
-- Cross-site link injection always queues for approval — never auto-patch Sanity mdx without an approved agentApprovals row.
+- network-linker records cross-site placements directly in `crossSiteLinks` (status `active`) and reads Sanity read-only; it does NOT auto-patch Sanity mdx. (The old `cross_link_placement` approval gate was removed 2026-06-09; if operator-gated mdx injection is ever wanted, it must be rebuilt against a real consumer.)
 
 ## Token-heavy operations to delegate
 

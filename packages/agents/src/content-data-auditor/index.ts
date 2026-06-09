@@ -4,10 +4,9 @@
  *  - mode='review': for a siteId, read operator-seeded proprietary inputs
  *    (siteOriginalDataInputs) + computed metrics (siteNetworkMetrics), detect
  *    which of the four NON-COMMODITY templates have a grounded, unfilled gap,
- *    and for each gap WRITE THREE LINKED ROWS:
+ *    and for each gap WRITE TWO LINKED ROWS:
  *       1. a seo_recommendations row (type 'original_*', riskLevel 'medium'),
- *       2. a paired agent_approvals row (kind 'original_content'),
- *       3. a content_ideas row (status 'pending', reusing the scout pattern).
+ *       2. a content_ideas row (status 'pending', reusing the scout pattern).
  *    Also writes a geo_seo_audits row (auditor 'content_data', score = originality).
  *    NEVER auto-applies. NEVER originates a claim. Data-study numbers come ONLY
  *    from siteNetworkMetrics.value — the LLM (later, at write time) is told to
@@ -29,14 +28,12 @@ import {
   siteOriginalDataInputs,
   siteNetworkMetrics,
   seoRecommendations,
-  agentApprovals,
   contentIdeas,
   geoSeoAudits,
   type NewSeoRecommendation,
   type SeoRecommendation,
 } from '@leadlandlord/db';
 import { BaseAgent, type AgentContext } from '../base';
-import { checkAutoApprove } from '../approval-engine';
 import {
   detectGaps,
   originalityScore,
@@ -190,7 +187,7 @@ export class ContentDataAuditor extends BaseAgent<
   }
 
   /**
-   * Write the seo_recommendations → agent_approvals → content_ideas triple for a
+   * Write the seo_recommendations → content_ideas pair for a
    * single gap. Returns true when the recommendation row was created (idea
    * collisions just skip the idea write, not the rec). NEVER auto-applies.
    */
@@ -251,75 +248,9 @@ export class ContentDataAuditor extends BaseAgent<
       .onConflictDoNothing()
       .returning({ id: contentIdeas.id });
 
-    // 3. paired agent_approvals row (kind 'original_content'), referencing the
-    //    rec + template + dataInputsRef + idea. Auto-approve rules MAY match;
-    //    we still never auto-APPLY here (apply is a separate, gated pass driven
-    //    by the operator approving the row).
-    const approvalPayload = {
-      recommendationId: rec.id,
-      ideaId: idea?.id ?? null,
-      siteId,
-      template: gap.template,
-      archetype,
-      topic,
-      targetKeyword,
-      dataInputsRef: gap.dataInputsRef,
-    };
-
-    let approvalStatus = 'pending';
-    let ruleMatched: string | undefined;
-    try {
-      const auto = await checkAutoApprove('original_content', approvalPayload);
-      if (auto.matched) {
-        approvalStatus = 'auto_approved';
-        ruleMatched = auto.ruleId;
-      }
-    } catch (err) {
-      ctx.log.warn(
-        { err: err instanceof Error ? err.message : err },
-        'content-data-auditor: auto-approve check failed',
-      );
-    }
-
-    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    const [approvalRow] = await db
-      .insert(agentApprovals)
-      .values({
-        agentRunId: ctx.runId,
-        kind: 'original_content',
-        payload: approvalPayload,
-        status: approvalStatus,
-        decidedBy: approvalStatus === 'auto_approved' ? `rule:${ruleMatched ?? 'unknown'}` : null,
-        decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
-        ruleMatched: ruleMatched ?? null,
-        expiresAt,
-      })
-      .returning({ id: agentApprovals.id });
-
-    // Link the idea to its approval. On auto-approve, flip the idea to
-    // auto_approved and emit the writer event — same shape the scout emits.
-    if (idea?.id) {
-      if (approvalStatus === 'auto_approved') {
-        await db
-          .update(contentIdeas)
-          .set({
-            status: 'auto_approved',
-            sourceApprovalId: approvalRow?.id ?? null,
-            decidedAt: new Date(),
-          })
-          .where(eq(contentIdeas.id, idea.id));
-        await ctx.emitNextStepEvent({
-          type: 'content.idea.approved',
-          targetAgent: 'local-content-writer',
-          payload: { ideaId: idea.id, siteId },
-        });
-      } else if (approvalRow?.id) {
-        await db
-          .update(contentIdeas)
-          .set({ sourceApprovalId: approvalRow.id })
-          .where(eq(contentIdeas.id, idea.id));
-      }
-    }
+    // The idea persists with status 'pending'; the operator decides it in the
+    // content queue on /operator/content. NEVER auto-applies.
+    void idea;
 
     return true;
   }

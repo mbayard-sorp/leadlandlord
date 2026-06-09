@@ -3,14 +3,12 @@ import { eq } from 'drizzle-orm';
 import {
   getDb,
   sites,
-  agentApprovals,
   contentIdeas,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { getLocalKeywordMetrics, dfsLocationName } from '@leadlandlord/integrations/dataforseo';
 import { createReadClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
-import { checkAutoApprove } from '../approval-engine';
 import { LocalContentScoutInput, LocalContentScoutOutput } from './schema';
 
 export { LocalContentScoutInput, LocalContentScoutOutput };
@@ -157,71 +155,11 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
 
       if (!inserted.length) continue;
       proposed++;
-
-      const ideaId = inserted[0]!.id;
-      const approvalPayload = {
-        ideaId,
-        siteId: input.site_id,
-        topic: idea.topic,
-        targetKeyword: idea.targetKeyword,
-        archetype,
-        angle: idea.angle,
-      };
-
-      let approvalStatus = 'pending';
-      let ruleMatched: string | undefined;
-
-      try {
-        const autoResult = await checkAutoApprove('content_idea', approvalPayload);
-        if (autoResult.matched) {
-          approvalStatus = 'auto_approved';
-          ruleMatched = autoResult.ruleId;
-        }
-      } catch (err) {
-        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'local-content-scout: auto-approve check failed');
-      }
-
-      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-
-      const [approvalRow] = await db
-        .insert(agentApprovals)
-        .values({
-          agentRunId: ctx.runId,
-          kind: 'content_idea',
-          payload: approvalPayload,
-          status: approvalStatus,
-          decidedBy: approvalStatus === 'auto_approved' ? `rule:${ruleMatched ?? 'unknown'}` : null,
-          decidedAt: approvalStatus === 'auto_approved' ? new Date() : null,
-          ruleMatched: ruleMatched ?? null,
-          expiresAt,
-        })
-        .onConflictDoNothing()
-        .returning({ id: agentApprovals.id });
-
-      if (approvalStatus === 'auto_approved') {
-        // Update idea status to auto_approved.
-        await db
-          .update(contentIdeas)
-          .set({ status: 'auto_approved', sourceApprovalId: approvalRow?.id ?? null, decidedAt: new Date() })
-          .where(eq(contentIdeas.id, ideaId));
-
-        autoApproved++;
-
-        // Emit downstream event so the writer picks this up without human approval.
-        await ctx.emitNextStepEvent({
-          type: 'content.idea.approved',
-          targetAgent: 'local-content-writer',
-          payload: { ideaId, siteId: input.site_id },
-        });
-      } else if (approvalRow?.id) {
-        await db
-          .update(contentIdeas)
-          .set({ sourceApprovalId: approvalRow.id })
-          .where(eq(contentIdeas.id, ideaId));
-      }
+      // Idea persists with status 'pending'; the operator decides it in the
+      // content queue on /operator/content.
     }
 
-    ctx.log.info({ proposed, autoApproved }, 'local-content-scout: done');
+    ctx.log.info({ proposed }, 'local-content-scout: done');
     return { proposed, autoApproved };
   }
 
