@@ -1,0 +1,96 @@
+/**
+ * Orchestrator supervisory pass (orchestrator Phase 3).
+ *
+ * Auto-disables agents that fail repeatedly (complementing the operator's
+ * existing >1.2x-cap runaway-spender disable). Runs from the 10-minute tick —
+ * NOT from inside the budget-gated operator agent — so it keeps working even
+ * during a global-budget pause. The same module backs the Phase 6 chat brain.
+ */
+import { getDb, agentBudgets, agentSchedules, eq } from '@leadlandlord/db';
+import { readFleetHealth, type FleetHealthRow } from './context';
+
+export const CONSECUTIVE_FAILURE_DISABLE_THRESHOLD = 3;
+
+/**
+ * Agents the orchestrator must never auto-disable: itself / the operator (it
+ * runs supervision) and the digest (it must keep reporting even while flapping).
+ * Disabling never triggers site creation (that needs human niche approval), so
+ * the human-gated build chain is safe to auto-disable.
+ */
+export const NEVER_AUTO_DISABLE: ReadonlySet<string> = new Set([
+  'operator',
+  'orchestrator',
+  'fleet-digest',
+]);
+
+export interface SupervisionAction {
+  kind: 'disable_agent';
+  agent: string;
+  reason: string;
+}
+
+export interface SupervisionResult {
+  actions: SupervisionAction[];
+  /** Set when the pass was a no-op because the read failed (e.g. table missing). */
+  skipped?: string;
+}
+
+/** Pure: pick which enabled agents have crossed the consecutive-failure threshold. */
+export function selectAgentsToDisable(
+  rows: FleetHealthRow[],
+  threshold: number = CONSECUTIVE_FAILURE_DISABLE_THRESHOLD,
+  neverDisable: ReadonlySet<string> = NEVER_AUTO_DISABLE,
+): SupervisionAction[] {
+  return rows
+    .filter(
+      (r) => r.enabled && r.consecutiveFailures >= threshold && !neverDisable.has(r.agent),
+    )
+    .map((r) => ({
+      kind: 'disable_agent' as const,
+      agent: r.agent,
+      reason:
+        `auto-disabled: ${r.consecutiveFailures} consecutive failures` +
+        (r.lastError ? ` (last: ${r.lastError.slice(0, 120)})` : ''),
+    }));
+}
+
+interface SupervisionLogger {
+  warn: (obj: unknown, msg: string) => void;
+}
+
+/**
+ * Read fleet health, disable repeat-failure agents, and pause their cadence.
+ * Defensive: if agent_health is unavailable (migration unapplied), returns a
+ * no-op result rather than throwing into the tick.
+ */
+export async function runSupervisionPass(logger?: SupervisionLogger): Promise<SupervisionResult> {
+  let rows: FleetHealthRow[];
+  try {
+    rows = await readFleetHealth();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger?.warn({ err: msg }, 'orchestrator supervision skipped (agent_health read failed)');
+    return { actions: [], skipped: msg };
+  }
+
+  const actions = selectAgentsToDisable(rows);
+  if (actions.length === 0) return { actions: [] };
+
+  const db = getDb();
+  for (const a of actions) {
+    await db
+      .update(agentBudgets)
+      .set({ enabled: false, updatedAt: new Date() })
+      .where(eq(agentBudgets.agent, a.agent));
+    // Best-effort: also pause the cadence row so it stops being scheduled.
+    try {
+      await db
+        .update(agentSchedules)
+        .set({ paused: true, managedBy: 'orchestrator', notes: a.reason, updatedAt: new Date() })
+        .where(eq(agentSchedules.targetAgent, a.agent));
+    } catch {
+      /* agent_schedules may not exist yet — the disable above is what matters */
+    }
+  }
+  return { actions };
+}
