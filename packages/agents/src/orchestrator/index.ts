@@ -5,3 +5,4 @@
  */
 export * from './context';
 export * from './supervisor';
+export * from './disposition';
