@@ -569,7 +569,12 @@ export const backlinkProspects = pgTable(
     backlinkId: uuid('backlink_id').references(() => backlinks.id, { onDelete: 'set null' }),
     /** 'prospect:<siteId>:<domain>' — prevents re-discovering the same domain. */
     dedupeKey: text('dedupe_key'),
-    /** DFS signals, Apollo enrichment, Firecrawl receptivity results. */
+    /** Outreach contact, pre-filled by MollyScorer (Firecrawl/Apollo) or entered by operator. */
+    contactEmail: text('contact_email'),
+    contactName: text('contact_name'),
+    /** 'found' (scraped/Apollo-confirmed) | 'guessed' (operator-entered or pattern) | 'missing'. */
+    contactState: text('contact_state'),
+    /** DFS signals, Apollo enrichment, Firecrawl receptivity results, snoozedUntil/snoozeReason. */
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -587,6 +592,43 @@ export const backlinkProspects = pgTable(
 
 export type BacklinkProspect = typeof backlinkProspects.$inferSelect;
 export type InsertBacklinkProspect = typeof backlinkProspects.$inferInsert;
+
+// ────────────────────────────────────────────────────────────
+// Backlink niche tastes — operator rejection feedback per niche
+// ────────────────────────────────────────────────────────────
+
+/**
+ * One row per operator prospect rejection. Accumulates a per-niche "taste
+ * profile" that MollyScorer feeds into its scoring prompt (20 most recent
+ * rows per niche) so future scouting avoids site types the operator keeps
+ * rejecting. Keyed on the lowercased niche string (not niches.id) so the
+ * profile survives niche-row revisions. Insert path dedupes (niche, domain)
+ * within 30 days.
+ */
+export const backlinkNicheTastes = pgTable(
+  'backlink_niche_tastes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Lowercased niche name, normalized at insert time. */
+    niche: text('niche').notNull(),
+    domain: text('domain').notNull(),
+    /** Operator's one-line rejection reason (preset chip and/or free text). */
+    reason: text('reason').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    prospectId: uuid('prospect_id').references(() => backlinkProspects.id, {
+      onDelete: 'set null',
+    }),
+  },
+  (t) => ({
+    nicheRecordedIdx: index('backlink_niche_tastes_niche_recorded_idx').on(
+      t.niche,
+      t.recordedAt,
+    ),
+  }),
+);
+
+export type BacklinkNicheTaste = typeof backlinkNicheTastes.$inferSelect;
+export type InsertBacklinkNicheTaste = typeof backlinkNicheTastes.$inferInsert;
 
 // ────────────────────────────────────────────────────────────
 // Email sends — outbound mail audit log + per-mailbox throttle source
