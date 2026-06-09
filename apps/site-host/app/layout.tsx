@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import { fontVarsForTheme } from '../lib/fonts';
 import { resolveCurrentSite } from '../lib/site-context';
 import { currentRequestBaseUrl } from '../lib/seo-meta';
@@ -111,6 +113,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </>
         ) : null}
         {process.env.NODE_ENV === 'production' && <WebVitalsReporter />}
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
