@@ -33,6 +33,7 @@ import { GeoAeoAuditor } from './geo-aeo-auditor/index';
 import { LocalSeoOptimizer } from './local-seo-optimizer/index';
 import { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
 import { ContentDataAuditor } from './content-data-auditor/index';
+import { FleetDigest } from './fleet-digest/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -73,6 +74,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'local-seo-optimizer': () => new LocalSeoOptimizer(),
   'network-metrics-aggregator': () => new NetworkMetricsAggregator(),
   'content-data-auditor': () => new ContentDataAuditor(),
+  'fleet-digest': () => new FleetDigest(),
 };
 
 export function getAgent(name: string): AnyAgent {

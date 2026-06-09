@@ -77,6 +77,8 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'local-seo-optimizer': [], // Owned-asset.
   'network-metrics-aggregator': [], // Owned-asset DB aggregation.
   'content-data-auditor': [], // Owned-asset content audit.
+  // Internal status email to the operator (not third-party outreach).
+  'fleet-digest': [['RESEND_API_KEY'], ['FLEET_DIGEST_TO', 'OPERATOR_EMAIL']],
 };
 
 /**

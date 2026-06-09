@@ -25,3 +25,4 @@ export { GeoAeoAuditor } from './geo-aeo-auditor/index';
 export { LocalSeoOptimizer } from './local-seo-optimizer/index';
 export { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
 export { ContentDataAuditor } from './content-data-auditor/index';
+export { FleetDigest } from './fleet-digest/index';
