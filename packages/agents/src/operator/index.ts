@@ -119,6 +119,21 @@ export function computeMargin(mrr30d: number, costs30d: number): number {
   return (mrr30d - costs30d) / mrr30d;
 }
 
+/**
+ * Niche approval is the human-only "create a site" trigger (orchestrator
+ * plan §0.1). ONLY the explicit `autonomous` mode (with autoApproveNiches
+ * true) may auto-approve a niche. `supervised` deliberately returns false —
+ * it permits monitoring + auto-disable but never niche approval — and so
+ * does `manual`. Keeping this a pure predicate lets the invariant be
+ * unit-tested directly rather than inferred from the decision tree.
+ */
+export function shouldAutoApproveNiche(
+  mode: OperatorMode,
+  autoApproveNiches: boolean,
+): boolean {
+  return mode === 'autonomous' && autoApproveNiches;
+}
+
 // ────────────────────────────────────────────────────────────
 // Internal types for decision tree
 // ────────────────────────────────────────────────────────────
@@ -200,15 +215,12 @@ export class Operator extends BaseAgent<typeof OperatorInput, typeof OperatorOut
       return { decisions, kpis, modeUsed: mode };
     }
 
-    // ── (b) Niche approval ──────────────────────────────────
-    if (
-      (mode === 'supervised' || mode === 'autonomous') &&
-      sys.autoApproveNiches &&
-      mode === 'autonomous'
-    ) {
-      // Only autonomous mode actually flips the row. Supervised mode is
-      // reserved for a future "queue for human review" path; for now we
-      // treat it as identical to manual w.r.t. niches.
+    // ── (b) Niche approval (HUMAN-ONLY gate) ────────────────
+    // Approving a niche is what triggers a site build, so it is reserved for
+    // the human operator. Only explicit `autonomous` mode may auto-approve a
+    // niche; `supervised` and `manual` never do — supervised permits
+    // monitoring + auto-disable but not niche approval. See orchestrator §0.1.
+    if (shouldAutoApproveNiche(mode, sys.autoApproveNiches)) {
       const top = await db
         .select()
         .from(niches)
