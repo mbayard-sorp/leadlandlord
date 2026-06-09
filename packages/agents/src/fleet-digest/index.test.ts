@@ -100,21 +100,30 @@ describe('renderFleetDigest', () => {
 });
 
 describe('resolveDigestRecipient (send skip mirrors notifyOperatorEmail)', () => {
-  it('skips (null) when RESEND_API_KEY is missing', () => {
-    expect(resolveDigestRecipient({ OPERATOR_EMAIL: 'mike@x.com' })).toBeNull();
+  const smtpEnv = { ZOHO_SMTP_USER: 'molly@leadslandlord.com', ZOHO_SMTP_PASS: 'app-pass' };
+
+  it('skips (null) when ZOHO_SMTP_USER is missing', () => {
+    expect(
+      resolveDigestRecipient({ ZOHO_SMTP_PASS: 'app-pass', OPERATOR_EMAIL: 'mike@x.com' }),
+    ).toBeNull();
+  });
+  it('skips (null) when ZOHO_SMTP_PASS is missing', () => {
+    expect(
+      resolveDigestRecipient({ ZOHO_SMTP_USER: 'molly@leadslandlord.com', OPERATOR_EMAIL: 'mike@x.com' }),
+    ).toBeNull();
   });
   it('skips (null) when no recipient is set', () => {
-    expect(resolveDigestRecipient({ RESEND_API_KEY: 're_x' })).toBeNull();
+    expect(resolveDigestRecipient(smtpEnv)).toBeNull();
   });
-  it('defaults from to Molly and uses FLEET_DIGEST_TO', () => {
-    const r = resolveDigestRecipient({ RESEND_API_KEY: 're_x', FLEET_DIGEST_TO: 'mike@me.com' });
+  it('defaults from to the Zoho account address and uses FLEET_DIGEST_TO', () => {
+    const r = resolveDigestRecipient({ ...smtpEnv, FLEET_DIGEST_TO: 'mike@me.com' });
     expect(r).not.toBeNull();
     expect(r!.to).toBe('mike@me.com');
     expect(r!.from).toMatch(/molly@leadslandlord\.com/);
   });
   it('falls back to OPERATOR_EMAIL and honors FLEET_DIGEST_FROM', () => {
     const r = resolveDigestRecipient({
-      RESEND_API_KEY: 're_x',
+      ...smtpEnv,
       OPERATOR_EMAIL: 'ops@me.com',
       FLEET_DIGEST_FROM: 'Ops <ops@leadslandlord.com>',
     });

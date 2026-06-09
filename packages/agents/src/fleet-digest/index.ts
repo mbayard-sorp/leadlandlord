@@ -6,9 +6,9 @@
  * niche approvals, sites awaiting go-live, credential-blocked agents,
  * over-budget agents, and agents the orchestrator auto-disabled.
  *
- * Sends from Molly <molly@leadslandlord.com> -> the operator. Mirrors the
- * notifyOperatorEmail skip-on-missing-env pattern: no RESEND_API_KEY or
- * recipient -> returns 'skipped' rather than throwing.
+ * Sends via Zoho SMTP from the Zoho account address -> the operator. Mirrors
+ * the notifyOperatorEmail skip-on-missing-env pattern: no ZOHO_SMTP_USER/PASS
+ * or recipient -> returns 'skipped' rather than throwing.
  */
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
@@ -18,7 +18,7 @@ import {
   agentHealth,
   systemState,
 } from '@leadlandlord/db';
-import { sendEmail } from '@leadlandlord/integrations/resend';
+import { sendEmail } from '@leadlandlord/integrations/zoho-smtp';
 import { BaseAgent, type AgentContext } from '../base';
 import { MOLLY_PERSONA } from '../molly/persona';
 
@@ -74,15 +74,16 @@ const MAX_ACTIVITY_ROWS = 25;
 
 /**
  * Resolve the digest sender/recipient from env, or null to skip (mirrors
- * notifyOperatorEmail): needs RESEND_API_KEY + a recipient. From defaults to
- * Molly <molly@leadslandlord.com> (decision §2), override via FLEET_DIGEST_FROM.
+ * notifyOperatorEmail): needs ZOHO_SMTP_USER + ZOHO_SMTP_PASS + a recipient.
+ * From is the Zoho account address (Zoho SMTP rejects mismatched senders),
+ * with Molly's display name; override via FLEET_DIGEST_FROM.
  */
 export function resolveDigestRecipient(
   env: Record<string, string | undefined>,
 ): { to: string; from: string } | null {
   const to = env.FLEET_DIGEST_TO || env.OPERATOR_EMAIL;
-  if (!env.RESEND_API_KEY || !to) return null;
-  const from = env.FLEET_DIGEST_FROM || `${MOLLY_PERSONA.displayName} <${MOLLY_PERSONA.mailbox}>`;
+  if (!env.ZOHO_SMTP_USER || !env.ZOHO_SMTP_PASS || !to) return null;
+  const from = env.FLEET_DIGEST_FROM || `${MOLLY_PERSONA.displayName} <${env.ZOHO_SMTP_USER}>`;
   return { to, from };
 }
 
@@ -405,8 +406,8 @@ export class FleetDigest extends BaseAgent<typeof FleetDigestInput, typeof Fleet
     const recipient = resolveDigestRecipient(process.env);
     if (!recipient) {
       ctx.log.info(
-        { hasKey: !!process.env.RESEND_API_KEY },
-        'fleet-digest: send skipped (missing RESEND_API_KEY or recipient)',
+        { hasSmtpCreds: !!(process.env.ZOHO_SMTP_USER && process.env.ZOHO_SMTP_PASS) },
+        'fleet-digest: send skipped (missing ZOHO_SMTP_USER/ZOHO_SMTP_PASS or recipient)',
       );
       return { date, delivery: 'skipped', needsAttentionCount, subject };
     }
@@ -417,7 +418,6 @@ export class FleetDigest extends BaseAgent<typeof FleetDigestInput, typeof Fleet
       subject,
       text,
       html,
-      tags: [{ name: 'kind', value: 'fleet-digest' }],
     });
     ctx.log.info({ to: recipient.to, needsAttentionCount }, 'fleet-digest: sent');
     return { date, delivery: 'sent', needsAttentionCount, subject };
