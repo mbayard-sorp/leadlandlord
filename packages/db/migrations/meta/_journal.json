@@ -260,6 +260,13 @@
       "when": 1781600000000,
       "tag": "0037_global_spend_cap",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1781700000000,
+      "tag": "0038_agent_schedules",
+      "breakpoints": true
     }
   ]
 }
