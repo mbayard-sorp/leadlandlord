@@ -5,25 +5,40 @@
  *
  * Input: { siteId }
  * Flow:
- *   1. Pull up to 20 `backlink_prospects` rows with status='prospected'.
- *   2. DA filter: drop rows with domain_rank < 25 OR domain_rank > 60 (leave
+ *   1. Site eligibility guard: status='live' AND deployedAt older than 28 days.
+ *      Returns graceful no-op when ineligible.
+ *   2. Pull up to 20 `backlink_prospects` rows with status='prospected',
+ *      excluding any with metadata->>'snoozedUntil' in the future.
+ *   3. DA filter: drop rows with domain_rank < 25 OR domain_rank > 60 (leave
  *      status unchanged — a future DA refresh might bring them in-range).
- *   3. Receptivity check: call scrapeReceptivity per remaining prospect (≤3
+ *   4. Load the 20 most recent backlinkNicheTastes rows for the site's niche
+ *      and inject them into the Haiku scoring prompt as a penalty signal.
+ *   5. Receptivity check: call scrapeReceptivity per remaining prospect (<=3
  *      Firecrawl URLs each). Stash results in metadata.receptivity.
- *   4. Single batched Haiku call: score all remaining prospects 0–100 with
+ *   6. Single batched Haiku call: score all remaining prospects 0-100 with
  *      a one-sentence rationale.
- *   5. Write back scores; mark top-5 as `flagged_top5`; mark the rest `scored`.
+ *   7. Write back scores; mark top-5 as `flagged_top5`; mark the rest `scored`.
+ *      Exclude already-snoozed rows from top-5 selection and count.
+ *   8. For the top-5 only: attempt contact discovery (Apollo, then Firecrawl
+ *      scrapeContact). Write contactEmail/contactName/contactState on success.
+ *      Never overwrite an existing contactEmail.
  *
- * Cost per run: ~$0.001 (Haiku) + ~$0.025 (Firecrawl, 5 × $0.005).
+ * Cost per run: ~$0.001 (Haiku) + ~$0.025 (Firecrawl, 5 x $0.005).
  * dedupeKeyFn: 'molly-scorer:<siteId>:<YYYYMMDD>' — one run per site per day.
  * defaultDailyCapUsd: $1.
  */
 
 import { z } from 'zod';
-import { eq, and, lte, gte } from 'drizzle-orm';
-import { getDb, backlinkProspects, sites } from '@leadlandlord/db';
+import { eq, and, sql } from 'drizzle-orm';
+import {
+  getDb,
+  backlinkProspects,
+  backlinkNicheTastes,
+  sites,
+} from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
-import { scrapeReceptivity } from '@leadlandlord/integrations/firecrawl';
+import { scrapeReceptivity, scrapeContact } from '@leadlandlord/integrations/firecrawl';
+import { findEditorByDomain } from '@leadlandlord/integrations/apollo';
 import { BaseAgent, type AgentContext } from '../base';
 import { log as rootLog } from '@leadlandlord/shared/log';
 
@@ -36,14 +51,18 @@ export type MollyScorerInput = z.infer<typeof MollyScorerInput>;
 
 export const MollyScorerOutput = z.object({
   siteId: z.string().uuid(),
+  /** True when the site did not meet eligibility criteria (not live or < 28d old). */
+  skippedIneligible: z.boolean().optional(),
   /** Prospects pulled from DB before DA filter. */
   prospectsPulled: z.number(),
-  /** Prospects dropped by DA filter (outside 25–60). */
+  /** Prospects dropped by DA filter (outside 25-60). */
   droppedByDaFilter: z.number(),
   /** Prospects that passed DA filter and were scored. */
   prospectsScoredCount: z.number(),
   /** IDs of the top-5 prospects flagged for operator review. */
   top5Ids: z.array(z.string().uuid()),
+  /** Number of top-5 prospects that had contact info successfully discovered. */
+  contactsFound: z.number(),
 });
 export type MollyScorerOutput = z.infer<typeof MollyScorerOutput>;
 
@@ -67,6 +86,15 @@ const SCORER_MODEL = 'claude-haiku-4-5';
 
 const DA_MIN = 25;
 const DA_MAX = 60;
+
+// ── Site eligibility: must be live and at least 28 days post-deploy ───────────
+
+const ELIGIBILITY_MIN_DAYS = 28;
+
+// ── Taste profile: max rows to pull per niche, max reason chars ───────────────
+
+const TASTE_PROFILE_MAX_ROWS = 20;
+const TASTE_REASON_MAX_CHARS = 100;
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
@@ -98,7 +126,29 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
     )[0];
     if (!site) throw new Error(`site ${input.siteId} not found`);
 
-    // ── 1. Pull prospected rows ──────────────────────────────────────────────
+    // ── 0a. Site eligibility guard ───────────────────────────────────────────
+    // Require status='live' AND deployedAt older than 28 days. Returning a
+    // graceful no-op avoids wasting Firecrawl/Haiku budget on sites not yet
+    // earning organic traffic, and prevents surfacing prospects for sites the
+    // operator hasn't verified are live.
+    const eligibilityReason = checkSiteEligibility(site);
+    if (eligibilityReason) {
+      log.info({ reason: eligibilityReason }, 'site not eligible for scoring — skip');
+      return {
+        siteId: input.siteId,
+        skippedIneligible: true,
+        prospectsPulled: 0,
+        droppedByDaFilter: 0,
+        prospectsScoredCount: 0,
+        top5Ids: [],
+        contactsFound: 0,
+      };
+    }
+
+    // ── 1. Pull prospected rows (excluding snoozed) ──────────────────────────
+    // Snooze: metadata->>'snoozedUntil' is an ISO timestamp stored in the
+    // jsonb blob. We exclude rows where that value is in the future so
+    // snoozed prospects don't consume scoring budget until they wake up.
     ctx.progress({ label: 'loading prospects' });
     const rows = await db
       .select()
@@ -107,25 +157,28 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
         and(
           eq(backlinkProspects.siteId, input.siteId),
           eq(backlinkProspects.status, 'prospected'),
+          // Exclude rows that the operator has snoozed until a future date.
+          sql`(${backlinkProspects.metadata}->>'snoozedUntil' IS NULL OR (${backlinkProspects.metadata}->>'snoozedUntil')::timestamptz <= NOW())`,
         ),
       )
       .limit(20);
 
     if (rows.length === 0) {
-      log.info('no prospected rows — no-op');
+      log.info('no prospected rows (or all snoozed) — no-op');
       return {
         siteId: input.siteId,
         prospectsPulled: 0,
         droppedByDaFilter: 0,
         prospectsScoredCount: 0,
         top5Ids: [],
+        contactsFound: 0,
       };
     }
 
     const prospectsPulled = rows.length;
 
     // ── 2. DA filter ─────────────────────────────────────────────────────────
-    // Drop outside 25–60. Leave status = 'prospected' — a future DA refresh
+    // Drop outside 25-60. Leave status = 'prospected' — a future DA refresh
     // might move them into range. Don't delete.
     const eligible = rows.filter((r) => {
       const rank = r.domainRank;
@@ -143,10 +196,41 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
         droppedByDaFilter,
         prospectsScoredCount: 0,
         top5Ids: [],
+        contactsFound: 0,
       };
     }
 
-    // ── 3. Receptivity check ─────────────────────────────────────────────────
+    // ── 3. Taste profile ─────────────────────────────────────────────────────
+    // Load the 20 most recent rejection signals for this niche. These tell
+    // Haiku what kinds of domains the operator keeps rejecting so it can
+    // apply a penalty to similar prospects.
+    ctx.progress({ label: 'loading taste profile' });
+    const siteNiche = (site.niche ?? '').toLowerCase();
+    const tasteRows = await db
+      .select({
+        domain: backlinkNicheTastes.domain,
+        reason: backlinkNicheTastes.reason,
+      })
+      .from(backlinkNicheTastes)
+      .where(eq(backlinkNicheTastes.niche, siteNiche))
+      .orderBy(sql`${backlinkNicheTastes.recordedAt} DESC`)
+      .limit(TASTE_PROFILE_MAX_ROWS);
+
+    // Build a compact taste profile section (domain + truncated reason, one
+    // line each). Only injected into the prompt when there is feedback to apply.
+    const tasteProfileSection =
+      tasteRows.length > 0
+        ? [
+            'The operator has previously rejected these domains for this niche (penalize similar prospects):',
+            ...tasteRows.map(
+              (t) => `  ${t.domain} — ${t.reason.slice(0, TASTE_REASON_MAX_CHARS)}`,
+            ),
+          ].join('\n')
+        : '';
+
+    log.info({ tasteRows: tasteRows.length }, 'taste profile loaded');
+
+    // ── 4. Receptivity check ─────────────────────────────────────────────────
     ctx.progress({ label: `checking receptivity for ${eligible.length} domains`, step: 0, total: eligible.length });
 
     const receptivityMap = new Map<string, Awaited<ReturnType<typeof scrapeReceptivity>>>();
@@ -173,7 +257,7 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
       }
     }
 
-    // ── 4. Batched Haiku scoring call ─────────────────────────────────────────
+    // ── 5. Batched Haiku scoring call ─────────────────────────────────────────
     ctx.progress({ label: 'scoring with Haiku' });
 
     const scoringPayload = eligible.map((r) => ({
@@ -186,22 +270,27 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
       city: site.city,
     }));
 
-    const systemPrompt = `You are Molly Matthews, Sr. Outreach Manager at LeadLandlord.
-Your job is to score candidate guest-post domains for relevance and outreach likelihood.
-
-Scoring criteria (0–100):
-- Niche relevance: does the blog cover topics related to ${site.niche} in or near ${site.city}? (40 points)
-- Guest-post receptivity: does the site show signals of accepting guest posts? (30 points)
-- Domain authority quality: DA 35–50 is ideal, score accordingly (30 points)
-
-Return ONLY valid JSON matching this schema:
-{
-  "scores": [
-    { "prospectId": "<uuid>", "score": <0-100>, "rationale": "<25 words max>" }
-  ]
-}
-
-Sort the array by score descending. Do not include commentary outside the JSON object.`;
+    // Taste profile is appended when non-empty; the blank line keeps the
+    // boundary visually clear for the model.
+    const systemPrompt = [
+      `You are Molly Matthews, Sr. Outreach Manager at LeadLandlord.`,
+      `Your job is to score candidate guest-post domains for relevance and outreach likelihood.`,
+      ``,
+      `Scoring criteria (0-100):`,
+      `- Niche relevance: does the blog cover topics related to ${site.niche} in or near ${site.city}? (40 points)`,
+      `- Guest-post receptivity: does the site show signals of accepting guest posts? (30 points)`,
+      `- Domain authority quality: DA 35-50 is ideal, score accordingly (30 points)`,
+      ...(tasteProfileSection ? ['', tasteProfileSection] : []),
+      ``,
+      `Return ONLY valid JSON matching this schema:`,
+      `{`,
+      `  "scores": [`,
+      `    { "prospectId": "<uuid>", "score": <0-100>, "rationale": "<25 words max>" }`,
+      `  ]`,
+      `}`,
+      ``,
+      `Sort the array by score descending. Do not include commentary outside the JSON object.`,
+    ].join('\n');
 
     const userMessage = `Score these ${eligible.length} prospect domains:\n\n${JSON.stringify(scoringPayload, null, 2)}`;
 
@@ -247,11 +336,24 @@ Sort the array by score descending. Do not include commentary outside the JSON o
         throw new Error('Haiku returned no scores matching input prospect IDs');
       }
 
-      // Top 5 by score.
-      const sorted = [...validScores].sort((a, b) => b.score - a.score);
-      top5Ids = sorted.slice(0, 5).map((s) => s.prospectId);
-      const top5Set = new Set(top5Ids);
+      // Top 5 by score — but exclude any row that has become snoozed between
+      // the initial pull and now. Re-check the in-memory metadata field;
+      // a race where the operator snoozes during scoring is rare but possible.
       const now = new Date();
+      const sorted = [...validScores].sort((a, b) => b.score - a.score);
+
+      const eligibleById = new Map(eligible.map((r) => [r.id, r]));
+      const filteredForTop5 = sorted.filter((s) => {
+        const row = eligibleById.get(s.prospectId);
+        if (!row) return false;
+        const meta = (row.metadata ?? {}) as Record<string, unknown>;
+        const snoozedUntil = meta['snoozedUntil'];
+        if (typeof snoozedUntil === 'string' && new Date(snoozedUntil) > now) return false;
+        return true;
+      });
+
+      top5Ids = filteredForTop5.slice(0, 5).map((s) => s.prospectId);
+      const top5Set = new Set(top5Ids);
 
       // Write scores back. Two update types: flagged_top5 (top 5) and scored (rest).
       for (const s of validScores) {
@@ -286,7 +388,93 @@ Sort the array by score descending. Do not include commentary outside the JSON o
       }
       prospectsScoredCount = eligible.length;
       top5Ids = [];
+
+      return {
+        siteId: input.siteId,
+        prospectsPulled,
+        droppedByDaFilter,
+        prospectsScoredCount,
+        top5Ids,
+        contactsFound: 0,
+      };
     }
+
+    // ── 6. Contact discovery for top-5 only ──────────────────────────────────
+    // Order: Apollo enrichment (findEditorByDomain), then Firecrawl scrapeContact.
+    // Only fill when contactEmail is null — never overwrite operator-entered data.
+    ctx.progress({ label: 'discovering contacts for top-5', step: 0, total: top5Ids.length });
+
+    let contactsFound = 0;
+    const eligibleMap = new Map(eligible.map((r) => [r.id, r]));
+
+    for (let i = 0; i < top5Ids.length; i++) {
+      const prospectId = top5Ids[i]!;
+      const row = eligibleMap.get(prospectId);
+      if (!row) continue;
+
+      // Never overwrite an existing contactEmail (operator may have entered one).
+      if (row.contactEmail) {
+        log.debug({ domain: row.domain }, 'contact already present — skip discovery');
+        continue;
+      }
+
+      ctx.progress({ label: `contact discovery: ${row.domain}`, step: i + 1, total: top5Ids.length });
+
+      let email: string | null = null;
+      let name: string | null = null;
+      let state: 'found' | 'missing' = 'missing';
+
+      // Path A: Apollo (editor-tier lookup — suitable for guest-post targets).
+      try {
+        const apolloResult = await findEditorByDomain(row.domain);
+        if (apolloResult?.person) {
+          const person = apolloResult.person;
+          // Apollo masks emails with 'email_not_unlocked@...' on lower plans.
+          const apolloEmail = person.email ?? null;
+          if (apolloEmail && !apolloEmail.toLowerCase().includes('email_not_unlocked')) {
+            email = apolloEmail;
+            name = person.name ?? null;
+            log.info({ domain: row.domain, source: 'apollo' }, 'contact found via Apollo');
+          }
+        }
+      } catch (err) {
+        log.warn({ domain: row.domain, err: err instanceof Error ? err.message : err }, 'Apollo contact lookup failed — falling back to Firecrawl');
+      }
+
+      // Path B: Firecrawl scrapeContact (fallback when Apollo returns nothing).
+      if (!email) {
+        try {
+          const scraped = await scrapeContact(row.domain);
+          if (scraped) {
+            email = scraped.email;
+            name = scraped.name ?? null;
+            log.info({ domain: row.domain, source: 'firecrawl', url: scraped.sourceUrl }, 'contact found via Firecrawl');
+          }
+        } catch (err) {
+          log.warn({ domain: row.domain, err: err instanceof Error ? err.message : err }, 'Firecrawl contact scrape failed');
+        }
+      }
+
+      if (email) {
+        state = 'found';
+        contactsFound++;
+      }
+
+      // Write result regardless — sets contactState='missing' for rows where
+      // we looked but found nothing, so the operator UI can show "searched, none found"
+      // rather than "not yet searched".
+      await db
+        .update(backlinkProspects)
+        .set({
+          contactEmail: email ?? undefined,
+          contactName: name ?? undefined,
+          contactState: state,
+          updatedAt: new Date(),
+        })
+        .where(eq(backlinkProspects.id, prospectId));
+    }
+
+    log.info({ top5: top5Ids.length, contactsFound }, 'contact discovery complete');
 
     return {
       siteId: input.siteId,
@@ -294,6 +482,36 @@ Sort the array by score descending. Do not include commentary outside the JSON o
       droppedByDaFilter,
       prospectsScoredCount,
       top5Ids,
+      contactsFound,
     };
   }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a reason string if the site is ineligible for scoring, or null when
+ * it passes both checks. Kept pure (no DB calls) so it is trivially testable.
+ *
+ * Eligibility criteria:
+ *   1. sites.status must be 'live'.
+ *   2. sites.deployedAt must be at least 28 days in the past.
+ *
+ * The 28-day minimum gives the site time to index before we chase backlinks.
+ */
+function checkSiteEligibility(
+  site: { status: string; deployedAt: Date | null },
+): string | null {
+  if (site.status !== 'live') {
+    return `status is '${site.status}', not 'live'`;
+  }
+  if (!site.deployedAt) {
+    return 'deployedAt is null';
+  }
+  const ageMs = Date.now() - new Date(site.deployedAt).getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  if (ageDays < ELIGIBILITY_MIN_DAYS) {
+    return `deployedAt is only ${Math.floor(ageDays)}d ago (need ${ELIGIBILITY_MIN_DAYS}d)`;
+  }
+  return null;
 }
