@@ -80,6 +80,8 @@ export const BundleSchema = z.object({
   contact: PageSchema,
   blog_posts: z.array(PageSchema),
   info_pages: z.array(PageSchema).default([]),
+  /** Standalone one-question-per-page FAQ pages at /faq/[slug] (see shared faq_pages). */
+  faq_pages: z.array(PageSchema).default([]),
   generated_at: z.string(),
   // Trust-signal fields — all optional with safe defaults (ADR 0001 + 0003)
   reviews: z.array(ReviewSchema).default([]),

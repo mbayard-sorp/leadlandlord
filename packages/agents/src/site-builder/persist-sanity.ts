@@ -6,7 +6,7 @@ import {
   themeDocId,
   type PageKind,
 } from '@leadlandlord/integrations/sanity';
-import { keywordClusterDocId } from '@leadlandlord/sanity-schema';
+import { keywordClusterDocId } from '@leadlandlord/sanity-schema/ids';
 
 export interface WriteSiteToSanityOptions {
   /** Override Sanity dataset (defaults to env). Used by dry-run for `development`. */
@@ -188,6 +188,7 @@ export async function writeSiteToSanity(
     ...bundle.service_areas.map((p, i) => ({ kind: 'service_area' as PageKind, index: i, page: p })),
     ...bundle.blog_posts.map((p, i) => ({ kind: 'blog' as PageKind, index: i, page: p })),
     ...bundle.info_pages.map((p, i) => ({ kind: 'info' as PageKind, index: i, page: p })),
+    ...bundle.faq_pages.map((p, i) => ({ kind: 'faq' as PageKind, index: i, page: p })),
   ];
 
   const siteRef = siteDocId(siteId);
@@ -312,6 +313,11 @@ export async function writeSiteToSanity(
     infoPages: bundle.info_pages.map((_, i) => ({
       _key: `i${i}`,
       _ref: pageDocId(siteId, 'info', i),
+      _type: 'reference',
+    })),
+    faqPages: bundle.faq_pages.map((_, i) => ({
+      _key: `f${i}`,
+      _ref: pageDocId(siteId, 'faq', i),
       _type: 'reference',
     })),
     generatedAt: bundle.generated_at,

@@ -36,6 +36,7 @@ export function sanityToBundle(site: SanitySite): Bundle {
     service_areas: (site.serviceAreas ?? []).map((p) => pageToBundlePage(p, 'service_area')),
     blog_posts: (site.blogPosts ?? []).map((p) => pageToBundlePage(p, 'blog')),
     info_pages: (site.infoPages ?? []).map((p) => pageToBundlePage(p, 'info')),
+    faq_pages: (site.faqPages ?? []).map((p) => pageToBundlePage(p, 'faq')),
     generated_at: site.generatedAt ?? new Date().toISOString(),
     // Trust-signal fields — safe defaults ensure existing tenants render identically (ADR 0003)
     reviews: (site.reviews ?? []).map((r) => ({

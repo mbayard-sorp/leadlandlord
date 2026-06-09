@@ -452,7 +452,7 @@ function collectAllPages(bundle: ContentBundle): ContentBundle['home'][] {
   if (bundle.home) pages.push(bundle.home);
   if (bundle.about) pages.push(bundle.about);
   if (bundle.contact) pages.push(bundle.contact);
-  for (const arr of [bundle.services, bundle.service_areas, bundle.blog_posts, bundle.info_pages]) {
+  for (const arr of [bundle.services, bundle.service_areas, bundle.blog_posts, bundle.info_pages, bundle.faq_pages]) {
     if (Array.isArray(arr)) pages.push(...arr);
   }
   return pages;
@@ -487,6 +487,9 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   if (!Array.isArray(bundle.info_pages)) {
     bundle.info_pages = [];
   }
+  if (!Array.isArray(bundle.faq_pages)) {
+    bundle.faq_pages = [];
+  }
   if (!Array.isArray(bundle.neighborhoods)) {
     bundle.neighborhoods = [];
   }
@@ -506,7 +509,7 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   // array. Hit 2026-05-08 on foundation repair build: blog_posts came back
   // as a string and zod rejected the bundle, costing $0.51 per failed
   // content-engine retry.
-  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
+  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages', 'faq_pages'] as const) {
     const v = bundle[key];
     if (typeof v === 'string') {
       try {
@@ -535,8 +538,9 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
     service_areas: 'service_area',
     blog_posts: 'blog',
     info_pages: 'info',
+    faq_pages: 'faq',
   } as const;
-  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
+  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages', 'faq_pages'] as const) {
     const arr = bundle[key];
     if (Array.isArray(arr)) {
       bundle[key] = arr.map((el, idx) =>
@@ -548,7 +552,7 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
   for (const key of ['home', 'about', 'contact'] as const) {
     if (bundle[key]) bundle[key] = trimPage(bundle[key]);
   }
-  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages'] as const) {
+  for (const key of ['services', 'service_areas', 'blog_posts', 'info_pages', 'faq_pages'] as const) {
     const arr = bundle[key];
     if (Array.isArray(arr)) {
       bundle[key] = arr.map(trimPage);
@@ -566,7 +570,7 @@ function normalizeBundle(raw: unknown, input: ContentEngineInput): unknown {
  */
 function coercePage(
   value: unknown,
-  defaults: { kind: 'home' | 'about' | 'contact' | 'service' | 'service_area' | 'blog' | 'info'; slug: string },
+  defaults: { kind: 'home' | 'about' | 'contact' | 'service' | 'service_area' | 'blog' | 'info' | 'faq'; slug: string },
 ): unknown {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   const mdx = typeof value === 'string' ? value : '';

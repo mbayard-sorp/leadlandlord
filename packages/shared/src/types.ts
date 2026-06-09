@@ -18,6 +18,7 @@ export const PageKind = z.enum([
   'contact',
   'blog',
   'info',
+  'faq',
 ]);
 export type PageKind = z.infer<typeof PageKind>;
 
@@ -142,6 +143,17 @@ export const ContentBundle = z.object({
    * visible nav — surfaced via in-page "Learn more" sections + sitemap.
    */
   info_pages: z.array(Page).default([]),
+  /**
+   * Agent-authored standalone FAQ pages at /faq/[slug]. ONE question per page —
+   * the page title and slug ARE the question — to win exact-match long-tail
+   * relevancy (topical authority without GBP/backlinks). Distinct from
+   * `Page.faqs` (the embedded Q&A accordion on service pages): these are their
+   * own crawlable URLs, linked from a /faq hub in the visible nav. mdx is the
+   * answer body. MUST be locally specific (city, niche, business) and sourced
+   * from real demand — generic restated answers fail helpful-content and create
+   * a network footprint when identical across sites.
+   */
+  faq_pages: z.array(Page).default([]),
   /**
    * Neighborhood list for the home page service-area section. Populated
    * post-LLM: the model emits names only; the content engine wraps each in

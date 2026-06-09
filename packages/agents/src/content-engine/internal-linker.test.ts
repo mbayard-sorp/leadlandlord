@@ -47,6 +47,7 @@ ${buildLargeBody(['window cleaning', 'gutter cleaning', 'pressure washing', 'roo
       makePage('/blog/how-often-clean-gutters', 'blog', 'How Often Should You Clean Your Gutters?', buildBlogMdx('gutter cleaning')),
     ],
     info_pages: [],
+    faq_pages: [],
     neighborhoods: [],
     generated_at: new Date().toISOString(),
     ...overrides,

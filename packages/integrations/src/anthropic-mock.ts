@@ -212,6 +212,14 @@ function mockContentBundle(prompt: string): unknown {
     contact: mockPage('contact', 'contact', `Contact ${city} ${niche}`),
     blog_posts: [mockPage('blog', 'cost-guide', `${niche} Cost Guide`, 'blog-mock-cost', 'mock cost guide')],
     info_pages: [mockPage('info', 'how-to', `How to Choose a ${niche} Pro`, 'info-mock-howto', 'mock how-to')],
+    faq_pages: [
+      // No cluster_key / primary_keyword: real FAQ pages aren't cluster-bound
+      // (the cluster page_kind enum has no 'faq'), and the H1 must be the
+      // question (title), not a keyword. Passing a clusterKey here would make
+      // persist-sanity patch a nonexistent keywordCluster doc.
+      mockPage('faq', `/faq/how-much-does-${niche.toLowerCase().replace(/\s+/g, '-')}-cost-in-${city.toLowerCase().replace(/\s+/g, '-')}`, `How much does ${niche.toLowerCase()} cost in ${city}?`),
+      mockPage('faq', `/faq/do-you-serve-${city.toLowerCase().replace(/\s+/g, '-')}`, `Do you serve ${city}?`),
+    ],
     generated_at: new Date().toISOString(),
   };
 }
