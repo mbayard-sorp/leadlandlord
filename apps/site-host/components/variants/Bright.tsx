@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
+import { heroH1, telHref, titleCaseKeyword, pageHref } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
@@ -252,7 +252,7 @@ export function BrightHome({
             {bundle.services.map((s, i) => (
               <a
                 key={s.slug}
-                href={s.slug}
+                href={pageHref(s)}
                 className={`bright-service-card ${SERVICE_BG[i % SERVICE_BG.length]}`}
               >
                 <div className="bright-service-row">
@@ -367,7 +367,7 @@ export function BrightHome({
             <h2 className="bright-h2">Tips and guides</h2>
             <div className="bright-learn-grid">
               {bundle.info_pages.slice(0, 6).map((p) => (
-                <a key={p.slug} href={p.slug} className="bright-learn-card">
+                <a key={p.slug} href={pageHref(p)} className="bright-learn-card">
                   <span className="bright-learn-title">{p.title}</span>
                   <span className="bright-learn-blurb">{p.meta_description}</span>
                 </a>
@@ -382,7 +382,7 @@ export function BrightHome({
             <h2 className="bright-h2">Recent articles</h2>
             <div className="bright-learn-grid">
               {blogTeasers.map((p) => (
-                <a key={p.slug} href={p.slug} className="bright-learn-card">
+                <a key={p.slug} href={pageHref(p)} className="bright-learn-card">
                   <span className="bright-learn-title">{p.title}</span>
                   <span className="bright-learn-blurb">{p.meta_description}</span>
                 </a>

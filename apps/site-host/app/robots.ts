@@ -22,7 +22,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   return {
     rules: blockAll
       ? [{ userAgent: '*', disallow: '/' }]
-      : [{ userAgent: '*', allow: '/', disallow: ['/api/'] }],
+      : [{ userAgent: '*', allow: '/', disallow: ['/api/', '/_next/static/chunks/'] }],
     sitemap: `${base}/sitemap.xml`,
     host: base,
   };

@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { heroH1, telHref, titleCaseKeyword } from '../../lib/content';
+import { heroH1, telHref, titleCaseKeyword, pageHref } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { LeadForm } from '../shared/LeadForm';
 import { LocalBusinessJsonLd, FaqJsonLd } from '../shared/LocalBusinessJsonLd';
@@ -149,7 +149,7 @@ export function PremiumHome({
           <p className="premium-lede">{bundle.home.meta_description}</p>
           <div className="premium-lede-aside">
             <p className="premium-roman">Enquire</p>
-            <a href="/contact/" className="premium-link">
+            <a href="/contact" className="premium-link">
               Arrange a consultation →
             </a>
             <span className="num premium-lede-phone">
@@ -170,7 +170,7 @@ export function PremiumHome({
           </div>
           <div className="premium-service-list">
             {bundle.services.map((s, i) => (
-              <a key={s.slug} href={s.slug} className="premium-service-row">
+              <a key={s.slug} href={pageHref(s)} className="premium-service-row">
                 <span className="premium-service-num">{String(i + 1).padStart(2, '0')}</span>
                 <span className="premium-service-title">{s.title}</span>
                 <span className="premium-service-blurb">{s.meta_description}</span>
@@ -255,7 +255,7 @@ export function PremiumHome({
             <ul className="premium-learn-list">
               {bundle.info_pages.slice(0, 6).map((p) => (
                 <li key={p.slug}>
-                  <a href={p.slug}>
+                  <a href={pageHref(p)}>
                     <span className="premium-learn-title">{p.title}</span>
                     <span className="premium-service-arrow">→</span>
                     <span className="premium-learn-blurb">{p.meta_description}</span>
@@ -273,7 +273,7 @@ export function PremiumHome({
             <ul className="premium-learn-list">
               {blogTeasers.map((p) => (
                 <li key={p.slug}>
-                  <a href={p.slug}>
+                  <a href={pageHref(p)}>
                     <span className="premium-learn-title">{p.title}</span>
                     <span className="premium-service-arrow">→</span>
                     <span className="premium-learn-blurb">{p.meta_description}</span>
@@ -326,7 +326,7 @@ export function PremiumHome({
             <Phone width={16} height={16} className="sticky-phone-icon" aria-hidden />
             {' '}{phone}
           </a>
-          <a href="/contact/" className="cta">
+          <a href="/contact" className="cta">
             Enquire
           </a>
         </div>
