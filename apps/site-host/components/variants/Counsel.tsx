@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { heroH1, telHref } from '../../lib/content';
+import { heroH1, telHref, pageHref } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, firstReview } from '../../lib/variant-utils';
 import { VideoEmbed } from '../shared/VideoEmbed';
 import { LongformSection } from '../shared/LongformSection';
@@ -229,7 +229,7 @@ export function CounselHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             {bundle.services.map((s, i) => (
               <a
                 key={s.slug}
-                href={s.slug}
+                href={pageHref(s)}
                 className="counsel-practice-card"
                 role="listitem"
               >
@@ -466,7 +466,7 @@ export function CounselHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
               <ul>
                 {bundle.services.slice(0, 6).map((s) => (
                   <li key={s.slug}>
-                    <a href={s.slug}>{s.title}</a>
+                    <a href={pageHref(s)}>{s.title}</a>
                   </li>
                 ))}
               </ul>

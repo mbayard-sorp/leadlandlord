@@ -119,6 +119,66 @@ export function telHref(number: string): string {
 }
 
 /**
+ * Strip a raw slug value down to its bare form — no leading/trailing slashes,
+ * no known route prefix — so `pageHref` can compose the canonical URL.
+ *
+ * Handles all observed slug formats from Sanity / Content Engine:
+ *   "foo"               → "foo"
+ *   "/foo"              → "foo"
+ *   "/foo/"             → "foo"
+ *   "/services/foo"     → "foo"          (prefix = "services")
+ *   "/services/foo/"    → "foo"          (prefix = "services")
+ *   "/service-areas/x/" → "x"            (prefix = "service-areas")
+ */
+function bareSlug(slug: string, prefix?: string): string {
+  let s = (slug ?? '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  if (prefix) {
+    if (s === prefix) s = '';
+    else if (s.startsWith(`${prefix}/`)) s = s.slice(prefix.length + 1);
+  }
+  return s;
+}
+
+/**
+ * Return the canonical, no-trailing-slash, site-relative href for a Page.
+ *
+ * Safe to use from both Server Components and Client Components — pure
+ * function with zero server-only imports.
+ *
+ * Route mapping:
+ *   service      → /<bareslug>                  (strips /services/ prefix too)
+ *   service-area → /service-areas/<bareslug>
+ *   blog         → /blog/<bareslug>
+ *   info/page    → /pages/<bareslug>
+ *   home         → /
+ */
+export function pageHref(page: Page): string {
+  const kind = page.kind;
+  if (kind === 'home') return '/';
+  if (kind === 'service') {
+    const s = bareSlug(page.slug, 'services');
+    return s ? `/${s}` : '/';
+  }
+  // Bundle/Sanity tag service-area pages `service_area` (underscore); accept
+  // the hyphen form too defensively.
+  if (kind === 'service_area' || kind === 'service-area') {
+    const s = bareSlug(page.slug, 'service-areas');
+    return s ? `/service-areas/${s}` : '/service-areas';
+  }
+  if (kind === 'blog') {
+    const s = bareSlug(page.slug, 'blog');
+    return s ? `/blog/${s}` : '/blog';
+  }
+  if (kind === 'info' || kind === 'page') {
+    const s = bareSlug(page.slug, 'pages');
+    return s ? `/pages/${s}` : '/pages';
+  }
+  // Fallback: strip any surrounding slashes and return flat
+  const s = bareSlug(page.slug);
+  return s ? `/${s}` : '/';
+}
+
+/**
  * The exact phrase variants render as the home-page H1.
  *
  * SEO-critical: must be the targeted keyword phrase verbatim so the strongest

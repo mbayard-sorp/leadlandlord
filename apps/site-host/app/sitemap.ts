@@ -3,6 +3,8 @@ import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../lib/site-context';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { fetchCorporatePageList } from '../lib/sanity';
+import type { Page } from '../lib/content';
+import { pageHref } from '../lib/content';
 
 // Corporate (leadslandlord.com) page kind → clean URL path + crawl hints.
 // Browser URLs are bare (proxy.ts rewrites them into /leadslandlord/*), so the
@@ -79,46 +81,53 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const site = await resolveCurrentSite();
   if (!site) return [];
-  const bundle = sanityToBundle(site);
-  const lastModified = bundle.generated_at ? new Date(bundle.generated_at) : new Date();
 
-  const normalize = (slug: string): string => canonical(base, slug);
+  // Warming sites should not advertise a populated sitemap — Googlebot
+  // must not crawl them until the tenant is live.
+  if (site.robotsDisallow) return [];
+
+  const bundle = sanityToBundle(site);
+  const bundleModified = bundle.generated_at ? new Date(bundle.generated_at) : new Date();
+
+  /** Per-page lastModified: prefer the page's own date_modified, fall back to bundle timestamp. */
+  const pageModified = (p: Page): Date =>
+    p.date_modified ? new Date(p.date_modified) : bundleModified;
 
   const fixed: MetadataRoute.Sitemap = [
-    { url: `${base}/`, lastModified, changeFrequency: 'weekly', priority: 1 },
-    { url: `${base}/about`, lastModified, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${base}/contact`, lastModified, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${base}/`, lastModified: bundleModified, changeFrequency: 'weekly', priority: 1 },
+    { url: `${base}/about`, lastModified: bundleModified, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${base}/contact`, lastModified: bundleModified, changeFrequency: 'monthly', priority: 0.7 },
     // /blog index only when there are enough posts to avoid thin-content indexing
     ...(bundle.blog_posts.length >= 2
-      ? [{ url: `${base}/blog`, lastModified, changeFrequency: 'weekly' as const, priority: 0.6 }]
+      ? [{ url: `${base}/blog`, lastModified: bundleModified, changeFrequency: 'weekly' as const, priority: 0.6 }]
       : []),
   ];
 
   const services: MetadataRoute.Sitemap = bundle.services.map((p) => ({
-    url: normalize(p.slug),
-    lastModified,
-    changeFrequency: 'monthly',
+    url: `${base}${pageHref(p)}`,
+    lastModified: pageModified(p),
+    changeFrequency: 'monthly' as const,
     priority: 0.8,
   }));
 
   const serviceAreas: MetadataRoute.Sitemap = bundle.service_areas.map((p) => ({
-    url: normalize(p.slug),
-    lastModified,
-    changeFrequency: 'monthly',
+    url: `${base}${pageHref(p)}`,
+    lastModified: pageModified(p),
+    changeFrequency: 'monthly' as const,
     priority: 0.7,
   }));
 
   const blog: MetadataRoute.Sitemap = bundle.blog_posts.map((p) => ({
-    url: normalize(p.slug),
-    lastModified,
-    changeFrequency: 'monthly',
+    url: `${base}${pageHref(p)}`,
+    lastModified: pageModified(p),
+    changeFrequency: 'monthly' as const,
     priority: 0.5,
   }));
 
   const infoPages: MetadataRoute.Sitemap = bundle.info_pages.map((p) => ({
-    url: normalize(p.slug),
-    lastModified,
-    changeFrequency: 'monthly',
+    url: `${base}${pageHref(p)}`,
+    lastModified: pageModified(p),
+    changeFrequency: 'monthly' as const,
     priority: 0.5,
   }));
 

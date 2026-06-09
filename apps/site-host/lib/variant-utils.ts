@@ -8,6 +8,7 @@
  */
 
 import type { Bundle, Page, Review } from './content';
+import { pageHref } from './content';
 
 /** De-duplicate an array while preserving insertion order. */
 function uniq<T>(arr: T[]): T[] {
@@ -28,12 +29,12 @@ export function deriveAreas(bundle: Bundle): string[] {
 }
 
 /**
- * Map from service-area title to its slug, used to render linked chips in the
- * "Where we work" section (areas that have a routed page get an <a>, others
- * render plain text).
+ * Map from service-area title to its canonical href, used to render linked
+ * chips in the "Where we work" section (areas that have a routed page get an
+ * <a>, others render plain text). Returns canonical no-trailing-slash paths.
  */
 export function areaSlugByTitle(bundle: Bundle): Map<string, string> {
-  return new Map(bundle.service_areas.map((a) => [a.title, a.slug]));
+  return new Map(bundle.service_areas.map((a) => [a.title, pageHref(a)]));
 }
 
 /**

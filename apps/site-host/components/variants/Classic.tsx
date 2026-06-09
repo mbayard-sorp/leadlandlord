@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Bundle } from '../../lib/content';
-import { heroH1, telHref } from '../../lib/content';
+import { heroH1, telHref, pageHref } from '../../lib/content';
 import { deriveAreas, areaSlugByTitle, deriveFaqs, deriveBlogTeasers, firstReview } from '../../lib/variant-utils';
 import { VideoEmbed } from '../shared/VideoEmbed';
 import { LongformSection } from '../shared/LongformSection';
@@ -201,7 +201,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
           </header>
           <div className="classic-services-grid">
             {bundle.services.map((s, i) => (
-              <a key={s.slug} href={s.slug} className="classic-service-tile">
+              <a key={s.slug} href={pageHref(s)} className="classic-service-tile">
                 <div className="classic-service-num num">{String(i + 1).padStart(2, '0')}</div>
                 <h3 className="classic-service-title">{s.title}</h3>
                 <p className="classic-service-blurb">{s.meta_description}</p>
@@ -275,7 +275,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             <ul className="classic-learn-list">
               {bundle.info_pages.slice(0, 6).map((p) => (
                 <li key={p.slug}>
-                  <a href={p.slug}>
+                  <a href={pageHref(p)}>
                     <span className="classic-learn-title">{p.title}</span>
                     <span className="classic-learn-arrow">&rarr;</span>
                     <span className="classic-learn-blurb">{p.meta_description}</span>
@@ -294,7 +294,7 @@ export function ClassicHome({ bundle, phone, siteId, siteSlug, pageUrl = 'https:
             <ul className="classic-learn-list">
               {blogTeasers.map((p) => (
                 <li key={p.slug}>
-                  <a href={p.slug}>
+                  <a href={pageHref(p)}>
                     <span className="classic-learn-title">{p.title}</span>
                     <span className="classic-learn-arrow">&rarr;</span>
                     <span className="classic-learn-blurb">{p.meta_description}</span>
