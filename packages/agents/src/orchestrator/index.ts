@@ -6,3 +6,6 @@
 export * from './context';
 export * from './supervisor';
 export * from './disposition';
+export * from './prompt';
+export * from './tools';
+export * from './brain';

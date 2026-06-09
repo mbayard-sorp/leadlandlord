@@ -8,6 +8,7 @@
  */
 import { getDb, agentBudgets, agentSchedules, eq } from '@leadlandlord/db';
 import { readFleetHealth, type FleetHealthRow } from './context';
+import { raiseQuestion } from './tools';
 
 export const CONSECUTIVE_FAILURE_DISABLE_THRESHOLD = 3;
 
@@ -90,6 +91,27 @@ export async function runSupervisionPass(logger?: SupervisionLogger): Promise<Su
         .where(eq(agentSchedules.targetAgent, a.agent));
     } catch {
       /* agent_schedules may not exist yet — the disable above is what matters */
+    }
+
+    // Phase 6 hook (deferred in Phase 3): open a question thread + email Mike so
+    // the auto-disable is visible and he can decide whether to re-enable. The
+    // disable itself is the audited action row inside that thread. Best-effort:
+    // a failure here (e.g. orchestrator_messages unmigrated) must not undo the
+    // disable, so swallow and log.
+    try {
+      await raiseQuestion({
+        title: `Auto-disabled ${a.agent}`,
+        question: `I auto-disabled ${a.agent} after repeated failures. ${a.reason}. Want me to re-enable it, or is this expected while you investigate?`,
+        actions: [
+          {
+            summary: a.reason,
+            metadata: { tool: 'disable_agent', agent: a.agent, source: 'supervision', after: { enabled: false } },
+          },
+        ],
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger?.warn({ err: msg, agent: a.agent }, 'orchestrator: raiseQuestion failed after auto-disable');
     }
   }
   return { actions };
