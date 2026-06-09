@@ -842,6 +842,60 @@ export const agentSchedules = pgTable('agent_schedules', {
 });
 
 /**
+ * Orchestrator chat threads (orchestrator Phase 6). One row per conversation
+ * between Mike and the fleet orchestrator — either Mike-initiated (`origin='chat'`)
+ * or orchestrator-initiated (`origin='orchestrator_question'`, raised by the brain
+ * or the supervisory pass when it needs a human decision). IDs are randomUUID.
+ */
+export const orchestratorThreads = pgTable('orchestrator_threads', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  status: text('status').notNull().default('open'), // 'open' | 'closed'
+  origin: text('origin').notNull(), // 'chat' | 'orchestrator_question'
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Messages within an orchestrator thread (orchestrator Phase 6). Every write
+ * the orchestrator performs also lands here as a `kind='action'` row (the audit
+ * trail, written BEFORE the mutation). Proactive questions are `kind='question'`
+ * with `requires_human_response=true`; answering in chat flips `resolved`.
+ */
+export const orchestratorMessages = pgTable(
+  'orchestrator_messages',
+  {
+    id: text('id').primaryKey(),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => orchestratorThreads.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // 'human' | 'orchestrator' | 'system'
+    kind: text('kind').notNull().default('message'), // 'message' | 'question' | 'action'
+    body: text('body').notNull(),
+    /** Tool calls, the diff an action applied, the agent affected, etc. */
+    metadata: jsonb('metadata'),
+    requiresHumanResponse: boolean('requires_human_response').notNull().default(false),
+    resolved: boolean('resolved').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    threadCreatedIdx: index('orchestrator_messages_thread_created_idx').on(
+      t.threadId,
+      t.createdAt,
+    ),
+    // The digest counts open questions: requires_human_response AND NOT resolved.
+    openQuestionIdx: index('orchestrator_messages_open_question_idx')
+      .on(t.createdAt)
+      .where(sql`${t.requiresHumanResponse} = true AND ${t.resolved} = false`),
+  }),
+);
+
+export type OrchestratorThread = typeof orchestratorThreads.$inferSelect;
+export type NewOrchestratorThread = typeof orchestratorThreads.$inferInsert;
+export type OrchestratorMessage = typeof orchestratorMessages.$inferSelect;
+export type NewOrchestratorMessage = typeof orchestratorMessages.$inferInsert;
+
+/**
  * Single-row settings table for portfolio-wide controls. Keyed by a constant
  * `id = 'global'` so the operator dashboard can flip the kill switch without
  * needing a separate row per tenant. New flags get added as columns; the

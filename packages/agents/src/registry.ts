@@ -75,6 +75,12 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'network-metrics-aggregator': () => new NetworkMetricsAggregator(),
   'content-data-auditor': () => new ContentDataAuditor(),
   'fleet-digest': () => new FleetDigest(),
+  // NOTE: the `orchestrator` agent (packages/agents/src/orchestrator/brain.ts)
+  // is intentionally NOT registered here. The registry feeds the cron worker
+  // (/api/cron/agent/[name]); registering it would make the chat brain firable
+  // via an arbitrary HTTP POST. It is instead instantiated directly by the
+  // operator chat server action in response to a human message. It still has an
+  // agent_budgets row ($5 cap) via FLEET_DISPOSITION + the seed script. See ADR 0019.
 };
 
 export function getAgent(name: string): AnyAgent {

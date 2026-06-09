@@ -341,6 +341,22 @@ export async function gatherFleetDigestData(
     'sitesAwaitingGoLive',
   );
 
+  // Open orchestrator questions awaiting Mike (Phase 6). Defensive: the table
+  // may not exist yet (0039 unapplied) -> safe() falls back to 0.
+  const openQuestions = await safe<number>(
+    async () => {
+      const r = rowsOf<{ c: number }>(
+        await db.execute(
+          sql`SELECT COUNT(*)::int AS c FROM orchestrator_messages WHERE requires_human_response = true AND resolved = false`,
+        ),
+      );
+      return r[0]?.c ?? 0;
+    },
+    0,
+    ctx,
+    'openQuestions',
+  );
+
   return {
     date,
     windowHours,
@@ -357,7 +373,7 @@ export async function gatherFleetDigestData(
     autoDisabled: health.filter((h) => !h.enabled && h.consecutiveFailures >= 3).map((h) => h.agent),
     pendingNiches,
     sitesAwaitingGoLive,
-    openQuestions: 0, // Phase 6 (orchestrator_messages) — none yet.
+    openQuestions,
   };
 }
 

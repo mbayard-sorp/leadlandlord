@@ -17,6 +17,7 @@ export const navLinks: ReadonlyArray<NavLinkItem> = [
   { href: '/operator/email-sends', label: 'Email Sends' },
   { href: '/operator/maintenance', label: 'Maintenance' },
   { href: '/operator/control', label: 'Control' },
+  { href: '/operator/orchestrator', label: 'Orchestrator' },
   { href: '/operator/pipeline', label: 'Pipeline', disabled: true },
   { href: '/operator/tenants', label: 'Tenants', disabled: true },
   { href: '/operator/niches', label: 'Niches' },
