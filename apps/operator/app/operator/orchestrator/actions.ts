@@ -12,6 +12,8 @@ import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import {
   getDb,
+  getSystemState,
+  setGlobalDailyCostCap,
   orchestratorThreads,
   orchestratorMessages,
   agentBudgets,
@@ -104,6 +106,45 @@ export async function setOrchestratorEnabled(
       'setOrchestratorEnabled failed',
     );
     return { ok: false, enabled: !enabled, message: 'could not update the orchestrator switch' };
+  }
+}
+
+/**
+ * The portfolio-wide daily spend ceiling (system_state.globalDailyCostCapUsd).
+ * This caps ALL agents combined, not just the orchestrator — enforced in
+ * BaseAgent before each run. 0 disables the ceiling.
+ */
+export async function getGlobalBudget(): Promise<{ capUsd: number; spentTodayUsd: number }> {
+  if (!(await auth())) return { capUsd: 0, spentTodayUsd: 0 };
+  try {
+    const s = await getSystemState();
+    return {
+      capUsd: Number(s.globalDailyCostCapUsd),
+      spentTodayUsd: Number(s.globalSpentTodayUsd),
+    };
+  } catch {
+    return { capUsd: 0, spentTodayUsd: 0 };
+  }
+}
+
+export async function setGlobalCap(
+  usd: number,
+): Promise<{ ok: boolean; capUsd: number; message?: string }> {
+  if (!(await auth())) return { ok: false, capUsd: 0, message: 'unauthorized' };
+  if (!Number.isFinite(usd) || usd < 0) {
+    return { ok: false, capUsd: 0, message: 'cap must be a number >= 0 (0 disables the ceiling)' };
+  }
+  const cap = Math.min(100000, Math.round(usd * 100) / 100);
+  try {
+    await setGlobalDailyCostCap(cap);
+    revalidatePath('/operator/orchestrator');
+    return { ok: true, capUsd: cap };
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'setGlobalCap failed',
+    );
+    return { ok: false, capUsd: 0, message: 'could not update the global cap' };
   }
 }
 
