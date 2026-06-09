@@ -49,6 +49,9 @@ const SEED: SeedRow[] = [
   { schedulerName: 'network-metrics-aggregator', targetAgent: 'network-metrics-aggregator', cadenceKind: 'cron', cronExpr: '0 4 * * *' },
   { schedulerName: 'geo-aeo-auditor', targetAgent: 'geo-aeo-auditor', cadenceKind: 'cron', cronExpr: '0 6 * * 1' },
   { schedulerName: 'local-seo-optimizer', targetAgent: 'local-seo-optimizer', cadenceKind: 'cron', cronExpr: '0 6 * * 2' },
+  // fleet-digest (orchestrator Phase 5): 0 13 * * * UTC ~= 6am MST. Avoids the
+  // 14:00 molly-digest slot. Not in vercel.json — DB-driven from the start.
+  { schedulerName: 'fleet-digest', targetAgent: 'fleet-digest', cadenceKind: 'cron', cronExpr: '0 13 * * *' },
 
   // Registered scheduler with no current timer — event/manual today. Parity.
   { schedulerName: 'wave-progression', targetAgent: 'wave-launcher', cadenceKind: 'manual' },
