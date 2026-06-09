@@ -6,7 +6,7 @@ import {
   themeDocId,
   type PageKind,
 } from '@leadlandlord/integrations/sanity';
-import { keywordClusterDocId } from '@leadlandlord/sanity-schema';
+import { keywordClusterDocId } from '@leadlandlord/sanity-schema/ids';
 
 export interface WriteSiteToSanityOptions {
   /** Override Sanity dataset (defaults to env). Used by dry-run for `development`. */
@@ -188,6 +188,7 @@ export async function writeSiteToSanity(
     ...bundle.service_areas.map((p, i) => ({ kind: 'service_area' as PageKind, index: i, page: p })),
     ...bundle.blog_posts.map((p, i) => ({ kind: 'blog' as PageKind, index: i, page: p })),
     ...bundle.info_pages.map((p, i) => ({ kind: 'info' as PageKind, index: i, page: p })),
+    ...bundle.faq_pages.map((p, i) => ({ kind: 'faq' as PageKind, index: i, page: p })),
   ];
 
   const siteRef = siteDocId(siteId);
@@ -314,6 +315,11 @@ export async function writeSiteToSanity(
       _ref: pageDocId(siteId, 'info', i),
       _type: 'reference',
     })),
+    faqPages: bundle.faq_pages.map((_, i) => ({
+      _key: `f${i}`,
+      _ref: pageDocId(siteId, 'faq', i),
+      _type: 'reference',
+    })),
     generatedAt: bundle.generated_at,
   });
 
@@ -346,6 +352,60 @@ export async function patchLongformInSanity(
     .set({ longformBody, longformGeneratedAt: generatedAt })
     .commit({ visibility: 'sync' });
   return { siteDocId: siteRef, transactionId: res._rev ?? '' };
+}
+
+/**
+ * Patch ONLY the standalone FAQ pages onto an existing site. Used by the
+ * `backfill-faq` script to retrofit FAQ pages onto sites built before the FAQ
+ * kind shipped, without rebuilding them. Strictly additive to the site doc:
+ * writes the faq page docs (deterministic ids `page-${siteId}-faq-N`) and sets
+ * ONLY the site doc's `faqPages` reference array — every other field and page
+ * reference is left untouched (a `patch().set`, not a `createOrReplace`).
+ *
+ * The site doc MUST already exist (caller skips Postgres rows with no Sanity
+ * doc). Re-running with fewer pages leaves higher-index faq docs orphaned but
+ * unreferenced — same semantics as the full writeSiteToSanity.
+ */
+export async function patchFaqPagesInSanity(
+  siteId: string,
+  faqPages: Page[],
+  opts: WriteSiteToSanityOptions = {},
+): Promise<{ siteDocId: string; transactionId: string; pagesWritten: number }> {
+  const client = createWriteClient(opts.dataset ? { dataset: opts.dataset } : {});
+  const siteRef = siteDocId(siteId);
+  const dateModified = opts.dateModified ?? new Date().toISOString();
+  const tx = client.transaction();
+
+  faqPages.forEach((p, i) => {
+    tx.createOrReplace({
+      _id: pageDocId(siteId, 'faq', i),
+      _type: 'page',
+      site: { _ref: siteRef, _type: 'reference' },
+      kind: 'faq',
+      slug: p.slug,
+      title: p.title,
+      metaDescription: p.meta_description,
+      mdx: p.mdx,
+      dateModified: p.date_modified ?? dateModified,
+      faqs: [],
+      targetedKeywords: [],
+    });
+  });
+
+  // Set ONLY faqPages on the existing site doc — leave home/services/blog/etc.
+  // references and all other fields exactly as they are.
+  tx.patch(siteRef, (patch) =>
+    patch.set({
+      faqPages: faqPages.map((_, i) => ({
+        _key: `f${i}`,
+        _ref: pageDocId(siteId, 'faq', i),
+        _type: 'reference',
+      })),
+    }),
+  );
+
+  const res = await tx.commit({ visibility: 'sync' });
+  return { siteDocId: siteRef, transactionId: res.transactionId, pagesWritten: faqPages.length };
 }
 
 function bundleSlug(bundle: ContentBundle): string {

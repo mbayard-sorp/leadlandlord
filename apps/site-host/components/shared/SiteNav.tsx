@@ -75,7 +75,9 @@ export function SiteNav({ bundle, variant, className, showAllPages }: Props) {
     const areaItems = bundle.service_areas.map((p) => ({ href: pageHref(p), title: p.title }));
     const guideItems = bundle.info_pages.map((p) => ({ href: pageHref(p), title: p.title }));
     const blogItems = bundle.blog_posts.map((p) => ({ href: pageHref(p), title: p.title }));
+    const faqItems = bundle.faq_pages.map((p) => ({ href: pageHref(p), title: p.title }));
     const showBlog = bundle.blog_posts.length >= 2;
+    const showFaq = bundle.faq_pages.length >= 2;
 
     return (
       // Mobile: the checkbox toggles a hamburger drawer. Desktop: CSS hides the
@@ -109,6 +111,13 @@ export function SiteNav({ bundle, variant, className, showAllPages }: Props) {
           {guideItems.length > 0 && (
             <NavMenu label="Guides" href={guideItems[0]!.href} items={guideItems} />
           )}
+          {showFaq && (
+            <NavMenu
+              label="FAQ"
+              href="/faq"
+              items={[{ href: '/faq', title: 'All questions' }, ...faqItems]}
+            />
+          )}
           {showBlog && (
             <NavMenu
               label="Blog"
@@ -126,12 +135,14 @@ export function SiteNav({ bundle, variant, className, showAllPages }: Props) {
   const firstService = bundle.services[0];
   const servicesHref = firstService ? pageHref(firstService) : '/#services';
   const showBlog = bundle.blog_posts.length >= 2;
+  const showFaq = bundle.faq_pages.length >= 2;
 
   return (
     <nav className={navClass} aria-label="Primary">
       <a href="/">Home</a>
       <a href={servicesHref}>Services</a>
       <a href="/#where">Service Areas</a>
+      {showFaq && <a href="/faq">FAQ</a>}
       {showBlog && <a href="/blog">Blog</a>}
       <a href="/about">About</a>
       <a href="/contact">Contact</a>

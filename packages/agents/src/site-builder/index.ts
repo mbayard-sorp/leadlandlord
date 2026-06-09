@@ -749,4 +749,4 @@ function countPages(bundle: { services: unknown[]; service_areas: unknown[]; blo
 }
 
 export { SiteBuilderInput, SiteBuilderOutput } from './schema';
-export { writeSiteToSanity } from './persist-sanity';
+export { writeSiteToSanity, patchFaqPagesInSanity } from './persist-sanity';

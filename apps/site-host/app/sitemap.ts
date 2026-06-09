@@ -101,6 +101,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...(bundle.blog_posts.length >= 2
       ? [{ url: `${base}/blog`, lastModified: bundleModified, changeFrequency: 'weekly' as const, priority: 0.6 }]
       : []),
+    // /faq hub under the same thin-content gate as the nav + index noindex.
+    ...(bundle.faq_pages.length >= 2
+      ? [{ url: `${base}/faq`, lastModified: bundleModified, changeFrequency: 'monthly' as const, priority: 0.6 }]
+      : []),
   ];
 
   const services: MetadataRoute.Sitemap = bundle.services.map((p) => ({
@@ -131,5 +135,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...fixed, ...services, ...serviceAreas, ...blog, ...infoPages];
+  const faqPages: MetadataRoute.Sitemap = bundle.faq_pages.map((p) => ({
+    url: `${base}${pageHref(p)}`,
+    lastModified: pageModified(p),
+    changeFrequency: 'monthly' as const,
+    priority: 0.5,
+  }));
+
+  return [...fixed, ...services, ...serviceAreas, ...blog, ...infoPages, ...faqPages];
 }

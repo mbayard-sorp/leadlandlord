@@ -80,6 +80,8 @@ export const BundleSchema = z.object({
   contact: PageSchema,
   blog_posts: z.array(PageSchema),
   info_pages: z.array(PageSchema).default([]),
+  /** Standalone one-question-per-page FAQ pages at /faq/[slug] (see shared faq_pages). */
+  faq_pages: z.array(PageSchema).default([]),
   generated_at: z.string(),
   // Trust-signal fields — all optional with safe defaults (ADR 0001 + 0003)
   reviews: z.array(ReviewSchema).default([]),
@@ -172,6 +174,10 @@ export function pageHref(page: Page): string {
   if (kind === 'info' || kind === 'page') {
     const s = bareSlug(page.slug, 'pages');
     return s ? `/pages/${s}` : '/pages';
+  }
+  if (kind === 'faq') {
+    const s = bareSlug(page.slug, 'faq');
+    return s ? `/faq/${s}` : '/faq';
   }
   // Fallback: strip any surrounding slashes and return flat
   const s = bareSlug(page.slug);

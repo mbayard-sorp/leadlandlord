@@ -319,6 +319,14 @@ export const site = defineType({
       of: [{ type: 'reference', to: [{ type: 'page' }] }],
     }),
     defineField({
+      name: 'faqPages',
+      title: 'FAQ Pages',
+      type: 'array',
+      of: [{ type: 'reference', to: [{ type: 'page' }] }],
+      description:
+        'Standalone one-question-per-page FAQ pages at /faq/[slug]. Linked from the /faq hub in the visible nav. Set by Content Engine.',
+    }),
+    defineField({
       name: 'generatedAt',
       title: 'Generated At',
       type: 'datetime',

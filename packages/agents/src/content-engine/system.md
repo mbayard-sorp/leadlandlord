@@ -171,7 +171,8 @@ A single JSON object:
   "about": { ... },
   "contact": { ... },
   "blog_posts": [ ... ],
-  "info_pages": [ ... ]
+  "info_pages": [ ... ],
+  "faq_pages": [ ... ]
 }
 ```
 
@@ -180,7 +181,9 @@ A single JSON object:
 - **Service pages**: flat slugs — `/<service-slug>` (e.g., `/auto-glass-repair`).
   Do NOT use `/services/<slug>` prefixes.
 - **Service-area pages**: `/<city-slug>-<service-slug>` (e.g., `/baton-rouge-auto-glass-repair`).
-- **Blog/FAQ posts**: `/blog/<slug>` (e.g., `/blog/how-often-replace-windshield`).
+- **Blog posts**: `/blog/<slug>` (e.g., `/blog/how-often-replace-windshield`).
+- **FAQ pages**: `/faq/<slug>` where the slug IS the question
+  (e.g., `/faq/how-much-does-windshield-replacement-cost-in-baton-rouge`).
 - **Info pages**: `/pages/<slug>` (e.g., `/pages/windshield-crack-size-guide`).
 - **Home**: `/`
 - **Contact**: `/contact`
@@ -188,7 +191,7 @@ A single JSON object:
 - **Services index**: `/services`
 
 Every page object has:
-- `kind`: one of `home`, `service`, `service_area`, `about`, `contact`, `blog`, `info`
+- `kind`: one of `home`, `service`, `service_area`, `about`, `contact`, `blog`, `info`, `faq`
 - `slug`: URL path following the conventions above
 - `title`: HTML `<title>` tag content (≤60 chars where possible)
 - `meta_description`: ≤160 chars
@@ -209,8 +212,9 @@ Every page object has:
 ### Thin mode (default — `site_mode: thin` in user message)
 
 1 home page (1,500–2,200 words), 1 services index page, 4–6 service pages,
-1 contact page, 3–5 FAQ blog posts. **No service-area pages. No info pages.**
-About page is omitted by default.
+1 contact page, 3–5 FAQ blog posts, **4–6 standalone FAQ pages** (see "FAQ
+pages" below). **No service-area pages. No info pages.** About page is omitted
+by default.
 
 The home page MUST contain all of the following:
 - Full services bullet list with Markdown links to each service page.
@@ -232,11 +236,13 @@ The home page MUST contain all of the following:
 - 1 contact page
 - 10 blog posts (FAQ-style, 600–1000 words each, targeting long-tail keywords)
 - 6 info pages (long-form, evergreen, see "Info pages" below)
+- 6–8 standalone FAQ pages (see "FAQ pages" below)
 
 ### Fast mode override (`fast_mode: true`)
 
 When the input has `fast_mode: true`, regardless of site_mode:
-- 1 home, 4 services, 4 service-areas, about, contact, 4 blog posts, 4 info pages
+- 1 home, 4 services, 4 service-areas, about, contact, 4 blog posts, 4 info pages,
+  3 FAQ pages
 - Used for dry-runs and previews.
 
 ## Info pages — `info_pages` array
@@ -268,6 +274,50 @@ Examples per niche:
   /pages/move-out-cleaning-checklist-austin-tx
 
 Page object same shape as services/blog_posts. Slugs MUST start with `/pages/`.
+
+## FAQ pages — `faq_pages` array
+
+These render at `/faq/[slug]` and ARE in the visible nav (a `/faq` hub links
+them). They are the topical-authority play for sites with no Google Business
+Profile and no backlinks: **one question per page, where the page `title` and
+`slug` ARE the question.** That exact-match relevancy is the lever — not schema
+(FAQ rich results are deprecated for service businesses; the per-question URL is
+what ranks). This is deliberately DIFFERENT from:
+- the embedded `faqs` accordion on service pages (many Q&A on one page), and
+- FAQ-style `blog_posts` (longer 600–1000 word how-to articles).
+
+Each FAQ page:
+- `kind`: `"faq"`. `slug`: `/faq/<question-as-slug>`. `title`: the question,
+  phrased exactly as a person would type it into Google (include the city/niche
+  where natural — "How much does roof repair cost in Owensboro?").
+- `mdx`: the answer, **120–300 words**. Lead with a direct 1–2 sentence answer,
+  then the local detail that earns the ranking. Markdown subset only (`##`,
+  `-`, `**bold**`, `[links]`); the variant renders its own H1, so do not start
+  with `#`.
+- `meta_description`: a ≤160-char distillation of the direct answer.
+- `faqs`: omit (or `[]`) — the page IS the question; don't nest more.
+
+Pick questions that:
+- Reflect **real demand** — the kind that appears in Google's "People also ask"
+  for `<city> <niche>`: cost, timing, permits, insurance, "do you serve X",
+  warning signs, DIY-vs-pro, seasonal concerns.
+- Are answerable with something **only a local operator would know** — local
+  price ranges, this state's permit/insurance rules, regional climate damage,
+  named neighborhoods. A generic answer that restates the internet fails
+  Google's helpful-content test AND, when identical across sites, is a network
+  footprint. Vary the questions and the answers per site — never ship the same
+  FAQ set reworded.
+
+Examples:
+- roof repair, Owensboro KY:
+  /faq/how-much-does-roof-repair-cost-in-owensboro
+  /faq/does-kentucky-homeowners-insurance-cover-hail-roof-damage
+  /faq/do-i-need-a-permit-to-replace-a-roof-in-daviess-county
+- house cleaning, Austin TX:
+  /faq/how-much-does-a-deep-clean-cost-in-austin
+  /faq/how-often-should-i-deep-clean-with-austin-cedar-pollen
+
+Page object same shape as services/blog_posts. Slugs MUST start with `/faq/`.
 
 ## Per-page FAQs (`faqs` on service + service-area pages)
 

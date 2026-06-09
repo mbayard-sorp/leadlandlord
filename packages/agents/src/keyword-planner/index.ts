@@ -6,14 +6,14 @@ import {
   getKeywordCandidates,
   type KeywordCandidate,
 } from '@leadlandlord/integrations/dataforseo';
+import { createWriteClient } from '@leadlandlord/sanity-schema/client';
 import {
-  createWriteClient,
   keywordClusterDocId,
   siteDocId,
   type ClusterIntent,
   type KeywordRole,
   type KeywordSource,
-} from '@leadlandlord/sanity-schema';
+} from '@leadlandlord/sanity-schema/ids';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 

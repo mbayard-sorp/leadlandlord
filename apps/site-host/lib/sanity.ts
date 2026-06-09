@@ -48,6 +48,7 @@ const SITE_PROJECTION = `{
   "serviceAreas": serviceAreas[0...50]->${PAGE_PROJECTION},
   "blogPosts": blogPosts[0...50]->${PAGE_PROJECTION},
   "infoPages": infoPages[0...50]->${PAGE_PROJECTION},
+  "faqPages": faqPages[0...50]->${PAGE_PROJECTION},
   "reviews": reviews[0...100]->{ author, rating, text, source, "date": date, verified },
   aggregateRating{ ratingValue, reviewCount, bestRating },
   licenseNumber, insuranceCarrier, yearsInBusiness, responseTimePromise,
@@ -110,6 +111,7 @@ export interface SanitySite {
   serviceAreas?: SanitySitePage[] | null;
   blogPosts?: SanitySitePage[] | null;
   infoPages?: SanitySitePage[] | null;
+  faqPages?: SanitySitePage[] | null;
   // Trust-signal fields (all optional — ADR 0001)
   reviews?: Array<{
     author: string;

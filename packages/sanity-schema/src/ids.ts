@@ -4,7 +4,7 @@
  * break.
  */
 
-export type PageKind = 'home' | 'about' | 'contact' | 'service' | 'service_area' | 'blog' | 'info';
+export type PageKind = 'home' | 'about' | 'contact' | 'service' | 'service_area' | 'blog' | 'info' | 'faq';
 
 export type ThemeName = 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel';
 

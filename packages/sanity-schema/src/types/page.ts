@@ -25,6 +25,7 @@ export const page = defineType({
           { title: 'Service Area', value: 'service_area' },
           { title: 'Blog', value: 'blog' },
           { title: 'Info', value: 'info' },
+          { title: 'FAQ', value: 'faq' },
         ],
       },
       validation: (r) => r.required(),

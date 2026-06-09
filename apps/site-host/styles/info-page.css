@@ -282,3 +282,17 @@
   line-height: 1.6;
   color: var(--ink);
 }
+
+/* Standalone FAQ page: "all questions" backlink under the answer body. */
+.info-page-backlink {
+  margin: 28px 0 0;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+}
+.info-page-backlink a {
+  color: var(--accent, var(--ink));
+  text-decoration: none;
+}
+.info-page-backlink a:hover {
+  text-decoration: underline;
+}
