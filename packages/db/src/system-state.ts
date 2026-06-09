@@ -99,3 +99,19 @@ export async function setOperatorConfig(args: SetOperatorConfigArgs): Promise<Sy
   if (!row) throw new Error('system_state row missing after ensureRow');
   return row;
 }
+
+/**
+ * Set the portfolio-wide daily spend ceiling (orchestrator Phase 2/4). A value
+ * of 0 disables the global cap. Enforced in BaseAgent.assertBudgetAvailable.
+ */
+export async function setGlobalDailyCostCap(usd: number): Promise<SystemState> {
+  await ensureRow();
+  const db = getDb();
+  const [row] = await db
+    .update(systemState)
+    .set({ globalDailyCostCapUsd: usd.toFixed(2), updatedAt: new Date() })
+    .where(eq(systemState.id, GLOBAL_ID))
+    .returning();
+  if (!row) throw new Error('system_state row missing after ensureRow');
+  return row;
+}
