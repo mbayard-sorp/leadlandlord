@@ -5,6 +5,7 @@ import {
   operatorMinuteBucket,
   isRunawayAgent,
   computeMargin,
+  shouldAutoApproveNiche,
 } from './index';
 
 // ────────────────────────────────────────────────────────────
@@ -109,6 +110,21 @@ describe('computeMargin', () => {
   });
   it('returns positive fractional for healthy month', () => {
     expect(computeMargin(1000, 200)).toBeCloseTo(0.8, 5);
+  });
+});
+
+describe('shouldAutoApproveNiche (human-only gate, orchestrator §0.1)', () => {
+  it('autonomous + flag → true (the only path that approves)', () => {
+    expect(shouldAutoApproveNiche('autonomous', true)).toBe(true);
+  });
+  it('autonomous without the flag → false', () => {
+    expect(shouldAutoApproveNiche('autonomous', false)).toBe(false);
+  });
+  it('supervised never approves, even with the flag on', () => {
+    expect(shouldAutoApproveNiche('supervised', true)).toBe(false);
+  });
+  it('manual never approves, even with the flag on', () => {
+    expect(shouldAutoApproveNiche('manual', true)).toBe(false);
   });
 });
 
@@ -394,6 +410,27 @@ describe('Operator decision tree', () => {
     expect(out.modeUsed).toBe('manual');
     // Should fall through to no-op since manual mode doesn't dispatch.
     expect(out.decisions[0]?.type).toBe('no_op');
+    expect(MOCK.nicheUpdates).toHaveLength(0);
+  });
+
+  it('supervised mode never auto-approves niches even with the flag + pending niches', async () => {
+    MOCK.systemState.operatorEnabled = true;
+    MOCK.systemState.operatorMode = 'supervised';
+    MOCK.systemState.autoApproveNiches = true; // Flag ON — must STILL not approve.
+    MOCK.niches = [
+      {
+        id: 'n1',
+        niche: 'tree removal',
+        city: 'Tucson',
+        state: 'AZ',
+        score: 95,
+        decision: 'pending',
+      },
+    ];
+    const out = await runOperator();
+    expect(out.modeUsed).toBe('supervised');
+    // No niche.approved event, no niche row update — no site-build trigger.
+    expect(MOCK.events.filter((e) => e.type === 'niche.approved')).toHaveLength(0);
     expect(MOCK.nicheUpdates).toHaveLength(0);
   });
 

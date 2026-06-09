@@ -65,3 +65,37 @@ export async function setKillSwitch(args: SetKillSwitchArgs): Promise<SystemStat
   if (!row) throw new Error('system_state row missing after ensureRow');
   return row;
 }
+
+export interface SetOperatorConfigArgs {
+  operatorEnabled?: boolean;
+  operatorMode?: 'manual' | 'supervised' | 'autonomous';
+  autoApproveNiches?: boolean;
+  autoApproveDomainBudgetUsd?: number | string;
+}
+
+/**
+ * Idempotently set the autonomy-gate fields on system_state. Only the fields
+ * provided are written; omitted fields are left untouched. This is the single
+ * supported writer for the human-only gates that keep the agent fleet from
+ * approving niches / creating sites on its own (orchestrator plan §0.1):
+ * leaving operatorMode at 'supervised' + autoApproveNiches=false means no
+ * agent can auto-approve a niche, regardless of operatorEnabled.
+ */
+export async function setOperatorConfig(args: SetOperatorConfigArgs): Promise<SystemState> {
+  await ensureRow();
+  const db = getDb();
+  const patch: Partial<typeof systemState.$inferInsert> = { updatedAt: new Date() };
+  if (args.operatorEnabled !== undefined) patch.operatorEnabled = args.operatorEnabled;
+  if (args.operatorMode !== undefined) patch.operatorMode = args.operatorMode;
+  if (args.autoApproveNiches !== undefined) patch.autoApproveNiches = args.autoApproveNiches;
+  if (args.autoApproveDomainBudgetUsd !== undefined) {
+    patch.autoApproveDomainBudgetUsd = String(args.autoApproveDomainBudgetUsd);
+  }
+  const [row] = await db
+    .update(systemState)
+    .set(patch)
+    .where(eq(systemState.id, GLOBAL_ID))
+    .returning();
+  if (!row) throw new Error('system_state row missing after ensureRow');
+  return row;
+}
