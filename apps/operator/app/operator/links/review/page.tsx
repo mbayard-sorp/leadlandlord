@@ -41,8 +41,8 @@ export default async function ReviewSessionPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-4">
-      <header className="flex items-center justify-between">
-        <div>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-semibold">Prospect review</h1>
           <p className="text-sm text-slate-400 mt-1">
             One at a time — approve, snooze, or reject each Molly pick.
@@ -50,7 +50,7 @@ export default async function ReviewSessionPage() {
         </div>
         <Link
           href="/operator/links"
-          className="text-xs px-3 py-1.5 rounded border border-slate-700 text-slate-300 hover:border-slate-500"
+          className="shrink-0 text-xs px-3 py-1.5 rounded border border-slate-700 text-slate-300 hover:border-slate-500 whitespace-nowrap"
         >
           ← Back to hub
         </Link>
