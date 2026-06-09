@@ -79,6 +79,8 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'content-data-auditor': [], // Owned-asset content audit.
   // Internal status email to the operator (not third-party outreach).
   'fleet-digest': [['RESEND_API_KEY'], ['FLEET_DIGEST_TO', 'OPERATOR_EMAIL']],
+  // FIRECRAWL_API_KEY is optional: NAP verification is skipped (not errored) when absent.
+  'citation-runner': [],
 };
 
 /**
@@ -86,7 +88,7 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
  * are NOT in the registry, so the audit adds them explicitly as
  * `not_implemented` for visibility. See orchestrator plan §1.1.
  */
-export const DEFERRED_STUBS: readonly string[] = ['backlink-copycat', 'citation-runner'];
+export const DEFERRED_STUBS: readonly string[] = ['backlink-copycat'];
 
 const FAILURE_STATUSES = new Set(['failed', 'budget_exceeded', 'not_implemented']);
 const TERMINAL_STATUSES = new Set([

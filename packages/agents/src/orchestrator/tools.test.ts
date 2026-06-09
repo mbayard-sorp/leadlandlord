@@ -25,6 +25,7 @@ const EXPECTED_READ = [
   'get_budget_status',
   'get_queue_state',
   'get_schedules',
+  'get_link_building_status',
 ];
 const EXPECTED_WRITE = [
   'enable_agent',
@@ -106,6 +107,7 @@ describe('isProtectedEventType (requeue guard)', () => {
       'site.activated',
       'sites.created',
       'domain.approval.granted',
+      'prospect.approved',
     ]) {
       expect(isProtectedEventType(t)).toBe(true);
     }

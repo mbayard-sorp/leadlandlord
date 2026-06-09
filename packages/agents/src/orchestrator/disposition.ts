@@ -76,13 +76,13 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   'closer-agent': OFF('until trials exist'),
   'billing-dunning': OFF('until paying tenants; Stripe'),
   'churn-recovery': OFF('until paying tenants'),
-  'molly-scorer': OFF('backlink workstream paused'),
+  'molly-scorer': ON(1), // pilot revival 2026-06
   'molly-digest': OFF('superseded by fleet-digest'),
-  'molly-inbox': OFF('backlink workstream paused'),
-  'molly-copywriter': OFF('backlink workstream paused'),
+  'molly-inbox': ON(2), // pilot revival 2026-06
+  'molly-copywriter': ON(5), // pilot revival 2026-06
   'wave-launcher': OFF('skips backlinks; revisit later'),
   'backlink-copycat': OFF('deferred — not built'),
-  'citation-runner': OFF('deferred — not built'),
+  'citation-runner': ON(1), // citations v1
 };
 
 export interface DispositionSummary {

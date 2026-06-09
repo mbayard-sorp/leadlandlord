@@ -22,6 +22,7 @@ import { scheduleLocalSeoOptimizer } from './local-seo-optimizer';
 import { scheduleNetworkMetricsAggregator } from './network-metrics-aggregator';
 import { scheduleContentDataAuditor } from './content-data-auditor';
 import { scheduleFleetDigest } from './fleet-digest';
+import { scheduleCitationRunner } from './citation-runner';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -52,6 +53,7 @@ export const schedulers: Record<string, Scheduler> = {
   'network-metrics-aggregator': scheduleNetworkMetricsAggregator,
   'content-data-auditor': scheduleContentDataAuditor,
   'fleet-digest': scheduleFleetDigest,
+  'citation-runner': scheduleCitationRunner,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';
