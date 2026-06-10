@@ -26,6 +26,18 @@ export async function approveDraft(id: string): Promise<ActionResult> {
       metadata: { ...md, draftApprovedAt: new Date().toISOString() },
     })
     .where(eq(backlinks.id, id));
+
+  await db.insert(agentEvents).values({
+    agent: 'operator-ui',
+    type: 'guest_post.deliver',
+    targetAgent: 'molly',
+    payload: {
+      mode: 'deliver',
+      siteId: row.siteId,
+      backlinkId: row.id,
+    },
+  });
+
   revalidatePath('/operator/links');
   revalidatePath(`/operator/links/${id}/draft`);
   return { ok: true };

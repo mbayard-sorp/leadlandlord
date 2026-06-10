@@ -37,8 +37,7 @@ import {
   sites,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
-import { scrapeReceptivity, scrapeContact } from '@leadlandlord/integrations/firecrawl';
-import { findEditorByDomain } from '@leadlandlord/integrations/apollo';
+import { scrapeReceptivity } from '@leadlandlord/integrations/firecrawl';
 import { BaseAgent, type AgentContext } from '../base';
 import { log as rootLog } from '@leadlandlord/shared/log';
 
@@ -182,7 +181,9 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
     // might move them into range. Don't delete.
     const eligible = rows.filter((r) => {
       const rank = r.domainRank;
-      if (rank == null) return false; // no DA data — skip
+      // null DA: pass through — we don't have data to filter on;
+      // Haiku prompt will note "DA unknown, judge on relevance/receptivity".
+      if (rank == null) return true;
       return rank >= DA_MIN && rank <= DA_MAX;
     });
     const droppedByDaFilter = prospectsPulled - eligible.length;
@@ -279,7 +280,7 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
       `Scoring criteria (0-100):`,
       `- Niche relevance: does the blog cover topics related to ${site.niche} in or near ${site.city}? (40 points)`,
       `- Guest-post receptivity: does the site show signals of accepting guest posts? (30 points)`,
-      `- Domain authority quality: DA 35-50 is ideal, score accordingly (30 points)`,
+      `- Domain authority quality: DA 35-50 is ideal, score accordingly (30 points). When domainRank is null, DA is unknown — judge on relevance/receptivity instead and note "DA unknown" in the rationale.`,
       ...(tasteProfileSection ? ['', tasteProfileSection] : []),
       ``,
       `Return ONLY valid JSON matching this schema:`,
@@ -399,82 +400,9 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
       };
     }
 
-    // ── 6. Contact discovery for top-5 only ──────────────────────────────────
-    // Order: Apollo enrichment (findEditorByDomain), then Firecrawl scrapeContact.
-    // Only fill when contactEmail is null — never overwrite operator-entered data.
-    ctx.progress({ label: 'discovering contacts for top-5', step: 0, total: top5Ids.length });
-
-    let contactsFound = 0;
-    const eligibleMap = new Map(eligible.map((r) => [r.id, r]));
-
-    for (let i = 0; i < top5Ids.length; i++) {
-      const prospectId = top5Ids[i]!;
-      const row = eligibleMap.get(prospectId);
-      if (!row) continue;
-
-      // Never overwrite an existing contactEmail (operator may have entered one).
-      if (row.contactEmail) {
-        log.debug({ domain: row.domain }, 'contact already present — skip discovery');
-        continue;
-      }
-
-      ctx.progress({ label: `contact discovery: ${row.domain}`, step: i + 1, total: top5Ids.length });
-
-      let email: string | null = null;
-      let name: string | null = null;
-      let state: 'found' | 'missing' = 'missing';
-
-      // Path A: Apollo (editor-tier lookup — suitable for guest-post targets).
-      try {
-        const apolloResult = await findEditorByDomain(row.domain);
-        if (apolloResult?.person) {
-          const person = apolloResult.person;
-          // Apollo masks emails with 'email_not_unlocked@...' on lower plans.
-          const apolloEmail = person.email ?? null;
-          if (apolloEmail && !apolloEmail.toLowerCase().includes('email_not_unlocked')) {
-            email = apolloEmail;
-            name = person.name ?? null;
-            log.info({ domain: row.domain, source: 'apollo' }, 'contact found via Apollo');
-          }
-        }
-      } catch (err) {
-        log.warn({ domain: row.domain, err: err instanceof Error ? err.message : err }, 'Apollo contact lookup failed — falling back to Firecrawl');
-      }
-
-      // Path B: Firecrawl scrapeContact (fallback when Apollo returns nothing).
-      if (!email) {
-        try {
-          const scraped = await scrapeContact(row.domain);
-          if (scraped) {
-            email = scraped.email;
-            name = scraped.name ?? null;
-            log.info({ domain: row.domain, source: 'firecrawl', url: scraped.sourceUrl }, 'contact found via Firecrawl');
-          }
-        } catch (err) {
-          log.warn({ domain: row.domain, err: err instanceof Error ? err.message : err }, 'Firecrawl contact scrape failed');
-        }
-      }
-
-      if (email) {
-        state = 'found';
-        contactsFound++;
-      }
-
-      // Write result regardless — sets contactState='missing' for rows where
-      // we looked but found nothing, so the operator UI can show "searched, none found"
-      // rather than "not yet searched".
-      await db
-        .update(backlinkProspects)
-        .set({
-          contactEmail: email ?? undefined,
-          contactName: name ?? undefined,
-          contactState: state,
-          updatedAt: new Date(),
-        })
-        .where(eq(backlinkProspects.id, prospectId));
-    }
-
-    log.info({ top5: top5Ids.length, contactsFound }, 'contact discovery complete');
+    // Contact discovery removed from scorer (ADR-0006 revision): discovery
+    // now runs in pitch mode after operator approval. contactsFound kept at 0
+    // for schema compatibility.
 
     return {
       siteId: input.siteId,
@@ -482,7 +410,7 @@ export class MollyScorer extends BaseAgent<typeof MollyScorerInput, typeof Molly
       droppedByDaFilter,
       prospectsScoredCount,
       top5Ids,
-      contactsFound,
+      contactsFound: 0,
     };
   }
 }

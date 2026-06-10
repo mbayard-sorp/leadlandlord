@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { approveProspect, rejectProspect } from './molly-actions';
+import { approveProspect, rejectProspect } from '@/lib/links/prospect-actions';
 import type { BacklinkProspect } from '@leadlandlord/db';
 
 interface ReceptivitySignals {
@@ -33,7 +33,7 @@ function Top5Card({ prospect, siteLabel }: Top5CardProps) {
   function reject() {
     setMsg(null);
     startTransition(async () => {
-      const r = await rejectProspect(prospect.id);
+      const r = await rejectProspect(prospect.id, 'operator_rejected');
       setMsg(r.ok ? 'returned to pool' : (r.message ?? 'reject failed'));
     });
   }

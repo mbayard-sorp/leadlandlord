@@ -19,7 +19,8 @@ export interface ActionResult {
 
 /**
  * Approve a flagged_top5 prospect.
- * Guards: contactEmail must be present; footprint guard (same domain approved/pitched on another site).
+ * Guards: footprint guard (same domain approved/pitched on another site). Contact email is
+ * optional; Molly discovers contacts post-approval and the operator can fill one in later.
  */
 export async function approveProspect(
   prospectId: string,
@@ -34,11 +35,6 @@ export async function approveProspect(
   if (!row) return { ok: false, message: 'prospect not found' };
   if (row.status === 'approved' || row.status === 'pitched') {
     return { ok: false, message: `prospect is already ${row.status}` };
-  }
-
-  const email = contactEmail?.trim() || row.contactEmail?.trim();
-  if (!email) {
-    return { ok: false, message: 'contact email required before approving' };
   }
 
   // Footprint guard: reject if another site already has this domain approved/pitched.
@@ -68,9 +64,11 @@ export async function approveProspect(
       status: 'approved',
       approvedAt: now,
       updatedAt: now,
-      contactEmail: email,
     })
     .where(eq(backlinkProspects.id, prospectId));
+
+  const resolvedEmail = contactEmail?.trim() || row.contactEmail?.trim();
+  const dedupeKey = `molly:pitch:${prospectId}:${resolvedEmail || 'nocontact'}`;
 
   await db.insert(agentEvents).values({
     agent: 'operator-ui',
@@ -80,6 +78,7 @@ export async function approveProspect(
       mode: 'prospect_approved',
       siteId: row.siteId,
       prospectId,
+      dedupeKey,
     },
   });
 
@@ -210,7 +209,7 @@ export async function setProspectContact(
   const db = getDb();
   const row = (
     await db
-      .select({ id: backlinkProspects.id })
+      .select()
       .from(backlinkProspects)
       .where(eq(backlinkProspects.id, prospectId))
       .limit(1)
@@ -226,6 +225,24 @@ export async function setProspectContact(
       updatedAt: new Date(),
     })
     .where(eq(backlinkProspects.id, prospectId));
+
+  // Re-pitch path: if the prospect is approved but not yet pitched, re-emit
+  // prospect.approved with the new email embedded in the dedupeKey. The distinct
+  // key bypasses the cached 'nocontact' success and triggers a fresh pitch run.
+  if (row.status === 'approved' && !row.backlinkId) {
+    const dedupeKey = `molly:pitch:${prospectId}:${trimmed}`;
+    await db.insert(agentEvents).values({
+      agent: 'operator-ui',
+      type: 'prospect.approved',
+      targetAgent: 'molly',
+      payload: {
+        mode: 'prospect_approved',
+        siteId: row.siteId,
+        prospectId,
+        dedupeKey,
+      },
+    });
+  }
 
   revalidatePath('/operator/links');
   return { ok: true };

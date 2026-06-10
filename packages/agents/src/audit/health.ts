@@ -63,6 +63,7 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'compliance-guard': [], // Rules + Anthropic.
   'call-classifier': [], // Anthropic-only.
   operator: [], // Owned-asset orchestration; DB only.
+  'molly': [['ZOHO_MCP_URL'], ['ZOHO_ACCOUNT_ID']], // guest-post outreach; Zoho optional (ZOHO_MOLLY_ENABLED gate).
   'molly-scorer': [], // Firecrawl receptivity scrape is best-effort.
   'molly-digest': [['RESEND_API_KEY', 'ZOHO_MCP_URL'], ['RESEND_FROM_ADDRESS', 'ZOHO_MOLLY_FROM']],
   'molly-inbox': [['ZOHO_MCP_URL'], ['ZOHO_ACCOUNT_ID']],

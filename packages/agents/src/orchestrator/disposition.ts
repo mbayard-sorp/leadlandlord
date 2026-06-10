@@ -76,6 +76,7 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   'closer-agent': OFF('until trials exist'),
   'billing-dunning': OFF('until paying tenants; Stripe'),
   'churn-recovery': OFF('until paying tenants'),
+  'molly': ON(5), // guest-post outreach; all sends human-gated
   'molly-scorer': ON(1), // pilot revival 2026-06
   'molly-digest': OFF('superseded by fleet-digest'),
   'molly-inbox': ON(2), // pilot revival 2026-06

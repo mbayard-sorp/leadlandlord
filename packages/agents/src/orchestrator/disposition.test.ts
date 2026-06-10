@@ -26,8 +26,8 @@ describe('FLEET_DISPOSITION coverage', () => {
 describe('summarizeDisposition (the intended split)', () => {
   const s = summarizeDisposition();
 
-  it('matches the agreed disposition: 26 ON, 4 armed, 9 disabled', () => {
-    expect(s.enabled).toHaveLength(26);
+  it('matches the agreed disposition: 27 ON, 4 armed, 9 disabled', () => {
+    expect(s.enabled).toHaveLength(27);
     expect(s.armed).toHaveLength(4);
     expect(s.disabled).toHaveLength(9);
     expect(s.enabled.length + s.armed.length + s.disabled.length).toBe(
