@@ -78,7 +78,7 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'network-metrics-aggregator': [], // Owned-asset DB aggregation.
   'content-data-auditor': [], // Owned-asset content audit.
   // Internal status email to the operator (not third-party outreach).
-  'fleet-digest': [['ZOHO_SMTP_USER'], ['ZOHO_SMTP_PASS'], ['FLEET_DIGEST_TO', 'OPERATOR_EMAIL']],
+  'fleet-digest': [['ZOHO_MCP_URL'], ['ZOHO_ACCOUNT_ID'], ['FLEET_DIGEST_TO', 'OPERATOR_EMAIL']],
   // FIRECRAWL_API_KEY is optional: NAP verification is skipped (not errored) when absent.
   'citation-runner': [],
 };

@@ -31,11 +31,6 @@ const EnvSchema = z.object({
   /** Optional override for the warmup schedule — JSON array of { days, cap }. */
   ZOHO_WARMUP_SCHEDULE_JSON: z.string().optional(),
   ZOHO_MCP_ENABLED: z.coerce.boolean().default(false),
-  /** Zoho Mail SMTP (fleet-digest delivery). */
-  ZOHO_SMTP_HOST: z.string().optional(),
-  ZOHO_SMTP_PORT: z.coerce.number().int().positive().optional(),
-  ZOHO_SMTP_USER: z.string().email().optional(),
-  ZOHO_SMTP_PASS: z.string().optional(),
   /** CAN-SPAM postal address used in agent-drafted outbound mail. */
   LEADLANDLORD_POSTAL_ADDRESS: z.string().optional(),
   KLAVIYO_PRIVATE_API_KEY: z.string().optional(),
@@ -150,12 +145,6 @@ export function getEnvLoose() {
     ZOHO_DAILY_SEND_CAP: Number.parseInt(process.env.ZOHO_DAILY_SEND_CAP ?? '50', 10),
     ZOHO_WARMUP_SCHEDULE_JSON: process.env.ZOHO_WARMUP_SCHEDULE_JSON,
     ZOHO_MCP_ENABLED: process.env.ZOHO_MCP_ENABLED === 'true',
-    ZOHO_SMTP_HOST: process.env.ZOHO_SMTP_HOST,
-    ZOHO_SMTP_PORT: process.env.ZOHO_SMTP_PORT
-      ? Number.parseInt(process.env.ZOHO_SMTP_PORT, 10)
-      : undefined,
-    ZOHO_SMTP_USER: process.env.ZOHO_SMTP_USER,
-    ZOHO_SMTP_PASS: process.env.ZOHO_SMTP_PASS,
     LEADLANDLORD_POSTAL_ADDRESS: process.env.LEADLANDLORD_POSTAL_ADDRESS,
     KLAVIYO_PRIVATE_API_KEY: process.env.KLAVIYO_PRIVATE_API_KEY,
     GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
