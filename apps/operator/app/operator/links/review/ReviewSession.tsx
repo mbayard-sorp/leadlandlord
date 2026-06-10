@@ -10,13 +10,19 @@ interface Prospect extends BacklinkProspect {
   siteLabel: string;
 }
 
+interface ScoutSite {
+  id: string;
+  label: string;
+}
+
 interface Props {
   prospects: Prospect[];
+  scoutSites: ScoutSite[];
 }
 
 type Decision = 'approve' | 'reject' | 'snooze' | null;
 
-export function ReviewSession({ prospects }: Props) {
+export function ReviewSession({ prospects, scoutSites }: Props) {
   const [index, setIndex] = useState(0);
   const [decisions, setDecisions] = useState<Record<string, 'approved' | 'rejected' | 'snoozed'>>(
     {},
@@ -35,6 +41,7 @@ export function ReviewSession({ prospects }: Props) {
   // Run scout
   const [runPending, startRunTransition] = useTransition();
   const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [scoutSiteId, setScoutSiteId] = useState('');
 
   const current = prospects[index];
   const totalDone = Object.keys(decisions).length;
@@ -92,22 +99,35 @@ export function ReviewSession({ prospects }: Props) {
               {runMsg}
             </p>
           )}
-          <button
-            type="button"
-            disabled={runPending}
-            onClick={() => {
-              const siteId = prompt('Site ID to scout?');
-              if (!siteId) return;
-              setRunMsg(null);
-              startRunTransition(async () => {
-                const r = await requestProspectRun({ siteId });
-                setRunMsg(r.ok ? 'Run queued.' : r.message ?? 'failed');
-              });
-            }}
-            className="text-xs px-3 py-1.5 rounded bg-sky-700/50 hover:bg-sky-700/70 text-sky-100 disabled:opacity-50"
-          >
-            {runPending ? 'Queuing…' : 'Run scout now'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={scoutSiteId}
+              onChange={(e) => setScoutSiteId(e.target.value)}
+              disabled={runPending}
+              className="text-xs px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-200 max-w-full disabled:opacity-50"
+            >
+              <option value="">Select a site…</option>
+              {scoutSites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={runPending || !scoutSiteId}
+              onClick={() => {
+                setRunMsg(null);
+                startRunTransition(async () => {
+                  const r = await requestProspectRun({ siteId: scoutSiteId });
+                  setRunMsg(r.ok ? 'Run queued.' : r.message ?? 'failed');
+                });
+              }}
+              className="text-xs px-3 py-1.5 rounded bg-sky-700/50 hover:bg-sky-700/70 text-sky-100 disabled:opacity-50"
+            >
+              {runPending ? 'Queuing…' : 'Run scout now'}
+            </button>
+          </div>
         </div>
       </div>
     );
