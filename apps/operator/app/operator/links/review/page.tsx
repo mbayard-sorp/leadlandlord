@@ -17,7 +17,14 @@ export default async function ReviewSessionPage() {
       .orderBy(desc(backlinkProspects.flaggedTop5At))
       .limit(100),
     db
-      .select({ id: sites.id, niche: sites.niche, city: sites.city, state: sites.state })
+      .select({
+        id: sites.id,
+        niche: sites.niche,
+        city: sites.city,
+        state: sites.state,
+        domain: sites.domain,
+        status: sites.status,
+      })
       .from(sites),
   ]);
 
@@ -39,6 +46,15 @@ export default async function ReviewSessionPage() {
     return { ...r, siteLabel };
   });
 
+  // Sites the operator can target with a scout run. Archived sites excluded.
+  const scoutSites = allSites
+    .filter((s) => s.status !== 'archived')
+    .map((s) => ({
+      id: s.id,
+      label: `${s.niche} — ${s.city}, ${s.state}${s.domain ? ` (${s.domain})` : ''}`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -56,7 +72,7 @@ export default async function ReviewSessionPage() {
         </Link>
       </header>
 
-      <ReviewSession prospects={prospects} />
+      <ReviewSession prospects={prospects} scoutSites={scoutSites} />
     </div>
   );
 }

@@ -121,8 +121,14 @@ export default async function LinksHubPage({ searchParams }: PageProps) {
 
       {/* B. Needs-you grid */}
       {totalNeedsYou === 0 ? (
-        <div className="rounded-lg border border-emerald-800/40 bg-emerald-900/10 px-4 py-2.5 text-sm text-emerald-300">
-          Nothing needs you.
+        <div className="flex items-center justify-between rounded-lg border border-emerald-800/40 bg-emerald-900/10 px-4 py-2.5 text-sm text-emerald-300">
+          <span>Nothing needs you.</span>
+          <Link
+            href="/operator/links/review"
+            className="text-xs px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+          >
+            Review session →
+          </Link>
         </div>
       ) : (
         <div className="grid md:grid-cols-3 gap-4">
@@ -137,16 +143,16 @@ export default async function LinksHubPage({ searchParams }: PageProps) {
                   {needsYou.prospectReviewCount}
                 </div>
                 <div className="text-xs text-slate-400 mt-0.5">awaiting your decision</div>
-                <Link
-                  href="/operator/links/review"
-                  className="mt-3 inline-flex items-center text-xs px-3 py-1.5 rounded bg-amber-700/40 hover:bg-amber-700/60 text-amber-100"
-                >
-                  Review session →
-                </Link>
               </>
             ) : (
               <div className="text-sm text-slate-500 mt-1">All clear</div>
             )}
+            <Link
+              href="/operator/links/review"
+              className="mt-3 inline-flex items-center text-xs px-3 py-1.5 rounded bg-amber-700/40 hover:bg-amber-700/60 text-amber-100"
+            >
+              Review session →
+            </Link>
           </div>
 
           {/* Draft review card */}
