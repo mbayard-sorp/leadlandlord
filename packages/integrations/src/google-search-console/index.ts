@@ -135,7 +135,10 @@ export async function getSearchAnalytics(
     const text = await res.text().catch(() => '');
     throw new IntegrationError(
       'google-search-console',
-      `searchAnalytics.query failed: ${res.status} ${res.statusText}`,
+      // Include the response body in the message: only err.message survives
+      // into agent_events.error, and Google's 403s carry the actual reason
+      // (PERMISSION_DENIED vs quota) in the body, not the status line.
+      `searchAnalytics.query failed: ${res.status} ${res.statusText}: ${text.slice(0, 500)}`,
       res.status,
       text,
     );
@@ -235,7 +238,7 @@ export async function listSites(): Promise<
     const text = await res.text().catch(() => '');
     throw new IntegrationError(
       'google-search-console',
-      `sites.list failed: ${res.status} ${res.statusText}`,
+      `sites.list failed: ${res.status} ${res.statusText}: ${text.slice(0, 500)}`,
       res.status,
       text,
     );
