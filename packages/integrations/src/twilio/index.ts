@@ -161,17 +161,35 @@ export function buildForwardingTwiml(opts: {
   recordingStatusCallback?: string;
   /** Plain text greeting played to the caller (Polly TTS) before the dial. */
   inboundGreeting?: string;
+  /**
+   * Caller ID for the forwarded leg. MUST be a Twilio-owned number (the
+   * site's tracking number): Twilio signs calls from its own numbers with
+   * SHAKEN/STIR attestation A. Passing through the original caller's number
+   * gets attestation C and carriers (notably Verizon) reject the leg before
+   * it ever rings.
+   */
+  callerId?: string;
+  /**
+   * URL Twilio requests after the dial finishes. The handler inspects
+   * DialCallStatus and falls back to voicemail on no-answer/busy/failed so
+   * a missed forward still captures the lead.
+   */
+  actionUrl?: string;
+  /** Seconds to ring the forwarding number before giving up (default 25). */
+  timeoutS?: number;
 }): string {
   const recordAttrs = opts.recordingStatusCallback
     ? ` record="record-from-answer-dual" recordingStatusCallback="${escape(opts.recordingStatusCallback)}" recordingStatusCallbackEvent="completed"`
     : '';
+  const callerIdAttr = opts.callerId ? ` callerId="${escape(opts.callerId)}"` : '';
+  const actionAttr = opts.actionUrl ? ` action="${escape(opts.actionUrl)}" method="POST"` : '';
   const numberAttrs = opts.whisperUrl ? ` url="${escape(opts.whisperUrl)}"` : '';
   const greetingTag = opts.inboundGreeting
     ? `<Say voice="Polly.Joanna">${escape(opts.inboundGreeting)}</Say>\n  `
     : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  ${greetingTag}<Dial${recordAttrs} answerOnBridge="true">
+  ${greetingTag}<Dial${recordAttrs}${callerIdAttr}${actionAttr} timeout="${opts.timeoutS ?? 25}" answerOnBridge="true">
     <Number${numberAttrs}>${escape(opts.forwardingNumber)}</Number>
   </Dial>
 </Response>`;
