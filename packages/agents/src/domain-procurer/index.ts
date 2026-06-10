@@ -300,16 +300,13 @@ export class DomainProcurer extends BaseAgent<typeof DomainProcurerInput, typeof
       .set({ status: 'registered', registeredAt: registered.registeredAt ?? now })
       .where(eq(domainCandidates.id, input.candidate_id));
 
-    await ctx.emitNextStepEvent({
-      type: 'domain.registered',
-      targetAgent: 'site-builder',
-      payload: {
-        site_id: input.site_id,
-        domain,
-        order_id: registered.orderId,
-        transaction_id: registered.transactionId,
-      },
-    });
+    // No follow-up event. A `domain.registered` emit targeted at site-builder
+    // used to live here, but its payload never satisfied SiteBuilderInput
+    // (missing niche/city/state) so every registration dead-lettered one
+    // event, and the dispatcher has no record-only mode (a null targetAgent
+    // falls back to dispatching at the emitter). All attach work — DNS,
+    // Vercel domain binding, Sanity domains[], sites.domain — completes
+    // above, and nothing consumed the event.
 
     ctx.progress({ label: `registered ${domain}` });
     ctx.log.info(
