@@ -46,6 +46,21 @@ export interface GeoSubscores {
   answerExtractability: number;
   entityConsistency: number;
   citationReadiness: number;
+  markdownCoverage: number;
+}
+
+/** A fetched markdown twin (.md endpoint) of an HTML page. */
+export interface FetchedMarkdownPage {
+  /** The .md URL we hit, e.g. https://example.com/services.md */
+  url: string;
+  /** HTTP status, or null when the fetch itself failed. */
+  status: number | null;
+  /** Content-Type header, or null when unavailable. */
+  contentType: string | null;
+  /** Response body ('' on failure). */
+  body: string;
+  /** Whether the HTML counterpart is a faq-kind page (drives the FAQ-section check). */
+  expectFaq: boolean;
 }
 
 export interface Finding {
@@ -61,7 +76,7 @@ export interface Finding {
  * agent maps these onto NewSeoRecommendation 1:1 (siteId is injected there).
  */
 export interface RecommendationCandidate {
-  type: 'geo_schema_fix' | 'geo_answer_rewrite' | 'geo_entity_fix';
+  type: 'geo_schema_fix' | 'geo_answer_rewrite' | 'geo_entity_fix' | 'geo_markdown_fix';
   riskLevel: 'low' | 'medium' | 'high';
   targetPage: string | null;
   rationale: string;
@@ -537,6 +552,99 @@ export function entityConsistency(
 }
 
 // ────────────────────────────────────────────────────────────
+// Markdown coverage (.md page twins + llms-full.txt)
+// ────────────────────────────────────────────────────────────
+
+/** Thin-content floor for a markdown twin body. */
+const MD_MIN_BODY_CHARS = 400;
+
+/**
+ * Score the site's per-page markdown twins (each HTML path + '.md', home at
+ * /index.md) plus /llms-full.txt. A page passes when it returns HTTP 200 with
+ * a text/markdown content type, a body above the thin-content floor, an H1
+ * first line, and (for faq-kind pages) an FAQ section. Score is the passing
+ * fraction * 100; a missing /llms-full.txt caps the score at 80. Missing/thin
+ * twins yield low-risk geo_markdown_fix candidates.
+ */
+export function markdownCoverage(
+  mdPages: FetchedMarkdownPage[],
+  llmsFullTxtOk: boolean,
+): {
+  score: number;
+  findings: Finding[];
+  candidates: RecommendationCandidate[];
+} {
+  const findings: Finding[] = [];
+  const candidates: RecommendationCandidate[] = [];
+
+  if (mdPages.length === 0) {
+    findings.push({
+      check: 'markdownCoverage',
+      severity: 'fail',
+      message: 'no markdown twin pages to evaluate',
+    });
+    return { score: 0, findings, candidates };
+  }
+
+  let passing = 0;
+  for (const p of mdPages) {
+    const problems: string[] = [];
+    if (p.status !== 200) {
+      problems.push(p.status === null ? 'fetch failed' : `HTTP ${p.status}`);
+    } else {
+      if (!(p.contentType ?? '').toLowerCase().includes('text/markdown')) {
+        problems.push(`content-type is not text/markdown (${p.contentType ?? 'none'})`);
+      }
+      if (p.body.trim().length < MD_MIN_BODY_CHARS) {
+        problems.push(`thin content (<${MD_MIN_BODY_CHARS} chars)`);
+      }
+      if (!p.body.trimStart().startsWith('# ')) {
+        problems.push('does not start with an H1');
+      }
+      if (p.expectFaq && !/^#{1,6}\s.*(faq|frequently asked)/im.test(p.body) && !/faq|frequently asked/i.test(p.body)) {
+        problems.push('faq page missing FAQ section');
+      }
+    }
+
+    if (problems.length === 0) {
+      passing += 1;
+      continue;
+    }
+
+    const problem = problems.join('; ');
+    findings.push({
+      check: 'markdownCoverage',
+      severity: p.status !== 200 ? 'fail' : 'warn',
+      message: `markdown twin ${problem}`,
+      pageUrl: p.url,
+      problem,
+    });
+    // Recommend only for missing or thin twins; format nits stay findings-only.
+    if (p.status !== 200 || p.body.trim().length < MD_MIN_BODY_CHARS) {
+      candidates.push({
+        type: 'geo_markdown_fix',
+        riskLevel: 'low',
+        targetPage: p.url,
+        rationale: `Markdown twin ${p.url} is ${p.status !== 200 ? 'missing' : 'thin'} (${problem}) — LLM crawlers can't ingest this page as markdown.`,
+        estImpactScore: clampedScore(35),
+        actionPayload: { problem, targetPage: p.url },
+      });
+    }
+  }
+
+  let score = (passing / mdPages.length) * 100;
+  if (!llmsFullTxtOk) {
+    findings.push({
+      check: 'markdownCoverage',
+      severity: 'warn',
+      message: '/llms-full.txt missing or not markdown',
+    });
+    score = Math.min(score, 80);
+  }
+  return { score, findings, candidates };
+}
+
+// ────────────────────────────────────────────────────────────
 // Top-level aggregation
 // ────────────────────────────────────────────────────────────
 
@@ -544,9 +652,10 @@ export function entityConsistency(
 const WEIGHTS = {
   llmsTxtCompleteness: 0.2,
   schemaCoverage: 0.25,
-  answerExtractability: 0.25,
+  answerExtractability: 0.2,
   entityConsistency: 0.2,
-  citationReadiness: 0.1,
+  citationReadiness: 0.05,
+  markdownCoverage: 0.1,
 } as const;
 
 /**
@@ -558,8 +667,10 @@ export function runChecks(input: {
   ctx: SiteContext;
   llmsTxt: string | null;
   pages: FetchedPage[];
+  /** Markdown twin fetch results; absent (e.g. older callers) scores 0. */
+  markdown?: { pages: FetchedMarkdownPage[]; llmsFullTxtOk: boolean };
 }): CheckResult {
-  const { ctx, llmsTxt, pages } = input;
+  const { ctx, llmsTxt, pages, markdown } = input;
   const findings: Finding[] = [];
   const candidates: RecommendationCandidate[] = [];
 
@@ -580,6 +691,10 @@ export function runChecks(input: {
   findings.push(...entity.findings);
   candidates.push(...entity.candidates);
 
+  const md = markdownCoverage(markdown?.pages ?? [], markdown?.llmsFullTxtOk ?? false);
+  findings.push(...md.findings);
+  candidates.push(...md.candidates);
+
   // citationReadiness — composite proxy of the other four (no own candidates).
   const citationReadiness =
     llms.score * 0.3 + schema.score * 0.3 + answer.score * 0.25 + entity.score * 0.15;
@@ -590,6 +705,7 @@ export function runChecks(input: {
     answerExtractability: Math.round(answer.score),
     entityConsistency: Math.round(entity.score),
     citationReadiness: Math.round(citationReadiness),
+    markdownCoverage: Math.round(md.score),
   };
 
   return { subscores, findings, candidates };
@@ -602,6 +718,7 @@ export function geoScore(s: GeoSubscores): number {
     s.schemaCoverage * WEIGHTS.schemaCoverage +
     s.answerExtractability * WEIGHTS.answerExtractability +
     s.entityConsistency * WEIGHTS.entityConsistency +
-    s.citationReadiness * WEIGHTS.citationReadiness;
+    s.citationReadiness * WEIGHTS.citationReadiness +
+    s.markdownCoverage * WEIGHTS.markdownCoverage;
   return Math.max(0, Math.min(100, Math.round(raw)));
 }

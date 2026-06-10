@@ -19,10 +19,15 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     h.get('x-site-mode') === 'corporate'
       ? ((await fetchCorporateSite())?.robotsDisallow ?? false)
       : ((await resolveCurrentSite())?.robotsDisallow ?? true);
+  const aiCrawlers = ['GPTBot', 'ClaudeBot', 'Claude-SearchBot', 'PerplexityBot', 'Google-Extended'];
+
   return {
     rules: blockAll
       ? [{ userAgent: '*', disallow: '/' }]
-      : [{ userAgent: '*', allow: '/', disallow: ['/api/', '/_next/static/chunks/'] }],
+      : [
+          { userAgent: '*', allow: '/', disallow: ['/api/', '/_next/static/chunks/'] },
+          ...aiCrawlers.map((userAgent) => ({ userAgent, allow: '/' })),
+        ],
     sitemap: `${base}/sitemap.xml`,
     host: base,
   };

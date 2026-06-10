@@ -39,6 +39,7 @@ import {
   isoWeek,
   type SiteContext,
   type FetchedPage,
+  type FetchedMarkdownPage,
   type RecommendationCandidate,
 } from './checks';
 
@@ -93,6 +94,7 @@ export const GeoAeoAuditorOutput = z.discriminatedUnion('mode', [
       answerExtractability: z.number(),
       entityConsistency: z.number(),
       citationReadiness: z.number(),
+      markdownCoverage: z.number(),
     }),
     recommendationsWritten: z.number().int().nonnegative(),
   }),
@@ -217,8 +219,12 @@ export class GeoAeoAuditor extends BaseAgent<typeof GeoAeoAuditorInput, typeof G
     ctx.progress({ label: 'fetching llms.txt + pages' });
     const { llmsTxt, pages, fetchFindings } = await this.fetchLiveAssets(siteRow.domain, ctx);
 
+    // Fetch the markdown twins of the same enumerated pages + /llms-full.txt.
+    ctx.progress({ label: 'fetching markdown twins' });
+    const markdown = await this.fetchMarkdownTwins(siteRow.domain, pages, ctx);
+
     // Run pure checks.
-    const result = runChecks({ ctx: siteCtx, llmsTxt, pages });
+    const result = runChecks({ ctx: siteCtx, llmsTxt, pages, markdown });
     const allFindings = [...fetchFindings, ...result.findings];
     const score = computeGeoScore(result.subscores);
 
@@ -376,6 +382,62 @@ export class GeoAeoAuditor extends BaseAgent<typeof GeoAeoAuditorInput, typeof G
     return { llmsTxt, pages, fetchFindings };
   }
 
+  /**
+   * Fetch the .md twin of every enumerated page (HTML path + '.md', home at
+   * /index.md) plus /llms-full.txt. Sequential like fetchLiveAssets — same
+   * polite throttle. Best-effort: failures become status=null entries that the
+   * pure markdownCoverage check turns into findings, never a throw.
+   */
+  private async fetchMarkdownTwins(
+    domain: string | null,
+    pages: FetchedPage[],
+    ctx: AgentContext,
+  ): Promise<{ pages: FetchedMarkdownPage[]; llmsFullTxtOk: boolean }> {
+    if (!domain || pages.length === 0) {
+      return { pages: [], llmsFullTxtOk: false };
+    }
+    const base = `https://${domain}`;
+
+    const getMd = async (url: string): Promise<{ status: number | null; contentType: string | null; body: string }> => {
+      try {
+        const res = await fetch(url, {
+          headers: { 'user-agent': 'LeadLandlord-GeoAeoAuditor/1.0' },
+          signal: AbortSignal.timeout(10_000),
+        });
+        return {
+          status: res.status,
+          contentType: res.headers.get('content-type'),
+          body: res.ok ? await res.text() : '',
+        };
+      } catch {
+        return { status: null, contentType: null, body: '' };
+      }
+    };
+
+    const mdPages: FetchedMarkdownPage[] = [];
+    for (const page of pages) {
+      let path = '/';
+      try {
+        path = new URL(page.url).pathname;
+      } catch {
+        // keep '/'
+      }
+      const mdPath = path === '/' ? '/index.md' : `${path.replace(/\/+$/, '')}.md`;
+      const url = `${base}${mdPath}`;
+      const r = await getMd(url);
+      mdPages.push({ url, ...r, expectFaq: /^\/faq(\/|\.|$)/.test(path) });
+    }
+
+    const llmsFull = await getMd(`${base}/llms-full.txt`);
+    const llmsFullTxtOk = llmsFull.status === 200 && llmsFull.body.trim().length > 0;
+
+    ctx.log.info(
+      { domain, mdPages: mdPages.length, mdOk: mdPages.filter((p) => p.status === 200).length, llmsFullTxtOk },
+      'geo-aeo-auditor markdown twin fetch complete',
+    );
+    return { pages: mdPages, llmsFullTxtOk };
+  }
+
   // ──────────────────────────────────────────────────────────
   // APPLY
   // ──────────────────────────────────────────────────────────
@@ -462,6 +524,12 @@ export class GeoAeoAuditor extends BaseAgent<typeof GeoAeoAuditorInput, typeof G
         return this.applySchemaFix(rec, ctx);
       case 'geo_entity_fix':
         return this.applyEntityFix(rec, ctx);
+      case 'geo_markdown_fix':
+        // Markdown twins are rendered by site-host from page content; there is
+        // nothing for the auditor to patch. Acknowledge so the rec doesn't
+        // dead-end as failed; the next weekly review re-checks the endpoint.
+        ctx.log.info({ recId: rec.id, targetPage: rec.targetPage }, 'geo_markdown_fix acknowledged');
+        return 'auto_applied';
       case 'geo_answer_rewrite':
         // Medium-risk — the actual Q&A rewrite is a later enrichment. Keep the
         // operator in the loop; the medium-risk gate already routes unapproved

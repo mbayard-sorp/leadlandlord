@@ -47,7 +47,8 @@ export default function proxy(req: NextRequest) {
       path === '/favicon.ico' ||
       path === '/sitemap.xml' ||
       path === '/robots.txt' ||
-      path === '/llms.txt';
+      path === '/llms.txt' ||
+      path === '/llms-full.txt';
     let res: NextResponse;
     if (!passthrough) {
       const url = req.nextUrl.clone();
@@ -93,6 +94,18 @@ export default function proxy(req: NextRequest) {
   const cookieSite = req.cookies.get('ll_site')?.value ?? null;
   const effectiveSlug = querySite ?? (cookieSite || null);
   if (effectiveSlug) headers.set('x-site-slug', effectiveSlug);
+
+  // Rewrite *.md paths to the internal /md/* route handler for AI crawlers.
+  // /index.md -> /md (home), /foo.md -> /md/foo, /a/b.md -> /md/a/b.
+  // Runs after slug detection so the rewrite carries x-site-slug in dev.
+  // Skip _next/static, api, and other internal paths (already guarded by matcher).
+  const mdMatch = req.nextUrl.pathname.match(/^(\/.*?)\.md$/);
+  if (mdMatch) {
+    const inner = mdMatch[1] === '/index' ? '' : mdMatch[1];
+    const url = req.nextUrl.clone();
+    url.pathname = `/md${inner}`;
+    return NextResponse.rewrite(url, { request: { headers } });
+  }
 
   const res = NextResponse.next({ request: { headers } });
   if (querySite && querySite !== cookieSite) {

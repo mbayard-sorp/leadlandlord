@@ -4,8 +4,10 @@ import {
   getDb,
   seoRecommendations,
   seoMetricsDaily,
+  geoSeoAudits,
   sites,
   type SeoRecommendation,
+  type GeoSeoAudit,
   type Site,
 } from '@leadlandlord/db';
 import { ReviewActions } from './ReviewActions';
@@ -52,6 +54,36 @@ async function loadActiveSites(): Promise<Site[]> {
     .limit(500);
 }
 
+/** Display labels for geo_aeo audit subscores, in render order. */
+const GEO_SUBSCORE_LABELS: Array<[key: string, label: string]> = [
+  ['llmsTxtCompleteness', 'llms.txt'],
+  ['schemaCoverage', 'Schema'],
+  ['answerExtractability', 'Answers'],
+  ['entityConsistency', 'Entity'],
+  ['citationReadiness', 'Citations'],
+  ['markdownCoverage', 'Markdown'],
+];
+
+/** Latest geo_aeo audit per active site (newest-first scan, first hit wins). */
+async function loadLatestGeoAudits(activeSites: Site[]): Promise<GeoSeoAudit[]> {
+  if (activeSites.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(geoSeoAudits)
+    .where(and(eq(geoSeoAudits.auditor, 'geo_aeo'), inArray(geoSeoAudits.siteId, activeSites.map((s) => s.id))))
+    .orderBy(desc(geoSeoAudits.auditedAt))
+    .limit(500);
+  const seen = new Set<string>();
+  const latest: GeoSeoAudit[] = [];
+  for (const r of rows) {
+    if (seen.has(r.siteId)) continue;
+    seen.add(r.siteId);
+    latest.push(r);
+  }
+  return latest;
+}
+
 async function loadRankingSummary(activeSites: Site[]): Promise<RankingRow[]> {
   if (activeSites.length === 0) return [];
   const db = getDb();
@@ -93,10 +125,11 @@ async function loadRankingSummary(activeSites: Site[]): Promise<RankingRow[]> {
 
 export default async function SeoDashboardPage() {
   const activeSites = await loadActiveSites();
-  const [pending, autoApplied, ranking] = await Promise.all([
+  const [pending, autoApplied, ranking, geoAudits] = await Promise.all([
     loadPending(),
     loadAutoApplied(),
     loadRankingSummary(activeSites),
+    loadLatestGeoAudits(activeSites),
   ]);
 
   const siteName = new Map(activeSites.map((s) => [s.id, `${s.niche} — ${s.city}, ${s.state}`]));
@@ -263,6 +296,58 @@ export default async function SeoDashboardPage() {
                     <td className="px-3 py-2">{r.totalClicks.toLocaleString()}</td>
                     <td className="px-3 py-2 text-slate-400">
                       {r.totalImpressions.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">
+          GEO / AEO audit subscores — latest per site
+        </h2>
+        {geoAudits.length === 0 ? (
+          <Empty>No geo_aeo audits yet. The GEO/AEO auditor populates this weekly.</Empty>
+        ) : (
+          <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="text-left px-3 py-2">Site</th>
+                  <th className="text-left px-3 py-2">Score</th>
+                  {GEO_SUBSCORE_LABELS.map(([key, label]) => (
+                    <th key={key} className="text-left px-3 py-2">
+                      {label}
+                    </th>
+                  ))}
+                  <th className="text-left px-3 py-2">Audited</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {geoAudits.map((a) => (
+                  <tr key={a.id} className="hover:bg-slate-900/40">
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/operator/sites/${a.siteId}`}
+                        className="text-sky-400 hover:text-sky-300 text-xs"
+                      >
+                        {siteName.get(a.siteId) ?? a.siteId.slice(0, 8)}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">{Number(a.score).toFixed(0)}</td>
+                    {GEO_SUBSCORE_LABELS.map(([key]) => {
+                      const v = a.subscores?.[key];
+                      return (
+                        <td key={key} className="px-3 py-2 tabular-nums text-slate-300">
+                          {typeof v === 'number' ? v.toFixed(0) : '—'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-xs text-slate-400">
+                      {new Date(a.auditedAt).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}
