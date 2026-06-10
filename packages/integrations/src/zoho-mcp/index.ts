@@ -219,7 +219,10 @@ export async function listMessages(args: ListMessagesArgs = {}): Promise<ListedM
     status?: { code?: number; description?: string };
     data?: Array<Record<string, unknown>>;
   }>(ZOHO_TOOL_SEARCH, {
-    body: {
+    // SearchEmails takes its args as query_params, not body (schema changed
+    // server-side 2026-06; body-shaped args fail with "Mandatory query param
+    // searchKey is not present in tool body").
+    query_params: {
       searchKey,
       start: 1,
       limit,
