@@ -1,10 +1,11 @@
-import { sql, desc } from 'drizzle-orm';
+import { sql, desc, inArray } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
-import { getDb, agentRuns, agentEvents, type AgentRun, type AgentEvent } from '@leadlandlord/db';
+import { getDb, agentRuns, agentEvents, sites, type AgentRun, type AgentEvent } from '@leadlandlord/db';
 import { agentRegistry, agentMetadata } from '@leadlandlord/agents';
 import vercelConfig from '../../../vercel.json';
 import { AgentTogglesPanel } from './AgentTogglesPanel';
 import { loadAgentEnabledMap } from './_toggle-actions';
+import { describeRun, type RunSiteInfo } from './_describe-run';
 
 export const revalidate = 30;
 
@@ -50,10 +51,38 @@ interface DailyAgentStats {
   tokens_out: number;
 }
 
+interface RecentRun {
+  run: AgentRun;
+  site: RunSiteInfo | null;
+}
+
+/** Site id for a run: the FK column when set, else site_id/siteId in the input payload. */
+function runSiteId(run: AgentRun): string | null {
+  if (run.siteId) return run.siteId;
+  const input = run.input as Record<string, unknown> | null;
+  const fromInput = input?.site_id ?? input?.siteId;
+  return typeof fromInput === 'string' ? fromInput : null;
+}
+
 const loadRecentRuns = unstable_cache(
-  async (): Promise<AgentRun[]> => {
+  async (): Promise<RecentRun[]> => {
     const db = getDb();
-    return await db.select().from(agentRuns).orderBy(desc(agentRuns.startedAt)).limit(50);
+    const runs = await db.select().from(agentRuns).orderBy(desc(agentRuns.startedAt)).limit(50);
+    const siteIds = [...new Set(runs.map(runSiteId).filter((id): id is string => id !== null))];
+    const siteRows = siteIds.length
+      ? await db
+          .select({
+            id: sites.id,
+            niche: sites.niche,
+            city: sites.city,
+            state: sites.state,
+            domain: sites.domain,
+          })
+          .from(sites)
+          .where(inArray(sites.id, siteIds))
+      : [];
+    const siteById = new Map(siteRows.map((s) => [s.id, s]));
+    return runs.map((run) => ({ run, site: siteById.get(runSiteId(run) ?? '') ?? null }));
   },
   ['operator-recent-runs'],
   { revalidate: 30, tags: ['agent-runs'] },
@@ -186,6 +215,7 @@ export default async function AgentsPage() {
             <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2">Agent</th>
+                <th className="text-left px-3 py-2">Task</th>
                 <th className="text-left px-3 py-2">Status</th>
                 <th className="text-left px-3 py-2">Started</th>
                 <th className="text-left px-3 py-2 hidden md:table-cell">Duration</th>
@@ -194,7 +224,7 @@ export default async function AgentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {recentRuns.map((r) => {
+              {recentRuns.map(({ run: r, site }) => {
                 const dur =
                   r.endedAt && r.startedAt
                     ? `${((new Date(r.endedAt).getTime() - new Date(r.startedAt).getTime()) / 1000).toFixed(1)}s`
@@ -202,6 +232,12 @@ export default async function AgentsPage() {
                 return (
                   <tr key={r.id} className="hover:bg-slate-900/40">
                     <td className="px-3 py-2 font-mono break-words">{r.agent}</td>
+                    <td
+                      className="px-3 py-2 text-slate-300 break-words max-w-[16rem]"
+                      title={JSON.stringify(r.input)}
+                    >
+                      {describeRun(r.agent, r.input, r.dedupeKey, site)}
+                    </td>
                     <td className="px-3 py-2">
                       <RunStatus status={r.status} />
                     </td>
