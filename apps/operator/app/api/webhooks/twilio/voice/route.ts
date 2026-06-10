@@ -90,12 +90,14 @@ export async function POST(req: Request) {
     ? `${baseUrl}/api/webhooks/twilio/whisper?msg=${encodeURIComponent(site.whisperMessage)}`
     : undefined;
 
+  // No inbound greeting on the forwarding path: the caller should hear
+  // ringback right away, like a normal call. The greeting is only used on
+  // the voicemail paths (no forwarding number, or forward unanswered).
   return new NextResponse(
     buildForwardingTwiml({
       forwardingNumber: site.forwardingNumber,
       whisperUrl,
       recordingStatusCallback: recordingCallback,
-      inboundGreeting: site.inboundGreeting ?? undefined,
       // Caller ID must be the Twilio-owned tracking number: it gets SHAKEN/STIR
       // attestation A. Passing through the lead's own number gets attestation C
       // and carriers reject the forwarded leg before it rings.
