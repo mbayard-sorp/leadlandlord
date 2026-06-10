@@ -100,35 +100,47 @@ describe('renderFleetDigest', () => {
 });
 
 describe('resolveDigestRecipient (send skip mirrors notifyOperatorEmail)', () => {
-  const smtpEnv = { ZOHO_SMTP_USER: 'molly@leadslandlord.com', ZOHO_SMTP_PASS: 'app-pass' };
+  const mcpEnv = { ZOHO_MCP_URL: 'https://mcp.zoho.example/abc', ZOHO_ACCOUNT_ID: '12345' };
 
-  it('skips (null) when ZOHO_SMTP_USER is missing', () => {
+  it('skips (null) when ZOHO_MCP_URL is missing', () => {
     expect(
-      resolveDigestRecipient({ ZOHO_SMTP_PASS: 'app-pass', OPERATOR_EMAIL: 'mike@x.com' }),
+      resolveDigestRecipient({ ZOHO_ACCOUNT_ID: '12345', OPERATOR_EMAIL: 'mike@x.com' }),
     ).toBeNull();
   });
-  it('skips (null) when ZOHO_SMTP_PASS is missing', () => {
+  it('skips (null) when ZOHO_ACCOUNT_ID is missing', () => {
     expect(
-      resolveDigestRecipient({ ZOHO_SMTP_USER: 'molly@leadslandlord.com', OPERATOR_EMAIL: 'mike@x.com' }),
+      resolveDigestRecipient({ ZOHO_MCP_URL: 'https://mcp.zoho.example/abc', OPERATOR_EMAIL: 'mike@x.com' }),
     ).toBeNull();
   });
   it('skips (null) when no recipient is set', () => {
-    expect(resolveDigestRecipient(smtpEnv)).toBeNull();
+    expect(resolveDigestRecipient(mcpEnv)).toBeNull();
   });
-  it('defaults from to the Zoho account address and uses FLEET_DIGEST_TO', () => {
-    const r = resolveDigestRecipient({ ...smtpEnv, FLEET_DIGEST_TO: 'mike@me.com' });
+  it('defaults from to Molly mailbox and uses FLEET_DIGEST_TO', () => {
+    const r = resolveDigestRecipient({
+      ...mcpEnv,
+      ZOHO_MOLLY_FROM: 'molly@leadslandlord.com',
+      FLEET_DIGEST_TO: 'mike@me.com',
+    });
     expect(r).not.toBeNull();
     expect(r!.to).toBe('mike@me.com');
-    expect(r!.from).toMatch(/molly@leadslandlord\.com/);
+    expect(r!.from).toBe('molly@leadslandlord.com');
+  });
+  it('falls back from ZOHO_MOLLY_FROM to ZOHO_DEFAULT_FROM', () => {
+    const r = resolveDigestRecipient({
+      ...mcpEnv,
+      ZOHO_DEFAULT_FROM: 'hello@leadslandlord.com',
+      OPERATOR_EMAIL: 'mike@x.com',
+    });
+    expect(r!.from).toBe('hello@leadslandlord.com');
   });
   it('falls back to OPERATOR_EMAIL and honors FLEET_DIGEST_FROM', () => {
     const r = resolveDigestRecipient({
-      ...smtpEnv,
+      ...mcpEnv,
       OPERATOR_EMAIL: 'ops@me.com',
-      FLEET_DIGEST_FROM: 'Ops <ops@leadslandlord.com>',
+      FLEET_DIGEST_FROM: 'ops@leadslandlord.com',
     });
     expect(r!.to).toBe('ops@me.com');
-    expect(r!.from).toBe('Ops <ops@leadslandlord.com>');
+    expect(r!.from).toBe('ops@leadslandlord.com');
   });
 });
 

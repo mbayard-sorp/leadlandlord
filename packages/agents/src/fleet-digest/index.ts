@@ -6,9 +6,10 @@
  * niche approvals, sites awaiting go-live, credential-blocked agents,
  * over-budget agents, and agents the orchestrator auto-disabled.
  *
- * Sends via Zoho SMTP from the Zoho account address -> the operator. Mirrors
- * the notifyOperatorEmail skip-on-missing-env pattern: no ZOHO_SMTP_USER/PASS
- * or recipient -> returns 'skipped' rather than throwing.
+ * Sends via the Zoho MCP server (same path as molly-digest/outreach) from a
+ * Zoho mailbox address -> the operator. Mirrors the notifyOperatorEmail
+ * skip-on-missing-env pattern: no ZOHO_MCP_URL/ZOHO_ACCOUNT_ID or recipient
+ * -> returns 'skipped' rather than throwing.
  */
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
@@ -18,7 +19,7 @@ import {
   agentHealth,
   systemState,
 } from '@leadlandlord/db';
-import { sendEmail } from '@leadlandlord/integrations/zoho-smtp';
+import { sendEmail } from '@leadlandlord/integrations/zoho-mcp';
 import { BaseAgent, type AgentContext } from '../base';
 import { MOLLY_PERSONA } from '../molly/persona';
 
@@ -74,16 +75,18 @@ const MAX_ACTIVITY_ROWS = 25;
 
 /**
  * Resolve the digest sender/recipient from env, or null to skip (mirrors
- * notifyOperatorEmail): needs ZOHO_SMTP_USER + ZOHO_SMTP_PASS + a recipient.
- * From is the Zoho account address (Zoho SMTP rejects mismatched senders),
- * with Molly's display name; override via FLEET_DIGEST_FROM.
+ * notifyOperatorEmail): needs ZOHO_MCP_URL + ZOHO_ACCOUNT_ID + a recipient.
+ * From must be a mailbox address the Zoho account can send as (Zoho rejects
+ * mismatched senders): FLEET_DIGEST_FROM, else Molly's mailbox, else the
+ * account default sender.
  */
 export function resolveDigestRecipient(
   env: Record<string, string | undefined>,
 ): { to: string; from: string } | null {
   const to = env.FLEET_DIGEST_TO || env.OPERATOR_EMAIL;
-  if (!env.ZOHO_SMTP_USER || !env.ZOHO_SMTP_PASS || !to) return null;
-  const from = env.FLEET_DIGEST_FROM || `${MOLLY_PERSONA.displayName} <${env.ZOHO_SMTP_USER}>`;
+  if (!env.ZOHO_MCP_URL || !env.ZOHO_ACCOUNT_ID || !to) return null;
+  const from =
+    env.FLEET_DIGEST_FROM || env.ZOHO_MOLLY_FROM || env.ZOHO_DEFAULT_FROM || MOLLY_PERSONA.mailbox;
   return { to, from };
 }
 
@@ -406,8 +409,12 @@ export class FleetDigest extends BaseAgent<typeof FleetDigestInput, typeof Fleet
     const recipient = resolveDigestRecipient(process.env);
     if (!recipient) {
       ctx.log.info(
-        { hasSmtpCreds: !!(process.env.ZOHO_SMTP_USER && process.env.ZOHO_SMTP_PASS) },
-        'fleet-digest: send skipped (missing ZOHO_SMTP_USER/ZOHO_SMTP_PASS or recipient)',
+        {
+          hasMcpUrl: !!process.env.ZOHO_MCP_URL,
+          hasAccountId: !!process.env.ZOHO_ACCOUNT_ID,
+          hasRecipient: !!(process.env.FLEET_DIGEST_TO || process.env.OPERATOR_EMAIL),
+        },
+        'fleet-digest: send skipped (missing ZOHO_MCP_URL/ZOHO_ACCOUNT_ID or recipient)',
       );
       return { date, delivery: 'skipped', needsAttentionCount, subject };
     }
