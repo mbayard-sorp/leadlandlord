@@ -133,6 +133,7 @@ export async function generateMetadata({ params }: Params) {
     path: `/${slug}`,
     image: page.og_image_url ?? bundle.hero_image_url,
     siteName: bundle.business_name,
+    mdPath: `/${slug}.md`,
   });
 }
 

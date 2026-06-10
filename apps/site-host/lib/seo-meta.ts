@@ -49,6 +49,12 @@ interface PageMetaInput {
   /** ISO timestamp for OG article publishedTime. */
   publishedTime?: string;
   siteName?: string;
+  /**
+   * Site-relative path for the markdown twin of this page (e.g. "/foo.md",
+   * "/index.md"). When present, a <link rel="alternate" type="text/markdown">
+   * hint is emitted so AI crawlers can discover structured content.
+   */
+  mdPath?: string;
 }
 
 /**
@@ -56,7 +62,7 @@ interface PageMetaInput {
  * and (for articles) publishedTime are all set consistently.
  */
 export function buildPageMetadata(opts: PageMetaInput): Metadata {
-  const { title, description, path, ogType = 'website', image, publishedTime, siteName } = opts;
+  const { title, description, path, ogType = 'website', image, publishedTime, siteName, mdPath } = opts;
   const canonical = canonicalPath(path);
   const images = image ? [image] : undefined;
 
@@ -73,7 +79,10 @@ export function buildPageMetadata(opts: PageMetaInput): Metadata {
   return {
     title,
     description,
-    alternates: { canonical },
+    alternates: {
+      canonical,
+      ...(mdPath ? { types: { 'text/markdown': mdPath } } : {}),
+    },
     openGraph: og,
     twitter: {
       card: 'summary_large_image',

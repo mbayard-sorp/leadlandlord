@@ -206,6 +206,7 @@ describe('runChecks + geoScore', () => {
       'answerExtractability',
       'entityConsistency',
       'citationReadiness',
+      'markdownCoverage',
     ]);
     const composite = geoScore(result.subscores);
     expect(composite).toBeGreaterThanOrEqual(0);

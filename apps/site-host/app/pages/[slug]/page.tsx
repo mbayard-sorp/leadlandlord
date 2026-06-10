@@ -145,6 +145,7 @@ export async function generateMetadata({ params }: Params) {
     image: page.og_image_url ?? bundle.hero_image_url,
     publishedTime: bundle.generated_at,
     siteName: bundle.business_name,
+    mdPath: `/pages/${slug}.md`,
   });
 }
 

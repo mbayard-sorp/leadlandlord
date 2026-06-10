@@ -67,5 +67,6 @@ export async function generateMetadata() {
     path: '/contact/',
     image: bundle.hero_image_url,
     siteName: bundle.business_name,
+    mdPath: '/contact.md',
   });
 }
