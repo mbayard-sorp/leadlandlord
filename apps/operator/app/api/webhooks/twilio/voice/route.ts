@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { eq, sql } from 'drizzle-orm';
-import { getDb, sites, calls } from '@leadlandlord/db';
+import { sql } from 'drizzle-orm';
+import { getDb, calls } from '@leadlandlord/db';
 import {
   buildForwardingTwiml,
   buildVoicemailTwiml,
 } from '@leadlandlord/integrations/twilio';
 import { log } from '@leadlandlord/shared/log';
 import { readTwilioParams, verifyTwilioRequest } from '../../../../../lib/twilio-webhook';
+import { findSiteForCall, voicemailResponseForSite } from '../../../../../lib/twilio-voice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,6 @@ export async function POST(req: Request) {
     return new NextResponse('forbidden', { status: 403 });
   }
 
-  const calledSid = params.CalledSid; // PN... — the IncomingPhoneNumber SID Twilio dialed
   const calledNumber = params.Called || params.To;
   const callerNumber = params.From;
   // CNAM lookup result — present only when caller-name lookup is enabled on the
@@ -39,21 +39,13 @@ export async function POST(req: Request) {
   const callerName = params.CallerName?.trim() || null;
   const callSid = params.CallSid;
 
-  const db = getDb();
-  let site = calledSid
-    ? (await db.select().from(sites).where(eq(sites.twilioPhoneSid, calledSid)).limit(1))[0]
-    : undefined;
-  if (!site && calledNumber) {
-    const rows = await db
-      .select()
-      .from(sites)
-      .where(eq(sites.trackingNumber, calledNumber))
-      .limit(1);
-    site = rows[0];
-  }
+  const site = await findSiteForCall(params);
 
   if (!site) {
-    log.warn({ calledSid, calledNumber, callSid }, 'voice webhook: no matching site');
+    log.warn(
+      { calledSid: params.CalledSid, calledNumber, callSid },
+      'voice webhook: no matching site',
+    );
     return new NextResponse(
       buildVoicemailTwiml({
         greeting:
@@ -67,6 +59,7 @@ export async function POST(req: Request) {
   // The unique index on twilio_call_sid is partial (WHERE twilio_call_sid IS NOT NULL),
   // so ON CONFLICT must repeat the predicate or Postgres can't infer the
   // arbiter index (error 42P10).
+  const db = getDb();
   await db
     .insert(calls)
     .values({
@@ -84,6 +77,12 @@ export async function POST(req: Request) {
     });
 
   const baseUrl = process.env.OPERATOR_PUBLIC_URL ?? '';
+
+  // No forwarding configured -> straight to voicemail with optional transcription.
+  if (!site.forwardingNumber) {
+    return voicemailResponseForSite(site, baseUrl);
+  }
+
   const recordingCallback = site.recordingEnabled
     ? `${baseUrl}/api/webhooks/twilio/recording`
     : undefined;
@@ -91,33 +90,18 @@ export async function POST(req: Request) {
     ? `${baseUrl}/api/webhooks/twilio/whisper?msg=${encodeURIComponent(site.whisperMessage)}`
     : undefined;
 
-  // No forwarding configured → straight to voicemail with optional transcription.
-  if (!site.forwardingNumber) {
-    const transcribeCb = `${baseUrl}/api/webhooks/twilio/transcription`;
-    // Use the AI-generated greeting MP3 if we've recorded one for this site
-    // (set during tracking-setup via ElevenLabs → Sanity assets). Fall back
-    // to inbound_greeting / whisper text + Polly TTS if no audio URL is available.
-    const meta = (site.metadata ?? {}) as { voicemailGreetingUrl?: string };
-    return new NextResponse(
-      buildVoicemailTwiml({
-        greeting:
-          site.inboundGreeting ??
-          site.whisperMessage ??
-          `Thanks for calling. Please leave a message.`,
-        audioUrl: meta.voicemailGreetingUrl,
-        recordingStatusCallback: recordingCallback,
-        transcribeCallback: transcribeCb,
-      }),
-      { status: 200, headers: { 'content-type': 'text/xml' } },
-    );
-  }
-
   return new NextResponse(
     buildForwardingTwiml({
       forwardingNumber: site.forwardingNumber,
       whisperUrl,
       recordingStatusCallback: recordingCallback,
       inboundGreeting: site.inboundGreeting ?? undefined,
+      // Caller ID must be the Twilio-owned tracking number: it gets SHAKEN/STIR
+      // attestation A. Passing through the lead's own number gets attestation C
+      // and carriers reject the forwarded leg before it rings.
+      callerId: site.trackingNumber ?? calledNumber,
+      // Fall back to voicemail when the forward is not answered.
+      actionUrl: `${baseUrl}/api/webhooks/twilio/dial-complete`,
     }),
     { status: 200, headers: { 'content-type': 'text/xml' } },
   );
