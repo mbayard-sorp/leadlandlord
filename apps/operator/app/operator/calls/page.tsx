@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { desc } from 'drizzle-orm';
 import { getDb, calls, sites, type Call } from '@leadlandlord/db';
 import { SiteFilter, type SiteOption } from './SiteFilter';
+import { DeleteCallButton } from './DeleteCallButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +115,7 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                 <th>Class</th>
                 <th className="hidden md:table-cell">Recording</th>
                 <th className="hidden lg:table-cell">Transcript</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -179,6 +181,9 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                     ) : (
                       <span className="text-slate-600">—</span>
                     )}
+                  </td>
+                  <td>
+                    <DeleteCallButton id={c.id} />
                   </td>
                 </tr>
               ))}
