@@ -116,4 +116,8 @@ export const agentMetadata: Record<string, AgentMeta> = {
     description: 'Drafts and publishes an approved local content idea as an info page on the tenant site.',
     trigger: 'Event-driven (content idea approved)',
   },
+  molly: {
+    description: 'Guest-post outreach: prospects domains, sends pitches, nudges editors, delivers approved drafts.',
+    trigger: 'Event-driven (operator scout button, prospect approval, nudge scheduler, draft approval)',
+  },
 };

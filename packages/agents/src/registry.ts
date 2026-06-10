@@ -35,6 +35,7 @@ import { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
 import { ContentDataAuditor } from './content-data-auditor/index';
 import { FleetDigest } from './fleet-digest/index';
 import { CitationRunner } from './citation-runner/index';
+import { Molly } from './molly/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -77,6 +78,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'content-data-auditor': () => new ContentDataAuditor(),
   'fleet-digest': () => new FleetDigest(),
   'citation-runner': () => new CitationRunner(),
+  molly: () => new Molly(),
   // NOTE: the `orchestrator` agent (packages/agents/src/orchestrator/brain.ts)
   // is intentionally NOT registered here. The registry feeds the cron worker
   // (/api/cron/agent/[name]); registering it would make the chat brain firable

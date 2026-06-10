@@ -10,7 +10,7 @@ export interface ActionResult {
   message?: string;
 }
 
-const MOLLY_AGENTS = ['molly-scorer', 'molly-inbox', 'molly-copywriter'] as const;
+const MOLLY_AGENTS = ['molly-scorer', 'molly-inbox', 'molly-copywriter', 'molly'] as const;
 
 /**
  * Pause all Molly agents (flip agent_budgets.enabled = false).

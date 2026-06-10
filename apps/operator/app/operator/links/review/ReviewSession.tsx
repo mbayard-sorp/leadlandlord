@@ -151,7 +151,6 @@ export function ReviewSession({ prospects }: Props) {
     current.contactState ?? (typeof md.contactState === 'string' ? md.contactState : 'missing');
   const needsContact =
     contactState === 'missing' || contactState === 'guessed' || !current.contactEmail;
-  const canApprove = !needsContact || contactSaved || (editEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail));
 
   const score = current.score != null ? Number(current.score) : null;
   const scoreColor =
@@ -171,11 +170,10 @@ export function ReviewSession({ prospects }: Props) {
   }
 
   function handleApprove() {
-    if (!canApprove || !current) return;
+    if (!current) return;
     setMsg(null);
-    const emailToUse = contactSaved || current.contactEmail ? current.contactEmail! : editEmail;
     startTransition(async () => {
-      const r = await approveProspect(current!.id, emailToUse || undefined);
+      const r = await approveProspect(current!.id);
       if (!r.ok) setMsg(r.message ?? 'approve failed');
       else recordDecision('approved');
     });
@@ -403,8 +401,7 @@ export function ReviewSession({ prospects }: Props) {
           <button
             type="button"
             onClick={handleApprove}
-            disabled={!canApprove || pending || activeDecision === 'approve'}
-            title={!canApprove ? 'Add contact email before approving' : undefined}
+            disabled={pending || activeDecision === 'approve'}
             className="flex-1 sm:flex-none text-sm px-4 py-2 rounded bg-emerald-700/50 hover:bg-emerald-700/70 text-emerald-100 disabled:opacity-40 font-medium"
           >
             {pending && activeDecision === 'approve' ? 'Approving…' : 'Approve'}
@@ -431,9 +428,9 @@ export function ReviewSession({ prospects }: Props) {
             <span className="hidden sm:inline ml-1.5 text-xs opacity-50">[R]</span>
           </button>
 
-          {!canApprove && (
+          {needsContact && !contactSaved && (
             <span className="text-xs text-amber-300 hidden sm:block">
-              Add contact email to enable Approve
+              No contact found — add email or Molly will discover it after approval
             </span>
           )}
         </div>
