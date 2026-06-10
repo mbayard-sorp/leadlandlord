@@ -323,7 +323,7 @@ export async function gatherFleetDigestData(
     async () => {
       const r = rowsOf<{ c: number }>(
         await db.execute(
-          sql`SELECT COUNT(*)::int AS c FROM agent_approvals WHERE kind = 'niche_candidate' AND status = 'pending'`,
+          sql`SELECT COUNT(*)::int AS c FROM niches WHERE decision = 'pending'`,
         ),
       );
       return r[0]?.c ?? 0;
