@@ -185,12 +185,79 @@ export const niches = pgTable(
     // ADR 0009 Phase 2 / C1: rentability score (0-100), separate from SEO
     // winnability score. Computed from contractor_count + avg_cpc + lead price.
     rentabilityScore: numeric('rentability_score', { precision: 6, scale: 2 }),
+    // Scout/validate engine (migration 0043). Scout-time expected monthly
+    // value (population-proportional, cached/static inputs) and the measured
+    // validation-time value. Both persisted, never overwritten, so predicted
+    // vs actual call volume can be calibrated later.
+    estMonthlyValueUsd: numeric('est_monthly_value_usd', { precision: 12, scale: 2 }),
+    validatedMonthlyValueUsd: numeric('validated_monthly_value_usd', { precision: 12, scale: 2 }),
+    // Claude annotation from the validator (seasonality flag, licensing
+    // concern, one-line caution). Null on legacy / manually seeded rows.
+    annotations: jsonb('annotations'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
   },
   (t) => ({
     nicheCityStateUniq: uniqueIndex('niches_niche_city_state_uniq').on(t.niche, t.city, t.state),
     decisionIdx: index('niches_decision_idx').on(t.decision),
+  }),
+);
+
+/**
+ * One row per scout run (migration 0043). The full trade x city grid is
+ * scored in memory and never persisted — only the top `persisted_candidates`
+ * rows land in niche_candidates, and the report jsonb captures everything the
+ * operator needs (value curve, recommendation, insights). A new scout for the
+ * same states marks prior 'current' runs 'superseded'.
+ */
+export const nicheScoutRuns = pgTable('niche_scout_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  agentRunId: uuid('agent_run_id'),
+  /** Two-letter state codes, e.g. ["AZ","NM"]. */
+  states: jsonb('states').$type<string[]>().notNull(),
+  /** Null = all 9 categories. */
+  categoryFilter: text('category_filter'),
+  populationMin: integer('population_min').notNull(),
+  populationMax: integer('population_max').notNull(),
+  gridCells: integer('grid_cells').notNull(),
+  persistedCandidates: integer('persisted_candidates').notNull(),
+  report: jsonb('report').notNull(),
+  /** 'current' | 'superseded' */
+  status: text('status').notNull().default('current'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const nicheCandidates = pgTable(
+  'niche_candidates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    scoutRunId: uuid('scout_run_id')
+      .notNull()
+      .references(() => nicheScoutRuns.id, { onDelete: 'cascade' }),
+    trade: text('trade').notNull(),
+    category: text('category').notNull(),
+    city: text('city').notNull(),
+    state: text('state').notNull(),
+    population: integer('population').notNull(),
+    /** Null = no cached cluster (data_confidence 'benchmark_only'). */
+    clusterVolume: integer('cluster_volume'),
+    estCityVolume: numeric('est_city_volume', { precision: 12, scale: 2 }),
+    leadBenchmarkPrice: numeric('lead_benchmark_price', { precision: 8, scale: 2 }).notNull(),
+    rentabilityPrior: numeric('rentability_prior', { precision: 4, scale: 3 }).notNull(),
+    estMonthlyValueUsd: numeric('est_monthly_value_usd', { precision: 12, scale: 2 }).notNull(),
+    rank: integer('rank').notNull(),
+    isNovelTrade: boolean('is_novel_trade').notNull().default(false),
+    /** 'cluster' | 'benchmark_only' */
+    dataConfidence: text('data_confidence').notNull().default('cluster'),
+    /** 'scouted' | 'queued' | 'validated' | 'validation_failed' */
+    status: text('status').notNull().default('scouted'),
+    nicheId: uuid('niche_id').references(() => niches.id, { onDelete: 'set null' }),
+    validatedValueUsd: numeric('validated_value_usd', { precision: 12, scale: 2 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    runCellUniq: uniqueIndex('niche_candidates_run_cell_uniq').on(t.scoutRunId, t.trade, t.city, t.state),
+    runRankIdx: index('niche_candidates_run_rank_idx').on(t.scoutRunId, t.rank),
   }),
 );
 
@@ -1012,6 +1079,11 @@ export const systemState = pgTable('system_state', {
   geoSharePrior: numeric('geo_share_prior', { precision: 4, scale: 3 }),
   rentabilityCpcCeiling: numeric('rentability_cpc_ceiling', { precision: 6, scale: 2 }),
   rentabilityLeadPriceCeiling: numeric('rentability_lead_price_ceiling', { precision: 7, scale: 2 }),
+  // Scout/validate value-model knobs (migration 0043). NULL = fall back to
+  // the defaults in packages/agents/src/niche-hunter/value-model.ts
+  // (CTR 0.20, call rate 0.10).
+  scoutCtrAtRank: numeric('scout_ctr_at_rank', { precision: 5, scale: 4 }),
+  scoutCallRate: numeric('scout_call_rate', { precision: 5, scale: 4 }),
   // ──────────────────────────────────────────────────────────
   // Portfolio-wide daily spend ceiling (orchestrator Phase 2).
   // Enforced in BaseAgent.assertBudgetAvailable BEFORE the per-agent
