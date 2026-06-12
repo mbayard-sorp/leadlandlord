@@ -22,6 +22,19 @@ export type ServiceCategory =
   | 'legal'
   | 'medical';
 
+/** Canonical category list for zod enums and UI pickers. */
+export const CATEGORY_VALUES = [
+  'home_services',
+  'auto',
+  'health',
+  'professional',
+  'pet',
+  'event',
+  'lifestyle',
+  'legal',
+  'medical',
+] as const satisfies readonly ServiceCategory[];
+
 export const SERVICE_TAXONOMY: Record<ServiceCategory, string[]> = {
   home_services: [
     'epoxy garage flooring',

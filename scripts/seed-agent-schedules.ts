@@ -54,6 +54,9 @@ const SEED: SeedRow[] = [
   { schedulerName: 'fleet-digest', targetAgent: 'fleet-digest', cadenceKind: 'cron', cronExpr: '0 13 * * *' },
   // citation-runner (citations v1): weekly Monday 13:00 UTC ~= 6am MST, live sites only.
   { schedulerName: 'citation-runner', targetAgent: 'citation-runner', cadenceKind: 'cron', cronExpr: '0 13 * * 1' },
+  // niche-keyword-refresher: quarterly cluster-cache warm, 05:00 UTC on the
+  // 1st of Jan/Apr/Jul/Oct (cron.ts expands */3 to months 1,4,7,10).
+  { schedulerName: 'niche-keyword-refresher', targetAgent: 'niche-keyword-refresher', cadenceKind: 'cron', cronExpr: '0 5 1 */3 *' },
 
   // Registered scheduler with no current timer — event/manual today. Parity.
   { schedulerName: 'wave-progression', targetAgent: 'wave-launcher', cadenceKind: 'manual' },

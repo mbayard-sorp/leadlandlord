@@ -1,4 +1,4 @@
-import { stableKey, withDataForSeoCache } from './cache';
+import { stableKey, withDataForSeoCache, peekDataForSeoCache } from './cache';
 import { dfsPost } from './client';
 
 export { dfsLocationName, usStateName } from './location';
@@ -727,6 +727,25 @@ export async function getKeywordCandidates(args: {
   });
   onCost?.(costUsd);
   return value;
+}
+
+/**
+ * Cache-only variant of getKeywordCandidates: returns the cached cluster when
+ * fresh, null on a miss. Never spends. Used by the niche scout's strictly
+ * cache-only mode (warm_missing_clusters=false).
+ */
+export async function peekKeywordCandidates(args: {
+  seed: string;
+  language?: string;
+  relatedLimit?: number;
+  suggestionLimit?: number;
+}): Promise<KeywordCandidate[] | null> {
+  if (process.env.MOCK_AI === 'true') {
+    return mockKeywordCandidates(args.seed);
+  }
+  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30 } = args;
+  const cacheKey = `${language}:${seed.toLowerCase().trim()}:r${relatedLimit}:s${suggestionLimit}`;
+  return peekDataForSeoCache<KeywordCandidate[]>({ endpoint: 'candidates', key: cacheKey });
 }
 
 function mockKeywordCandidates(seed: string): KeywordCandidate[] {
