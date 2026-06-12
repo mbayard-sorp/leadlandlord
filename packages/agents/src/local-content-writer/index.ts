@@ -3,6 +3,9 @@ import { eq } from 'drizzle-orm';
 import { getDb, sites, contentIdeas } from '@leadlandlord/db';
 import { BaseAgent, type AgentContext } from '../base';
 import { draftInfoPage } from '../shared/author-info-page';
+import { loadNicheKnowledge } from '../shared/niche-knowledge';
+import { resolveSiteThemeKey } from '../shared/site-theme';
+import { isStoryArchetype } from '../local-content-scout';
 import { persistInfoPage } from './persist-info-page';
 
 const LocalContentWriterInput = z.object({
@@ -67,20 +70,35 @@ export class LocalContentWriter extends BaseAgent<typeof LocalContentWriterInput
       .limit(1);
     if (!site) throw new Error(`local-content-writer: site not found: ${idea.siteId}`);
 
+    const story = isStoryArchetype(idea.archetype);
+
+    // For job stories, resolve the site theme and load the niche-knowledge
+    // block so the narrative's problem/fix stays factually accurate.
+    let themeKey: 'classic' | 'modern' | 'premium' | 'bright' | 'haul' | 'counsel' | undefined;
+    let nicheKnowledge: string | null = null;
+    if (story) {
+      themeKey = await resolveSiteThemeKey(idea.siteId);
+      nicheKnowledge = loadNicheKnowledge(themeKey);
+    }
+
     ctx.progress({ step: 2, total: 3, label: 'drafting content' });
     const drafted = await draftInfoPage({
       siteId: idea.siteId,
       proposedSlug: toSlug(idea.topic),
       proposedTitle: idea.topic,
-      intent: 'info',
+      intent: story ? 'story' : 'info',
       niche: site.niche,
       city: site.city,
       state: site.state,
       ctx,
+      themeKey,
       archetype: idea.archetype ?? undefined,
       voiceSeed: idea.voiceSeed ?? undefined,
-      // Map archetype to a length target: cost_guide and comparison are longer.
-      lengthTarget: idea.archetype === 'cost_guide' || idea.archetype === 'comparison' ? 1200 : 900,
+      storyScaffold: story ? idea.storyScaffold : null,
+      nicheKnowledge,
+      // Job stories and cost_guide/comparison run a bit longer.
+      lengthTarget:
+        story || idea.archetype === 'cost_guide' || idea.archetype === 'comparison' ? 1100 : 900,
     });
 
     // Optional compliance check: lazy-import so the test surface stays light.
