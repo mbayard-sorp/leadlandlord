@@ -26,18 +26,24 @@ describe('FLEET_DISPOSITION coverage', () => {
 describe('summarizeDisposition (the intended split)', () => {
   const s = summarizeDisposition();
 
-  it('matches the agreed disposition: 27 ON, 4 armed, 9 disabled', () => {
-    expect(s.enabled).toHaveLength(27);
-    expect(s.armed).toHaveLength(4);
+  it('matches the agreed disposition: 28 ON, 5 armed, 9 disabled', () => {
+    expect(s.enabled).toHaveLength(28);
+    expect(s.armed).toHaveLength(5);
     expect(s.disabled).toHaveLength(9);
     expect(s.enabled.length + s.armed.length + s.disabled.length).toBe(
       Object.keys(FLEET_DISPOSITION).length,
     );
   });
 
-  it('arms exactly the human-triggered build chain', () => {
+  it('arms exactly the human-triggered build chain + niche engine', () => {
     expect(new Set(s.armed)).toEqual(
-      new Set(['niche-hunter', 'site-builder', 'domain-procurer', 'tracking-setup']),
+      new Set([
+        'niche-scout',
+        'niche-validator',
+        'site-builder',
+        'domain-procurer',
+        'tracking-setup',
+      ]),
     );
   });
 

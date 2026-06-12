@@ -1,4 +1,4 @@
-import { stableKey, withDataForSeoCache } from './cache';
+import { stableKey, withDataForSeoCache, peekDataForSeoCache } from './cache';
 import { dfsPost } from './client';
 
 export { dfsLocationName, usStateName } from './location';
@@ -65,8 +65,10 @@ export async function getLocalKeywordMetrics(args: {
   language?: string;
   /** Skip cache and re-fetch from DataForSEO. */
   forceRefresh?: boolean;
+  /** Called with the cold-miss cost in USD (0 on cache hit). */
+  onCost?: (costUsd: number) => void;
 }): Promise<KeywordMetrics[]> {
-  const { keywords, location, language = 'en', forceRefresh } = args;
+  const { keywords, location, language = 'en', forceRefresh, onCost } = args;
   if (keywords.length === 0) return [];
   // MOCK_AI: return canned metrics so niche-hunter scoring path still runs.
   if (process.env.MOCK_AI === 'true') {
@@ -83,7 +85,7 @@ export async function getLocalKeywordMetrics(args: {
   // order doesn't matter; dedup means {a,b,a} hashes the same as {a,b}.
   const sortedKeywords = Array.from(new Set(keywords.map((k) => k.toLowerCase()))).sort();
   const cacheKey = stableKey([language, location, ...sortedKeywords]);
-  const { value } = await withDataForSeoCache<KeywordMetrics[]>({
+  const { value, costUsd } = await withDataForSeoCache<KeywordMetrics[]>({
     endpoint: 'metrics',
     key: cacheKey,
     // Search volume / CPC drift over weeks; 30 days is the sweet spot before
@@ -94,6 +96,7 @@ export async function getLocalKeywordMetrics(args: {
     forceRefresh,
     fetcher: () => fetchLocalKeywordMetricsFromApi(keywords, location, language),
   });
+  onCost?.(costUsd);
   return value;
 }
 
@@ -307,8 +310,10 @@ export async function getSerpComposition(args: {
   location: string;
   language?: string;
   forceRefresh?: boolean;
+  /** Called with the cold-miss cost in USD (0 on cache hit). */
+  onCost?: (costUsd: number) => void;
 }): Promise<SerpComposition> {
-  const { keyword, location, language = 'en', forceRefresh } = args;
+  const { keyword, location, language = 'en', forceRefresh, onCost } = args;
   if (process.env.MOCK_AI === 'true') {
     return {
       aggregator_share: 0.3,
@@ -324,7 +329,7 @@ export async function getSerpComposition(args: {
     };
   }
   const cacheKey = stableKey([language, location, keyword.toLowerCase()]);
-  const { value } = await withDataForSeoCache<SerpComposition>({
+  const { value, costUsd } = await withDataForSeoCache<SerpComposition>({
     endpoint: 'serp-composition',
     key: cacheKey,
     ttlDays: 14,
@@ -332,6 +337,7 @@ export async function getSerpComposition(args: {
     forceRefresh,
     fetcher: () => fetchSerpCompositionFromApi(keyword, location, language),
   });
+  onCost?.(costUsd);
   return value;
 }
 
@@ -426,14 +432,37 @@ interface PaidSerpItemRaw {
  *
  * Cap ad_count at 10 before passing to scoring normalization.
  */
+/**
+ * Cache key for the paid-ads endpoint. When a `location` string is supplied
+ * it replaces the numeric location_code slot, so existing national entries
+ * (keyed on 2840) keep their keys and city-scoped lookups get distinct keys.
+ */
+export function paidAdsCacheKey(args: {
+  keyword: string;
+  location?: string;
+  location_code?: number;
+  language_code?: string;
+}): string {
+  const { keyword, location, location_code = 2840, language_code = 'en' } = args;
+  return stableKey([language_code, location ?? location_code, keyword.toLowerCase()]);
+}
+
 export async function getPaidAdCount(args: {
   keyword: string;
+  /**
+   * DataForSEO location_name string (e.g. dfsLocationName output,
+   * "Tucson,Arizona,United States"). When set, the ads SERP is city-scoped;
+   * when absent, falls back to location_code (national 2840 by default).
+   */
+  location?: string;
   location_code?: number;
   language_code?: string;
   /** Skip cache and re-fetch from DataForSEO. */
   forceRefresh?: boolean;
+  /** Called with the cold-miss cost in USD (0 on cache hit). */
+  onCost?: (costUsd: number) => void;
 }): Promise<number> {
-  const { keyword, location_code = 2840, language_code = 'en', forceRefresh } = args;
+  const { keyword, location, location_code = 2840, language_code = 'en', forceRefresh, onCost } = args;
   if (process.env.MOCK_AI === 'true') {
     // Return a plausible mock so scoring path exercises ad_presence weight.
     return 3;
@@ -441,28 +470,50 @@ export async function getPaidAdCount(args: {
   // Cached like the other SERP endpoints: ad presence for a given keyword
   // barely moves week-to-week, and validation/re-validation used to fire a
   // fresh ads-SERP call every time. 14-day TTL matches getSerpComposition.
-  const cacheKey = stableKey([language_code, location_code, keyword.toLowerCase()]);
-  const { value } = await withDataForSeoCache<number>({
+  const cacheKey = paidAdsCacheKey({ keyword, location, location_code, language_code });
+  const { value, costUsd } = await withDataForSeoCache<number>({
     endpoint: 'paid-ads',
     key: cacheKey,
     ttlDays: 14,
     costUsd: 0.075,
     forceRefresh,
-    fetcher: () => fetchPaidAdCountFromApi(keyword, location_code, language_code),
+    fetcher: () => fetchPaidAdCountFromApi(keyword, location, location_code, language_code),
   });
+  onCost?.(costUsd);
   return value;
 }
 
 async function fetchPaidAdCountFromApi(
   keyword: string,
+  location: string | undefined,
   location_code: number,
   language_code: string,
 ): Promise<number> {
-  try {
-    const rows = await dfsPost<{ items: PaidSerpItemRaw[] | null; items_count?: number }>(
+  const post = (loc: { location_name: string } | { location_code: number }) =>
+    dfsPost<{ items: PaidSerpItemRaw[] | null; items_count?: number }>(
       '/serp/google/ads/live/advanced',
-      [{ keyword, location_code, language_code, depth: 10 }],
+      [{ keyword, ...loc, language_code, depth: 10 }],
     );
+  try {
+    let rows;
+    if (location) {
+      try {
+        rows = await post({ location_name: location });
+      } catch (err) {
+        // location_name support on the ads SERP endpoint is unverified live.
+        // On a 40501 Invalid Field error, retry national — worst case is the
+        // pre-city-scoping status quo.
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.includes('40501')) throw err;
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[dataforseo] ads SERP rejected location_name "${location}" (40501) — retrying with location_code ${location_code}`,
+        );
+        rows = await post({ location_code });
+      }
+    } else {
+      rows = await post({ location_code });
+    }
     const row = rows[0];
     if (!row) return 0;
     // Prefer items_count if present; fall back to counting items with type='paid'.
@@ -636,6 +687,8 @@ export async function getKeywordCandidates(args: {
   suggestionLimit?: number;
   /** Skip cache and re-fetch from DataForSEO. */
   forceRefresh?: boolean;
+  /** Called with the cold-miss cost in USD (0 on cache hit). */
+  onCost?: (costUsd: number) => void;
 }): Promise<KeywordCandidate[]> {
   // MOCK_AI bypasses DataForSEO and returns canned candidates. Used by
   // the same end-to-end test harness that mocks Anthropic — see
@@ -643,12 +696,12 @@ export async function getKeywordCandidates(args: {
   if (process.env.MOCK_AI === 'true') {
     return mockKeywordCandidates(args.seed);
   }
-  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30, forceRefresh } = args;
+  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30, forceRefresh, onCost } = args;
   // The seed is the natural cache key — keyword-planner emits seeds like
   // `<niche>`, `<niche> near me`, `<niche> cost` that are city-independent
   // and reusable across every site we ever build for that niche.
   const cacheKey = `${language}:${seed.toLowerCase().trim()}:r${relatedLimit}:s${suggestionLimit}`;
-  const { value } = await withDataForSeoCache<KeywordCandidate[]>({
+  const { value, costUsd } = await withDataForSeoCache<KeywordCandidate[]>({
     endpoint: 'candidates',
     key: cacheKey,
     // Candidate phrase universe is stable; semantic neighbors don't shift
@@ -672,7 +725,27 @@ export async function getKeywordCandidates(args: {
       return Array.from(byPhrase.values()).sort((a, b) => b.search_volume - a.search_volume);
     },
   });
+  onCost?.(costUsd);
   return value;
+}
+
+/**
+ * Cache-only variant of getKeywordCandidates: returns the cached cluster when
+ * fresh, null on a miss. Never spends. Used by the niche scout's strictly
+ * cache-only mode (warm_missing_clusters=false).
+ */
+export async function peekKeywordCandidates(args: {
+  seed: string;
+  language?: string;
+  relatedLimit?: number;
+  suggestionLimit?: number;
+}): Promise<KeywordCandidate[] | null> {
+  if (process.env.MOCK_AI === 'true') {
+    return mockKeywordCandidates(args.seed);
+  }
+  const { seed, language = 'en', relatedLimit = 50, suggestionLimit = 30 } = args;
+  const cacheKey = `${language}:${seed.toLowerCase().trim()}:r${relatedLimit}:s${suggestionLimit}`;
+  return peekDataForSeoCache<KeywordCandidate[]>({ endpoint: 'candidates', key: cacheKey });
 }
 
 function mockKeywordCandidates(seed: string): KeywordCandidate[] {

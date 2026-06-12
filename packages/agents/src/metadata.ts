@@ -28,9 +28,16 @@ export const agentMetadata: Record<string, AgentMeta> = {
     description: 'Provisions a Twilio tracking number and wires call forwarding for a site.',
     trigger: 'Event-driven (during site build)',
   },
-  'niche-hunter': {
-    description: 'Brainstorms and scores niche × city candidates using DataForSEO demand signals.',
+  'niche-scout': {
+    description: 'Scores the full trade × city grid from cached keyword clusters and static benchmarks, ranking by expected monthly value.',
     trigger: 'On demand (operator)',
+  },
+  'niche-validator': {
+    description: 'Validates top scouted candidates with live DataForSEO data and promotes them into the niche review queue.',
+    trigger: 'On demand (operator)',
+  },
+  'niche-keyword-refresher': {
+    description: 'Quarterly warm of the per-trade keyword-cluster cache so scouts stay near-zero cost.',
   },
   'keyword-planner': {
     description: 'Pulls DataForSEO keywords and clusters them into page-mapped clusters for a site.',

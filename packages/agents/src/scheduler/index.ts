@@ -23,6 +23,7 @@ import { scheduleNetworkMetricsAggregator } from './network-metrics-aggregator';
 import { scheduleContentDataAuditor } from './content-data-auditor';
 import { scheduleFleetDigest } from './fleet-digest';
 import { scheduleCitationRunner } from './citation-runner';
+import { scheduleNicheKeywordRefresher } from './niche-keyword-refresher';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -54,6 +55,7 @@ export const schedulers: Record<string, Scheduler> = {
   'content-data-auditor': scheduleContentDataAuditor,
   'fleet-digest': scheduleFleetDigest,
   'citation-runner': scheduleCitationRunner,
+  'niche-keyword-refresher': scheduleNicheKeywordRefresher,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';

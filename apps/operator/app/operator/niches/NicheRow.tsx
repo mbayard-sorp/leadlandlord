@@ -32,7 +32,39 @@ export type NicheRowData = {
   decision: string;
   contractorCount: number | null;
   rentabilityScore: string | null;
+  estMonthlyValueUsd: string | null;
+  validatedMonthlyValueUsd: string | null;
+  annotations: unknown;
 };
+
+interface NicheAnnotations {
+  seasonality?: string | null;
+  licensing_concern?: string | null;
+  caution?: string | null;
+}
+
+function parseAnnotations(raw: unknown): NicheAnnotations | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const a = raw as NicheAnnotations;
+  if (!a.seasonality && !a.licensing_concern && !a.caution) return null;
+  return a;
+}
+
+function ValueCell({ row }: { row: NicheRowData }) {
+  if (row.validatedMonthlyValueUsd !== null) {
+    return (
+      <span className="text-xs font-medium text-emerald-400">
+        ${Number(row.validatedMonthlyValueUsd).toFixed(0)}/mo val
+      </span>
+    );
+  }
+  if (row.estMonthlyValueUsd !== null) {
+    return (
+      <span className="text-xs text-slate-400">${Number(row.estMonthlyValueUsd).toFixed(0)}/mo est</span>
+    );
+  }
+  return <span className="text-slate-500">—</span>;
+}
 
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-2 py-2 ${className}`}>{children}</td>;
@@ -82,7 +114,6 @@ export function NicheRow({
   showDelete = false,
   siteId,
   colSpan,
-  geoSharePrior,
   demandUsed,
   demandSource,
 }: {
@@ -92,7 +123,6 @@ export function NicheRow({
   showDelete?: boolean;
   siteId?: string | null;
   colSpan: number;
-  geoSharePrior: number;
   demandUsed: number;
   demandSource: 'dataforseo' | 'claude_estimate';
 }) {
@@ -100,6 +130,7 @@ export function NicheRow({
   const [rationaleOpen, setRationaleOpen] = useState(false);
   const hasCalibration = row.dfsClusterVolume !== null;
   const isValidated = row.volumeSource === 'dataforseo';
+  const annotations = parseAnnotations(row.annotations);
 
   return (
     <>
@@ -115,6 +146,9 @@ export function NicheRow({
         </Td>
         <Td className="hidden md:table-cell">
           {row.city}, {row.state}
+        </Td>
+        <Td className="align-middle whitespace-nowrap">
+          <ValueCell row={row} />
         </Td>
         <Td className="font-semibold align-middle">
           {isValidated ? <span className="text-slate-600">—</span> : (row.score ?? '—')}
@@ -133,6 +167,19 @@ export function NicheRow({
           {row.estAvgJobValueUsd ? `$${Number(row.estAvgJobValueUsd).toLocaleString()}` : '—'}
         </Td>
         <Td className="text-xs text-slate-400 max-w-md hidden lg:table-cell align-top">
+          {annotations && (
+            <div className="mb-1 space-y-0.5">
+              {annotations.seasonality && (
+                <p className="text-[11px] text-sky-300">Seasonality: {annotations.seasonality}</p>
+              )}
+              {annotations.licensing_concern && (
+                <p className="text-[11px] text-amber-300">Licensing: {annotations.licensing_concern}</p>
+              )}
+              {annotations.caution && (
+                <p className="text-[11px] text-red-300">Caution: {annotations.caution}</p>
+              )}
+            </div>
+          )}
           <div className="flex items-start gap-1.5">
             <p className={`flex-1 ${rationaleOpen ? '' : 'line-clamp-3'}`}>{row.rationale}</p>
             {row.rationale && (
@@ -181,7 +228,6 @@ export function NicheRow({
               claudeEstimate={row.estSearchVolume ?? row.searchVolume}
               dfsSeedVolume={row.dfsSearchVolume}
               clusterVolume={row.dfsClusterVolume}
-              geoSharePrior={geoSharePrior}
               demandUsed={demandUsed}
               demandSource={demandSource}
               score={row.score}

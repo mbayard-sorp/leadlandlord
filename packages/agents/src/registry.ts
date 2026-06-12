@@ -1,7 +1,9 @@
 import { SiteBuilder } from './site-builder/index';
 import { ContentEngine } from './content-engine/index';
 import { TrackingSetup } from './tracking-setup/index';
-import { NicheHunter } from './niche-hunter/index';
+import { NicheScout } from './niche-hunter/scout';
+import { NicheValidator } from './niche-hunter/validator';
+import { NicheKeywordRefresher } from './niche-hunter/refresher';
 import { KeywordPlanner } from './keyword-planner/index';
 import { DomainProcurer } from './domain-procurer/index';
 import { SeoOperator } from './seo-operator/index';
@@ -44,7 +46,9 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'site-builder': () => new SiteBuilder(),
   'content-engine': () => new ContentEngine(),
   'tracking-setup': () => new TrackingSetup(),
-  'niche-hunter': () => new NicheHunter(),
+  'niche-scout': () => new NicheScout(),
+  'niche-validator': () => new NicheValidator(),
+  'niche-keyword-refresher': () => new NicheKeywordRefresher(),
   'keyword-planner': () => new KeywordPlanner(),
   'domain-procurer': () => new DomainProcurer(),
   'seo-operator': () => new SeoOperator(),

@@ -62,7 +62,7 @@ export function describeRun(
   ].filter((v): v is string => Boolean(v) && !isUuid(v!));
   parts.push(...what);
 
-  // niche-hunter input is all hunt parameters — summarize the hunt instead.
+  // Legacy niche-hunter runs (historical rows only; agent removed 2026-06-12).
   if (agent === 'niche-hunter' && parts.length === 0) {
     const geo = i.geo_filter as Json | undefined;
     const states = Array.isArray(geo?.states) ? (geo.states as string[]).join('/') : null;

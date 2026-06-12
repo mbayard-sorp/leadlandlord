@@ -5,8 +5,6 @@ interface Props {
   dfsSeedVolume: number | null;
   /** DataForSEO Labs cluster aggregate volume (dfsClusterVolume). */
   clusterVolume: number | null;
-  /** Geo-share prior used to scale clusterVolume into a single-market estimate (display only). */
-  geoSharePrior: number;
   /**
    * The volume actually fed to computeScore — computed server-side via
    * resolveDemandVolume(dfsSearchVolume, estSearchVolume) and threaded down
@@ -52,14 +50,11 @@ export function CalibrationContent({
   claudeEstimate,
   dfsSeedVolume,
   clusterVolume,
-  geoSharePrior,
   demandUsed,
   demandSource,
   score,
 }: Props) {
   if (clusterVolume === null) return null;
-
-  const blend = Math.round(clusterVolume * geoSharePrior);
 
   const demandNote =
     demandSource === 'dataforseo'
@@ -77,11 +72,6 @@ export function CalibrationContent({
           valueClass="text-emerald-400"
         />
         <Stat label="Cluster aggregate (national)" value={fmt(clusterVolume)} />
-        <Stat
-          label={`Cluster blend (×${geoSharePrior}) — cross-check only, not a score input`}
-          value={fmt(blend)}
-          valueClass="text-slate-500"
-        />
         <div className="hidden sm:block h-9 w-px bg-slate-800" aria-hidden />
         <Stat
           label={`Demand fed to score (${demandSource === 'dataforseo' ? 'DFS measured' : 'Claude estimate'})`}

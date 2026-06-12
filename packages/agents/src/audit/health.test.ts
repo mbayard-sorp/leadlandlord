@@ -52,7 +52,9 @@ describe('buildAuditRows', () => {
       'tenant-prospector',
       'billing-dunning',
       'outreach-agent',
-      'niche-hunter',
+      'niche-scout',
+      'niche-validator',
+      'niche-keyword-refresher',
       'local-content-scout',
     ]) {
       expect(rowFor(rows, agent).auditStatus).toBe('needs_creds');
