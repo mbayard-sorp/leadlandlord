@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
-import { NicheHunterInput } from '@leadlandlord/agents/niche-hunter';
 import { NicheScoutInput } from '@leadlandlord/agents/niche-hunter/scout';
 import { validateNicheCore } from '@leadlandlord/agents/niche-hunter/validate';
 import {
@@ -17,80 +16,6 @@ interface ActionResult {
   ok: boolean;
   message?: string;
   nicheId?: string;
-}
-
-/**
- * Run niche-hunter against the supplied filters. The Operator owns when
- * this happens — there's no cron schedule for it because real DataForSEO
- * spend should be operator-gated.
- */
-export async function runNicheHunter(formData: FormData): Promise<ActionResult> {
-  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
-
-  const sys = await getSystemState();
-  if (sys.killSwitch) {
-    const reason = sys.killSwitchReason ? ` (${sys.killSwitchReason})` : '';
-    return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
-  }
-
-  const states = String(formData.get('states') ?? '')
-    .split(',')
-    .map((s) => s.trim().toUpperCase())
-    .filter((s) => s.length === 2);
-  const target = Number(formData.get('target_count') ?? 10);
-  const brainstorm = Number(formData.get('brainstorm_count') ?? 30);
-  const minVol = Number(formData.get('min_search_volume') ?? 100);
-  const maxKd = Number(formData.get('max_kd') ?? 40);
-  const minJob = Number(formData.get('min_avg_job_value_usd') ?? 150);
-  const scoreTopN = Number(formData.get('score_top_n') ?? 8);
-  const cityPoolSize = Number(formData.get('city_pool_size') ?? 150);
-  const perStateCap = Number(formData.get('per_state_cap') ?? 12);
-  const popMinRaw = formData.get('city_population_min');
-  const popMaxRaw = formData.get('city_population_max');
-  const cityPopulationMin = popMinRaw !== null && popMinRaw !== '' ? Number(popMinRaw) : undefined;
-  const cityPopulationMax = popMaxRaw !== null && popMaxRaw !== '' ? Number(popMaxRaw) : undefined;
-
-  const rawInput = {
-    target_count: target,
-    brainstorm_count: brainstorm,
-    score_top_n: scoreTopN,
-    city_pool_size: cityPoolSize,
-    per_state_cap: perStateCap,
-    ...(cityPopulationMin !== undefined ? { city_population_min: cityPopulationMin } : {}),
-    ...(cityPopulationMax !== undefined ? { city_population_max: cityPopulationMax } : {}),
-    min_search_volume: minVol,
-    max_kd: maxKd,
-    min_avg_job_value_usd: minJob,
-    allowed_categories: (() => {
-      const VALID_CATEGORIES = [
-        'home_services', 'auto', 'health', 'professional', 'pet', 'event', 'lifestyle',
-        'legal', 'medical',
-      ] as const;
-      const ALL_CATEGORIES = [...VALID_CATEGORIES];
-      const submitted = formData.getAll('allowed_categories').map(String);
-      const filtered = submitted.filter((c): c is typeof VALID_CATEGORIES[number] =>
-        (VALID_CATEGORIES as readonly string[]).includes(c)
-      );
-      return filtered.length > 0 ? filtered : ALL_CATEGORIES;
-    })(),
-    geo_filter: states.length ? { states } : undefined,
-  };
-
-  const parsed = NicheHunterInput.safeParse(rawInput);
-  if (!parsed.success) {
-    return { ok: false, message: parsed.error.issues.map((i) => i.message).join('; ') };
-  }
-
-  const db = getDb();
-  await db.insert(agentEvents).values({
-    agent: 'operator',
-    type: 'niche.run',
-    targetAgent: 'niche-hunter',
-    payload: parsed.data,
-  });
-  log.info({ payload: parsed.data }, 'niche-hunter run enqueued');
-  revalidatePath('/operator/niches');
-  return { ok: true, message: 'Queued — check the Activity panel for progress.' };
 }
 
 /**
@@ -243,7 +168,6 @@ export interface NicheRunStatus {
 
 /** Agent name -> the event type its runs are enqueued under. */
 const NICHE_AGENT_EVENT_TYPES = {
-  'niche-hunter': 'niche.run',
   'niche-scout': 'niche.scout',
   'niche-validator': 'niche.validate',
 } as const;
@@ -337,13 +261,8 @@ function summarizeRunOutput(agentName: NicheAgentName, out: Record<string, unkno
     case 'niche-validator':
       return `${out.validated ?? 0} validated, ${out.failed ?? 0} failed`;
     default:
-      return `${out.persisted ?? 0} niches saved`;
+      return 'finished';
   }
-}
-
-/** Back-compat wrapper for the legacy StatusBar; removed with the brainstorm engine. */
-export async function getLatestNicheRunStatus(): Promise<NicheRunStatus> {
-  return getLatestAgentRunStatus('niche-hunter');
 }
 
 /**

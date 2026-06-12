@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { getLatestAgentRunStatus, type NicheRunStatus, type NicheAgentName } from './actions';
 
 const AGENT_LABELS: Record<NicheAgentName, string> = {
-  'niche-hunter': 'Hunter',
   'niche-scout': 'Scout',
   'niche-validator': 'Validator',
 };

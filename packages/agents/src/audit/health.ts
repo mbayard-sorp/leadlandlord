@@ -30,7 +30,9 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'site-builder': [], // Imagen + Klaviyo are optional/skipped when unset.
   'content-engine': [], // Anthropic-only.
   'tracking-setup': [['TWILIO_ACCOUNT_SID'], ['TWILIO_AUTH_TOKEN']],
-  'niche-hunter': [['DATAFORSEO_AUTH']],
+  'niche-scout': [['DATAFORSEO_AUTH']],
+  'niche-validator': [['DATAFORSEO_AUTH']],
+  'niche-keyword-refresher': [['DATAFORSEO_AUTH']],
   'keyword-planner': [['DATAFORSEO_AUTH']],
   'domain-procurer': [
     ['NAMECHEAP_API_USER'],

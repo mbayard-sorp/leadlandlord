@@ -1,50 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { ClaudeCandidateSchema, computeScore } from './index';
+import { computeScore } from './index';
 import { isDenylisted, NICHE_DENYLIST } from './denylist';
-import { DEFAULT_WEIGHTS, GEO_SHARE_PRIOR, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
+import { DEFAULT_WEIGHTS, DFS_TRUST_FLOOR, DEMAND_SUB_SATURATION_CEILING, resolveDemandVolume } from './scoring-config';
 import { getRentabilityPrior } from './lead-benchmarks';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ClaudeCandidateSchema — schema validation tests
-// ─────────────────────────────────────────────────────────────────────────────
-
-const validCandidate = {
-  niche: 'tree removal',
-  city: 'Tucson',
-  state: 'AZ',
-  category: 'home_services',
-  est_avg_job_value_usd: 800,
-  est_close_rate: 0.35,
-  rationale: 'High demand in desert climates with many mature trees and minimal chain competition.',
-  confidence_score: 8,
-  est_monthly_searches_low: 120,
-  est_monthly_searches_high: 300,
-};
-
-describe('ClaudeCandidateSchema', () => {
-  it('accepts a well-formed candidate', () => {
-    const result = ClaudeCandidateSchema.safeParse(validCandidate);
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts the medical category (medical/dental niches are in scope)', () => {
-    const result = ClaudeCandidateSchema.safeParse({ ...validCandidate, category: 'medical' });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects an invalid category', () => {
-    const result = ClaudeCandidateSchema.safeParse({ ...validCandidate, category: 'underwater_basket_weaving' });
-    expect(result.success).toBe(false);
-  });
-
-  it('uppercases a lowercase state code', () => {
-    const result = ClaudeCandidateSchema.safeParse({ ...validCandidate, state: 'tx' });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.state).toBe('TX');
-    }
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // computeScore — safety clamp + weight tests
@@ -288,10 +246,6 @@ describe('getRentabilityPrior', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('resolveDemandVolume', () => {
-  it('GEO_SHARE_PRIOR is still 0.15 (display-only, drawer cross-check)', () => {
-    expect(GEO_SHARE_PRIOR).toBe(0.15);
-  });
-
   it('DFS_TRUST_FLOOR is 100', () => {
     expect(DFS_TRUST_FLOOR).toBe(100);
   });

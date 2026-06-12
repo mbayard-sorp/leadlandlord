@@ -38,9 +38,9 @@ async function main() {
       next_attempt_at, error,
       to_char(created_at, 'HH24:MI:SS') as ct
     FROM agent_events
-    WHERE target_agent = 'niche-hunter'
+    WHERE target_agent IN ('niche-scout', 'niche-validator')
     ORDER BY created_at DESC LIMIT 5`);
-  console.log('\nNiche-hunter events:');
+  console.log('\nNiche engine events:');
   console.table(niche.rows);
 }
 main().then(() => process.exit(0));

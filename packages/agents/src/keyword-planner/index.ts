@@ -32,7 +32,7 @@ import { IntegrationError } from '@leadlandlord/shared/errors';
  *
  * Cost target: ~$0.50 per site (DataForSEO ~$0.40 + Claude clustering ~$0.10).
  *
- * Why a separate agent (not inline in niche-hunter): we don't want to spend
+ * Why a separate agent (not inline in the niche engine): we don't want to spend
  * planner budget on the 40+ niche candidates that get rejected. Approval is
  * the natural "this niche is real" gate.
  */

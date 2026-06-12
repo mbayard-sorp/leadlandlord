@@ -114,7 +114,6 @@ export function NicheRow({
   showDelete = false,
   siteId,
   colSpan,
-  geoSharePrior,
   demandUsed,
   demandSource,
 }: {
@@ -124,7 +123,6 @@ export function NicheRow({
   showDelete?: boolean;
   siteId?: string | null;
   colSpan: number;
-  geoSharePrior: number;
   demandUsed: number;
   demandSource: 'dataforseo' | 'claude_estimate';
 }) {
@@ -230,7 +228,6 @@ export function NicheRow({
               claudeEstimate={row.estSearchVolume ?? row.searchVolume}
               dfsSeedVolume={row.dfsSearchVolume}
               clusterVolume={row.dfsClusterVolume}
-              geoSharePrior={geoSharePrior}
               demandUsed={demandUsed}
               demandSource={demandSource}
               score={row.score}

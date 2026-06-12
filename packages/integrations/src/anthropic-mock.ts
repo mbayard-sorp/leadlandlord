@@ -4,7 +4,7 @@
  * Activated by `MOCK_AI=true` env var (see anthropic.ts::getAnthropicClient).
  *
  * Returns canned responses keyed by the tool name in the request. Supports
- * both `messages.create` (used by keyword-planner, niche-hunter,
+ * both `messages.create` (used by keyword-planner, niche-validator,
  * call-classifier) and `messages.stream` (used by content-engine).
  *
  * Built 2026-05-07 after a $103 cascade burn convinced us we needed to
@@ -95,9 +95,6 @@ function cannedToolInput(toolName: string, prompt: string): unknown {
       return mockContentBundle(prompt);
     case 'output_faq_pages':
       return mockFaqPages(prompt);
-    case 'submit_niches':
-    case 'submit_niche_candidates':
-      return mockNicheCandidates();
     case 'submit_niche_annotations':
       return mockNicheAnnotations(prompt);
     default:
@@ -265,23 +262,6 @@ function mockFaqPages(prompt: string): unknown {
   };
 }
 
-function mockNicheCandidates(): unknown {
-  return {
-    niches: [
-      {
-        niche: 'mock niche 1',
-        city: 'Mock City',
-        state: 'MO',
-        rationale: 'mock rationale',
-        search_volume: 500,
-        kd: 25,
-        est_avg_job_value_usd: 800,
-        est_close_rate: 0.15,
-        score: 30,
-      },
-    ],
-  };
-}
 
 // ---- Stream mock for content-engine ----
 

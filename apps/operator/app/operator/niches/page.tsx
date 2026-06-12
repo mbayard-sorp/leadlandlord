@@ -1,6 +1,6 @@
 import { desc, asc, eq, inArray } from 'drizzle-orm';
 import { getDb, niches, sites, nicheScoutRuns, nicheCandidates } from '@leadlandlord/db';
-import { GEO_SHARE_PRIOR, resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
+import { resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
 import { ScoutForm } from './ScoutForm';
 import { ScoutReport, type ScoutRunData, type ScoutCandidateData } from './ScoutReport';
 import { SeedNicheForm } from './SeedNicheForm';
@@ -228,7 +228,6 @@ function Table({
               showDelete={showDelete}
               siteId={siteByNiche?.get(r.id) ?? null}
               colSpan={colSpan}
-              geoSharePrior={GEO_SHARE_PRIOR}
               demandUsed={demandUsed}
               demandSource={demandSource}
             />

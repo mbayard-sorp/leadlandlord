@@ -64,7 +64,6 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   orchestrator: ON(5), // Phase 6
 
   // ── Armed: enabled but fires only on a human-initiated event ──
-  'niche-hunter': ARMED(5), // legacy brainstorm engine; removed after scout/validate cutover
   'niche-scout': ARMED(15), // deterministic grid scout; cap tolerates a cold cluster warm
   'niche-validator': ARMED(15), // operator-approved validation spend
   'niche-keyword-refresher': ON(15), // quarterly cluster warm (~$12.50 fully stale)

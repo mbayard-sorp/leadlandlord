@@ -26,7 +26,7 @@ const AGENT_PROMPT_GLOB = '../../packages/agents/src/**/*.md';
 // The @leadlandlord/us-cities package reads its CSV + census JSON via
 // readFileSync('../data/...') at runtime (see packages/us-cities/src/index.ts).
 // nft doesn't trace these data files automatically, so any agent route that
-// loads the city list (niche-hunter) ENOENTs in production without this.
+// loads the city list (niche-scout) ENOENTs in production without this.
 const US_CITIES_DATA_GLOB = '../../packages/us-cities/data/**';
 const envLocal = findEnvFile(__dirname, '.env.local');
 if (envLocal) loadEnv({ path: envLocal, override: true });
@@ -52,7 +52,7 @@ const config: NextConfig = {
   // prompt files live under packages/agents/src/.
   outputFileTracingIncludes: {
     '/api/operator/build': [AGENT_PROMPT_GLOB],
-    // niche-hunter runs via both the direct agent trigger and the operator-tick
+    // niche-scout runs via both the direct agent trigger and the operator-tick
     // fan-out, and reads the us-cities data files at runtime — trace them here.
     '/api/cron/agent/[name]': [AGENT_PROMPT_GLOB, US_CITIES_DATA_GLOB],
     '/api/cron/operator-tick': [AGENT_PROMPT_GLOB, US_CITIES_DATA_GLOB],

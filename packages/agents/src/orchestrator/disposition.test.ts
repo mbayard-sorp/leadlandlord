@@ -26,9 +26,9 @@ describe('FLEET_DISPOSITION coverage', () => {
 describe('summarizeDisposition (the intended split)', () => {
   const s = summarizeDisposition();
 
-  it('matches the agreed disposition: 28 ON, 6 armed, 9 disabled', () => {
+  it('matches the agreed disposition: 28 ON, 5 armed, 9 disabled', () => {
     expect(s.enabled).toHaveLength(28);
-    expect(s.armed).toHaveLength(6);
+    expect(s.armed).toHaveLength(5);
     expect(s.disabled).toHaveLength(9);
     expect(s.enabled.length + s.armed.length + s.disabled.length).toBe(
       Object.keys(FLEET_DISPOSITION).length,
@@ -38,7 +38,6 @@ describe('summarizeDisposition (the intended split)', () => {
   it('arms exactly the human-triggered build chain + niche engine', () => {
     expect(new Set(s.armed)).toEqual(
       new Set([
-        'niche-hunter',
         'niche-scout',
         'niche-validator',
         'site-builder',
