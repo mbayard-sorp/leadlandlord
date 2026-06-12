@@ -128,6 +128,8 @@ export interface ContractorCountArgs {
   city: string;
   state: string;
   forceRefresh?: boolean;
+  /** Called with the cold-miss cost in USD (0 on cache hit). */
+  onCost?: (costUsd: number) => void;
 }
 
 /**
@@ -152,7 +154,7 @@ export async function getContractorCount(args: ContractorCountArgs): Promise<num
   const query = `${args.niche} in ${args.city}, ${args.state}`;
   const cacheKey = stableKey([args.niche.toLowerCase(), args.city.toLowerCase(), args.state.toLowerCase()]);
 
-  const { value: count } = await withDataForSeoCache<number>({
+  const { value: count, costUsd } = await withDataForSeoCache<number>({
     endpoint: 'places-contractor-count',
     key: cacheKey,
     ttlDays: 30,
@@ -169,6 +171,7 @@ export async function getContractorCount(args: ContractorCountArgs): Promise<num
     },
   });
 
+  args.onCost?.(costUsd);
   return count;
 }
 
