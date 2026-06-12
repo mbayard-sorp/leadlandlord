@@ -66,7 +66,7 @@ const MOCK_CTX = {
   emitNextStepEvent: vi.fn().mockResolvedValue(undefined),
 };
 
-function makeMockDb(ideaStatus = 'auto_approved') {
+function makeMockDb(ideaStatus = 'auto_approved', ideaOverrides: Record<string, unknown> = {}) {
   const idea = {
     id: IDEA_ID,
     siteId: SITE_ID,
@@ -79,6 +79,8 @@ function makeMockDb(ideaStatus = 'auto_approved') {
     scoutRunId: 'run-scout-001',
     angle: 'Cost and pricing breakdown',
     rationale: 'Homeowners search for this before hiring.',
+    storyScaffold: null,
+    ...ideaOverrides,
   };
 
   const site = {
@@ -227,6 +229,46 @@ describe('LocalContentWriter.execute (MOCK_AI=1)', () => {
         execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
       }).execute({ idea_id: IDEA_ID }, MOCK_CTX),
     ).rejects.toThrow(/must be approved or auto_approved/);
+  });
+
+  it('drafts a composite job-story page for a job_story archetype', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const mockDb = makeMockDb('approved', {
+      topic: 'What we found behind a slow tree-removal call in Tucson',
+      archetype: 'job_story_diagnosis',
+      voiceSeed: 'voice-c',
+      storyScaffold: {
+        presentingSymptom: 'A leaning oak that seemed like a simple removal.',
+        rootCause: 'Root rot had compromised the trunk base, risking an uncontrolled fall.',
+        resolution: 'We sectioned the tree from the top down and ground the stump.',
+        preventionTakeaway: 'Watch for fungal conks at the base — they signal internal decay.',
+        settingHint: 'A 1960s ranch home in midtown.',
+      },
+    });
+    vi.mocked(getDb).mockReturnValue(mockDb as never);
+
+    const { LocalContentWriter } = await import('./index');
+    const writer = new LocalContentWriter();
+
+    await (writer as unknown as {
+      execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
+    }).execute({ idea_id: IDEA_ID }, MOCK_CTX);
+
+    const pageDocArg = mockCreateOrReplace.mock.calls.find(
+      (args) => (args[0] as Record<string, unknown>)._type === 'page',
+    )?.[0] as Record<string, string> | undefined;
+    expect(pageDocArg).toBeDefined();
+
+    // Narrative uses the {{phone}} placeholder, never a literal number.
+    expect(pageDocArg!.mdx).toContain('{{phone}}');
+    expect(pageDocArg!.mdx).not.toMatch(/\(\d{3}\)\s*\d{3}-\d{4}/);
+    // Illustrative-example disclosure keeps us clear of fake-testimonial rules.
+    expect(pageDocArg!.mdx).toMatch(/illustrative/i);
+
+    // JSON-LD is a Case Study Article with no review/rating/named-person nodes.
+    expect(pageDocArg!.jsonLd).toContain('Case Study');
+    expect(pageDocArg!.jsonLd).not.toMatch(/"@type"\s*:\s*"Review"/);
+    expect(pageDocArg!.jsonLd).not.toMatch(/aggregateRating/i);
   });
 
   it('throws when idea not found', async () => {

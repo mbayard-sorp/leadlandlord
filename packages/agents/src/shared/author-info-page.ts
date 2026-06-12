@@ -14,15 +14,35 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import type { AgentContext } from '../base';
 
+/** Factual skeleton for a job-story post (mirrors the scout's StoryScaffold). */
+export interface StoryScaffoldInput {
+  presentingSymptom: string;
+  rootCause: string;
+  resolution: string;
+  preventionTakeaway: string;
+  settingHint: string;
+}
+
 export interface AuthorInfoPageArgs {
   siteId: string;
   proposedSlug: string;
   proposedTitle: string;
-  intent: 'info' | 'service' | 'comparison';
+  intent: 'info' | 'service' | 'comparison' | 'story';
   niche: string;
   city: string;
   state: string;
   ctx: AgentContext;
+  /**
+   * Job-story scaffold. Required-ish for `intent: 'story'`: when present the
+   * writer dramatizes this factual skeleton (fictional, unnamed customer)
+   * instead of writing generic prose.
+   */
+  storyScaffold?: StoryScaffoldInput | null;
+  /**
+   * Niche-knowledge block (terminology + common pain points + regulations) used
+   * to keep job-story technique factually accurate. Ignored for non-story intent.
+   */
+  nicheKnowledge?: string | null;
   /**
    * Theme key from the Sanity site doc. Currently informational only — passed
    * to the prompt so tone matches the site's design vibe.
@@ -80,6 +100,37 @@ function buildDraftToolInputSchema(lengthTarget: number) {
   } as const;
 }
 
+/** Tool schema for job-story posts — Article JSON-LD with a Case Study section. */
+function buildStoryToolInputSchema(lengthTarget: number) {
+  return {
+    type: 'object',
+    required: ['title', 'meta_description', 'mdx', 'h1', 'schema_org_jsonld'],
+    properties: {
+      title: {
+        type: 'string',
+        description: 'Page title, ≤60 chars, framed as a job/use-case and including the target keyword naturally.',
+      },
+      meta_description: {
+        type: 'string',
+        description: 'Meta description, ≤155 chars, hinting at the problem solved, with a CTA.',
+      },
+      h1: {
+        type: 'string',
+        description: 'H1 heading rendered at the top of the page body.',
+      },
+      mdx: {
+        type: 'string',
+        description: `Narrative body in Markdown/MDX, ${lengthTarget - 100}–${lengthTarget + 100} words. Tell the job as a story with H2 sections: the call/symptom, what we found on site, how we fixed it, and what to watch for. The customer is fictional and unnamed (composite). Weave the target keyword 3–5 times naturally. End with a short italic line noting the example is illustrative, then a CTA using {{phone}}.`,
+      },
+      schema_org_jsonld: {
+        type: 'object',
+        description:
+          'Schema.org JSON-LD as a JSON object. Use type "Article" with "articleSection": "Case Study", a descriptive "headline", and an "about" naming the problem. Do NOT include Review, Rating, or a named Person — these are illustrative composite stories, not testimonials.',
+      },
+    },
+  } as const;
+}
+
 function voiceInstruction(voiceSeed: string | undefined): string {
   if (!voiceSeed) return '';
   if (voiceSeed === 'voice-a') {
@@ -88,43 +139,84 @@ function voiceInstruction(voiceSeed: string | undefined): string {
   if (voiceSeed === 'voice-b') {
     return '\nVoice style: informative and structured. Use clear headers. Favor concise, factual language.';
   }
+  if (voiceSeed === 'voice-c') {
+    return '\nVoice style: anecdotal and grounded. Lead with concrete scene-setting detail, then explain plainly. Good for storytelling.';
+  }
   return `\nVoice seed: ${voiceSeed}. Match the tone described.`;
 }
 
 export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedInfoPage> {
-  const { proposedTitle, intent, niche, city, state, ctx, themeKey, archetype, voiceSeed, lengthTarget = 1000 } = args;
+  const { proposedTitle, intent, niche, city, state, ctx, themeKey, archetype, voiceSeed, storyScaffold, nicheKnowledge, lengthTarget = 1000 } = args;
 
   if (process.env.MOCK_AI === '1') {
     return mockDraft(args);
   }
 
+  const isStory = intent === 'story' && !!storyScaffold;
+
   const client = getAnthropicClient();
   const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
 
-  const system = [
-    `You are an expert local-SEO content writer. You write helpful, accurate, non-promotional info pages for small local businesses.`,
-    `Avoid: fake reviews, made-up awards, specific license numbers, claims like "best in state". The page should educate the reader about the topic and end with an honest CTA.`,
-    `CRITICAL — phone numbers: never write a literal phone number anywhere in the MDX or CTAs. Always use the placeholder token {{phone}} exactly as written (e.g. "Call us today at {{phone}}"). The site-host runtime substitutes the tenant's real tracking number at render. A literal number like (555) 123-4567 is a hard failure.`,
-    `Tone: clear, neighborly, practical. Theme vibe: ${themeKey ?? 'classic'}.`,
-    archetype ? `Content archetype: ${archetype}. Structure and angle the content accordingly.` : '',
-    voiceInstruction(voiceSeed),
-  ].filter(Boolean).join('\n');
+  const system = isStory
+    ? [
+        `You are an expert local-SEO content writer. You write helpful, accurate job-story posts for small local businesses: short narratives about a real job, centered on a problem that was DISCOVERED and RESOLVED.`,
+        `The customer is FICTIONAL and UNNAMED — write in composite/illustrative framing ("A homeowner in <area> called about…"). Never present a named individual as a verified customer, and never imply a review, rating, or testimonial.`,
+        `Factual integrity: the problem and the fix must be accurate, common scenarios for this niche. Do not invent technique. Use correct trade terminology.`,
+        `CRITICAL — phone numbers: never write a literal phone number anywhere in the MDX or CTAs. Always use the placeholder token {{phone}} exactly as written. A literal number like (555) 123-4567 is a hard failure.`,
+        `Avoid: fake reviews, made-up awards, specific license numbers, claims like "best in state".`,
+        `Tone: clear, neighborly, practical. Theme vibe: ${themeKey ?? 'classic'}.`,
+        archetype ? `Content archetype: ${archetype}. Shape the narrative arc accordingly.` : '',
+        voiceInstruction(voiceSeed),
+      ].filter(Boolean).join('\n')
+    : [
+        `You are an expert local-SEO content writer. You write helpful, accurate, non-promotional info pages for small local businesses.`,
+        `Avoid: fake reviews, made-up awards, specific license numbers, claims like "best in state". The page should educate the reader about the topic and end with an honest CTA.`,
+        `CRITICAL — phone numbers: never write a literal phone number anywhere in the MDX or CTAs. Always use the placeholder token {{phone}} exactly as written (e.g. "Call us today at {{phone}}"). The site-host runtime substitutes the tenant's real tracking number at render. A literal number like (555) 123-4567 is a hard failure.`,
+        `Tone: clear, neighborly, practical. Theme vibe: ${themeKey ?? 'classic'}.`,
+        archetype ? `Content archetype: ${archetype}. Structure and angle the content accordingly.` : '',
+        voiceInstruction(voiceSeed),
+      ].filter(Boolean).join('\n');
 
-  const userPrompt = [
-    `Author a single info page for a ${niche} business serving ${city}, ${state}.`,
-    `Topic: "${proposedTitle}"`,
-    `Intent: ${intent}`,
-    ``,
-    `Requirements:`,
-    `- Title ≤60 chars, includes the topic phrase naturally.`,
-    `- Meta description ≤155 chars, with a CTA.`,
-    `- MDX body ${lengthTarget - 100}–${lengthTarget + 100} words, structured with H2/H3.`,
-    `- The topic phrase should appear 3–5 times naturally (not stuffed).`,
-    `- End with a CTA inviting the reader to call or contact the business, using the {{phone}} placeholder token (never a literal number).`,
-    `- JSON-LD: Article schema for info, Service for service intent.`,
-    ``,
-    `Call ${DRAFT_TOOL_NAME} exactly once with the result.`,
-  ].join('\n');
+  const userPrompt = isStory
+    ? [
+        `Write a single job-story post for a ${niche} business serving ${city}, ${state}.`,
+        `Working title: "${proposedTitle}"`,
+        ``,
+        `Dramatize this factual skeleton — keep the problem and fix accurate; the customer is fictional and unnamed:`,
+        `- Presenting symptom: ${storyScaffold!.presentingSymptom}`,
+        `- Root cause discovered: ${storyScaffold!.rootCause}`,
+        `- Resolution: ${storyScaffold!.resolution}`,
+        `- Prevention takeaway: ${storyScaffold!.preventionTakeaway}`,
+        `- Setting flavor (no named person): ${storyScaffold!.settingHint}`,
+        ...(nicheKnowledge
+          ? [``, `Niche knowledge — keep terminology and technique consistent with this:`, nicheKnowledge]
+          : []),
+        ``,
+        `Requirements:`,
+        `- Title ≤60 chars, framed as a job/use-case, includes the keyword naturally.`,
+        `- Meta description ≤155 chars, with a CTA.`,
+        `- MDX body ${lengthTarget - 100}–${lengthTarget + 100} words. Narrative arc with H2 sections: the call/symptom → what we found on site → how we fixed it → what to watch for.`,
+        `- Weave the keyword phrase 3–5 times naturally (not stuffed).`,
+        `- End the body with a short italic line: *Names and details are illustrative; the problem and fix reflect real jobs we do.* — then a CTA inviting the reader to call using the {{phone}} placeholder token.`,
+        `- JSON-LD: Article with "articleSection": "Case Study". No Review/Rating/named Person nodes.`,
+        ``,
+        `Call ${DRAFT_TOOL_NAME} exactly once with the result.`,
+      ].join('\n')
+    : [
+        `Author a single info page for a ${niche} business serving ${city}, ${state}.`,
+        `Topic: "${proposedTitle}"`,
+        `Intent: ${intent}`,
+        ``,
+        `Requirements:`,
+        `- Title ≤60 chars, includes the topic phrase naturally.`,
+        `- Meta description ≤155 chars, with a CTA.`,
+        `- MDX body ${lengthTarget - 100}–${lengthTarget + 100} words, structured with H2/H3.`,
+        `- The topic phrase should appear 3–5 times naturally (not stuffed).`,
+        `- End with a CTA inviting the reader to call or contact the business, using the {{phone}} placeholder token (never a literal number).`,
+        `- JSON-LD: Article schema for info, Service for service intent.`,
+        ``,
+        `Call ${DRAFT_TOOL_NAME} exactly once with the result.`,
+      ].join('\n');
 
   const resp = await client.messages.create({
     model,
@@ -135,7 +227,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
       {
         name: DRAFT_TOOL_NAME,
         description: 'Output the drafted info page.',
-        input_schema: buildDraftToolInputSchema(lengthTarget) as never,
+        input_schema: (isStory ? buildStoryToolInputSchema(lengthTarget) : buildDraftToolInputSchema(lengthTarget)) as never,
       },
     ],
     tool_choice: { type: 'tool', name: DRAFT_TOOL_NAME },
@@ -189,7 +281,53 @@ function clampString(s: string, max: number): string {
 }
 
 function mockDraft(args: AuthorInfoPageArgs): DraftedInfoPage {
-  const { proposedTitle, niche, city, state, lengthTarget = 1000, archetype, voiceSeed } = args;
+  const { proposedTitle, niche, city, state, lengthTarget = 1000, archetype, voiceSeed, intent, storyScaffold } = args;
+
+  if (intent === 'story' && storyScaffold) {
+    const title = clampString(`${proposedTitle} | ${niche} ${city}`, 60);
+    const meta = clampString(
+      `A ${niche} job in ${city}: ${storyScaffold.presentingSymptom.slice(0, 60)}. Call us today.`,
+      155,
+    );
+    const mdx = [
+      `# ${proposedTitle}`,
+      ``,
+      `## The call`,
+      ``,
+      `A homeowner in ${storyScaffold.settingHint} called our ${city} ${niche} team: ${storyScaffold.presentingSymptom}`,
+      ``,
+      `## What we found on site`,
+      ``,
+      `${storyScaffold.rootCause} It is a common ${niche} issue in ${city}, ${state}, and the surface symptom was masking it.`,
+      ``,
+      `## How we fixed it`,
+      ``,
+      `${storyScaffold.resolution}`,
+      ``,
+      `## What to watch for`,
+      ``,
+      `${storyScaffold.preventionTakeaway}`,
+      ``,
+      `*Names and details are illustrative; the problem and fix reflect real jobs we do.*`,
+      ``,
+      `Dealing with something similar? Call our ${city} ${niche} crew at {{phone}} for a free quote.`,
+    ].join('\n');
+    return {
+      title,
+      metaDescription: meta,
+      h1: proposedTitle,
+      mdx,
+      jsonLd: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        articleSection: 'Case Study',
+        headline: title,
+        about: storyScaffold.rootCause,
+        areaServed: `${city}, ${state}`,
+      }),
+    };
+  }
+
   const title = clampString(`${proposedTitle} | ${niche} ${city}`, 60);
   const meta = clampString(
     `Learn about ${proposedTitle.toLowerCase()} for ${niche} in ${city}, ${state}. Call us today.`,

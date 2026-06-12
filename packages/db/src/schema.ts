@@ -1323,11 +1323,34 @@ export const contentIdeas = pgTable(
     targetKeyword: text('target_keyword').notNull(),
     /** The "why now" angle — seasonal hook, local trend, demand gap. */
     angle: text('angle'),
-    /** One of: seasonal | how_to | cost_guide | comparison | local_spotlight. */
+    /**
+     * One of: seasonal | how_to | cost_guide | comparison | local_spotlight
+     * | job_story_diagnosis | job_story_second_opinion | job_story_emergency.
+     * The job_story_* archetypes produce narrative use-case posts.
+     */
     archetype: text('archetype').notNull(),
     /** Voice-rotation seed passed into the writer's prompt for stylistic variance. */
     voiceSeed: text('voice_seed').notNull(),
     rationale: text('rationale'),
+    /**
+     * Factual skeleton for job-story (use-case) archetypes, populated by the
+     * scout and dramatized — without inventing technique — by the writer.
+     * Null for the five non-narrative archetypes. The customer is fictional and
+     * unnamed (composite/illustrative framing); rootCause/resolution must be a
+     * genuine, common scenario for the niche.
+     */
+    storyScaffold: jsonb('story_scaffold').$type<{
+      /** What the (fictional) customer first reported. */
+      presentingSymptom: string;
+      /** The real underlying issue discovered on site — a genuine, common cause in the niche. */
+      rootCause: string;
+      /** The factual fix / scope of work. */
+      resolution: string;
+      /** Honest "what to watch for" lesson for readers. */
+      preventionTakeaway: string;
+      /** Neighborhood / home-type flavor (no named person). */
+      settingHint: string;
+    } | null>(),
     /** pending | approved | rejected | published | auto_approved | expired */
     status: text('status').notNull().default('pending'),
     /** agent_runs.id of the scout run that produced this idea (research cost). */

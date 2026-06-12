@@ -9,11 +9,39 @@ import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/
 import { getLocalKeywordMetrics, dfsLocationName } from '@leadlandlord/integrations/dataforseo';
 import { createReadClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
+import { loadNicheKnowledge } from '../shared/niche-knowledge';
+import { resolveSiteThemeKey } from '../shared/site-theme';
 import { LocalContentScoutInput, LocalContentScoutOutput } from './schema';
 
 export { LocalContentScoutInput, LocalContentScoutOutput };
 
-const ARCHETYPES = ['seasonal', 'how_to', 'cost_guide', 'comparison', 'local_spotlight'] as const;
+/**
+ * Narrative use-case archetypes. These produce job-story posts — a problem that
+ * was discovered and resolved — which Google and LLMs reward over commoditized
+ * informative prose. They ride the same per-site/per-week rotation as the
+ * informative archetypes, so a portion of each site's posts become stories
+ * while the network footprint stays varied.
+ */
+const STORY_ARCHETYPES = [
+  'job_story_diagnosis',
+  'job_story_second_opinion',
+  'job_story_emergency',
+] as const;
+
+const ARCHETYPES = [
+  'seasonal',
+  'how_to',
+  'cost_guide',
+  'comparison',
+  'local_spotlight',
+  ...STORY_ARCHETYPES,
+] as const;
+
+/** True when an archetype is a narrative job-story format (vs informative prose). */
+export function isStoryArchetype(a: string | null | undefined): boolean {
+  return !!a && (STORY_ARCHETYPES as readonly string[]).includes(a);
+}
+
 const VOICES = ['voice-a', 'voice-b', 'voice-c'] as const;
 const IDEATION_TOOL_NAME = 'submit_content_ideas';
 
@@ -57,13 +85,24 @@ function toTopicSlug(topic: string): string {
     .slice(0, 80);
 }
 
+export interface StoryScaffold {
+  presentingSymptom: string;
+  rootCause: string;
+  resolution: string;
+  preventionTakeaway: string;
+  settingHint: string;
+}
+
 interface ClaudeIdea {
   topic: string;
   targetKeyword: string;
   angle: string;
   rationale: string;
+  /** Present only for job-story archetypes. */
+  storyScaffold?: StoryScaffold;
 }
 
+/** Informative-prose ideation schema (the five non-narrative archetypes). */
 const IDEATION_SCHEMA = {
   type: 'object',
   properties: {
@@ -78,6 +117,43 @@ const IDEATION_SCHEMA = {
           rationale: { type: 'string', description: 'One sentence on why this idea has local search demand.' },
         },
         required: ['topic', 'targetKeyword', 'angle', 'rationale'],
+      },
+    },
+  },
+  required: ['ideas'],
+};
+
+/**
+ * Job-story ideation schema. Adds a factual scaffold per idea. The customer is
+ * fictional and unnamed; rootCause/resolution must be a genuine, common
+ * scenario for the niche (grounded in the injected niche-knowledge block).
+ */
+const STORY_IDEATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    ideas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          topic: { type: 'string', description: 'Human-readable title framed as a job/use-case, e.g. "What we found behind a slow kitchen drain in Sam Hughes".' },
+          targetKeyword: { type: 'string', description: 'Primary long-tail keyword the story illustrates (a genuine search gap, not an owned keyword).' },
+          angle: { type: 'string', description: 'The narrative hook — the surprising discovery or the stakes.' },
+          rationale: { type: 'string', description: 'One sentence on why this scenario maps to real local search demand.' },
+          storyScaffold: {
+            type: 'object',
+            description: 'Factual skeleton. The customer is fictional and unnamed; the problem and fix MUST be genuine and common for this niche.',
+            properties: {
+              presentingSymptom: { type: 'string', description: 'What the (fictional) customer first reported — the surface complaint.' },
+              rootCause: { type: 'string', description: 'The real underlying issue discovered on site. Must be a genuine, common cause for this niche — draw from the niche knowledge provided.' },
+              resolution: { type: 'string', description: 'The factual fix / scope of work that actually resolves that root cause.' },
+              preventionTakeaway: { type: 'string', description: 'An honest "what to watch for" lesson a reader can use.' },
+              settingHint: { type: 'string', description: 'Neighborhood / home-type flavor for realism — no named person.' },
+            },
+            required: ['presentingSymptom', 'rootCause', 'resolution', 'preventionTakeaway', 'settingHint'],
+          },
+        },
+        required: ['topic', 'targetKeyword', 'angle', 'rationale', 'storyScaffold'],
       },
     },
   },
@@ -108,6 +184,21 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
     ctx.progress({ step: 3, total: 4, label: 'fetching local keyword demand' });
     const localKeywords = await this.fetchLocalDemand(site.niche, site.city, site.state, ctx);
 
+    // The archetype for this run is deterministic per site+week. Compute it
+    // before ideation so story runs can request the narrative scaffold.
+    const weekNumber = parseInt(isoWeek(new Date()).split('-W')[1]!, 10);
+    const archetype = assignArchetype(input.site_id, weekNumber);
+    const voiceSeed = assignVoiceSeed(input.site_id);
+    const story = isStoryArchetype(archetype);
+
+    // For job stories, ground rootCause/resolution in real niche knowledge so
+    // the problem and fix stay factual (characters are fictional).
+    let nicheKnowledge: string | null = null;
+    if (story) {
+      const themeKey = await resolveSiteThemeKey(input.site_id);
+      nicheKnowledge = loadNicheKnowledge(themeKey);
+    }
+
     ctx.progress({ step: 4, total: 4, label: 'ideating with Claude' });
     const ideas = await this.ideate(
       site.niche,
@@ -116,12 +207,10 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
       input.idea_count,
       ownedKeywords,
       localKeywords,
+      archetype,
+      nicheKnowledge,
       ctx,
     );
-
-    const weekNumber = parseInt(isoWeek(new Date()).split('-W')[1]!, 10);
-    const archetype = assignArchetype(input.site_id, weekNumber);
-    const voiceSeed = assignVoiceSeed(input.site_id);
 
     let proposed = 0;
     let autoApproved = 0;
@@ -147,6 +236,7 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
           archetype,
           voiceSeed,
           rationale: idea.rationale,
+          storyScaffold: story ? (idea.storyScaffold ?? null) : null,
           status: 'pending',
           scoutRunId: ctx.runId,
         })
@@ -232,16 +322,32 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
     ideaCount: number,
     ownedKeywords: string[],
     localKeywords: string[],
+    archetype: string,
+    nicheKnowledge: string | null,
     ctx: AgentContext,
   ): Promise<ClaudeIdea[]> {
+    const story = isStoryArchetype(archetype);
+
     if (process.env.MOCK_AI === '1') {
-      return mockIdeas(niche, city, state, ideaCount);
+      return mockIdeas(niche, city, state, ideaCount, archetype);
     }
 
     const client = getAnthropicClient();
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
 
-    const systemPrompt = `You are a local-SEO content strategist. Your job is to propose info page topics for a ${niche} business serving ${city}, ${state}.
+    const systemPrompt = story
+      ? `You are a local-SEO content strategist for a ${niche} business serving ${city}, ${state}. Propose ${ideaCount} job-story (use-case) post ideas — each a short narrative about a job the business handled, centered on a PROBLEM THAT WAS DISCOVERED AND RESOLVED, not a description of the service.
+
+Archetype "${archetype}" shapes the arc:
+- job_story_diagnosis: a routine-sounding symptom hides a different root cause found on site.
+- job_story_second_opinion: the customer got a wrong or overpriced diagnosis elsewhere; the real issue is found.
+- job_story_emergency: an urgent, often season/weather-driven failure and the rapid response.
+
+Hard rules:
+- The customer is FICTIONAL and UNNAMED (composite/illustrative). Never invent a named individual presented as a real, verified customer, and never imply a review or rating.
+- The problem (rootCause) and the fix (resolution) MUST be genuine, common scenarios for this niche — accurate, not invented technique.
+- Each idea still targets a real local long-tail keyword the site does NOT already own.`
+      : `You are a local-SEO content strategist. Your job is to propose info page topics for a ${niche} business serving ${city}, ${state}.
 
 Each topic must:
 - Target a genuine local long-tail search query that the site does NOT yet own
@@ -260,20 +366,27 @@ Do not propose topics that duplicate or cannibalize the existing keyword list.`;
       ``,
       `Local keyword demand signals (use these to find gaps):`,
       localKeywords.map((k) => `- ${k}`).join('\n'),
+      ...(story && nicheKnowledge
+        ? [
+            ``,
+            `Niche knowledge — draw rootCause/resolution from real, common scenarios below (do not invent technique):`,
+            nicheKnowledge,
+          ]
+        : []),
       ``,
       `Propose exactly ${ideaCount} new content ideas. Call ${IDEATION_TOOL_NAME} once.`,
     ].join('\n');
 
     const response = await client.messages.create({
       model,
-      max_tokens: 4000,
+      max_tokens: story ? 6000 : 4000,
       temperature: 0.7,
       system: systemPrompt,
       tools: [
         {
           name: IDEATION_TOOL_NAME,
           description: 'Submit the proposed content ideas.',
-          input_schema: IDEATION_SCHEMA as never,
+          input_schema: (story ? STORY_IDEATION_SCHEMA : IDEATION_SCHEMA) as never,
         },
       ],
       tool_choice: { type: 'tool', name: IDEATION_TOOL_NAME },
@@ -293,7 +406,7 @@ Do not propose topics that duplicate or cannibalize the existing keyword list.`;
       throw new Error('local-content-scout: Claude did not return tool_use');
     }
     const out = toolUse.input as { ideas?: unknown[] };
-    return (out.ideas ?? []).filter(isClaudeIdea);
+    return (out.ideas ?? []).filter(isClaudeIdea).map(coerceStoryScaffold);
   }
 }
 
@@ -308,7 +421,39 @@ function isClaudeIdea(v: unknown): v is ClaudeIdea {
   );
 }
 
-function mockIdeas(niche: string, city: string, state: string, count: number): ClaudeIdea[] {
+/** Keep a valid storyScaffold; drop a malformed one rather than persist junk. */
+function coerceStoryScaffold(idea: ClaudeIdea): ClaudeIdea {
+  const s = idea.storyScaffold as Partial<StoryScaffold> | undefined;
+  if (
+    s &&
+    typeof s.presentingSymptom === 'string' &&
+    typeof s.rootCause === 'string' &&
+    typeof s.resolution === 'string' &&
+    typeof s.preventionTakeaway === 'string' &&
+    typeof s.settingHint === 'string'
+  ) {
+    return idea;
+  }
+  const { storyScaffold: _drop, ...rest } = idea;
+  return rest;
+}
+
+function mockIdeas(niche: string, city: string, state: string, count: number, archetype: string): ClaudeIdea[] {
+  if (isStoryArchetype(archetype)) {
+    return Array.from({ length: count }, (_, i) => ({
+      topic: `What we found behind a ${niche} call in ${city} (#${i + 1})`,
+      targetKeyword: `emergency ${niche} ${city} ${state}`.toLowerCase(),
+      angle: 'A routine-sounding symptom hid a different root cause found on site.',
+      rationale: `Residents in ${city} search this when a ${niche} problem turns urgent.`,
+      storyScaffold: {
+        presentingSymptom: `The homeowner reported a recurring ${niche} issue that seemed minor.`,
+        rootCause: `On site we found a common underlying ${niche} fault that the surface symptom was masking.`,
+        resolution: `We corrected the underlying fault and verified the fix end-to-end.`,
+        preventionTakeaway: `Watch for the early warning sign so a small ${niche} issue does not become an emergency.`,
+        settingHint: `An older home near ${city}.`,
+      },
+    }));
+  }
   const archetypes: Array<{ angle: string; suffix: string }> = [
     { angle: 'Cost and pricing breakdown for homeowners', suffix: 'cost guide' },
     { angle: 'Seasonal timing for best results', suffix: 'best time of year' },

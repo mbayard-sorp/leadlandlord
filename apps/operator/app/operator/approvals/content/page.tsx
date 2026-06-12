@@ -114,7 +114,30 @@ export default async function ContentQueuePage({
                         </div>
                       )}
                     </Td>
-                    <Td className="break-words font-medium max-w-[200px]">{idea.topic}</Td>
+                    <Td className="break-words font-medium max-w-[240px]">
+                      {idea.topic}
+                      {idea.storyScaffold && (
+                        <details className="mt-1 text-xs font-normal text-slate-400">
+                          <summary className="cursor-pointer text-amber-400/80 hover:text-amber-300">
+                            Job story — review facts
+                          </summary>
+                          <dl className="mt-1 space-y-0.5">
+                            <div>
+                              <dt className="inline text-slate-500">Symptom: </dt>
+                              <dd className="inline">{idea.storyScaffold.presentingSymptom}</dd>
+                            </div>
+                            <div>
+                              <dt className="inline text-slate-500">Root cause: </dt>
+                              <dd className="inline">{idea.storyScaffold.rootCause}</dd>
+                            </div>
+                            <div>
+                              <dt className="inline text-slate-500">Resolution: </dt>
+                              <dd className="inline">{idea.storyScaffold.resolution}</dd>
+                            </div>
+                          </dl>
+                        </details>
+                      )}
+                    </Td>
                     <Td className="hidden md:table-cell text-slate-300">{idea.targetKeyword}</Td>
                     <Td className="hidden md:table-cell">
                       <span className="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">

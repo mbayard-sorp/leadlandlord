@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { AgentContext } from '../base';
 import { LocalContentScoutInput, LocalContentScoutOutput, isoWeek } from './index';
 
@@ -213,12 +213,17 @@ describe('cannibalization guard', () => {
   it('skips idea whose targetKeyword collides with an existing idea keyword', async () => {
     const { getDb } = await import('@leadlandlord/db');
 
-    // The mock will produce ideas like "tree removal cost guide tucson az"
-    // We seed existing ideas with that exact phrase to force a skip.
-    // In MOCK_AI mode, mockIdeas produces: `${niche} ${suffix} ${city} ${state}`.toLowerCase()
-    // For index 0: suffix = 'cost guide' -> 'tree removal cost guide tucson az'
-    const collidingKeyword = 'tree removal cost guide tucson az';
-    const mockDb = makeScoutDb({ existingIdeas: [{ targetKeyword: collidingKeyword }] });
+    // The first mock idea's keyword depends on the archetype the scout assigns
+    // for the current week (informative vs job-story rotation). Seed both
+    // candidate first-idea keywords so the collision fires regardless:
+    //   - informative index 0:  `${niche} cost guide ${city} ${state}`
+    //   - job-story:             `emergency ${niche} ${city} ${state}`
+    const mockDb = makeScoutDb({
+      existingIdeas: [
+        { targetKeyword: 'tree removal cost guide tucson az' },
+        { targetKeyword: 'emergency tree removal tucson az' },
+      ],
+    });
     vi.mocked(getDb).mockReturnValue(mockDb as never);
 
     const { LocalContentScout } = await import('./index');
@@ -348,5 +353,104 @@ describe('archetype and voiceSeed assignment', () => {
     expect((firstInsert!.archetype as string).length).toBeGreaterThan(0);
     expect(typeof firstInsert!.voiceSeed).toBe('string');
     expect((firstInsert!.voiceSeed as string).length).toBeGreaterThan(0);
+  });
+});
+
+// ---- Job-story scaffold ------------------------------------------------------
+
+describe('job-story archetypes', () => {
+  function makeCapturingDb(insertedValues: Array<Record<string, unknown>>) {
+    let insertCallCount = 0;
+    let selectCallCount = 0;
+    return {
+      select: vi.fn().mockImplementation(() => {
+        selectCallCount++;
+        const callNum = selectCallCount;
+        return {
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() =>
+              callNum === 1
+                ? { limit: vi.fn().mockResolvedValue([DEFAULT_SITE]) }
+                : Promise.resolve([]),
+            ),
+          }),
+        };
+      }),
+      insert: vi.fn().mockImplementation(() => {
+        insertCallCount++;
+        return {
+          values: vi.fn().mockImplementation((v: Record<string, unknown>) => {
+            insertedValues.push(v);
+            return {
+              onConflictDoNothing: vi.fn().mockReturnThis(),
+              returning: vi.fn().mockResolvedValue([{ id: 'idea-001' }]),
+            };
+          }),
+        };
+      }),
+      update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(undefined) }),
+    };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('persists a populated storyScaffold when the assigned archetype is a job story', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const { LocalContentScout, isStoryArchetype } = await import('./index');
+
+    // Archetype is deterministic per ISO week; scan forward week-by-week until
+    // the site lands on a job-story archetype (guaranteed within 8 weeks).
+    let captured: Record<string, unknown> | undefined;
+    for (let i = 0; i < 8 && !captured; i++) {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(Date.UTC(2026, 0, 5 + i * 7))); // successive Mondays
+      const insertedValues: Array<Record<string, unknown>> = [];
+      vi.mocked(getDb).mockReturnValue(makeCapturingDb(insertedValues) as never);
+
+      const scout = new LocalContentScout();
+      await (scout as unknown as {
+        execute: (i: { site_id: string; idea_count: number }, ctx: AgentContext) => Promise<unknown>;
+      }).execute({ site_id: SITE_ID, idea_count: 1 }, MOCK_CTX);
+      vi.useRealTimers();
+
+      const row = insertedValues[0];
+      if (row && isStoryArchetype(row.archetype as string)) captured = row;
+    }
+
+    expect(captured, 'expected to hit a job-story archetype within 8 weeks').toBeDefined();
+    const scaffold = captured!.storyScaffold as Record<string, string> | null;
+    expect(scaffold).not.toBeNull();
+    expect(typeof scaffold!.presentingSymptom).toBe('string');
+    expect(typeof scaffold!.rootCause).toBe('string');
+    expect(typeof scaffold!.resolution).toBe('string');
+    expect(typeof scaffold!.preventionTakeaway).toBe('string');
+    expect(typeof scaffold!.settingHint).toBe('string');
+  });
+
+  it('leaves storyScaffold null for informative archetypes', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const { LocalContentScout, isStoryArchetype } = await import('./index');
+
+    let captured: Record<string, unknown> | undefined;
+    for (let i = 0; i < 8 && !captured; i++) {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(Date.UTC(2026, 0, 5 + i * 7)));
+      const insertedValues: Array<Record<string, unknown>> = [];
+      vi.mocked(getDb).mockReturnValue(makeCapturingDb(insertedValues) as never);
+
+      const scout = new LocalContentScout();
+      await (scout as unknown as {
+        execute: (i: { site_id: string; idea_count: number }, ctx: AgentContext) => Promise<unknown>;
+      }).execute({ site_id: SITE_ID, idea_count: 1 }, MOCK_CTX);
+      vi.useRealTimers();
+
+      const row = insertedValues[0];
+      if (row && !isStoryArchetype(row.archetype as string)) captured = row;
+    }
+
+    expect(captured).toBeDefined();
+    expect(captured!.storyScaffold).toBeNull();
   });
 });

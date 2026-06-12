@@ -288,6 +288,13 @@
       "when": 1782000000000,
       "tag": "0041_link_building_surface",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1782100000000,
+      "tag": "0042_content_idea_story_scaffold",
+      "breakpoints": true
     }
   ]
 }
