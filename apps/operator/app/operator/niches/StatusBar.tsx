@@ -1,32 +1,50 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getLatestNicheRunStatus, type NicheRunStatus } from './actions';
+import { getLatestAgentRunStatus, type NicheRunStatus, type NicheAgentName } from './actions';
 
-export function StatusBar() {
-  const [status, setStatus] = useState<NicheRunStatus | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+const AGENT_LABELS: Record<NicheAgentName, string> = {
+  'niche-hunter': 'Hunter',
+  'niche-scout': 'Scout',
+  'niche-validator': 'Validator',
+};
+
+/**
+ * Polls the niche-engine agents every 2s and renders one bar per agent with
+ * non-idle status. Reloads the page when a watched run finishes so fresh
+ * rows / scout reports appear.
+ */
+export function StatusBar({ agents = ['niche-scout', 'niche-validator'] }: { agents?: NicheAgentName[] }) {
+  const [statuses, setStatuses] = useState<Partial<Record<NicheAgentName, NicheRunStatus>>>({});
+  const [dismissed, setDismissed] = useState<Partial<Record<NicheAgentName, boolean>>>({});
 
   useEffect(() => {
     let cancelled = false;
-    let prevState: string | undefined;
+    const prevStates: Partial<Record<NicheAgentName, string>> = {};
 
     async function tick() {
-      try {
-        const s = await getLatestNicheRunStatus();
-        if (cancelled) return;
-        setStatus(s);
-        // A fresh run should always be visible, even if the previous result
-        // was dismissed.
-        if (s.state === 'queued' || s.state === 'running') setDismissed(false);
-        // When a run finishes, refresh the page so the new rows appear.
-        if (prevState === 'running' && (s.state === 'succeeded' || s.state === 'failed')) {
-          window.location.reload();
-        }
-        prevState = s.state;
-      } catch {
-        // Swallow; next tick will retry.
-      }
+      let shouldReload = false;
+      await Promise.all(
+        agents.map(async (agent) => {
+          try {
+            const s = await getLatestAgentRunStatus(agent);
+            if (cancelled) return;
+            setStatuses((prev) => ({ ...prev, [agent]: s }));
+            // A fresh run should always be visible, even if the previous
+            // result was dismissed.
+            if (s.state === 'queued' || s.state === 'running') {
+              setDismissed((prev) => (prev[agent] ? { ...prev, [agent]: false } : prev));
+            }
+            if (prevStates[agent] === 'running' && (s.state === 'succeeded' || s.state === 'failed')) {
+              shouldReload = true;
+            }
+            prevStates[agent] = s.state;
+          } catch {
+            // Swallow; next tick will retry.
+          }
+        }),
+      );
+      if (shouldReload && !cancelled) window.location.reload();
     }
 
     tick();
@@ -35,23 +53,56 @@ export function StatusBar() {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(agents)]);
 
-  if (!status || status.state === 'idle' || dismissed) return null;
+  const visible = agents.filter((agent) => {
+    const s = statuses[agent];
+    return s && s.state !== 'idle' && !dismissed[agent];
+  });
+  if (visible.length === 0) return null;
 
+  return (
+    <div className="space-y-2">
+      {visible.map((agent) => (
+        <AgentBar
+          key={agent}
+          agent={agent}
+          status={statuses[agent]!}
+          onDismiss={() => setDismissed((prev) => ({ ...prev, [agent]: true }))}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AgentBar({
+  agent,
+  status,
+  onDismiss,
+}: {
+  agent: NicheAgentName;
+  status: NicheRunStatus;
+  onDismiss: () => void;
+}) {
   const isTerminal =
     status.state === 'succeeded' || status.state === 'failed' || status.state === 'dead_letter';
-
   const { color, dot, label } = stateStyles(status.state);
   const pct = status.step && status.total ? Math.round((status.step / status.total) * 100) : null;
 
   return (
     <div className={`rounded-lg border ${color} p-3 text-sm`}>
       <div className="flex items-center gap-2">
-        <span className={`inline-block h-2 w-2 rounded-full ${dot} ${status.state === 'running' || status.state === 'queued' ? 'animate-pulse' : ''}`} />
-        <span className="font-medium uppercase tracking-wide text-xs">{label}</span>
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${dot} ${status.state === 'running' || status.state === 'queued' ? 'animate-pulse' : ''}`}
+        />
+        <span className="font-medium uppercase tracking-wide text-xs">
+          {AGENT_LABELS[agent]} · {label}
+        </span>
         {status.step && status.total && (
-          <span className="text-xs text-slate-400">step {status.step}/{status.total}</span>
+          <span className="text-xs text-slate-400">
+            step {status.step}/{status.total}
+          </span>
         )}
         <span className="text-slate-200 truncate">{status.message}</span>
         <div className="ml-auto flex items-center gap-2">
@@ -61,7 +112,7 @@ export function StatusBar() {
           {isTerminal && (
             <button
               type="button"
-              onClick={() => setDismissed(true)}
+              onClick={onDismiss}
               aria-label="Dismiss"
               title="Dismiss"
               className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-200"
@@ -73,20 +124,10 @@ export function StatusBar() {
       </div>
       {pct !== null && (
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-          <div
-            className="h-full bg-emerald-500 transition-all duration-300"
-            style={{ width: `${pct}%` }}
-          />
+          <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
       )}
-      {status.output && (
-        <div className="mt-2 text-xs text-slate-400">
-          Brainstormed {status.output.brainstormed} · Scored {status.output.scored} · Saved {status.output.persisted}
-        </div>
-      )}
-      {status.error && (
-        <div className="mt-2 text-xs text-red-300 break-words">{status.error}</div>
-      )}
+      {status.error && <div className="mt-2 text-xs text-red-300 break-words">{status.error}</div>}
     </div>
   );
 }

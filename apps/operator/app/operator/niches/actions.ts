@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
 import { NicheHunterInput } from '@leadlandlord/agents/niche-hunter';
+import { NicheScoutInput } from '@leadlandlord/agents/niche-hunter/scout';
 import { validateNicheCore } from '@leadlandlord/agents/niche-hunter/validate';
 import {
   DEFAULT_RENTABILITY_CPC_CEILING,
@@ -93,6 +94,86 @@ export async function runNicheHunter(formData: FormData): Promise<ActionResult> 
 }
 
 /**
+ * Run a niche scout: enumerate the trade x city grid for the chosen states,
+ * score from cached/static data, persist top candidates + report. Enqueued
+ * as an agent_events row (a 5-state grid is too slow for an inline action).
+ */
+export async function runNicheScout(formData: FormData): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const sys = await getSystemState();
+  if (sys.killSwitch) {
+    const reason = sys.killSwitchReason ? ` (${sys.killSwitchReason})` : '';
+    return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
+  }
+
+  const states = String(formData.get('states') ?? '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => s.length === 2);
+  const categoryRaw = String(formData.get('category_filter') ?? '').trim();
+  const popMinRaw = formData.get('population_min');
+  const popMaxRaw = formData.get('population_max');
+
+  const rawInput = {
+    states,
+    ...(categoryRaw ? { category_filter: categoryRaw } : {}),
+    ...(popMinRaw !== null && popMinRaw !== '' ? { population_min: Number(popMinRaw) } : {}),
+    ...(popMaxRaw !== null && popMaxRaw !== '' ? { population_max: Number(popMaxRaw) } : {}),
+    warm_missing_clusters: formData.get('warm_missing_clusters') !== 'false',
+  };
+
+  const parsed = NicheScoutInput.safeParse(rawInput);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+  }
+
+  const db = getDb();
+  await db.insert(agentEvents).values({
+    agent: 'operator',
+    type: 'niche.scout',
+    targetAgent: 'niche-scout',
+    payload: parsed.data,
+  });
+  log.info({ payload: parsed.data }, 'niche-scout run enqueued');
+  revalidatePath('/operator/niches');
+  return { ok: true, message: 'Scout queued — the status bar tracks progress.' };
+}
+
+/**
+ * Validate the top N candidates of a scout run (operator-approved spend).
+ * Enqueues a niche.validate event for the niche-validator agent: full DFS
+ * trio per candidate, exploration quota, rows landing in `niches` as pending.
+ */
+export async function runNicheValidation(formData: FormData): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const sys = await getSystemState();
+  if (sys.killSwitch) {
+    const reason = sys.killSwitchReason ? ` (${sys.killSwitchReason})` : '';
+    return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
+  }
+
+  const scoutRunId = String(formData.get('scout_run_id') ?? '').trim();
+  const count = Number(formData.get('count') ?? 0);
+  if (!scoutRunId) return { ok: false, message: 'missing scout_run_id' };
+  if (!Number.isInteger(count) || count < 1 || count > 50) {
+    return { ok: false, message: 'count must be an integer between 1 and 50' };
+  }
+
+  const db = getDb();
+  await db.insert(agentEvents).values({
+    agent: 'operator',
+    type: 'niche.validate',
+    targetAgent: 'niche-validator',
+    payload: { scout_run_id: scoutRunId, count },
+  });
+  log.info({ scoutRunId, count }, 'niche-validator run enqueued');
+  revalidatePath('/operator/niches');
+  return { ok: true, message: `Validation of top ${count} queued — the status bar tracks progress.` };
+}
+
+/**
  * Approve a pending niche. Updates the row + emits a `niche.approved`
  * agent_event so the operator-tick fan-out can dispatch Site Builder.
  */
@@ -156,32 +237,43 @@ export interface NicheRunStatus {
   startedAt?: string;
   endedAt?: string;
   costUsd?: number;
-  output?: { brainstormed: number; scored: number; persisted: number } | null;
+  output?: Record<string, unknown> | null;
   error?: string | null;
 }
 
+/** Agent name -> the event type its runs are enqueued under. */
+const NICHE_AGENT_EVENT_TYPES = {
+  'niche-hunter': 'niche.run',
+  'niche-scout': 'niche.scout',
+  'niche-validator': 'niche.validate',
+} as const;
+export type NicheAgentName = keyof typeof NICHE_AGENT_EVENT_TYPES;
+
 /**
- * Returns the status of the most recent niche-hunter activity — either an
- * unprocessed agent_events row (queued) or the latest agent_runs row
- * (running / succeeded / failed). The status bar polls this every 2s.
+ * Returns the status of the most recent activity for one of the niche-engine
+ * agents — either an unprocessed agent_events row (queued) or the latest
+ * agent_runs row (running / succeeded / failed). The status bar polls this
+ * every 2s per agent.
  */
-export async function getLatestNicheRunStatus(): Promise<NicheRunStatus> {
+export async function getLatestAgentRunStatus(agentName: NicheAgentName): Promise<NicheRunStatus> {
   try { await requireOperatorSession(); } catch { return { state: 'idle', message: 'unauthorized' }; }
+  const eventType = NICHE_AGENT_EVENT_TYPES[agentName];
+  if (!eventType) return { state: 'idle', message: `unknown agent ${agentName}` };
   const db = getDb();
 
-  // Most recent niche.run event — if still unprocessed it represents queued work.
+  // Most recent enqueue event — if still unprocessed it represents queued work.
   const [latestEvent] = await db
     .select()
     .from(agentEvents)
-    .where(eq(agentEvents.type, 'niche.run'))
+    .where(eq(agentEvents.type, eventType))
     .orderBy(desc(agentEvents.createdAt))
     .limit(1);
 
-  // Most recent niche-hunter run (running or finished).
+  // Most recent run for the agent (running or finished).
   const [latestRun] = await db
     .select()
     .from(agentRuns)
-    .where(eq(agentRuns.agent, 'niche-hunter'))
+    .where(eq(agentRuns.agent, agentName))
     .orderBy(desc(agentRuns.startedAt))
     .limit(1);
 
@@ -213,16 +305,14 @@ export async function getLatestNicheRunStatus(): Promise<NicheRunStatus> {
   // Finished run.
   if (latestRun) {
     if (latestRun.status === 'succeeded') {
-      const out = latestRun.output as { brainstormed?: number; scored?: number; persisted?: number } | null;
+      const out = (latestRun.output ?? null) as Record<string, unknown> | null;
       return {
         state: 'succeeded',
-        message: `done — ${out?.persisted ?? 0} niches saved`,
+        message: `done — ${summarizeRunOutput(agentName, out)}`,
         startedAt: latestRun.startedAt.toISOString(),
         endedAt: latestRun.endedAt?.toISOString(),
         costUsd: Number(latestRun.costUsd),
-        output: out
-          ? { brainstormed: out.brainstormed ?? 0, scored: out.scored ?? 0, persisted: out.persisted ?? 0 }
-          : null,
+        output: out,
       };
     }
     if (latestRun.status === 'failed') {
@@ -237,6 +327,23 @@ export async function getLatestNicheRunStatus(): Promise<NicheRunStatus> {
   }
 
   return { state: 'idle', message: 'no recent runs' };
+}
+
+function summarizeRunOutput(agentName: NicheAgentName, out: Record<string, unknown> | null): string {
+  if (!out) return 'finished';
+  switch (agentName) {
+    case 'niche-scout':
+      return `${out.persisted ?? 0} candidates scouted, validating top ${out.recommended_n ?? '?'} recommended`;
+    case 'niche-validator':
+      return `${out.validated ?? 0} validated, ${out.failed ?? 0} failed`;
+    default:
+      return `${out.persisted ?? 0} niches saved`;
+  }
+}
+
+/** Back-compat wrapper for the legacy StatusBar; removed with the brainstorm engine. */
+export async function getLatestNicheRunStatus(): Promise<NicheRunStatus> {
+  return getLatestAgentRunStatus('niche-hunter');
 }
 
 /**

@@ -1,7 +1,8 @@
-import { desc, inArray } from 'drizzle-orm';
-import { getDb, niches, sites } from '@leadlandlord/db';
+import { desc, asc, eq, inArray } from 'drizzle-orm';
+import { getDb, niches, sites, nicheScoutRuns, nicheCandidates } from '@leadlandlord/db';
 import { GEO_SHARE_PRIOR, resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
-import { RunForm } from './RunForm';
+import { ScoutForm } from './ScoutForm';
+import { ScoutReport, type ScoutRunData, type ScoutCandidateData } from './ScoutReport';
 import { SeedNicheForm } from './SeedNicheForm';
 import { StatusBar } from './StatusBar';
 import { NicheRow, type NicheRowData } from './NicheRow';
@@ -18,6 +19,47 @@ export default async function NichesPage({
   const { category } = await searchParams;
   const db = getDb();
   const allRows = await db.select().from(niches).orderBy(desc(niches.score)).limit(200);
+
+  // Latest current scout run + its top 100 candidates.
+  const [scoutRun] = await db
+    .select()
+    .from(nicheScoutRuns)
+    .where(eq(nicheScoutRuns.status, 'current'))
+    .orderBy(desc(nicheScoutRuns.createdAt))
+    .limit(1);
+  let scoutRunData: ScoutRunData | null = null;
+  let scoutCandidates: ScoutCandidateData[] = [];
+  if (scoutRun) {
+    scoutRunData = {
+      id: scoutRun.id,
+      createdAt: scoutRun.createdAt.toISOString(),
+      states: (scoutRun.states ?? []) as string[],
+      categoryFilter: scoutRun.categoryFilter,
+      gridCells: scoutRun.gridCells,
+      persistedCandidates: scoutRun.persistedCandidates,
+      report: scoutRun.report as ScoutRunData['report'],
+    };
+    const candidateRows = await db
+      .select()
+      .from(nicheCandidates)
+      .where(eq(nicheCandidates.scoutRunId, scoutRun.id))
+      .orderBy(asc(nicheCandidates.rank))
+      .limit(100);
+    scoutCandidates = candidateRows.map((c) => ({
+      id: c.id,
+      rank: c.rank,
+      trade: c.trade,
+      category: c.category,
+      city: c.city,
+      state: c.state,
+      population: c.population,
+      estMonthlyValueUsd: c.estMonthlyValueUsd,
+      isNovelTrade: c.isNovelTrade,
+      dataConfidence: c.dataConfidence,
+      status: c.status,
+      validatedValueUsd: c.validatedValueUsd,
+    }));
+  }
 
   // Counts across every category (for the dropdown), computed before filtering.
   const categoryCounts: Record<string, number> = {};
@@ -56,13 +98,16 @@ export default async function NichesPage({
           <h1 className="text-xl md:text-2xl font-semibold">Niches</h1>
         </div>
         <p className="text-sm text-slate-400 mt-1">
-          Niche Hunter brainstorms candidates with Claude, scores each with DataForSEO real
-          search volume + keyword difficulty, ranks them. Approve a niche to dispatch Site
-          Builder via the agent_events queue.
+          Scout enumerates the trade × city grid and ranks every cell by expected monthly value
+          (near-zero cost). Validate the top N with real DataForSEO data; validated candidates
+          land below as pending. Approve a niche to dispatch Site Builder via the agent_events
+          queue.
         </p>
       </header>
 
-      <RunForm />
+      <ScoutForm />
+
+      {scoutRunData && <ScoutReport run={scoutRunData} candidates={scoutCandidates} />}
 
       <SeedNicheForm />
 
@@ -77,7 +122,7 @@ export default async function NichesPage({
 
       <Section title={`Pending review (${pending.length})`}>
         {pending.length === 0 ? (
-          <Empty>Nothing pending. Run Niche Hunter above to populate.</Empty>
+          <Empty>Nothing pending. Run a scout above, then validate top candidates to populate.</Empty>
         ) : (
           <Table rows={pending} showButtons />
         )}
@@ -144,7 +189,7 @@ function Table({
 }) {
   // Base columns + the optional Decision / Build columns; used for the
   // full-width calibration detail row's colSpan.
-  const colSpan = 9 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
+  const colSpan = 10 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
       <table className="w-full text-sm">
@@ -153,6 +198,7 @@ function Table({
             <Th>Category</Th>
             <Th>Niche</Th>
             <Th className="hidden md:table-cell">City</Th>
+            <Th>Value</Th>
             <Th>Score</Th>
             <Th className="hidden lg:table-cell">Rent.</Th>
             <Th className="hidden md:table-cell">Vol</Th>
