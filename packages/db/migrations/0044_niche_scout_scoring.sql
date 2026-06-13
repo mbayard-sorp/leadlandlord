@@ -10,7 +10,7 @@
 ALTER TABLE "niche_candidates"
   ADD COLUMN IF NOT EXISTS "winnability" numeric(4, 3),
   ADD COLUMN IF NOT EXISTS "cluster_difficulty" numeric(5, 2);
-
+--> statement-breakpoint
 -- system_state: operator-tunable floor overrides (NULL = use code defaults)
 --   scout_min_lead_price      default $50  (MIN_LEAD_BENCHMARK_PRICE)
 --   scout_min_rentability_prior  default 0.60 (MIN_RENTABILITY_PRIOR)
