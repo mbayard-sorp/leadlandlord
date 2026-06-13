@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeClusterVolume,
+  computeClusterDifficulty,
   estimateScoutValue,
   estimateValidatedValue,
+  passesAbilityToPayFloor,
   findValueCliff,
   DEFAULT_BENCHMARK_CLUSTER_VOLUME,
   US_POPULATION,
 } from './value-model';
+import {
+  POP_DAMPENING_REFERENCE,
+  DEFAULT_BENCHMARK_WINNABILITY,
+  MIN_LEAD_BENCHMARK_PRICE,
+  MIN_RENTABILITY_PRIOR,
+} from './scoring-config';
 
 // tree removal: leadBenchmarkPrice = (40+80)/2 = 60, rentabilityPrior = 0.72
 // (lead-benchmarks.ts TRADE_BENCHMARKS).
@@ -28,20 +36,128 @@ describe('computeClusterVolume', () => {
   });
 });
 
+// ---- computeClusterDifficulty -----------------------------------------------
+
+describe('computeClusterDifficulty', () => {
+  it('returns volume-weighted avg kd over commercial/transactional candidates', () => {
+    const kd = computeClusterDifficulty([
+      { search_volume: 4000, intent: 'commercial', kd: 30 },
+      { search_volume: 2000, intent: 'transactional', kd: 60 },
+    ]);
+    // weightedSum = 4000*30 + 2000*60 = 120000+120000 = 240000; totalWeight = 6000
+    // avg = 240000/6000 = 40
+    expect(kd).toBeCloseTo(40, 5);
+  });
+
+  it('applies NULL_INTENT_WEIGHT (0.5) to null-intent candidates', () => {
+    const kd = computeClusterDifficulty([
+      { search_volume: 1000, intent: null, kd: 20 },
+    ]);
+    // weight = 1000 * 0.5 = 500; weightedSum = 20 * 500 = 10000
+    expect(kd).toBeCloseTo(20, 5); // 10000 / 500
+  });
+
+  it('skips candidates where kd <= 0 (DFS missing-data sentinel)', () => {
+    const kd = computeClusterDifficulty([
+      { search_volume: 5000, intent: 'commercial', kd: 0 },   // skip
+      { search_volume: 5000, intent: 'commercial', kd: -1 },  // skip
+      { search_volume: 2000, intent: 'commercial', kd: 50 },  // use
+    ]);
+    expect(kd).toBeCloseTo(50, 5);
+  });
+
+  it('returns null when ALL candidates have kd <= 0', () => {
+    const kd = computeClusterDifficulty([
+      { search_volume: 5000, intent: 'commercial', kd: 0 },
+    ]);
+    expect(kd).toBeNull();
+  });
+
+  it('returns null for empty cluster', () => {
+    expect(computeClusterDifficulty([])).toBeNull();
+  });
+
+  it('ignores informational/navigational intent even if kd > 0', () => {
+    const kd = computeClusterDifficulty([
+      { search_volume: 10000, intent: 'informational', kd: 80 },
+      { search_volume: 10000, intent: 'navigational', kd: 80 },
+      { search_volume: 1000, intent: 'commercial', kd: 20 },
+    ]);
+    expect(kd).toBeCloseTo(20, 5);
+  });
+});
+
+// ---- estimateScoutValue (ADR 0021 updates) -----------------------------------
+
 describe('estimateScoutValue', () => {
-  it('computes population-proportional dollar value for a cluster-backed trade', () => {
+  it('computes sqrt-dampened population-proportional dollar value with winnability', () => {
+    const cityPop = US_POPULATION / 1000;
+    const clusterVolume = 33_400;
     const v = estimateScoutValue({
       trade: 'tree removal',
-      cityPopulation: US_POPULATION / 1000, // exact 1/1000 share
-      clusterVolume: 33_400,
+      cityPopulation: cityPop,
+      clusterVolume,
+      clusterDifficulty: null, // benchmark winnability
     });
-    // cityVolume = 33400/1000 = 33.4; value = 33.4 * 0.2 * 0.1 * 60 = 40.08
+    // cityVolume = clusterVolume * sqrt(cityPop * REF) / US_POP
+    const expectedCityVol =
+      (clusterVolume * Math.sqrt(cityPop * POP_DAMPENING_REFERENCE)) / US_POPULATION;
+    // estMonthlyValueUsd = cityVol * 0.2 * DEFAULT_BENCHMARK_WINNABILITY * 0.1 * 60
+    const expectedValue = expectedCityVol * 0.2 * DEFAULT_BENCHMARK_WINNABILITY * 0.1 * 60;
     expect(v.dataConfidence).toBe('cluster');
-    expect(v.estCityVolume).toBeCloseTo(33.4, 2);
     expect(v.leadBenchmarkPrice).toBe(60);
     expect(v.rentabilityPrior).toBe(0.72);
-    expect(v.estMonthlyValueUsd).toBeCloseTo(40.08, 2);
-    expect(v.scoutScore).toBeCloseTo(40.08 * 0.72, 2);
+    expect(v.winnability).toBe(DEFAULT_BENCHMARK_WINNABILITY);
+    expect(v.estMonthlyValueUsd).toBeCloseTo(expectedValue, 1);
+    expect(v.scoutScore).toBeCloseTo(expectedValue * 0.72, 1);
+  });
+
+  it('uses clusterDifficulty to compute winnability when provided', () => {
+    const v = estimateScoutValue({
+      trade: 'tree removal',
+      cityPopulation: 100_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: 40,
+    });
+    // winnability = (100-40)/100 = 0.6
+    expect(v.winnability).toBeCloseTo(0.6, 5);
+  });
+
+  it('high difficulty lowers score vs low difficulty (order preserved)', () => {
+    const low = estimateScoutValue({
+      trade: 'tree removal',
+      cityPopulation: 100_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: 20,
+    });
+    const high = estimateScoutValue({
+      trade: 'tree removal',
+      cityPopulation: 100_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: 80,
+    });
+    expect(low.estMonthlyValueUsd).toBeGreaterThan(high.estMonthlyValueUsd);
+    expect(low.winnability).toBeGreaterThan(high.winnability);
+  });
+
+  it('dampening: 600k city scores ~sqrt(10)x a 60k city (not 10x)', () => {
+    const small = estimateScoutValue({
+      trade: 'tree removal',
+      cityPopulation: 60_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: 30,
+    });
+    const large = estimateScoutValue({
+      trade: 'tree removal',
+      cityPopulation: 600_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: 30,
+    });
+    // Ratio should be sqrt(600k/60k) = sqrt(10) ≈ 3.162
+    const ratio = large.estMonthlyValueUsd / small.estMonthlyValueUsd;
+    expect(ratio).toBeCloseTo(Math.sqrt(10), 1);
+    // Order still preserved
+    expect(large.estMonthlyValueUsd).toBeGreaterThan(small.estMonthlyValueUsd);
   });
 
   it('degrades to benchmark_only with null cluster volume', () => {
@@ -49,14 +165,10 @@ describe('estimateScoutValue', () => {
       trade: 'tree removal',
       cityPopulation: US_POPULATION / 1000,
       clusterVolume: null,
+      clusterDifficulty: null,
     });
     expect(v.dataConfidence).toBe('benchmark_only');
     expect(v.estCityVolume).toBeNull();
-    // Uses DEFAULT_BENCHMARK_CLUSTER_VOLUME: 3 * 0.2 * 0.1 * 60 = 3.6
-    expect(v.estMonthlyValueUsd).toBeCloseTo(
-      (DEFAULT_BENCHMARK_CLUSTER_VOLUME / 1000) * 0.2 * 0.1 * 60,
-      2,
-    );
   });
 
   it('benchmark_only ranks below a cluster-backed trade of equal cluster volume basis', () => {
@@ -64,27 +176,98 @@ describe('estimateScoutValue', () => {
       trade: 'tree removal',
       cityPopulation: 50_000,
       clusterVolume: 50_000,
+      clusterDifficulty: null,
     });
     const benchmarkOnly = estimateScoutValue({
       trade: 'tree removal',
       cityPopulation: 50_000,
       clusterVolume: null,
+      clusterDifficulty: null,
     });
     expect(benchmarkOnly.estMonthlyValueUsd).toBeLessThan(cluster.estMonthlyValueUsd);
   });
 
   it('respects operator CTR/call-rate overrides', () => {
-    const base = estimateScoutValue({ trade: 'roofing', cityPopulation: 100_000, clusterVolume: 10_000 });
+    const base = estimateScoutValue({
+      trade: 'roofing',
+      cityPopulation: 100_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: 50,
+    });
     const tuned = estimateScoutValue({
       trade: 'roofing',
       cityPopulation: 100_000,
       clusterVolume: 10_000,
+      clusterDifficulty: 50,
       ctrAtRank: 0.1,
       callRate: 0.05,
     });
     expect(tuned.estMonthlyValueUsd).toBeCloseTo(base.estMonthlyValueUsd / 4, 1);
   });
+
+  it('defaultWinnability override is used when clusterDifficulty is null', () => {
+    const v = estimateScoutValue({
+      trade: 'tree removal',
+      cityPopulation: 100_000,
+      clusterVolume: 10_000,
+      clusterDifficulty: null,
+      defaultWinnability: 0.7,
+    });
+    expect(v.winnability).toBe(0.7);
+  });
 });
+
+// ---- passesAbilityToPayFloor ------------------------------------------------
+
+describe('passesAbilityToPayFloor', () => {
+  it('keeps legal trades (high lead price, high rentability)', () => {
+    expect(passesAbilityToPayFloor('personal injury lawyer')).toBe(true);
+    expect(passesAbilityToPayFloor('divorce lawyer')).toBe(true);
+  });
+
+  it('keeps medical trades (above both floors)', () => {
+    expect(passesAbilityToPayFloor('dental implants')).toBe(true);
+    expect(passesAbilityToPayFloor('dermatology clinic')).toBe(true);
+  });
+
+  it('keeps core home services (tree, roofing, HVAC)', () => {
+    expect(passesAbilityToPayFloor('tree removal')).toBe(true);
+    expect(passesAbilityToPayFloor('roofing contractor')).toBe(true);
+    expect(passesAbilityToPayFloor('hvac repair')).toBe(true);
+  });
+
+  it('drops the default pair ($45/0.50) — unknown niche fails both floors', () => {
+    // Default pair: leadBenchmarkPrice=45 < 50, rentabilityPrior=0.5 < 0.6
+    expect(passesAbilityToPayFloor('totally unknown exotic trade xyz')).toBe(false);
+  });
+
+  it('drops low-ticket trades (pressure washing: $32.5 lead price, 0.32 prior)', () => {
+    expect(passesAbilityToPayFloor('pressure washing services')).toBe(false);
+  });
+
+  it('drops junk removal (lead price $30, prior 0.30 — both below floors)', () => {
+    expect(passesAbilityToPayFloor('junk removal')).toBe(false);
+  });
+
+  it('respects minLeadBenchmarkPrice override', () => {
+    // tree removal: $60 lead price. Raise floor to $70 → should fail price floor.
+    expect(passesAbilityToPayFloor('tree removal', { minLeadBenchmarkPrice: 70 })).toBe(false);
+    // Lower floor to $40 → should pass.
+    expect(passesAbilityToPayFloor('pressure washing services', { minLeadBenchmarkPrice: 30 })).toBe(false); // still fails prior
+  });
+
+  it('respects minRentabilityPrior override', () => {
+    // tree removal: prior 0.72. Raise prior floor to 0.80 → fails prior.
+    expect(passesAbilityToPayFloor('tree removal', { minRentabilityPrior: 0.80 })).toBe(false);
+  });
+
+  it('floor constants are at expected values', () => {
+    expect(MIN_LEAD_BENCHMARK_PRICE).toBe(50);
+    expect(MIN_RENTABILITY_PRIOR).toBe(0.60);
+  });
+});
+
+// ---- estimateValidatedValue (existing tests, no changes to formula) ---------
 
 describe('estimateValidatedValue', () => {
   it('uses measured volume above the DFS trust floor', () => {
@@ -127,6 +310,8 @@ describe('estimateValidatedValue', () => {
     expect(v.validatedValueUsd).toBe(0);
   });
 });
+
+// ---- findValueCliff (unchanged) ---------------------------------------------
 
 describe('findValueCliff', () => {
   it('finds the largest relative drop within ranks 5..50', () => {

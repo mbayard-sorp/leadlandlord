@@ -16,6 +16,8 @@ export const ScoutReport = z.object({
     cells: z.number(),
     excluded_existing: z.number(),
     excluded_denylist: z.number(),
+    /** Count of trades dropped by the ability-to-pay floor (ADR 0021). */
+    excluded_floor: z.number().default(0),
     uncached_trades: z.number(),
   }),
   /** Sampled at n = 5, 10, 15, ... so the UI can draw the curve cheaply. */
@@ -52,9 +54,13 @@ export interface ScoredCell {
   state: string;
   population: number;
   clusterVolume: number | null;
+  /** Volume-weighted avg kd; null = no usable kd (all kd <= 0 or no cluster). */
+  clusterDifficulty: number | null;
   estCityVolume: number | null;
   leadBenchmarkPrice: number;
   rentabilityPrior: number;
+  /** SEO competition winnability: clamp((100-kd)/100) or DEFAULT_BENCHMARK_WINNABILITY. */
+  winnability: number;
   estMonthlyValueUsd: number;
   scoutScore: number;
   dataConfidence: 'cluster' | 'benchmark_only';

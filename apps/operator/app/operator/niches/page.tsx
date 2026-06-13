@@ -54,6 +54,8 @@ export default async function NichesPage({
       state: c.state,
       population: c.population,
       estMonthlyValueUsd: c.estMonthlyValueUsd,
+      winnability: c.winnability ?? null,
+      clusterDifficulty: c.clusterDifficulty ?? null,
       isNovelTrade: c.isNovelTrade,
       dataConfidence: c.dataConfidence,
       status: c.status,

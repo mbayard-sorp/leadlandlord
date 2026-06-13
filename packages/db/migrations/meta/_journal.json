@@ -302,6 +302,13 @@
       "when": 1782200000000,
       "tag": "0043_niche_scout_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1749852000000,
+      "tag": "0044_niche_scout_scoring",
+      "breakpoints": true
     }
   ]
 }

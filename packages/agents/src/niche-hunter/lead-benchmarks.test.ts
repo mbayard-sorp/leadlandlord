@@ -4,6 +4,8 @@ import {
   getLeadBenchmarkPrice,
   computeRentabilityScore,
 } from './lead-benchmarks';
+import { MIN_LEAD_BENCHMARK_PRICE, MIN_RENTABILITY_PRIOR } from './scoring-config';
+import { SERVICE_TAXONOMY } from './service-taxonomy';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getLeadBenchmarkPrice
@@ -190,4 +192,108 @@ describe('getRentabilityPrior (existing, regression check)', () => {
   it('unknown niche returns neutral prior (0.5)', () => {
     expect(getRentabilityPrior('totally unknown xyz trade')).toBe(0.5);
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Floor guard: default pair sits below BOTH thresholds (ADR 0021)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('floor guard — default pair vs floor thresholds', () => {
+  it('DEFAULT lead price (45) is below MIN_LEAD_BENCHMARK_PRICE (50)', () => {
+    const price = getLeadBenchmarkPrice('totally unknown xyz trade');
+    expect(price).toBeLessThan(MIN_LEAD_BENCHMARK_PRICE);
+  });
+
+  it('DEFAULT rentability prior (0.5) is below MIN_RENTABILITY_PRIOR (0.60)', () => {
+    const prior = getRentabilityPrior('totally unknown xyz trade');
+    expect(prior).toBeLessThan(MIN_RENTABILITY_PRIOR);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legal benchmark entries resolve to mapped (non-default) economics
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('legal trade benchmarks — mapped and above floor', () => {
+  const LEGAL_TRADES = [
+    'personal injury lawyer',
+    'car accident lawyer',
+    'truck accident lawyer',
+    'criminal defense lawyer',
+    'dui lawyer',
+    'divorce lawyer',
+    'bankruptcy lawyer',
+    'immigration lawyer',
+    'estate planning attorney',
+    'medical malpractice lawyer',
+  ];
+
+  for (const trade of LEGAL_TRADES) {
+    it(`${trade} resolves to mapped economics above both floors`, () => {
+      const price = getLeadBenchmarkPrice(trade);
+      const prior = getRentabilityPrior(trade);
+      // Must be above defaults (proving it matched a benchmark entry)
+      expect(price).toBeGreaterThan(45);   // not the $45 default
+      expect(prior).toBeGreaterThan(0.5);  // not the 0.5 default
+      // Must clear the floors
+      expect(price).toBeGreaterThanOrEqual(MIN_LEAD_BENCHMARK_PRICE);
+      expect(prior).toBeGreaterThanOrEqual(MIN_RENTABILITY_PRIOR);
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGRESSION GUARD: every trade in the pruned SERVICE_TAXONOMY must pass the
+// ability-to-pay floor (price >= 50, prior >= 0.60). This test makes the
+// "benchmark-before-floor" gap un-regressable: any new taxonomy trade added
+// without a matching benchmark entry will fail here before Phase D can run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('all pruned taxonomy trades pass ability-to-pay floor', () => {
+  for (const [category, trades] of Object.entries(SERVICE_TAXONOMY)) {
+    for (const trade of trades) {
+      it(`[${category}] "${trade}" price >= ${MIN_LEAD_BENCHMARK_PRICE} AND prior >= ${MIN_RENTABILITY_PRIOR}`, () => {
+        const price = getLeadBenchmarkPrice(trade);
+        const prior = getRentabilityPrior(trade);
+        expect(
+          price,
+          `"${trade}" lead price ${price} < floor ${MIN_LEAD_BENCHMARK_PRICE} (defaults to $45 — missing benchmark entry)`,
+        ).toBeGreaterThanOrEqual(MIN_LEAD_BENCHMARK_PRICE);
+        expect(
+          prior,
+          `"${trade}" rentability prior ${prior} < floor ${MIN_RENTABILITY_PRIOR} (defaults to 0.5 — missing benchmark entry)`,
+        ).toBeGreaterThanOrEqual(MIN_RENTABILITY_PRIOR);
+      });
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Medical benchmark entries resolve to mapped (non-default) economics
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('medical trade benchmarks — mapped and above floor', () => {
+  const MEDICAL_TRADES = [
+    'dental implants',
+    'general dentist',
+    'orthodontist',
+    'chiropractor',
+    'physical therapy clinic',
+    'dermatology clinic',
+    'optometrist',
+    'lasik eye surgery',
+    'weight loss clinic',
+    'veterinary clinic',
+  ];
+
+  for (const trade of MEDICAL_TRADES) {
+    it(`${trade} resolves to mapped economics above both floors`, () => {
+      const price = getLeadBenchmarkPrice(trade);
+      const prior = getRentabilityPrior(trade);
+      expect(price).toBeGreaterThan(45);
+      expect(prior).toBeGreaterThan(0.5);
+      expect(price).toBeGreaterThanOrEqual(MIN_LEAD_BENCHMARK_PRICE);
+      expect(prior).toBeGreaterThanOrEqual(MIN_RENTABILITY_PRIOR);
+    });
+  }
 });

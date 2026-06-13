@@ -1,5 +1,11 @@
 import { getLeadBenchmarkPrice, getRentabilityPrior } from './lead-benchmarks';
-import { resolveDemandVolume } from './scoring-config';
+import {
+  resolveDemandVolume,
+  POP_DAMPENING_REFERENCE,
+  DEFAULT_BENCHMARK_WINNABILITY,
+  MIN_LEAD_BENCHMARK_PRICE,
+  MIN_RENTABILITY_PRIOR,
+} from './scoring-config';
 
 /**
  * Dollar-denominated expected-value model for the scout/validate niche engine.
@@ -62,6 +68,12 @@ export interface ClusterCandidateLike {
   search_volume: number;
   /** 'commercial' | 'transactional' | 'informational' | 'navigational' | null */
   intent: string | null;
+  /**
+   * DataForSEO keyword_difficulty (0-100). 0 means "missing/unknown" in DFS
+   * convention (not "easy") — computeClusterDifficulty skips kd <= 0 exactly
+   * for this reason.
+   */
+  kd?: number;
 }
 
 /**
@@ -80,6 +92,37 @@ export function computeClusterVolume(candidates: ClusterCandidateLike[]): number
   return Math.round(total);
 }
 
+/**
+ * Volume-weighted average keyword_difficulty over the same intent set
+ * computeClusterVolume uses (commercial/transactional full weight, null ×
+ * NULL_INTENT_WEIGHT). Skips candidates where kd <= 0 — DFS returns 0 for
+ * "missing", which conflates unknown with easy and would recreate the
+ * competition-blindness failure in a new dimension.
+ *
+ * Returns null when no candidates have usable kd (kd > 0). Callers treat
+ * null as "no data" and fall back to DEFAULT_BENCHMARK_WINNABILITY.
+ */
+export function computeClusterDifficulty(candidates: ClusterCandidateLike[]): number | null {
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const c of candidates) {
+    const kd = c.kd ?? 0;
+    if (kd <= 0) continue;
+    let weight = 0;
+    if (c.intent === 'commercial' || c.intent === 'transactional') {
+      weight = c.search_volume;
+    } else if (c.intent === null) {
+      weight = c.search_volume * NULL_INTENT_WEIGHT;
+    }
+    // informational/navigational excluded (same rule as computeClusterVolume)
+    if (weight <= 0) continue;
+    weightedSum += kd * weight;
+    totalWeight += weight;
+  }
+  if (totalWeight === 0) return null;
+  return weightedSum / totalWeight;
+}
+
 // ---- scout value -----------------------------------------------------------
 
 export interface ScoutValueArgs {
@@ -95,6 +138,16 @@ export interface ScoutValueArgs {
   fallbackClusterVolume?: number;
   ctrAtRank?: number;
   callRate?: number;
+  /**
+   * Volume-weighted avg kd from computeClusterDifficulty. Null = no usable
+   * kd data; uses DEFAULT_BENCHMARK_WINNABILITY.
+   */
+  clusterDifficulty?: number | null;
+  /**
+   * Override the DEFAULT_BENCHMARK_WINNABILITY used when clusterDifficulty is
+   * null. Operator-supplied to allow exploratory runs with different defaults.
+   */
+  defaultWinnability?: number;
 }
 
 export interface ScoutValue {
@@ -102,6 +155,11 @@ export interface ScoutValue {
   estCityVolume: number | null;
   leadBenchmarkPrice: number;
   rentabilityPrior: number;
+  /**
+   * SEO competition winnability: clamp((100 - clusterDifficulty) / 100, 0, 1).
+   * DEFAULT_BENCHMARK_WINNABILITY (0.5) when no usable kd.
+   */
+  winnability: number;
   estMonthlyValueUsd: number;
   scoutScore: number;
   dataConfidence: 'cluster' | 'benchmark_only';
@@ -118,18 +176,52 @@ export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
   const volumeBasis =
     args.clusterVolume ?? args.fallbackClusterVolume ?? DEFAULT_BENCHMARK_CLUSTER_VOLUME;
 
-  const cityVolume = volumeBasis * (args.cityPopulation / US_POPULATION);
-  const estMonthlyValueUsd = round2(cityVolume * ctr * callRate * leadBenchmarkPrice);
+  // Sqrt-dampened population share (ADR 0021). Compresses a 10x metro
+  // advantage to ~3.16x so mid-size low-competition cities surface.
+  // A city of exactly POP_DAMPENING_REFERENCE is numerically unchanged
+  // vs. the old linear formula (both yield volumeBasis * REF / US_POPULATION).
+  const cityVolume =
+    (volumeBasis * Math.sqrt(args.cityPopulation * POP_DAMPENING_REFERENCE)) / US_POPULATION;
+
+  // Winnability: mirror the validated path's clamp pattern (value-model.ts ~167).
+  const clusterDifficulty = args.clusterDifficulty ?? null;
+  const fallbackWinnability = args.defaultWinnability ?? DEFAULT_BENCHMARK_WINNABILITY;
+  const winnability =
+    clusterDifficulty !== null
+      ? Math.max(0, Math.min(1, (100 - clusterDifficulty) / 100))
+      : fallbackWinnability;
+
+  const estMonthlyValueUsd = round2(cityVolume * ctr * winnability * callRate * leadBenchmarkPrice);
   const scoutScore = round2(estMonthlyValueUsd * rentabilityPrior);
 
   return {
     estCityVolume: dataConfidence === 'cluster' ? round2(cityVolume) : null,
     leadBenchmarkPrice,
     rentabilityPrior,
+    winnability,
     estMonthlyValueUsd,
     scoutScore,
     dataConfidence,
   };
+}
+
+/**
+ * Hard ability-to-pay floor check (ADR 0021). Returns true only when the
+ * trade's lead benchmark price and rentability prior both clear the minimum
+ * thresholds. The $45/0.50 default pair sits below BOTH floors, so any
+ * unmapped trade is cleanly dropped. Every KEEP trade with an explicit
+ * benchmark entry passes (lowest KEEP = tree $60/0.72; thresholds chosen
+ * to sit in the gap above the default).
+ *
+ * Optional opts allow per-run override (operator system_state knobs).
+ */
+export function passesAbilityToPayFloor(
+  trade: string,
+  opts?: { minLeadBenchmarkPrice?: number; minRentabilityPrior?: number },
+): boolean {
+  const minPrice = opts?.minLeadBenchmarkPrice ?? MIN_LEAD_BENCHMARK_PRICE;
+  const minPrior = opts?.minRentabilityPrior ?? MIN_RENTABILITY_PRIOR;
+  return getLeadBenchmarkPrice(trade) >= minPrice && getRentabilityPrior(trade) >= minPrior;
 }
 
 // ---- validated value ---------------------------------------------------------
