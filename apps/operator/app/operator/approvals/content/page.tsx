@@ -1,4 +1,4 @@
-import { getDb, contentIdeas, sites, agentRuns, eq, asc } from '@leadlandlord/db';
+import { getDb, contentIdeas, sites, agentRuns, eq, asc, inArray } from '@leadlandlord/db';
 import Link from 'next/link';
 import { ContentApproveButtons } from './ContentApproveButtons';
 import { SiteFilter, type SiteOption } from './SiteFilter';
@@ -28,14 +28,53 @@ export default async function ContentQueuePage({
   const sp = await searchParams;
   const db = getDb();
 
-  const [allPending, allSites, allRuns] = await Promise.all([
-    db.select().from(contentIdeas).where(eq(contentIdeas.status, 'pending')).orderBy(asc(contentIdeas.createdAt)),
-    db.select().from(sites),
-    db.select().from(agentRuns),
+  // Project only the columns this queue renders. A bare `select().from(contentIdeas)`
+  // emits every column in the Drizzle schema (e.g. story_scaffold, added in migration
+  // 0042), so it hard-fails with "column does not exist" whenever the deployed DB is
+  // behind on migrations. Selecting explicitly keeps the approval gate resilient to lag.
+  const allPending = await db
+    .select({
+      id: contentIdeas.id,
+      siteId: contentIdeas.siteId,
+      topic: contentIdeas.topic,
+      targetKeyword: contentIdeas.targetKeyword,
+      archetype: contentIdeas.archetype,
+      angle: contentIdeas.angle,
+      storyScaffold: contentIdeas.storyScaffold,
+      scoutRunId: contentIdeas.scoutRunId,
+      createdAt: contentIdeas.createdAt,
+    })
+    .from(contentIdeas)
+    .where(eq(contentIdeas.status, 'pending'))
+    .orderBy(asc(contentIdeas.createdAt));
+
+  // Only hydrate the sites and agent_runs actually referenced by these ideas.
+  // agent_runs is the highest-churn table in the system (a row per agent tick, each
+  // carrying large jsonb input/output), so a bare `select().from(agentRuns)` grows
+  // unbounded and trips the neon-http response/time limits — which is what stops this
+  // page from loading. Scope it like every other route.
+  const siteIds = [...new Set(allPending.map((i) => i.siteId))];
+  const runIds = [
+    ...new Set(allPending.map((i) => i.scoutRunId).filter((id): id is string => id != null)),
+  ];
+
+  const [refSites, refRuns] = await Promise.all([
+    siteIds.length
+      ? db
+          .select({ id: sites.id, niche: sites.niche, city: sites.city, state: sites.state })
+          .from(sites)
+          .where(inArray(sites.id, siteIds))
+      : Promise.resolve([] as { id: string; niche: string; city: string; state: string }[]),
+    runIds.length
+      ? db
+          .select({ id: agentRuns.id, costUsd: agentRuns.costUsd })
+          .from(agentRuns)
+          .where(inArray(agentRuns.id, runIds))
+      : Promise.resolve([] as { id: string; costUsd: string | null }[]),
   ]);
 
-  const siteById = new Map(allSites.map((s) => [s.id, s]));
-  const runById = new Map(allRuns.map((r) => [r.id, r]));
+  const siteById = new Map(refSites.map((s) => [s.id, s]));
+  const runById = new Map(refRuns.map((r) => [r.id, r]));
 
   // Build the dropdown from sites that actually have pending ideas, so the
   // filter only offers sites worth selecting.
