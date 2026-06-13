@@ -29,8 +29,22 @@ function statusPill(status: string): React.ReactNode {
 export default async function ContentCostPage() {
   const db = getDb();
 
+  // Project only the columns this dashboard reads. A bare `select().from(contentIdeas)`
+  // emits every column in the Drizzle schema (e.g. story_scaffold, added in migration
+  // 0042), so it hard-fails with "column does not exist" whenever the deployed DB is
+  // behind on migrations — even though this page never uses those columns. Selecting
+  // explicitly keeps the cost view resilient to schema/migration lag.
   const ideas = await db
-    .select()
+    .select({
+      id: contentIdeas.id,
+      siteId: contentIdeas.siteId,
+      topic: contentIdeas.topic,
+      targetKeyword: contentIdeas.targetKeyword,
+      status: contentIdeas.status,
+      scoutRunId: contentIdeas.scoutRunId,
+      writerRunId: contentIdeas.writerRunId,
+      createdAt: contentIdeas.createdAt,
+    })
     .from(contentIdeas)
     .orderBy(desc(contentIdeas.createdAt))
     .limit(500);
@@ -38,8 +52,7 @@ export default async function ContentCostPage() {
   // Only hydrate the sites and agent_runs actually referenced by these ideas.
   // agent_runs is the highest-churn table in the system (a row per agent tick,
   // each carrying large jsonb input/output), so a bare `select().from(agentRuns)`
-  // grows unbounded and eventually trips the neon-http response/time limits —
-  // which is what stops this page from loading. Scope it like every other route.
+  // grows unbounded and adds needless load. Scope it like every other route.
   const siteIds = [...new Set(ideas.map((i) => i.siteId))];
   const runIds = [
     ...new Set(
