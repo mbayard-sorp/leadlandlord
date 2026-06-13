@@ -7,6 +7,38 @@
  * (value-model.ts) instead of threshold filters.
  */
 
+// ── Scout scoring floor + dampening constants (ADR 0021) ────────────────────
+
+/**
+ * Hard floor on lead benchmark price (USD). Trades resolving below this value
+ * are dropped before scoring — they can't sustain a recurring rent fee.
+ * Operator-overridable via system_state.scout_min_lead_price.
+ */
+export const MIN_LEAD_BENCHMARK_PRICE = 50;
+
+/**
+ * Hard floor on rentability prior. Trades resolving below this value are
+ * dropped before scoring. Combined with MIN_LEAD_BENCHMARK_PRICE, this gates
+ * the $45/0.50 default bucket out cleanly while keeping every mapped KEEP trade.
+ * Operator-overridable via system_state.scout_min_rentability_prior.
+ */
+export const MIN_RENTABILITY_PRIOR = 0.60;
+
+/**
+ * Population anchor for the sqrt volume dampening formula (ADR 0021).
+ * A city of exactly this size is unchanged vs. the old linear formula;
+ * larger cities are compressed. Value of 100k keeps the 100k city as the
+ * neutral pivot — matching the middle of the scout's default pop range.
+ */
+export const POP_DAMPENING_REFERENCE = 100_000;
+
+/**
+ * Winnability fallback when no usable kd values exist in the cluster
+ * (all kd <= 0). Conservative: an uncached trade should not get an
+ * assumed-easy SERP that lets it leapfrog measured-hard trades.
+ */
+export const DEFAULT_BENCHMARK_WINNABILITY = 0.5;
+
 export const DEFAULT_WEIGHTS = {
   demand: 0.30,
   serp_difficulty: 0.30,

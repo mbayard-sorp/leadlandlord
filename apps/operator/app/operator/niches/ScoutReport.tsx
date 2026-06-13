@@ -13,6 +13,8 @@ export interface ScoutCandidateData {
   state: string;
   population: number;
   estMonthlyValueUsd: string;
+  winnability: string | null;
+  clusterDifficulty: string | null;
   isNovelTrade: boolean;
   dataConfidence: string;
   status: string;
@@ -33,6 +35,7 @@ export interface ScoutRunData {
       cells: number;
       excluded_existing: number;
       excluded_denylist: number;
+      excluded_floor?: number;
       uncached_trades: number;
     };
     value_curve: Array<{ n: number; min_value_usd: number; cumulative_validation_cost_usd: number }>;
@@ -87,6 +90,9 @@ export function ScoutReport({
             {new Date(run.createdAt).toLocaleString()} · {run.report.grid.trades} trades ×{' '}
             {run.report.grid.cities} cities = {run.gridCells.toLocaleString()} cells ·{' '}
             {run.report.grid.excluded_existing} already in pipeline ·{' '}
+            {(run.report.grid.excluded_floor ?? 0) > 0 && (
+              <span className="text-amber-400">{run.report.grid.excluded_floor} below floor · </span>
+            )}
             {run.report.grid.uncached_trades} trades benchmark-only
           </span>
         </div>
@@ -165,6 +171,8 @@ export function ScoutReport({
               <Th>City</Th>
               <Th className="hidden md:table-cell">Pop</Th>
               <Th>Est $/mo</Th>
+              <Th className="hidden lg:table-cell">Win%</Th>
+              <Th className="hidden lg:table-cell">KD</Th>
               <Th className="hidden lg:table-cell">Flags</Th>
               <Th>Status</Th>
             </tr>
@@ -191,6 +199,16 @@ export function ScoutReport({
                       → ${Number(c.validatedValueUsd).toFixed(0)} val
                     </span>
                   )}
+                </Td>
+                <Td className="hidden lg:table-cell text-xs text-slate-300">
+                  {c.winnability !== null
+                    ? `${(Number(c.winnability) * 100).toFixed(0)}%`
+                    : <span className="text-slate-600">—</span>}
+                </Td>
+                <Td className="hidden lg:table-cell text-xs text-slate-400">
+                  {c.clusterDifficulty !== null
+                    ? Number(c.clusterDifficulty).toFixed(0)
+                    : <span className="text-slate-600">—</span>}
                 </Td>
                 <Td className="hidden lg:table-cell">
                   <span className="flex gap-1">

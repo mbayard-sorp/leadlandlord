@@ -10,9 +10,11 @@ function cell(overrides: Partial<ScoredCell> & { estMonthlyValueUsd: number }): 
     state: 'WY',
     population: 60_000,
     clusterVolume: 5000,
+    clusterDifficulty: 30,
     estCityVolume: 30,
     leadBenchmarkPrice: 60,
     rentabilityPrior: 0.72,
+    winnability: 0.7,
     scoutScore: overrides.estMonthlyValueUsd * 0.72,
     dataConfidence: 'cluster',
     isNovelTrade: false,
@@ -26,6 +28,7 @@ const GRID = {
   cells: 1480,
   excluded_existing: 20,
   excluded_denylist: 3,
+  excluded_floor: 5,
   uncached_trades: 12,
 };
 

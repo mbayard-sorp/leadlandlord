@@ -5,7 +5,7 @@ import { getKeywordCandidates, peekKeywordCandidates } from '@leadlandlord/integ
 import { listCities } from '@leadlandlord/us-cities/loader';
 import { SERVICE_TAXONOMY, CATEGORY_VALUES, type ServiceCategory } from './service-taxonomy';
 import { isDenylisted } from './denylist';
-import { computeClusterVolume, estimateScoutValue } from './value-model';
+import { computeClusterVolume, computeClusterDifficulty, estimateScoutValue, passesAbilityToPayFloor } from './value-model';
 import { buildScoutReport, type ScoredCell } from './scout-report';
 
 /**
@@ -68,6 +68,11 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     const sys = await getSystemState();
     const ctrAtRank = sys.scoutCtrAtRank != null ? parseFloat(sys.scoutCtrAtRank) : undefined;
     const callRate = sys.scoutCallRate != null ? parseFloat(sys.scoutCallRate) : undefined;
+    // Ability-to-pay floor overrides — NULL = use code defaults from scoring-config.ts.
+    const minLeadBenchmarkPrice =
+      sys.scoutMinLeadPrice != null ? parseFloat(sys.scoutMinLeadPrice) : undefined;
+    const minRentabilityPrior =
+      sys.scoutMinRentabilityPrior != null ? parseFloat(sys.scoutMinRentabilityPrior) : undefined;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -111,15 +116,22 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     };
 
     const clusterVolumes = new Map<string, number | null>();
+    // Volume-weighted avg kd per trade (null = no usable kd, use DEFAULT_BENCHMARK_WINNABILITY).
+    const clusterDifficulties = new Map<string, number | null>();
     let fetched = 0;
     const fetchOne = async (trade: string) => {
       try {
         if (input.warm_missing_clusters) {
           const candidates = await getKeywordCandidates({ seed: trade, onCost });
           clusterVolumes.set(trade, computeClusterVolume(candidates));
+          clusterDifficulties.set(trade, computeClusterDifficulty(candidates));
         } else {
           const candidates = await peekKeywordCandidates({ seed: trade });
           clusterVolumes.set(trade, candidates ? computeClusterVolume(candidates) : null);
+          clusterDifficulties.set(
+            trade,
+            candidates ? computeClusterDifficulty(candidates) : null,
+          );
         }
       } catch (err) {
         ctx.log.warn(
@@ -127,6 +139,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           'niche-scout: cluster lookup failed — scoring trade from benchmarks only',
         );
         clusterVolumes.set(trade, null);
+        clusterDifficulties.set(trade, null);
       }
       fetched++;
       if (fetched % 25 === 0 || fetched === allTrades.length) {
@@ -160,9 +173,19 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     // 5. Score the full grid in memory.
     ctx.progress({ step: 3, total: 5, label: `scoring ${allTrades.length} x ${cities.length} cells` });
     let excludedExisting = 0;
+    let excludedFloor = 0;
     const cells: ScoredCell[] = [];
     for (const { trade, category } of allTrades) {
+      // Hard ability-to-pay floor: drop trades that can't sustain rent before
+      // scoring any cities. Counted once per trade (not per city).
+      if (
+        !passesAbilityToPayFloor(trade, { minLeadBenchmarkPrice, minRentabilityPrior })
+      ) {
+        excludedFloor++;
+        continue;
+      }
       const clusterVolume = clusterVolumes.get(trade) ?? null;
+      const clusterDifficulty = clusterDifficulties.get(trade) ?? null;
       const isNovelTrade = !surfacedTrades.has(trade.toLowerCase());
       for (const city of cities) {
         if (existingCombos.has(`${trade.toLowerCase()}|${city.city.toLowerCase()}|${city.state.toUpperCase()}`)) {
@@ -176,6 +199,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           fallbackClusterVolume,
           ctrAtRank,
           callRate,
+          clusterDifficulty,
         });
         cells.push({
           trade,
@@ -184,9 +208,11 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           state: city.state,
           population: city.population,
           clusterVolume,
+          clusterDifficulty,
           estCityVolume: v.estCityVolume,
           leadBenchmarkPrice: v.leadBenchmarkPrice,
           rentabilityPrior: v.rentabilityPrior,
+          winnability: v.winnability,
           estMonthlyValueUsd: v.estMonthlyValueUsd,
           scoutScore: v.scoutScore,
           dataConfidence: v.dataConfidence,
@@ -213,6 +239,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         cells: cells.length,
         excluded_existing: excludedExisting,
         excluded_denylist: excludedDenylist,
+        excluded_floor: excludedFloor,
         uncached_trades: uncachedTrades,
       },
       generatedAt: new Date().toISOString(),
@@ -256,6 +283,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           estCityVolume: c.estCityVolume != null ? c.estCityVolume.toFixed(2) : null,
           leadBenchmarkPrice: c.leadBenchmarkPrice.toFixed(2),
           rentabilityPrior: c.rentabilityPrior.toFixed(3),
+          winnability: c.winnability.toFixed(3),
+          clusterDifficulty: c.clusterDifficulty != null ? c.clusterDifficulty.toFixed(2) : null,
           estMonthlyValueUsd: c.estMonthlyValueUsd.toFixed(2),
           rank: i + j + 1,
           isNovelTrade: c.isNovelTrade,

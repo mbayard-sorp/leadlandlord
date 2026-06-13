@@ -253,6 +253,17 @@ export const nicheCandidates = pgTable(
     status: text('status').notNull().default('scouted'),
     nicheId: uuid('niche_id').references(() => niches.id, { onDelete: 'set null' }),
     validatedValueUsd: numeric('validated_value_usd', { precision: 12, scale: 2 }),
+    /**
+     * SEO competition winnability persisted at scout time (ADR 0021).
+     * clamp((100 - clusterDifficulty) / 100) or DEFAULT_BENCHMARK_WINNABILITY.
+     * Nullable for rows created before migration 0044.
+     */
+    winnability: numeric('winnability', { precision: 4, scale: 3 }),
+    /**
+     * Volume-weighted avg keyword_difficulty from computeClusterDifficulty.
+     * Null when no usable kd values existed in the cluster (all kd <= 0).
+     */
+    clusterDifficulty: numeric('cluster_difficulty', { precision: 5, scale: 2 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -1084,6 +1095,11 @@ export const systemState = pgTable('system_state', {
   // (CTR 0.20, call rate 0.10).
   scoutCtrAtRank: numeric('scout_ctr_at_rank', { precision: 5, scale: 4 }),
   scoutCallRate: numeric('scout_call_rate', { precision: 5, scale: 4 }),
+  // Ability-to-pay floor overrides (migration 0044, ADR 0021). NULL = fall
+  // back to MIN_LEAD_BENCHMARK_PRICE ($50) and MIN_RENTABILITY_PRIOR (0.60)
+  // in scoring-config.ts. Set via /operator/control for exploratory runs.
+  scoutMinLeadPrice: numeric('scout_min_lead_price', { precision: 8, scale: 2 }),
+  scoutMinRentabilityPrior: numeric('scout_min_rentability_prior', { precision: 4, scale: 3 }),
   // ──────────────────────────────────────────────────────────
   // Portfolio-wide daily spend ceiling (orchestrator Phase 2).
   // Enforced in BaseAgent.assertBudgetAvailable BEFORE the per-agent

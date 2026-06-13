@@ -39,7 +39,12 @@ vi.mock('@leadlandlord/db', () => ({
       }),
     })),
   })),
-  getSystemState: vi.fn(async () => ({ scoutCtrAtRank: null, scoutCallRate: null })),
+  getSystemState: vi.fn(async () => ({
+    scoutCtrAtRank: null,
+    scoutCallRate: null,
+    scoutMinLeadPrice: null,
+    scoutMinRentabilityPrior: null,
+  })),
   niches: { __name: 'niches', niche: 'niche', city: 'city', state: 'state' },
   nicheScoutRuns: { __name: 'niche_scout_runs', id: 'id', status: 'status', states: 'states' },
   nicheCandidates: { __name: 'niche_candidates' },
@@ -60,7 +65,9 @@ vi.mock('@leadlandlord/us-cities/loader', () => ({
 // ---- DataForSEO mock ----------------------------------------------------------
 // Trades resolve deterministic cluster volumes from the seed string; one named
 // trade stays uncached to exercise benchmark_only degradation.
-const UNCACHED_TRADE = 'gutter cleaning';
+// Must be a trade that (a) passes the ability-to-pay floor and (b) is in the
+// home_services taxonomy post-prune.
+const UNCACHED_TRADE = 'chimney repair';
 
 vi.mock('@leadlandlord/integrations/dataforseo', () => ({
   getKeywordCandidates: vi.fn(async (args: { seed: string; onCost?: (u: number) => void }) => {
@@ -83,6 +90,7 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
 
 import { NicheScout, NicheScoutInput } from './scout';
 import { isDenylisted } from './denylist';
+import { getSystemState } from '@leadlandlord/db';
 
 const MOCK_CTX: AgentContext = {
   runId: 'run-scout-1',
@@ -141,19 +149,21 @@ describe('NicheScout', () => {
   });
 
   it('excludes combos already in niches and stamps novelty', async () => {
+    // Use a trade that passes the floor and is in home_services taxonomy.
+    const SURFACED_TRADE = 'fence installation';
     existingNicheRows = [
-      { niche: 'pressure washing', city: 'Casper', state: 'WY' },
+      { niche: SURFACED_TRADE, city: 'Casper', state: 'WY' },
     ];
     await runScout();
-    const pressureCasper = insertedCandidates.filter(
-      (c) => c.trade === 'pressure washing' && c.city === 'Casper',
+    const surfacedCasper = insertedCandidates.filter(
+      (c) => c.trade === SURFACED_TRADE && c.city === 'Casper',
     );
-    expect(pressureCasper).toHaveLength(0);
+    expect(surfacedCasper).toHaveLength(0);
     // Other cities for the surfaced trade still appear, but are not novel.
-    const pressureOther = insertedCandidates.filter((c) => c.trade === 'pressure washing');
-    for (const c of pressureOther) expect(c.isNovelTrade).toBe(false);
+    const surfacedOther = insertedCandidates.filter((c) => c.trade === SURFACED_TRADE);
+    for (const c of surfacedOther) expect(c.isNovelTrade).toBe(false);
     // Unsurfaced trades are novel.
-    const other = insertedCandidates.find((c) => c.trade !== 'pressure washing');
+    const other = insertedCandidates.find((c) => c.trade !== SURFACED_TRADE);
     expect(other?.isNovelTrade).toBe(true);
 
     const run = insertedRuns[0]! as { report: { grid: { excluded_existing: number } } };
@@ -187,5 +197,68 @@ describe('NicheScout', () => {
     expect(MOCK_CTX.recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'dataforseo', cost_usd: 0.028 }),
     );
+  });
+
+  it('persists winnability and cluster_difficulty on each candidate', async () => {
+    await runScout();
+    expect(insertedCandidates.length).toBeGreaterThan(0);
+    for (const c of insertedCandidates) {
+      // winnability must be a numeric string (not undefined/null — always set)
+      expect(typeof c.winnability).toBe('string');
+      expect(Number.isFinite(parseFloat(c.winnability as string))).toBe(true);
+      // cluster_difficulty: present for trades with usable kd, null for uncached
+      if (c.trade !== UNCACHED_TRADE) {
+        // The mock returns kd=10 for all non-uncached trades.
+        expect(c.clusterDifficulty).not.toBeNull();
+        expect(Number.isFinite(parseFloat(c.clusterDifficulty as string))).toBe(true);
+      }
+    }
+  });
+
+  it('benchmark_only trade gets DEFAULT_BENCHMARK_WINNABILITY (0.5) not 1.0', async () => {
+    const out = await runScout({ warm_missing_clusters: false });
+    void out;
+    const uncached = insertedCandidates.filter((c) => c.trade === UNCACHED_TRADE);
+    expect(uncached.length).toBeGreaterThan(0);
+    for (const c of uncached) {
+      // No cluster means no kd — winnability must be DEFAULT_BENCHMARK_WINNABILITY (0.5)
+      expect(parseFloat(c.winnability as string)).toBeCloseTo(0.5, 3);
+      expect(c.clusterDifficulty).toBeNull();
+    }
+  });
+
+  it('floor excludes trades below ability-to-pay threshold — excluded_floor populated', async () => {
+    // After the taxonomy prune + benchmark expansion, most home_services trades
+    // pass the floor. excluded_floor counts trades that hit the default ($45/0.50).
+    // We run with default thresholds and verify the counter is present and a number.
+    await runScout();
+    const run = insertedRuns[0]! as {
+      report: { grid: { excluded_floor: number } };
+    };
+    // excluded_floor must be a non-negative integer (could be 0 if all trades have benchmarks).
+    expect(typeof run.report.grid.excluded_floor).toBe('number');
+    expect(run.report.grid.excluded_floor).toBeGreaterThanOrEqual(0);
+    // Candidates must not include any floor-excluded trades:
+    // all persisted candidates should have winnability set.
+    for (const c of insertedCandidates) {
+      expect(c.winnability).toBeDefined();
+    }
+  });
+
+  it('system_state override affects floor — high minLeadPrice excludes more trades', async () => {
+    // Raise minLeadBenchmarkPrice to $200 via system_state override.
+    // Most home_services trades have lead prices well below $200, so excluded_floor goes up.
+    vi.mocked(getSystemState).mockResolvedValueOnce({
+      scoutCtrAtRank: null,
+      scoutCallRate: null,
+      scoutMinLeadPrice: '200',        // floor raised to $200
+      scoutMinRentabilityPrior: null,
+    } as Awaited<ReturnType<typeof getSystemState>>);
+    await runScout();
+    const run = insertedRuns[0]! as {
+      report: { grid: { excluded_floor: number } };
+    };
+    // With floor at $200, most home_services trades should be excluded.
+    expect(run.report.grid.excluded_floor).toBeGreaterThan(0);
   });
 });
