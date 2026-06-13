@@ -1,4 +1,4 @@
-import { desc, getDb, contentIdeas, sites, agentRuns, eq } from '@leadlandlord/db';
+import { desc, getDb, contentIdeas, sites, agentRuns, inArray } from '@leadlandlord/db';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -29,14 +29,43 @@ function statusPill(status: string): React.ReactNode {
 export default async function ContentCostPage() {
   const db = getDb();
 
-  const [ideas, allSites, allRuns] = await Promise.all([
-    db.select().from(contentIdeas).orderBy(desc(contentIdeas.createdAt)).limit(500),
-    db.select().from(sites),
-    db.select().from(agentRuns),
+  const ideas = await db
+    .select()
+    .from(contentIdeas)
+    .orderBy(desc(contentIdeas.createdAt))
+    .limit(500);
+
+  // Only hydrate the sites and agent_runs actually referenced by these ideas.
+  // agent_runs is the highest-churn table in the system (a row per agent tick,
+  // each carrying large jsonb input/output), so a bare `select().from(agentRuns)`
+  // grows unbounded and eventually trips the neon-http response/time limits —
+  // which is what stops this page from loading. Scope it like every other route.
+  const siteIds = [...new Set(ideas.map((i) => i.siteId))];
+  const runIds = [
+    ...new Set(
+      ideas
+        .flatMap((i) => [i.scoutRunId, i.writerRunId])
+        .filter((id): id is string => id != null),
+    ),
+  ];
+
+  const [refSites, refRuns] = await Promise.all([
+    siteIds.length
+      ? db
+          .select({ id: sites.id, niche: sites.niche, city: sites.city, state: sites.state })
+          .from(sites)
+          .where(inArray(sites.id, siteIds))
+      : Promise.resolve([] as { id: string; niche: string; city: string; state: string }[]),
+    runIds.length
+      ? db
+          .select({ id: agentRuns.id, costUsd: agentRuns.costUsd })
+          .from(agentRuns)
+          .where(inArray(agentRuns.id, runIds))
+      : Promise.resolve([] as { id: string; costUsd: string }[]),
   ]);
 
-  const siteById = new Map(allSites.map((s) => [s.id, s]));
-  const runById = new Map(allRuns.map((r) => [r.id, r]));
+  const siteById = new Map(refSites.map((s) => [s.id, s]));
+  const runById = new Map(refRuns.map((r) => [r.id, r]));
 
   const rows = ideas.map((idea) => {
     const site = siteById.get(idea.siteId);
