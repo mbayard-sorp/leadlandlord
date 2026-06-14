@@ -46,6 +46,7 @@ vi.mock('@leadlandlord/db', () => ({
     scoutMinRentabilityPrior: null,
     scoutGeoCompBlend: null,
     scoutGeoDemandBlend: null,
+    scoutPerStateCap: null,
   })),
   niches: { __name: 'niches', niche: 'niche', city: 'city', state: 'state' },
   nicheScoutRuns: { __name: 'niche_scout_runs', id: 'id', status: 'status', states: 'states' },
@@ -267,6 +268,7 @@ describe('NicheScout', () => {
       scoutMinRentabilityPrior: null,
       scoutGeoCompBlend: null,
       scoutGeoDemandBlend: null,
+      scoutPerStateCap: null,
     } as Awaited<ReturnType<typeof getSystemState>>);
     await runScout();
     const run = insertedRuns[0]! as {
@@ -274,5 +276,44 @@ describe('NicheScout', () => {
     };
     // With floor at $200, most home_services trades should be excluded.
     expect(run.report.grid.excluded_floor).toBeGreaterThan(0);
+  });
+
+  it('per-state cap (ADR 0022 §4) admits only the top-N candidates per state', async () => {
+    // All grid cells are in WY (the only requested state) across 3 cities and
+    // many trades, so without a cap dozens of candidates would persist. With
+    // scoutPerStateCap=2, exactly the 2 highest-scoring WY candidates survive.
+    vi.mocked(getSystemState).mockResolvedValueOnce({
+      scoutCtrAtRank: null,
+      scoutCallRate: null,
+      scoutMinLeadPrice: null,
+      scoutMinRentabilityPrior: null,
+      scoutGeoCompBlend: null,
+      scoutGeoDemandBlend: null,
+      scoutPerStateCap: 2,
+    } as Awaited<ReturnType<typeof getSystemState>>);
+
+    await runScout();
+
+    // Exactly 2 candidates persisted, all in WY, ranked 1 and 2.
+    expect(insertedCandidates).toHaveLength(2);
+    expect(insertedCandidates.every((c) => c.state === 'WY')).toBe(true);
+    expect(insertedCandidates.map((c) => c.rank)).toEqual([1, 2]);
+
+    // They are the two highest-scoring cells (score desc). Confirm rank 1 >= rank 2.
+    const score = (c: Record<string, unknown>) =>
+      parseFloat(c.estMonthlyValueUsd as string) * parseFloat(String(c.rentabilityPrior));
+    expect(score(insertedCandidates[0]!)).toBeGreaterThanOrEqual(score(insertedCandidates[1]!));
+
+    // The run row records the capped persisted count.
+    const run = insertedRuns[0]! as { persistedCandidates: number };
+    expect(run.persistedCandidates).toBe(2);
+  });
+
+  it('null per-state cap leaves persistence unchanged (more than the cap would allow)', async () => {
+    // Default mock already returns scoutPerStateCap: null. The full WY grid has
+    // far more than 2 candidates, proving the cap is what limited the prior test.
+    await runScout();
+    expect(insertedCandidates.length).toBeGreaterThan(2);
+    expect(insertedCandidates.every((c) => c.state === 'WY')).toBe(true);
   });
 });

@@ -78,6 +78,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutGeoCompBlend != null ? parseFloat(sys.scoutGeoCompBlend) : undefined;
     const demandBlendStrength =
       sys.scoutGeoDemandBlend != null ? parseFloat(sys.scoutGeoDemandBlend) : undefined;
+    // Per-state diversity cap (ADR 0022 §4) — NULL = no cap (current behavior).
+    const perStateCap =
+      sys.scoutPerStateCap != null ? sys.scoutPerStateCap : undefined;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -229,6 +232,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           category,
           city: city.city,
           state: city.state,
+          county: city.county,
           population: city.population,
           clusterVolume,
           clusterDifficulty,
@@ -279,7 +283,25 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     // 'current' + supersede prior runs for the same states. neon-http has no
     // transactions, so ordering is the integrity mechanism.
     ctx.progress({ step: 4, total: 5, label: `persisting top ${Math.min(input.persist_top, cells.length)} candidates` });
-    const toPersist = cells.slice(0, input.persist_top);
+    // Per-state diversity cap (ADR 0022 §4): when set, admit cells greedily in
+    // score order (cells are already sorted desc), skipping any whose state has
+    // reached `perStateCap`, THEN slice to persist_top. NULL cap = unchanged.
+    // The report above still reflects the whole grid, not the capped set.
+    const admitted =
+      perStateCap != null && perStateCap > 0
+        ? (() => {
+            const perState = new Map<string, number>();
+            const kept: ScoredCell[] = [];
+            for (const c of cells) {
+              const seen = perState.get(c.state) ?? 0;
+              if (seen >= perStateCap) continue;
+              perState.set(c.state, seen + 1);
+              kept.push(c);
+            }
+            return kept;
+          })()
+        : cells;
+    const toPersist = admitted.slice(0, input.persist_top);
     const statesSorted = [...input.states].sort();
 
     const [runRow] = await db

@@ -42,6 +42,34 @@ export const ScoutReport = z.object({
       z.object({ category: z.string(), count_in_top100: z.number() }),
     ),
     novel_trades_in_top100: z.number(),
+    /**
+     * Geo-tier reporting surface (ADR 0022 §4). Aggregated over ALL scored
+     * cells (not just the top 100) so the operator sees the full geographic
+     * shape of demand vs competition. Both arrays sorted desc by
+     * geoAttractiveness; the UI renders the top-10 of each.
+     */
+    geo_tiers: z.object({
+      states: z.array(
+        z.object({
+          state: z.string(),
+          demandDensity: z.number(),
+          competitionSaturation: z.number(),
+          geoAttractiveness: z.number(),
+          candidateCount: z.number(),
+        }),
+      ),
+      metros: z.array(
+        z.object({
+          county: z.string(),
+          state: z.string(),
+          demandDensity: z.number(),
+          competitionSaturation: z.number(),
+          geoAttractiveness: z.number(),
+          candidateCount: z.number(),
+        }),
+      ),
+      census_hit_rate: z.number(),
+    }),
   }),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
@@ -52,6 +80,8 @@ export interface ScoredCell {
   category: string;
   city: string;
   state: string;
+  /** County the city sits in (UsCity.county) — geo-tier "metro" grouping key. */
+  county: string;
   population: number;
   clusterVolume: number | null;
   /** Volume-weighted avg kd; null = no usable kd (all kd <= 0 or no cluster). */
@@ -152,6 +182,8 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
 
   const novelTrades = new Set(top100.filter((c) => c.isNovelTrade).map((c) => c.trade));
 
+  const geo_tiers = buildGeoTiers(cellsDesc);
+
   return ScoutReport.parse({
     generated_at: generatedAt,
     grid,
@@ -161,10 +193,85 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
       population_bands,
       category_concentration,
       novel_trades_in_top100: novelTrades.size,
+      geo_tiers,
     },
   });
 }
 
+/** Cap on the number of metro (county) rows in the report to bound jsonb size. */
+const GEO_TIERS_METROS_TOP_N = 25;
+
+/**
+ * Geo-tier aggregation (ADR 0022 §4): a diversity/reporting surface, NOT a
+ * score multiplier. Aggregates over ALL scored cells. Per geography:
+ *   demandDensity         = mean(demandQuality)
+ *   competitionSaturation = mean(1 − metroDensityMult)
+ *   geoAttractiveness     = demandDensity · mean(metroDensityMult)
+ * census_hit_rate = (cells with hasCensus) / (total cells).
+ * States include every group; metros are capped to the top-N by
+ * geoAttractiveness. Both arrays sorted desc by geoAttractiveness.
+ */
+function buildGeoTiers(cells: ScoredCell[]): ScoutReport['insights']['geo_tiers'] {
+  interface Acc {
+    demandQualitySum: number;
+    metroDensitySum: number;
+    count: number;
+  }
+  const states = new Map<string, Acc>();
+  const metros = new Map<string, Acc & { county: string; state: string }>();
+  let censusHits = 0;
+
+  for (const c of cells) {
+    if (c.hasCensus) censusHits++;
+
+    const s = states.get(c.state) ?? { demandQualitySum: 0, metroDensitySum: 0, count: 0 };
+    s.demandQualitySum += c.demandQuality;
+    s.metroDensitySum += c.metroDensityMult;
+    s.count += 1;
+    states.set(c.state, s);
+
+    const metroKey = `${c.county}|${c.state}`;
+    const m =
+      metros.get(metroKey) ??
+      { demandQualitySum: 0, metroDensitySum: 0, count: 0, county: c.county, state: c.state };
+    m.demandQualitySum += c.demandQuality;
+    m.metroDensitySum += c.metroDensityMult;
+    m.count += 1;
+    metros.set(metroKey, m);
+  }
+
+  const summarize = (a: Acc) => {
+    const demandDensity = a.count > 0 ? a.demandQualitySum / a.count : 0;
+    const meanMetroDensity = a.count > 0 ? a.metroDensitySum / a.count : 0;
+    return {
+      demandDensity: round(demandDensity),
+      competitionSaturation: round(1 - meanMetroDensity),
+      geoAttractiveness: round(demandDensity * meanMetroDensity),
+      candidateCount: a.count,
+    };
+  };
+
+  const stateRows = Array.from(states.entries())
+    .map(([state, a]) => ({ state, ...summarize(a) }))
+    .sort((x, y) => y.geoAttractiveness - x.geoAttractiveness);
+
+  const metroRows = Array.from(metros.values())
+    .map((a) => ({ county: a.county, state: a.state, ...summarize(a) }))
+    .sort((x, y) => y.geoAttractiveness - x.geoAttractiveness)
+    .slice(0, GEO_TIERS_METROS_TOP_N);
+
+  return {
+    states: stateRows,
+    metros: metroRows,
+    census_hit_rate: cells.length > 0 ? round(censusHits / cells.length) : 0,
+  };
+}
+
 function round2(n: number): number {
   return Number(n.toFixed(2));
+}
+
+/** Round a 0–1 ratio to 4 dp — geo-tier means need more precision than round2. */
+function round(n: number): number {
+  return Number(n.toFixed(4));
 }
