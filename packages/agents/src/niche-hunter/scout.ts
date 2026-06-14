@@ -12,8 +12,15 @@ import { listCities, computeCityMarketScores, type MarketSignal } from '@leadlan
 import { SERVICE_TAXONOMY, CATEGORY_VALUES, type ServiceCategory } from './service-taxonomy';
 import { isDenylisted } from './denylist';
 import { computeClusterVolume, computeClusterDifficulty, estimateScoutValue, passesAbilityToPayFloor } from './value-model';
-import { resolveDemandVolume, DEFAULT_SCOUT_REFINE_BUDGET_USD, DEFAULT_SCOUT_REFINE_TOP_K } from './scoring-config';
+import {
+  resolveDemandVolume,
+  DEFAULT_SCOUT_REFINE_BUDGET_USD,
+  DEFAULT_SCOUT_REFINE_TOP_K,
+  SCOUT_MAX_PER_TRADE,
+  SCOUT_MAX_CATEGORY_SHARE,
+} from './scoring-config';
 import { buildScoutReport, type ScoredCell } from './scout-report';
+import { selectDiversified } from './selection';
 
 /**
  * Niche Scout — phase 1 of the deterministic scout/validate engine.
@@ -100,6 +107,13 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     // Per-state diversity cap (ADR 0022 §4) — NULL = no cap (current behavior).
     const perStateCap =
       sys.scoutPerStateCap != null ? sys.scoutPerStateCap : undefined;
+    // Per-trade / per-category diversity caps (ADR 0023) — NULL = code defaults.
+    const maxPerTrade =
+      sys.scoutMaxPerTrade != null ? Number(sys.scoutMaxPerTrade) : SCOUT_MAX_PER_TRADE;
+    const maxCategoryShare =
+      sys.scoutMaxCategoryShare != null
+        ? parseFloat(sys.scoutMaxCategoryShare)
+        : SCOUT_MAX_CATEGORY_SHARE;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -431,13 +445,44 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       cells.sort(cellComparator);
     }
 
+    // Diversity caps (ADR 0023): bound how much of the persisted set any single
+    // trade or category may occupy, so a high-ticket mono-category (e.g. legal)
+    // can't sweep the whole list. The per-category cap is disabled for runs
+    // already scoped to one category — capping there would starve the request.
+    const capPerTrade = Math.max(1, Math.floor(maxPerTrade));
+    const capPerCategory = input.category_filter
+      ? input.persist_top
+      : Math.max(1, Math.ceil(input.persist_top * maxCategoryShare));
+    const { selected: diversifiedCells, excludedByCap } = selectDiversified(cells, input.persist_top, {
+      maxPerTrade: capPerTrade,
+      maxPerCategory: capPerCategory,
+    });
+    // Per-state diversity cap (ADR 0022 §4): when set, admit cells greedily in
+    // score order (diversifiedCells is already sorted desc), skipping any whose
+    // state has reached `perStateCap`. NULL cap = unchanged. Applied after the
+    // per-trade/category caps so all three diversity dimensions compose.
+    const rankedCells =
+      perStateCap != null && perStateCap > 0
+        ? (() => {
+            const perState = new Map<string, number>();
+            const kept: ScoredCell[] = [];
+            for (const c of diversifiedCells) {
+              const seen = perState.get(c.state) ?? 0;
+              if (seen >= perStateCap) continue;
+              perState.set(c.state, seen + 1);
+              kept.push(c);
+            }
+            return kept;
+          })()
+        : diversifiedCells;
+
     const report = buildScoutReport({
       refinement: {
         refined_count: refinedCount,
         refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
         refine_budget_exhausted: refineBudgetExhausted,
       },
-      cellsDesc: cells,
+      cellsDesc: rankedCells,
       grid: {
         trades: allTrades.length,
         cities: cities.length,
@@ -445,6 +490,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         excluded_existing: excludedExisting,
         excluded_denylist: excludedDenylist,
         excluded_floor: excludedFloor,
+        excluded_diversity_cap: excludedByCap,
+        diversity_cap_per_trade: capPerTrade,
+        diversity_cap_per_category: capPerCategory,
         uncached_trades: uncachedTrades,
       },
       generatedAt: new Date().toISOString(),
@@ -454,26 +502,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     // leaves a half-populated 'current' run), then candidates, then flip to
     // 'current' + supersede prior runs for the same states. neon-http has no
     // transactions, so ordering is the integrity mechanism.
-    ctx.progress({ step: 4, total: 5, label: `persisting top ${Math.min(input.persist_top, cells.length)} candidates` });
-    // Per-state diversity cap (ADR 0022 §4): when set, admit cells greedily in
-    // score order (cells are already sorted desc), skipping any whose state has
-    // reached `perStateCap`, THEN slice to persist_top. NULL cap = unchanged.
-    // The report above still reflects the whole grid, not the capped set.
-    const admitted =
-      perStateCap != null && perStateCap > 0
-        ? (() => {
-            const perState = new Map<string, number>();
-            const kept: ScoredCell[] = [];
-            for (const c of cells) {
-              const seen = perState.get(c.state) ?? 0;
-              if (seen >= perStateCap) continue;
-              perState.set(c.state, seen + 1);
-              kept.push(c);
-            }
-            return kept;
-          })()
-        : cells;
-    const toPersist = admitted.slice(0, input.persist_top);
+    ctx.progress({ step: 4, total: 5, label: `persisting top ${rankedCells.length} candidates` });
+    const toPersist = rankedCells;
     const statesSorted = [...input.states].sort();
 
     const [runRow] = await db

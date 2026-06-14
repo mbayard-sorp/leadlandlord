@@ -316,6 +316,13 @@
       "when": 1782400000000,
       "tag": "0045_niche_scout_geo",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1782500000000,
+      "tag": "0046_niche_scout_diversity",
+      "breakpoints": true
     }
   ]
 }

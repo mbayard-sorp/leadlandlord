@@ -78,6 +78,33 @@ export const DEFAULT_SCOUT_REFINE_BUDGET_USD = 3.00;
  */
 export const DEFAULT_SCOUT_REFINE_TOP_K = 0;
 
+// ── Candidate diversity caps (ADR 0023) ─────────────────────────────────────
+//
+// The scout ranks the whole trade x city grid by a single dollar score and
+// keeps the top N. With no spread constraint, whichever trade has the highest
+// leadBenchmarkPrice x rentabilityPrior sweeps every city — legal trades
+// (PI lawyer $650 x 0.92 ≈ 6x a roofer per unit volume) filled an entire run.
+// These caps bound how much of the persisted set any one trade or category can
+// occupy, so the value ranking still orders candidates but a single mono-trade
+// or mono-category can no longer monopolize the list. Both are operator-tunable
+// via system_state (scout_max_per_trade, scout_max_category_share).
+
+/**
+ * Max cities (candidates) any single trade may contribute to the persisted set.
+ * Caps "personal injury lawyer in 200 cities" down to a handful so other trades
+ * surface. Operator-overridable via system_state.scout_max_per_trade.
+ */
+export const SCOUT_MAX_PER_TRADE = 8;
+
+/**
+ * Max fraction of the persisted set any single category may occupy. With 9
+ * categories, 0.30 lets the strongest category take up to ~a third while still
+ * leaving room for the rest. Resolved to an absolute count against persist_top
+ * at selection time. Operator-overridable via system_state.scout_max_category_share.
+ * Ignored when the run is already scoped to one category (category_filter set).
+ */
+export const SCOUT_MAX_CATEGORY_SHARE = 0.30;
+
 export const DEFAULT_WEIGHTS = {
   demand: 0.30,
   serp_difficulty: 0.30,
