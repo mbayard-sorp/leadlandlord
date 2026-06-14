@@ -170,6 +170,20 @@ export interface ScoutValueArgs {
    * Undefined → DEFAULT_GEO_DEMAND_BLEND (0.0 → inert).
    */
   demandBlendStrength?: number;
+  /**
+   * Stage-3 refinement override (ADR 0022 §5). When set, replaces the proxy
+   * winnability (clamped to [0,1]) with the measured local-SERP value before
+   * the geo fold; everything else (geo blends, dollar math) stays identical so
+   * the refined cell is scored by the SAME formula as the proxy cell.
+   */
+  winnabilityOverride?: number;
+  /**
+   * Stage-3 refinement override (ADR 0022 §5). When set, replaces the
+   * population-derived cityVolume with a measured city volume (already resolved
+   * via resolveDemandVolume by the caller). Used only when local volume is
+   * measured during refinement.
+   */
+  cityVolumeOverride?: number;
 }
 
 export interface ScoutValue {
@@ -211,15 +225,20 @@ export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
   // A city of exactly POP_DAMPENING_REFERENCE is numerically unchanged
   // vs. the old linear formula (both yield volumeBasis * REF / US_POPULATION).
   const cityVolume =
+    args.cityVolumeOverride ??
     (volumeBasis * Math.sqrt(args.cityPopulation * POP_DAMPENING_REFERENCE)) / US_POPULATION;
 
   // Winnability: mirror the validated path's clamp pattern (value-model.ts ~167).
+  // A Stage-3 measured override (already clamped by the caller) replaces the
+  // proxy cluster-difficulty winnability when present.
   const clusterDifficulty = args.clusterDifficulty ?? null;
   const fallbackWinnability = args.defaultWinnability ?? DEFAULT_BENCHMARK_WINNABILITY;
   const winnability =
-    clusterDifficulty !== null
-      ? Math.max(0, Math.min(1, (100 - clusterDifficulty) / 100))
-      : fallbackWinnability;
+    args.winnabilityOverride !== undefined
+      ? Math.max(0, Math.min(1, args.winnabilityOverride))
+      : clusterDifficulty !== null
+        ? Math.max(0, Math.min(1, (100 - clusterDifficulty) / 100))
+        : fallbackWinnability;
 
   // Structural geo modifiers (ADR 0022). Absent signal → multiplier 1.0; inert
   // blend strength (0.0) → modifier collapses to 1.0, so at the shipped defaults
@@ -241,7 +260,15 @@ export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
   const scoutScore = round2(estMonthlyValueUsd * rentabilityPrior);
 
   return {
-    estCityVolume: dataConfidence === 'cluster' ? round2(cityVolume) : null,
+    // A Stage-3 measured-volume override always surfaces as estCityVolume (it
+    // is a measured figure, not an imputed one); otherwise the cluster path
+    // emits the population-derived estimate and benchmark_only emits null.
+    estCityVolume:
+      args.cityVolumeOverride !== undefined
+        ? round2(cityVolume)
+        : dataConfidence === 'cluster'
+          ? round2(cityVolume)
+          : null,
     leadBenchmarkPrice,
     rentabilityPrior,
     winnability,

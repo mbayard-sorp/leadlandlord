@@ -71,6 +71,18 @@ export const ScoutReport = z.object({
       census_hit_rate: z.number(),
     }),
   }),
+  /**
+   * Stage-3 local-SERP refinement summary (ADR 0022 §5). refined_count cells
+   * carried refinement_source='local_serp'; refine_spend_usd is the DataForSEO
+   * cost actually incurred (cache hits cost $0); refine_budget_exhausted is true
+   * when the loop aborted because a cold call would have exceeded the budget.
+   * All zeros / false when Stage 3 is disabled (refine_top_k <= 0).
+   */
+  refinement: z.object({
+    refined_count: z.number(),
+    refine_spend_usd: z.number(),
+    refine_budget_exhausted: z.boolean(),
+  }),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
 
@@ -107,6 +119,14 @@ export interface ScoredCell {
   hasCensus: boolean;
   /** 'proxy' (Stage-1 structural) or 'local_serp' (Stage-3 refined). */
   refinementSource: 'proxy' | 'local_serp';
+  /** Stage-3 measured local-SERP difficulty (0-100); set only on refined cells. */
+  localSerpDifficulty?: number;
+  /** Stage-3 measured local-SERP aggregator share (0-1); set only on refined cells. */
+  localAggregatorShare?: number;
+  /** Stage-3 measured local-pack presence; set only on refined cells. */
+  hasLocalPack?: boolean;
+  /** Stage-3 measured local seed volume (sum); set only when volume measured. */
+  localMeasuredVolume?: number;
 }
 
 const POPULATION_BANDS: Array<{ band: string; min: number; max: number }> = [
@@ -127,10 +147,24 @@ export interface BuildScoutReportArgs {
    * candidates' trades have cached clusters.
    */
   expectedCacheSavingsRate?: number;
+  /**
+   * Stage-3 refinement summary (ADR 0022 §5). Defaults to a disabled summary
+   * (zeros / false) when omitted, so callers that never refine need not pass it.
+   */
+  refinement?: {
+    refined_count: number;
+    refine_spend_usd: number;
+    refine_budget_exhausted: boolean;
+  };
 }
 
 export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
   const { cellsDesc, grid, generatedAt } = args;
+  const refinement = args.refinement ?? {
+    refined_count: 0,
+    refine_spend_usd: 0,
+    refine_budget_exhausted: false,
+  };
   const savings = Math.max(0, Math.min(1, args.expectedCacheSavingsRate ?? 0));
   const costForN = (n: number) =>
     round2(n * VALIDATION_COST_PER_CANDIDATE_USD * (1 - savings));
@@ -195,6 +229,7 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
       novel_trades_in_top100: novelTrades.size,
       geo_tiers,
     },
+    refinement,
   });
 }
 

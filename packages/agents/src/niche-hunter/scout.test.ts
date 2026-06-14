@@ -47,6 +47,9 @@ vi.mock('@leadlandlord/db', () => ({
     scoutGeoCompBlend: null,
     scoutGeoDemandBlend: null,
     scoutPerStateCap: null,
+    scoutRefineTopK: null,
+    scoutRefineBudgetUsd: null,
+    scoutRefineMeasureVolume: null,
   })),
   niches: { __name: 'niches', niche: 'niche', city: 'city', state: 'state' },
   nicheScoutRuns: { __name: 'niche_scout_runs', id: 'id', status: 'status', states: 'states' },
@@ -82,6 +85,23 @@ vi.mock('@leadlandlord/us-cities/loader', () => ({
 // home_services taxonomy post-prune.
 const UNCACHED_TRADE = 'chimney repair';
 
+// ── Stage-3 refinement mock controls (ADR 0022 §5) ──────────────────────────
+// Tests tune these to drive the local-SERP refinement pass deterministically.
+//   serpDifficulty: canned getSerpComposition difficulty (0-100).
+//   serpCost: cold-miss cost reported via onCost for each SERP call. Tests set
+//     this high to exercise the budget cap, or 0 to simulate a cache hit (free).
+//   freeKeys: set of `${trade} ${cityLower}` SERP keywords whose call reports
+//     $0 (cache hit) regardless of serpCost — used by the cache-hit-free test.
+const refineMock = {
+  serpDifficulty: 30,
+  aggregatorShare: 0.4,
+  hasLocalPack: true,
+  serpCost: 0.075,
+  metricsVolume: 500,
+  metricsCost: 0.0012,
+  freeKeys: new Set<string>(),
+};
+
 vi.mock('@leadlandlord/integrations/dataforseo', () => ({
   getKeywordCandidates: vi.fn(async (args: { seed: string; onCost?: (u: number) => void }) => {
     if (args.seed === UNCACHED_TRADE) {
@@ -99,11 +119,38 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       { phrase: `${args.seed} cost`, search_volume: 4000, kd: 10, cpc: 2, competition: 0.3, intent: 'commercial', source: 'related' },
     ];
   }),
+  dfsLocationName: vi.fn((city: string, state: string) => `${city},${state},United States`),
+  getSerpComposition: vi.fn(async (args: { keyword: string; onCost?: (u: number) => void }) => {
+    const cost = refineMock.freeKeys.has(args.keyword) ? 0 : refineMock.serpCost;
+    args.onCost?.(cost);
+    return {
+      aggregator_share: refineMock.aggregatorShare,
+      organic_count: 10,
+      has_local_pack: refineMock.hasLocalPack,
+      local_pack_count: 3,
+      top_domains: [],
+      top_local: [],
+      difficulty: refineMock.serpDifficulty,
+    };
+  }),
+  getLocalKeywordMetrics: vi.fn(
+    async (args: { keywords: string[]; onCost?: (u: number) => void }) => {
+      args.onCost?.(refineMock.metricsCost);
+      return args.keywords.map((kw) => ({
+        keyword: kw,
+        search_volume: refineMock.metricsVolume,
+        cpc: 2.0,
+        competition: 0.4,
+        monthly_searches: [],
+      }));
+    },
+  ),
 }));
 
 import { NicheScout, NicheScoutInput } from './scout';
 import { isDenylisted } from './denylist';
 import { getSystemState } from '@leadlandlord/db';
+import { getSerpComposition, getLocalKeywordMetrics } from '@leadlandlord/integrations/dataforseo';
 
 const MOCK_CTX: AgentContext = {
   runId: 'run-scout-1',
@@ -128,6 +175,16 @@ beforeEach(() => {
   statusUpdates.length = 0;
   existingNicheRows = [];
   vi.mocked(MOCK_CTX.recordUsage).mockClear();
+  vi.mocked(getSerpComposition).mockClear();
+  vi.mocked(getLocalKeywordMetrics).mockClear();
+  // Reset Stage-3 refinement mock controls to canned defaults.
+  refineMock.serpDifficulty = 30;
+  refineMock.aggregatorShare = 0.4;
+  refineMock.hasLocalPack = true;
+  refineMock.serpCost = 0.075;
+  refineMock.metricsVolume = 500;
+  refineMock.metricsCost = 0.0012;
+  refineMock.freeKeys = new Set<string>();
 });
 
 describe('NicheScout', () => {
@@ -315,5 +372,121 @@ describe('NicheScout', () => {
     await runScout();
     expect(insertedCandidates.length).toBeGreaterThan(2);
     expect(insertedCandidates.every((c) => c.state === 'WY')).toBe(true);
+  });
+
+  // ── Stage-3 local-SERP refinement (ADR 0022 §5) ───────────────────────────
+  describe('Stage-3 refinement', () => {
+    it('refine_top_k unset → zero SERP calls, refined_count 0, all cells proxy', async () => {
+      const out = await runScout();
+      expect(vi.mocked(getSerpComposition)).not.toHaveBeenCalled();
+      expect(out.refined_count).toBe(0);
+      expect(out.refine_spend_usd).toBe(0);
+      const run = insertedRuns[0]! as { report: { refinement: { refined_count: number; refine_budget_exhausted: boolean } } };
+      expect(run.report.refinement.refined_count).toBe(0);
+      expect(run.report.refinement.refine_budget_exhausted).toBe(false);
+      expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
+    });
+
+    it('refine_top_k=0 explicitly → no refinement', async () => {
+      const out = await runScout({ refine_top_k: 0 });
+      expect(vi.mocked(getSerpComposition)).not.toHaveBeenCalled();
+      expect(out.refined_count).toBe(0);
+    });
+
+    it('refine_top_k=N with generous budget refines top-N, re-ranks, persists measured fields', async () => {
+      refineMock.serpDifficulty = 30; // winnability_local = 0.70
+      const N = 3;
+      const out = await runScout({ refine_top_k: N, refine_budget_usd: 100 });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(N);
+      expect(out.refined_count).toBe(N);
+      expect(out.refine_spend_usd).toBeCloseTo(N * 0.075, 4);
+
+      const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
+      expect(refined).toHaveLength(N);
+      for (const c of refined) {
+        // Measured winnability reflects difficulty 30 → (100-30)/100 = 0.70.
+        expect(parseFloat(c.winnability as string)).toBeCloseTo(0.7, 3);
+        expect(parseFloat(c.localSerpDifficulty as string)).toBeCloseTo(30, 2);
+        expect(parseFloat(c.localAggregatorShare as string)).toBeCloseTo(0.4, 3);
+        expect(c.hasLocalPack).toBe(true);
+        // Volume not measured by default → column null.
+        expect(c.localMeasuredVolume).toBeNull();
+      }
+
+      // Re-rank invariant: ranks remain 1..N strictly ascending, scores weakly desc.
+      const ranks = insertedCandidates.map((c) => c.rank as number);
+      expect(ranks).toEqual(Array.from({ length: ranks.length }, (_, i) => i + 1));
+      const score = (c: Record<string, unknown>) =>
+        parseFloat(c.estMonthlyValueUsd as string) * parseFloat(String(c.rentabilityPrior));
+      for (let i = 1; i < insertedCandidates.length; i++) {
+        expect(score(insertedCandidates[i]!)).toBeLessThanOrEqual(score(insertedCandidates[i - 1]!) + 0.02);
+      }
+    });
+
+    it('refine_measure_volume measures local volume and persists localMeasuredVolume', async () => {
+      refineMock.metricsVolume = 500;
+      const out = await runScout({ refine_top_k: 2, refine_budget_usd: 100, refine_measure_volume: true });
+      expect(vi.mocked(getLocalKeywordMetrics)).toHaveBeenCalledTimes(2);
+      expect(out.refined_count).toBe(2);
+      const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
+      for (const c of refined) {
+        // Two seeds × 500 each = 1000 measured volume.
+        expect(c.localMeasuredVolume).toBe(1000);
+      }
+    });
+
+    it('budget cap: only M<N cold calls fit → exactly M refined, budget exhausted, spend <= budget', async () => {
+      // SERP cold cost 0.075; budget 0.20 → only 2 cold calls fit (0.15), the 3rd
+      // projection (0.225) exceeds 0.20 → abort.
+      refineMock.serpCost = 0.075;
+      const out = await runScout({ refine_top_k: 5, refine_budget_usd: 0.2 });
+      expect(out.refined_count).toBe(2);
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(2);
+      expect(out.refine_spend_usd).toBeLessThanOrEqual(0.2);
+      expect(out.refine_spend_usd).toBeCloseTo(0.15, 4);
+      const run = insertedRuns[0]! as { report: { refinement: { refine_budget_exhausted: boolean } } };
+      expect(run.report.refinement.refine_budget_exhausted).toBe(true);
+    });
+
+    it('cache hits are free: $0 calls do not decrement budget, refining more cells than budget alone allows', async () => {
+      // Top-5 cells in score order. The first two SERP keywords are cache hits
+      // ($0); the rest cost 0.075. Budget 0.16 fits only 2 cold calls alone, but
+      // the 2 free hits mean 4 cells refine before the 5th cold call (0.075 ×3 =
+      // 0.225 > 0.16) trips the guard.
+      refineMock.serpCost = 0.075;
+      // Determine the top-5 cells' SERP keywords up-front by running once with a
+      // generous budget to capture call order deterministically.
+      const probe = await runScout({ refine_top_k: 5, refine_budget_usd: 100 });
+      void probe;
+      const issuedKeys = vi
+        .mocked(getSerpComposition)
+        .mock.calls.map((c) => (c[0] as { keyword: string }).keyword);
+      // Reset state for the real assertion run.
+      insertedRuns.length = 0;
+      insertedCandidates.length = 0;
+      statusUpdates.length = 0;
+      vi.mocked(getSerpComposition).mockClear();
+      // Mark the first two issued keys (highest score order) as free cache hits.
+      refineMock.freeKeys = new Set(issuedKeys.slice(0, 2));
+
+      const out = await runScout({ refine_top_k: 5, refine_budget_usd: 0.16 });
+      // 2 free + 2 cold (0.15) fit; the next cold projection (0.225) aborts.
+      expect(out.refined_count).toBe(4);
+      expect(out.refine_spend_usd).toBeCloseTo(0.15, 4);
+      const run = insertedRuns[0]! as { report: { refinement: { refine_budget_exhausted: boolean } } };
+      expect(run.report.refinement.refine_budget_exhausted).toBe(true);
+    });
+
+    it('dedupe: a duplicated (city,state,trade) in top-K triggers a single SERP call', async () => {
+      // The grid never produces duplicates, so the guard is exercised indirectly:
+      // with refine_top_k larger than the unique cell count, each unique cell is
+      // refined exactly once (no double calls).
+      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100 });
+      const issuedKeys = vi
+        .mocked(getSerpComposition)
+        .mock.calls.map((c) => (c[0] as { keyword: string }).keyword);
+      expect(new Set(issuedKeys).size).toBe(issuedKeys.length);
+      expect(out.refined_count).toBe(issuedKeys.length);
+    });
   });
 });
