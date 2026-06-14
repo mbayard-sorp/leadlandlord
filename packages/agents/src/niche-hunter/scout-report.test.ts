@@ -36,6 +36,7 @@ const GRID = {
   excluded_existing: 20,
   excluded_denylist: 3,
   excluded_floor: 5,
+  excluded_diversity_cap: 0,
   uncached_trades: 12,
 };
 

@@ -50,6 +50,8 @@ vi.mock('@leadlandlord/db', () => ({
     scoutRefineTopK: null,
     scoutRefineBudgetUsd: null,
     scoutRefineMeasureVolume: null,
+    scoutMaxPerTrade: null,
+    scoutMaxCategoryShare: null,
   })),
   niches: { __name: 'niches', niche: 'niche', city: 'city', state: 'state' },
   nicheScoutRuns: { __name: 'niche_scout_runs', id: 'id', status: 'status', states: 'states' },
@@ -488,5 +490,55 @@ describe('NicheScout', () => {
       expect(new Set(issuedKeys).size).toBe(issuedKeys.length);
       expect(out.refined_count).toBe(issuedKeys.length);
     });
+  });
+
+  // ── Candidate diversity caps (ADR 0023) ───────────────────────────────────
+  it('records the diversity caps applied to the persisted set', async () => {
+    await runScout();
+    const run = insertedRuns[0]! as {
+      report: {
+        grid: {
+          diversity_cap_per_trade: number;
+          diversity_cap_per_category: number;
+          excluded_diversity_cap: number;
+        };
+      };
+    };
+    // Default per-trade cap is SCOUT_MAX_PER_TRADE (8).
+    expect(run.report.grid.diversity_cap_per_trade).toBe(8);
+    // category_filter set -> per-category cap disabled (== persist_top).
+    expect(run.report.grid.diversity_cap_per_category).toBe(500);
+    expect(typeof run.report.grid.excluded_diversity_cap).toBe('number');
+    expect(run.report.grid.excluded_diversity_cap).toBeGreaterThanOrEqual(0);
+  });
+
+  it('per-trade cap override limits how many cities of one trade are persisted', async () => {
+    // Cap each trade to a single city and shrink the persisted set so the cap
+    // actually bites (with persist_top >= grid size the backfill restores all).
+    vi.mocked(getSystemState).mockResolvedValueOnce({
+      scoutCtrAtRank: null,
+      scoutCallRate: null,
+      scoutMinLeadPrice: null,
+      scoutMinRentabilityPrior: null,
+      scoutGeoCompBlend: null,
+      scoutGeoDemandBlend: null,
+      scoutPerStateCap: null,
+      scoutRefineTopK: null,
+      scoutRefineBudgetUsd: null,
+      scoutRefineMeasureVolume: null,
+      scoutMaxPerTrade: 1,
+      scoutMaxCategoryShare: null,
+    } as Awaited<ReturnType<typeof getSystemState>>);
+    await runScout({ persist_top: 10 });
+
+    expect(insertedCandidates).toHaveLength(10);
+    const tradeCounts = new Map<string, number>();
+    for (const c of insertedCandidates) {
+      const t = (c.trade as string).toLowerCase();
+      tradeCounts.set(t, (tradeCounts.get(t) ?? 0) + 1);
+    }
+    for (const count of tradeCounts.values()) expect(count).toBe(1);
+    // 10 distinct trades -> the cap genuinely spread the set.
+    expect(tradeCounts.size).toBe(10);
   });
 });
