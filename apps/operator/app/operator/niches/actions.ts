@@ -40,12 +40,19 @@ export async function runNicheScout(formData: FormData): Promise<ActionResult> {
   const popMinRaw = formData.get('population_min');
   const popMaxRaw = formData.get('population_max');
 
+  const refineTopKRaw = formData.get('refine_top_k');
+  const refineBudgetRaw = formData.get('refine_budget_usd');
+  const refineMeasureVolumeRaw = formData.get('refine_measure_volume');
+
   const rawInput = {
     states,
     ...(categoryRaw ? { category_filter: categoryRaw } : {}),
     ...(popMinRaw !== null && popMinRaw !== '' ? { population_min: Number(popMinRaw) } : {}),
     ...(popMaxRaw !== null && popMaxRaw !== '' ? { population_max: Number(popMaxRaw) } : {}),
     warm_missing_clusters: formData.get('warm_missing_clusters') !== 'false',
+    ...(refineTopKRaw !== null && refineTopKRaw !== '' ? { refine_top_k: Number(refineTopKRaw) } : {}),
+    ...(refineBudgetRaw !== null && refineBudgetRaw !== '' ? { refine_budget_usd: Number(refineBudgetRaw) } : {}),
+    ...(refineMeasureVolumeRaw === 'true' ? { refine_measure_volume: true } : {}),
   };
 
   const parsed = NicheScoutInput.safeParse(rawInput);

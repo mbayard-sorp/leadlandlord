@@ -158,6 +158,79 @@ export async function updateScoringPriors(formData: FormData): Promise<ActionRes
   return { ok: true, message: 'Scoring priors saved. Applies to the next niche validation.' };
 }
 
+/**
+ * Scout geographic-targeting and refinement knobs (ADR 0022). All nullable —
+ * blank stores NULL, which the scout reads as "use the code default".
+ *
+ * Blend strengths (0–1): 0 = inert (default); suggested starting values 0.3–0.5.
+ * Per-state cap (int > 0): NULL = no cap (current behavior).
+ * Refine top-K (int >= 0): 0 or NULL = Stage-3 disabled (default).
+ * Refine budget (USD): NULL = code default ($3.00).
+ * Refine measure volume (bool): NULL = false (code default).
+ */
+export async function updateScoutGeoKnobs(formData: FormData): Promise<ActionResult> {
+  const compBlend = optNum(formData.get('scoutGeoCompBlend'));
+  const demandBlend = optNum(formData.get('scoutGeoDemandBlend'));
+  const perStateCap = optNum(formData.get('scoutPerStateCap'));
+  const refineTopK = optNum(formData.get('scoutRefineTopK'));
+  const refineBudget = optNum(formData.get('scoutRefineBudgetUsd'));
+  const refineMeasureVolumeRaw = formData.get('scoutRefineMeasureVolume');
+
+  if (
+    compBlend === undefined ||
+    demandBlend === undefined ||
+    perStateCap === undefined ||
+    refineTopK === undefined ||
+    refineBudget === undefined
+  ) {
+    return { ok: false, message: 'Values must be numbers (or blank to reset to default).' };
+  }
+  if (compBlend != null && (compBlend < 0 || compBlend > 1)) {
+    return { ok: false, message: 'Geo comp blend must be between 0 and 1.' };
+  }
+  if (demandBlend != null && (demandBlend < 0 || demandBlend > 1)) {
+    return { ok: false, message: 'Geo demand blend must be between 0 and 1.' };
+  }
+  if (perStateCap != null && (!Number.isInteger(perStateCap) || perStateCap < 1)) {
+    return { ok: false, message: 'Per-state cap must be a positive integer.' };
+  }
+  if (refineTopK != null && (!Number.isInteger(refineTopK) || refineTopK < 0)) {
+    return { ok: false, message: 'Refine top-K must be a non-negative integer.' };
+  }
+  if (refineBudget != null && refineBudget < 0) {
+    return { ok: false, message: 'Refine budget must be >= 0.' };
+  }
+
+  // Boolean: checkbox present = true, absent = null (fall back to code default false).
+  const refineMeasureVolume: boolean | null =
+    refineMeasureVolumeRaw === 'on' || refineMeasureVolumeRaw === 'true'
+      ? true
+      : refineMeasureVolumeRaw === ''
+        ? false
+        : null;
+
+  const db = getDb();
+  await db
+    .update(systemState)
+    .set({
+      scoutGeoCompBlend: compBlend == null ? null : compBlend.toFixed(3),
+      scoutGeoDemandBlend: demandBlend == null ? null : demandBlend.toFixed(3),
+      scoutPerStateCap: perStateCap == null ? null : Math.round(perStateCap),
+      scoutRefineTopK: refineTopK == null ? null : Math.round(refineTopK),
+      scoutRefineBudgetUsd: refineBudget == null ? null : refineBudget.toFixed(2),
+      scoutRefineMeasureVolume: refineMeasureVolume,
+      updatedAt: new Date(),
+    })
+    .where(eq(systemState.id, 'global'));
+
+  log.info(
+    { compBlend, demandBlend, perStateCap, refineTopK, refineBudget, refineMeasureVolume },
+    'scout geo-targeting knobs updated from dashboard',
+  );
+  revalidatePath('/operator/control');
+  return { ok: true, message: 'Scout geo-targeting knobs saved. Applies to the next scout run.' };
+}
+
 export async function setOperatorEnabled(formData: FormData): Promise<ActionResult> {
   const enabled = bool(formData.get('enabled'));
   const db = getDb();

@@ -49,6 +49,31 @@ export interface ScoutRunData {
       population_bands: Array<{ band: string; share_of_top100_value: number }>;
       category_concentration: Array<{ category: string; count_in_top100: number }>;
       novel_trades_in_top100: number;
+      /** ADR 0022 geo-tier surface — may be absent on older reports. */
+      geo_tiers?: {
+        states: Array<{
+          state: string;
+          demandDensity: number;
+          competitionSaturation: number;
+          geoAttractiveness: number;
+          candidateCount: number;
+        }>;
+        metros: Array<{
+          county: string;
+          state: string;
+          demandDensity: number;
+          competitionSaturation: number;
+          geoAttractiveness: number;
+          candidateCount: number;
+        }>;
+        census_hit_rate: number;
+      };
+    };
+    /** ADR 0022 Stage-3 refinement summary — may be absent on older reports. */
+    refinement?: {
+      refined_count: number;
+      refine_spend_usd: number;
+      refine_budget_exhausted: boolean;
     };
   };
 }
@@ -158,6 +183,108 @@ export function ScoutReport({
           </span>
           <span>{run.report.insights.novel_trades_in_top100} novel trades in top 100</span>
         </div>
+
+        {/* Best geographies — ADR 0022 geo-tier surface */}
+        {run.report.insights.geo_tiers && (
+          <div className="space-y-3">
+            <div className="flex items-baseline gap-2">
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
+                Best geographies
+              </p>
+              <span className="text-[10px] text-slate-600">
+                Census hit rate: {(run.report.insights.geo_tiers.census_hit_rate * 100).toFixed(1)}%
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Top states */}
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-600 mb-1">
+                  Top states by attractiveness
+                </p>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wide text-slate-600 border-b border-slate-800">
+                      <th className="pb-1 pr-2">State</th>
+                      <th className="pb-1 pr-2">Attract.</th>
+                      <th className="pb-1 pr-2">Demand</th>
+                      <th className="pb-1 pr-2">Saturation</th>
+                      <th className="pb-1">Cells</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {run.report.insights.geo_tiers.states.slice(0, 10).map((s) => (
+                      <tr key={s.state} className="border-b border-slate-800/40 last:border-0">
+                        <td className="py-0.5 pr-2 font-medium text-slate-200">{s.state}</td>
+                        <td className="py-0.5 pr-2 text-emerald-300">{s.geoAttractiveness.toFixed(3)}</td>
+                        <td className="py-0.5 pr-2 text-slate-300">{s.demandDensity.toFixed(3)}</td>
+                        <td className="py-0.5 pr-2 text-amber-300">{(s.competitionSaturation * 100).toFixed(1)}%</td>
+                        <td className="py-0.5 text-slate-500">{s.candidateCount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Top metros (counties) */}
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-slate-600 mb-1">
+                  Top metros by attractiveness
+                </p>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wide text-slate-600 border-b border-slate-800">
+                      <th className="pb-1 pr-2">County</th>
+                      <th className="pb-1 pr-2">Attract.</th>
+                      <th className="pb-1 pr-2">Demand</th>
+                      <th className="pb-1 pr-2">Saturation</th>
+                      <th className="pb-1">Cells</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {run.report.insights.geo_tiers.metros.slice(0, 10).map((m) => (
+                      <tr key={`${m.county}|${m.state}`} className="border-b border-slate-800/40 last:border-0">
+                        <td className="py-0.5 pr-2 font-medium text-slate-200">
+                          {m.county}, {m.state}
+                        </td>
+                        <td className="py-0.5 pr-2 text-emerald-300">{m.geoAttractiveness.toFixed(3)}</td>
+                        <td className="py-0.5 pr-2 text-slate-300">{m.demandDensity.toFixed(3)}</td>
+                        <td className="py-0.5 pr-2 text-amber-300">{(m.competitionSaturation * 100).toFixed(1)}%</td>
+                        <td className="py-0.5 text-slate-500">{m.candidateCount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Refinement summary — ADR 0022 Stage-3 */}
+        {run.report.refinement && run.report.refinement.refined_count > 0 && (
+          <div className="rounded border border-slate-700 bg-slate-800/40 px-3 py-2 space-y-1">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
+              Refinement (Stage 3 — local SERP)
+            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-300">
+              <span>
+                <span className="text-slate-400">Cells refined: </span>
+                <span className="font-medium text-emerald-300">
+                  {run.report.refinement.refined_count.toLocaleString()}
+                </span>
+              </span>
+              <span>
+                <span className="text-slate-400">DFS spend: </span>
+                <span className="font-medium text-slate-200">
+                  ${run.report.refinement.refine_spend_usd.toFixed(4)}
+                </span>
+              </span>
+              {run.report.refinement.refine_budget_exhausted && (
+                <span className="inline-flex items-center rounded border border-amber-800 bg-amber-950/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                  budget exhausted
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Candidate table */}
