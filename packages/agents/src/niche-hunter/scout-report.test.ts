@@ -18,6 +18,12 @@ function cell(overrides: Partial<ScoredCell> & { estMonthlyValueUsd: number }): 
     scoutScore: overrides.estMonthlyValueUsd * 0.72,
     dataConfidence: 'cluster',
     isNovelTrade: false,
+    metroDensityMult: 1.0,
+    demandQuality: 1.0,
+    localRankMult: 1.0,
+    demandMult: 1.0,
+    hasCensus: false,
+    refinementSource: 'proxy',
     ...overrides,
   };
 }

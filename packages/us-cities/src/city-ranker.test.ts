@@ -20,7 +20,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import { existsSync, readFileSync } from 'node:fs';
 import { _resetCensusCache, _resetCitiesCache } from './index';
-import { rankCities } from './city-ranker';
+import { rankCities, computeCityMarketScores } from './city-ranker';
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
@@ -399,6 +399,109 @@ describe('rankCities — per-state cap', () => {
       expect(count).toBeLessThanOrEqual(1);
     }
 
+    vi.restoreAllMocks();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeCityMarketScores — free structural geo signal (ADR 0022)
+// ---------------------------------------------------------------------------
+
+describe('computeCityMarketScores (ADR 0022)', () => {
+  beforeEach(() => {
+    _resetCensusCache();
+    _resetCitiesCache();
+    setupMocks();
+  });
+  afterEach(() => {
+    _resetCitiesCache();
+    vi.restoreAllMocks();
+  });
+
+  const keyOf = (city: string, state: string) =>
+    `${city.toLowerCase()}|${state.toUpperCase()}`;
+
+  it('returns a signal for every in-band city, including Census-absent ones (never dropped)', () => {
+    const scores = computeCityMarketScores({ states: ['TX'], populationMin: 1, populationMax: 999_999_999 });
+    // MetroCandidate + Remotetown have Census; NearbyA/B/C have no Census entry
+    // in STUB_CACHE but must still appear with a neutral mid-range signal.
+    expect(scores.has(keyOf('NearbyA', 'TX'))).toBe(true);
+    expect(scores.has(keyOf('MetroCandidate', 'TX'))).toBe(true);
+    expect(scores.get(keyOf('NearbyA', 'TX'))!.hasCensus).toBe(false);
+    expect(scores.get(keyOf('MetroCandidate', 'TX'))!.hasCensus).toBe(true);
+  });
+
+  it('Census-absent city → demandQuality lands in [0.3, 0.7], NOT 0 (mid-range fallback, no haircut)', () => {
+    const scores = computeCityMarketScores({ states: ['TX'], populationMin: 1, populationMax: 999_999_999 });
+    // NearbyA has no Census entry → falls back to owner-occ 0.7, income 65k,
+    // home value 250k, units 15k → graceful mid-range, not 0.
+    const nearby = scores.get(keyOf('NearbyA', 'TX'))!;
+    expect(nearby.hasCensus).toBe(false);
+    expect(nearby.demandQuality).toBeGreaterThanOrEqual(0.3);
+    expect(nearby.demandQuality).toBeLessThanOrEqual(0.7);
+    expect(nearby.demandQuality).not.toBe(0);
+  });
+
+  it('no hard filters: an out-of-band-population, low-income city is still returned', () => {
+    // Pine Bluff (income 30k, homevalue 75k) fails rankCities' hard filters but
+    // computeCityMarketScores has none — it must appear.
+    const scores = computeCityMarketScores({ states: ['AR'], populationMin: 1, populationMax: 999_999_999 });
+    expect(scores.has(keyOf('Pine Bluff', 'AR'))).toBe(true);
+  });
+
+  it('respects the population band but still surfaces in-band cities', () => {
+    // Restrict to 50k–70k: MetroCandidate (55k) is in band, NearbyA (200k) is not.
+    const scores = computeCityMarketScores({ states: ['TX'], populationMin: 50_000, populationMax: 70_000 });
+    expect(scores.has(keyOf('MetroCandidate', 'TX'))).toBe(true);
+    expect(scores.has(keyOf('NearbyA', 'TX'))).toBe(false);
+  });
+
+  it('grid index built over ALL cities: a large OUT-OF-BAND city suppresses a nearby IN-BAND city metroDensityMult', () => {
+    // BandTarget (55k, in band) sits ~25 km from BigMetro (900k, out of the
+    // 50k–70k band). If the grid were built only over the band, BigMetro would
+    // be invisible and BandTarget would score 1.0. Because the index spans ALL
+    // cities, BandTarget's nearbyPop ≥ 500k → metroDensityMult < 1.0.
+    const cache: Record<string, object> = {
+      'NM|bandtarget': {
+        medianIncome: 65_000,
+        medianHomeValue: 250_000,
+        ownerOccupiedPct: 0.65,
+        totalHousingUnits: 20_000,
+        medianAge: 40,
+        populationCensus: 55_000,
+      },
+    };
+    const gridCSV = [
+      CSV_HEADER,
+      makeCSVLine('BandTarget', 'NM', 'New Mexico', 35.0, -106.0, 55_000),
+      // ~24 km north (0.22 deg lat), pop 900k — well outside the 50k–70k band.
+      makeCSVLine('BigMetro', 'NM', 'New Mexico', 35.22, -106.0, 900_000),
+    ].join('\n');
+
+    _resetCensusCache();
+    _resetCitiesCache();
+    mockExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s.includes('census-enrichment')) return true;
+      return existsSync(p);
+    });
+    mockReadFileSync.mockImplementation((p, ...args) => {
+      const s = String(p);
+      if (s.includes('census-enrichment')) return JSON.stringify(cache);
+      if (s.includes('uscities.csv')) return gridCSV;
+      return (readFileSync as (...a: Parameters<typeof readFileSync>) => ReturnType<typeof readFileSync>)(p, ...args);
+    });
+
+    const scores = computeCityMarketScores({ states: ['NM'], populationMin: 50_000, populationMax: 70_000 });
+    const target = scores.get(keyOf('BandTarget', 'NM'));
+    expect(target).toBeDefined();
+    // 900k nearby pop (BigMetro is the only neighbor) → >= 1M? no, 900k → [500k,1M) → 0.4
+    expect(target!.metroDensityMult).toBeLessThan(1.0);
+    expect(target!.metroDensityMult).toBe(0.4);
+    // BigMetro itself is out of band → not in the returned map.
+    expect(scores.has(keyOf('BigMetro', 'NM'))).toBe(false);
+
+    _resetCitiesCache();
     vi.restoreAllMocks();
   });
 });

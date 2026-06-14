@@ -28,6 +28,27 @@ export interface RankCitiesOpts {
   states?: string[]; // optional state allowlist
 }
 
+/**
+ * Structural geo signal for a single city, consumed by the niche scout
+ * (ADR 0022). Pure subset of the rank-and-rent model with NO hard Census
+ * filters and NO missing-data haircut — Census absence in the full grid
+ * reflects survey-coverage geography, not demand quality.
+ */
+export interface MarketSignal {
+  /** S6 metro density multiplier (0.15–1.0); 1.0 = no nearby metro mass. */
+  metroDensityMult: number;
+  /** Composite demand quality 0–1: 0.40*s1 + 0.40*s2 + 0.20*s3. */
+  demandQuality: number;
+  /** True when all three Census filter fields are present. */
+  hasCensus: boolean;
+}
+
+export interface ComputeCityMarketScoresOpts {
+  states?: string[];
+  populationMin?: number;
+  populationMax?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -59,6 +80,32 @@ function popTentScore(pop: number): number {
     return normClamp(110_000 - pop, 0, 30_000);
   }
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Shared subscore helpers — single source of truth for the S1/S2/S3 math used
+// by both rankCities (ADR 0008) and computeCityMarketScores (ADR 0022). The
+// Census-absent fallbacks (owner-occ 0.7, income 65k, home value 250k, units
+// 15k) yield a graceful mid-range score, not 0.
+// ---------------------------------------------------------------------------
+
+/** S1 — Owner-occupancy. */
+function subscoreOwnerOccupied(c: UsCityEnriched): number {
+  return normClamp(c.ownerOccupiedPct ?? 0.7, 0.55, 0.85);
+}
+
+/** S2 — Wealth composite (income + home value). */
+function subscoreWealth(c: UsCityEnriched): number {
+  return (
+    0.6 * normClamp(c.medianIncome ?? 65_000, 45_000, 100_000) +
+    0.4 * normClamp(c.medianHomeValue ?? 250_000, 150_000, 500_000)
+  );
+}
+
+/** S3 — Housing units (log-scaled). */
+function subscoreHousingUnits(c: UsCityEnriched): number {
+  const units = c.totalHousingUnits ?? 15_000;
+  return Math.min(1, Math.log10(Math.max(1, units)) / Math.log10(35_000));
 }
 
 // ---------------------------------------------------------------------------
@@ -193,16 +240,13 @@ export function rankCities(opts: RankCitiesOpts = {}): RankedCity[] {
     const missingDataHaircut = missingCount >= 2 ? 0.9 : 1.0;
 
     // S1 — Owner-occupancy (neutral 0.5 if missing, but filter already blocks missing OO)
-    const s1_ownerOccupied = normClamp(c.ownerOccupiedPct ?? 0.7, 0.55, 0.85);
+    const s1_ownerOccupied = subscoreOwnerOccupied(c);
 
     // S2 — Wealth composite
-    const s2_wealth =
-      0.6 * normClamp(c.medianIncome ?? 65_000, 45_000, 100_000) +
-      0.4 * normClamp(c.medianHomeValue ?? 250_000, 150_000, 500_000);
+    const s2_wealth = subscoreWealth(c);
 
     // S3 — Housing units (log-scaled)
-    const units = c.totalHousingUnits ?? 15_000;
-    const s3_housingUnits = Math.min(1, Math.log10(Math.max(1, units)) / Math.log10(35_000));
+    const s3_housingUnits = subscoreHousingUnits(c);
 
     // S4 — Population band fit (tent function)
     const pop = c.populationCensus ?? c.population;
@@ -254,4 +298,65 @@ export function rankCities(opts: RankCitiesOpts = {}): RankedCity[] {
   }
 
   return diverse.slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Scout geo signal (ADR 0022)
+// ---------------------------------------------------------------------------
+
+/**
+ * Free structural geo signal for the niche scout. Returns a MarketSignal for
+ * every city in the requested states / population band — NO hard Census
+ * filters, NO missing-data haircut, NO per-state cap. Census-absent cities
+ * fall back to the shared subscore mid-range defaults (graceful, never 0) and
+ * are flagged hasCensus=false for audit.
+ *
+ * The spatial index is built over ALL cities (not just the population band) so
+ * metro mass from large out-of-band cities still suppresses metroDensityMult
+ * for nearby in-band candidates — same pattern as rankCities.
+ *
+ * Map key: `${city.toLowerCase()}|${state.toUpperCase()}` — matches the
+ * existingCombos key convention in the scout.
+ */
+export function computeCityMarketScores(
+  opts: ComputeCityMarketScoresOpts = {},
+): Map<string, MarketSignal> {
+  const { states, populationMin, populationMax } = opts;
+
+  // Build the spatial index over ALL cities (unfiltered) so out-of-band metro
+  // mass still counts toward nearby population.
+  const all = listCitiesEnriched({
+    populationMin: 1,
+    populationMax: 999_999_999,
+    states,
+  });
+  const gridBuckets = buildGridBuckets(all);
+
+  const min = populationMin ?? 0;
+  const max = populationMax ?? Number.POSITIVE_INFINITY;
+
+  const out = new Map<string, MarketSignal>();
+  for (const c of all) {
+    if (c.population < min || c.population > max) continue;
+
+    const demandQuality =
+      0.4 * subscoreOwnerOccupied(c) +
+      0.4 * subscoreWealth(c) +
+      0.2 * subscoreHousingUnits(c);
+
+    const metroDensityMult = getMetroDensityMultiplier(c, gridBuckets);
+
+    const hasCensus =
+      c.ownerOccupiedPct !== undefined &&
+      c.medianIncome !== undefined &&
+      c.medianHomeValue !== undefined;
+
+    out.set(`${c.city.toLowerCase()}|${c.state.toUpperCase()}`, {
+      metroDensityMult,
+      demandQuality,
+      hasCensus,
+    });
+  }
+
+  return out;
 }

@@ -1,4 +1,11 @@
-export { rankCities, type RankedCity, type RankCitiesOpts } from './city-ranker';
+export {
+  rankCities,
+  computeCityMarketScores,
+  type RankedCity,
+  type RankCitiesOpts,
+  type MarketSignal,
+  type ComputeCityMarketScoresOpts,
+} from './city-ranker';
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

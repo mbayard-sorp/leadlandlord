@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseAgent, type AgentContext } from '../base';
 import { getDb, niches, nicheScoutRuns, nicheCandidates, getSystemState, eq, and, inArray } from '@leadlandlord/db';
 import { getKeywordCandidates, peekKeywordCandidates } from '@leadlandlord/integrations/dataforseo';
-import { listCities } from '@leadlandlord/us-cities/loader';
+import { listCities, computeCityMarketScores, type MarketSignal } from '@leadlandlord/us-cities/loader';
 import { SERVICE_TAXONOMY, CATEGORY_VALUES, type ServiceCategory } from './service-taxonomy';
 import { isDenylisted } from './denylist';
 import { computeClusterVolume, computeClusterDifficulty, estimateScoutValue, passesAbilityToPayFloor } from './value-model';
@@ -73,6 +73,11 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutMinLeadPrice != null ? parseFloat(sys.scoutMinLeadPrice) : undefined;
     const minRentabilityPrior =
       sys.scoutMinRentabilityPrior != null ? parseFloat(sys.scoutMinRentabilityPrior) : undefined;
+    // Structural geo blend strengths (ADR 0022) — NULL = code defaults (0.0 → inert).
+    const compBlendStrength =
+      sys.scoutGeoCompBlend != null ? parseFloat(sys.scoutGeoCompBlend) : undefined;
+    const demandBlendStrength =
+      sys.scoutGeoDemandBlend != null ? parseFloat(sys.scoutGeoDemandBlend) : undefined;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -81,6 +86,17 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       populationMax: input.population_max,
       states: input.states,
     });
+
+    // Free structural geo signal (ADR 0022): one MarketSignal per city in the
+    // pop band. Census-absent / unmatched cities fall back to a neutral signal —
+    // never dropped, never penalized. Grid index is built over ALL cities inside
+    // computeCityMarketScores so out-of-band metro mass still suppresses density.
+    const marketScores = computeCityMarketScores({
+      states: input.states,
+      populationMin: input.population_min,
+      populationMax: input.population_max,
+    });
+    const NEUTRAL_SIGNAL: MarketSignal = { metroDensityMult: 1.0, demandQuality: 1.0, hasCensus: false };
 
     // 2. Trade list — taxonomy filtered by category, minus denylist.
     const categories: ServiceCategory[] = input.category_filter
@@ -192,6 +208,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           excludedExisting++;
           continue;
         }
+        const signal =
+          marketScores.get(`${city.city.toLowerCase()}|${city.state.toUpperCase()}`) ??
+          NEUTRAL_SIGNAL;
         const v = estimateScoutValue({
           trade,
           cityPopulation: city.population,
@@ -200,6 +219,10 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           ctrAtRank,
           callRate,
           clusterDifficulty,
+          metroDensityMult: signal.metroDensityMult,
+          demandQuality: signal.demandQuality,
+          compBlendStrength,
+          demandBlendStrength,
         });
         cells.push({
           trade,
@@ -217,6 +240,12 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           scoutScore: v.scoutScore,
           dataConfidence: v.dataConfidence,
           isNovelTrade,
+          metroDensityMult: v.metroDensityMult,
+          demandQuality: v.demandQuality,
+          localRankMult: v.localRankMult,
+          demandMult: v.demandMult,
+          hasCensus: signal.hasCensus,
+          refinementSource: 'proxy',
         });
       }
     }
@@ -289,6 +318,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           rank: i + j + 1,
           isNovelTrade: c.isNovelTrade,
           dataConfidence: c.dataConfidence,
+          metroDensityMult: c.metroDensityMult.toFixed(3),
+          demandQuality: c.demandQuality.toFixed(3),
         })),
       );
     }

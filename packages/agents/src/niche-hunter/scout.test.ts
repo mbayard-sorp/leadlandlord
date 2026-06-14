@@ -44,6 +44,8 @@ vi.mock('@leadlandlord/db', () => ({
     scoutCallRate: null,
     scoutMinLeadPrice: null,
     scoutMinRentabilityPrior: null,
+    scoutGeoCompBlend: null,
+    scoutGeoDemandBlend: null,
   })),
   niches: { __name: 'niches', niche: 'niche', city: 'city', state: 'state' },
   nicheScoutRuns: { __name: 'niche_scout_runs', id: 'id', status: 'status', states: 'states' },
@@ -54,12 +56,22 @@ vi.mock('@leadlandlord/db', () => ({
 }));
 
 // ---- us-cities mock ----------------------------------------------------------
+// computeCityMarketScores is imported from the same '/loader' subpath as
+// listCities (ADR 0022 Stage 1). Returns one MarketSignal per city; Gillette is
+// deliberately omitted so the scout's neutral-signal fallback path is exercised.
 vi.mock('@leadlandlord/us-cities/loader', () => ({
   listCities: vi.fn(() => [
     { city: 'Casper', state: 'WY', stateName: 'Wyoming', county: 'Natrona', population: 59_000, lat: 0, lng: 0 },
     { city: 'Laramie', state: 'WY', stateName: 'Wyoming', county: 'Albany', population: 32_000, lat: 0, lng: 0 },
     { city: 'Gillette', state: 'WY', stateName: 'Wyoming', county: 'Campbell', population: 33_000, lat: 0, lng: 0 },
   ]),
+  computeCityMarketScores: vi.fn(() =>
+    new Map<string, { metroDensityMult: number; demandQuality: number; hasCensus: boolean }>([
+      ['casper|WY', { metroDensityMult: 1.0, demandQuality: 0.62, hasCensus: true }],
+      ['laramie|WY', { metroDensityMult: 1.0, demandQuality: 0.55, hasCensus: true }],
+      // Gillette intentionally absent → scout uses the neutral fallback signal.
+    ]),
+  ),
 }));
 
 // ---- DataForSEO mock ----------------------------------------------------------
@@ -253,6 +265,8 @@ describe('NicheScout', () => {
       scoutCallRate: null,
       scoutMinLeadPrice: '200',        // floor raised to $200
       scoutMinRentabilityPrior: null,
+      scoutGeoCompBlend: null,
+      scoutGeoDemandBlend: null,
     } as Awaited<ReturnType<typeof getSystemState>>);
     await runScout();
     const run = insertedRuns[0]! as {

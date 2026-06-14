@@ -217,6 +217,129 @@ describe('estimateScoutValue', () => {
   });
 });
 
+// ---- estimateScoutValue geo modifiers (ADR 0022) ----------------------------
+
+describe('estimateScoutValue — geo modifiers (ADR 0022)', () => {
+  // Reference (pre-geo) value for a non-trivial cell, computed the ADR 0021 way.
+  const refArgs = {
+    trade: 'tree removal',
+    cityPopulation: 73_000,
+    clusterVolume: 12_345,
+    clusterDifficulty: 37,
+    ctrAtRank: 0.18,
+    callRate: 0.09,
+  };
+  function ref0021(): number {
+    const cityVolume =
+      (refArgs.clusterVolume * Math.sqrt(refArgs.cityPopulation * POP_DAMPENING_REFERENCE)) /
+      US_POPULATION;
+    const winnability = (100 - refArgs.clusterDifficulty) / 100;
+    // leadBenchmarkPrice for tree removal = 60
+    const v = cityVolume * refArgs.ctrAtRank * winnability * refArgs.callRate * 60;
+    return Number(v.toFixed(2));
+  }
+
+  it('α_comp=0 AND α_dem=0: any geo inputs reproduce the ADR 0021 formula bit-for-bit', () => {
+    const baseline = estimateScoutValue(refArgs);
+    const withGeo = estimateScoutValue({
+      ...refArgs,
+      metroDensityMult: 0.15, // most aggressive competition signal
+      demandQuality: 0.2, // weak demand
+      compBlendStrength: 0.0,
+      demandBlendStrength: 0.0,
+    });
+    // Exact float equality — the inert defaults must not perturb the result.
+    expect(withGeo.estMonthlyValueUsd).toBe(baseline.estMonthlyValueUsd);
+    expect(withGeo.estMonthlyValueUsd).toBe(ref0021());
+    expect(withGeo.scoutScore).toBe(baseline.scoutScore);
+    // Audit fields still emitted; multipliers collapse to 1.0 at α=0.
+    expect(withGeo.localRankMult).toBe(1.0);
+    expect(withGeo.demandMult).toBe(1.0);
+    // Raw geo signals are echoed through for audit.
+    expect(withGeo.metroDensityMult).toBe(0.15);
+    expect(withGeo.demandQuality).toBe(0.2);
+  });
+
+  it('absent geo args emit 1.0 audit multipliers and match ADR 0021', () => {
+    const v = estimateScoutValue(refArgs);
+    expect(v.metroDensityMult).toBe(1.0);
+    expect(v.demandQuality).toBe(1.0);
+    expect(v.localRankMult).toBe(1.0);
+    expect(v.demandMult).toBe(1.0);
+    expect(v.estMonthlyValueUsd).toBe(ref0021());
+  });
+
+  it('α_comp>0: a dense metro (metroDensityMult=0.15) scores below a sparse one (1.0)', () => {
+    const sparse = estimateScoutValue({
+      ...refArgs,
+      metroDensityMult: 1.0,
+      compBlendStrength: 0.5,
+    });
+    const dense = estimateScoutValue({
+      ...refArgs,
+      metroDensityMult: 0.15,
+      compBlendStrength: 0.5,
+    });
+    expect(dense.estMonthlyValueUsd).toBeLessThan(sparse.estMonthlyValueUsd);
+    expect(dense.localRankMult).toBeLessThan(1.0);
+    // localRankMult = 1 - 0.5*(1 - 0.15) = 0.575
+    expect(dense.localRankMult).toBeCloseTo(0.575, 5);
+  });
+
+  it('α_dem>0: lower demandQuality scores lower', () => {
+    const hi = estimateScoutValue({
+      ...refArgs,
+      demandQuality: 0.9,
+      demandBlendStrength: 0.5,
+    });
+    const lo = estimateScoutValue({
+      ...refArgs,
+      demandQuality: 0.3,
+      demandBlendStrength: 0.5,
+    });
+    expect(lo.estMonthlyValueUsd).toBeLessThan(hi.estMonthlyValueUsd);
+    // demandMult = 1 - 0.5*(1 - 0.3) = 0.65
+    expect(lo.demandMult).toBeCloseTo(0.65, 5);
+  });
+
+  it('population-invariance: the metroDensityMult value ratio is identical across populations (no nonlinear pop interaction)', () => {
+    // Use a large volume so the absolute dollar values are well above the round2
+    // (2-decimal) quantization floor — otherwise rounding noise at tiny values
+    // masks the underlying invariance. The CLAIM is that the geo multiplier is
+    // independent of population: the dense/sparse ratio must be the same at every
+    // population AND equal localRankMult (0.64), with no sqrt-pop interaction.
+    const expectedRatio = 1 - 0.6 * (1 - 0.4); // localRankMult = 0.64
+    const ratios: number[] = [];
+    for (const pop of [20_000, 73_000, 250_000, 600_000]) {
+      const base = estimateScoutValue({
+        ...refArgs,
+        clusterVolume: 5_000_000,
+        cityPopulation: pop,
+        metroDensityMult: 1.0,
+        compBlendStrength: 0.6,
+      });
+      const dense = estimateScoutValue({
+        ...refArgs,
+        clusterVolume: 5_000_000,
+        cityPopulation: pop,
+        metroDensityMult: 0.4,
+        compBlendStrength: 0.6,
+      });
+      // localRankMult itself never depends on population.
+      expect(dense.localRankMult).toBe(expectedRatio);
+      expect(base.localRankMult).toBe(1.0);
+      ratios.push(dense.estMonthlyValueUsd / base.estMonthlyValueUsd);
+    }
+    // Every population yields the same ratio (mutually equal == invariant), and
+    // that ratio matches localRankMult. Tolerance accommodates round2's 2-decimal
+    // quantization; the exact guarantee is the localRankMult assertions above.
+    for (const r of ratios) {
+      expect(r).toBeCloseTo(expectedRatio, 3);
+      expect(r).toBeCloseTo(ratios[0]!, 3);
+    }
+  });
+});
+
 // ---- passesAbilityToPayFloor ------------------------------------------------
 
 describe('passesAbilityToPayFloor', () => {

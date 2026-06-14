@@ -65,6 +65,18 @@ export interface ScoredCell {
   scoutScore: number;
   dataConfidence: 'cluster' | 'benchmark_only';
   isNovelTrade: boolean;
+  /** Structural metro-density competition multiplier (0.15–1.0); 1.0 = no geo signal. */
+  metroDensityMult: number;
+  /** Census-derived demand quality (0–1); 1.0 = no geo signal. */
+  demandQuality: number;
+  /** winnability audit fold: 1 − α_comp·(1 − metroDensityMult). */
+  localRankMult: number;
+  /** value audit fold: 1 − α_dem·(1 − demandQuality). */
+  demandMult: number;
+  /** True when the city had a Census match in computeCityMarketScores. */
+  hasCensus: boolean;
+  /** 'proxy' (Stage-1 structural) or 'local_serp' (Stage-3 refined). */
+  refinementSource: 'proxy' | 'local_serp';
 }
 
 const POPULATION_BANDS: Array<{ band: string; min: number; max: number }> = [
