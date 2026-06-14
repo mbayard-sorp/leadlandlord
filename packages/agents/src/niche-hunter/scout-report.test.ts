@@ -8,6 +8,7 @@ function cell(overrides: Partial<ScoredCell> & { estMonthlyValueUsd: number }): 
     category: 'home_services',
     city: 'Casper',
     state: 'WY',
+    county: 'Natrona',
     population: 60_000,
     clusterVolume: 5000,
     clusterDifficulty: 30,
@@ -18,6 +19,12 @@ function cell(overrides: Partial<ScoredCell> & { estMonthlyValueUsd: number }): 
     scoutScore: overrides.estMonthlyValueUsd * 0.72,
     dataConfidence: 'cluster',
     isNovelTrade: false,
+    metroDensityMult: 1.0,
+    demandQuality: 1.0,
+    localRankMult: 1.0,
+    demandMult: 1.0,
+    hasCensus: false,
+    refinementSource: 'proxy',
     ...overrides,
   };
 }
@@ -73,6 +80,47 @@ describe('buildScoutReport', () => {
 
     expect(report.insights.category_concentration[0]).toEqual({ category: 'auto', count_in_top100: 2 });
     expect(report.insights.novel_trades_in_top100).toBe(1);
+  });
+
+  it('aggregates geo_tiers over ALL cells: density, saturation, attractiveness, census rate', () => {
+    const cells = [
+      cell({ estMonthlyValueUsd: 300, state: 'WY', county: 'Natrona', demandQuality: 0.6, metroDensityMult: 0.8, hasCensus: true }),
+      cell({ estMonthlyValueUsd: 200, state: 'WY', county: 'Natrona', demandQuality: 0.4, metroDensityMult: 0.6, hasCensus: true }),
+      cell({ estMonthlyValueUsd: 100, state: 'MT', county: 'Yellowstone', demandQuality: 0.5, metroDensityMult: 1.0, hasCensus: false }),
+    ];
+    const report = buildScoutReport({ cellsDesc: cells, grid: GRID, generatedAt: '2026-06-12T00:00:00Z' });
+    const geo = report.insights.geo_tiers;
+
+    // census_hit_rate = 2/3 over ALL cells.
+    expect(geo.census_hit_rate).toBeCloseTo(2 / 3, 4);
+
+    // States sorted desc by geoAttractiveness: MT (0.5) before WY (0.35).
+    expect(geo.states.map((s) => s.state)).toEqual(['MT', 'WY']);
+
+    const wy = geo.states.find((s) => s.state === 'WY')!;
+    // mean(demandQuality) = (0.6+0.4)/2 = 0.5
+    expect(wy.demandDensity).toBeCloseTo(0.5, 4);
+    // mean(1 - metroDensityMult) = (0.2+0.4)/2 = 0.3
+    expect(wy.competitionSaturation).toBeCloseTo(0.3, 4);
+    // demandDensity * mean(metroDensityMult) = 0.5 * 0.7 = 0.35
+    expect(wy.geoAttractiveness).toBeCloseTo(0.35, 4);
+    expect(wy.candidateCount).toBe(2);
+
+    const mt = geo.states.find((s) => s.state === 'MT')!;
+    expect(mt.demandDensity).toBeCloseTo(0.5, 4);
+    expect(mt.competitionSaturation).toBeCloseTo(0.0, 4);
+    expect(mt.geoAttractiveness).toBeCloseTo(0.5, 4);
+    expect(mt.candidateCount).toBe(1);
+
+    // Metros grouped by county, carry state, sorted desc by attractiveness.
+    expect(geo.metros.map((m) => `${m.county}|${m.state}`)).toEqual([
+      'Yellowstone|MT',
+      'Natrona|WY',
+    ]);
+    const natrona = geo.metros.find((m) => m.county === 'Natrona')!;
+    expect(natrona.state).toBe('WY');
+    expect(natrona.candidateCount).toBe(2);
+    expect(natrona.geoAttractiveness).toBeCloseTo(0.35, 4);
   });
 
   it('parses against the zod schema (report is persisted as-is)', () => {

@@ -1,11 +1,18 @@
 import { z } from 'zod';
 import { BaseAgent, type AgentContext } from '../base';
 import { getDb, niches, nicheScoutRuns, nicheCandidates, getSystemState, eq, and, inArray } from '@leadlandlord/db';
-import { getKeywordCandidates, peekKeywordCandidates } from '@leadlandlord/integrations/dataforseo';
-import { listCities } from '@leadlandlord/us-cities/loader';
+import {
+  getKeywordCandidates,
+  peekKeywordCandidates,
+  getSerpComposition,
+  getLocalKeywordMetrics,
+  dfsLocationName,
+} from '@leadlandlord/integrations/dataforseo';
+import { listCities, computeCityMarketScores, type MarketSignal } from '@leadlandlord/us-cities/loader';
 import { SERVICE_TAXONOMY, CATEGORY_VALUES, type ServiceCategory } from './service-taxonomy';
 import { isDenylisted } from './denylist';
 import { computeClusterVolume, computeClusterDifficulty, estimateScoutValue, passesAbilityToPayFloor } from './value-model';
+import { resolveDemandVolume, DEFAULT_SCOUT_REFINE_BUDGET_USD, DEFAULT_SCOUT_REFINE_TOP_K } from './scoring-config';
 import { buildScoutReport, type ScoredCell } from './scout-report';
 
 /**
@@ -34,6 +41,14 @@ export const NicheScoutInput = z.object({
   persist_top: z.number().int().positive().max(2000).default(500),
   /** false = strictly cache-only scout (zero DataForSEO spend). */
   warm_missing_clusters: z.boolean().default(true),
+  /**
+   * Stage-3 local-SERP refinement (ADR 0022 §5). Per-run overrides of the
+   * system_state knobs; undefined → sys.* → code defaults. refine_top_k <= 0
+   * disables refinement entirely (no DataForSEO spend).
+   */
+  refine_top_k: z.number().int().nonnegative().optional(),
+  refine_budget_usd: z.number().nonnegative().optional(),
+  refine_measure_volume: z.boolean().optional(),
 });
 export type NicheScoutInput = z.infer<typeof NicheScoutInput>;
 
@@ -45,6 +60,10 @@ export const NicheScoutOutput = z.object({
   value_floor_usd: z.number(),
   est_validation_cost_usd: z.number(),
   dfs_spend_usd: z.number(),
+  /** Stage-3 cells refined to refinement_source='local_serp' (ADR 0022 §5). */
+  refined_count: z.number(),
+  /** Stage-3 DataForSEO spend actually incurred (cache hits cost $0). */
+  refine_spend_usd: z.number(),
 });
 export type NicheScoutOutput = z.infer<typeof NicheScoutOutput>;
 
@@ -73,6 +92,14 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutMinLeadPrice != null ? parseFloat(sys.scoutMinLeadPrice) : undefined;
     const minRentabilityPrior =
       sys.scoutMinRentabilityPrior != null ? parseFloat(sys.scoutMinRentabilityPrior) : undefined;
+    // Structural geo blend strengths (ADR 0022) — NULL = code defaults (0.0 → inert).
+    const compBlendStrength =
+      sys.scoutGeoCompBlend != null ? parseFloat(sys.scoutGeoCompBlend) : undefined;
+    const demandBlendStrength =
+      sys.scoutGeoDemandBlend != null ? parseFloat(sys.scoutGeoDemandBlend) : undefined;
+    // Per-state diversity cap (ADR 0022 §4) — NULL = no cap (current behavior).
+    const perStateCap =
+      sys.scoutPerStateCap != null ? sys.scoutPerStateCap : undefined;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -81,6 +108,17 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       populationMax: input.population_max,
       states: input.states,
     });
+
+    // Free structural geo signal (ADR 0022): one MarketSignal per city in the
+    // pop band. Census-absent / unmatched cities fall back to a neutral signal —
+    // never dropped, never penalized. Grid index is built over ALL cities inside
+    // computeCityMarketScores so out-of-band metro mass still suppresses density.
+    const marketScores = computeCityMarketScores({
+      states: input.states,
+      populationMin: input.population_min,
+      populationMax: input.population_max,
+    });
+    const NEUTRAL_SIGNAL: MarketSignal = { metroDensityMult: 1.0, demandQuality: 1.0, hasCensus: false };
 
     // 2. Trade list — taxonomy filtered by category, minus denylist.
     const categories: ServiceCategory[] = input.category_filter
@@ -192,6 +230,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           excludedExisting++;
           continue;
         }
+        const signal =
+          marketScores.get(`${city.city.toLowerCase()}|${city.state.toUpperCase()}`) ??
+          NEUTRAL_SIGNAL;
         const v = estimateScoutValue({
           trade,
           cityPopulation: city.population,
@@ -200,12 +241,17 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           ctrAtRank,
           callRate,
           clusterDifficulty,
+          metroDensityMult: signal.metroDensityMult,
+          demandQuality: signal.demandQuality,
+          compBlendStrength,
+          demandBlendStrength,
         });
         cells.push({
           trade,
           category,
           city: city.city,
           state: city.state,
+          county: city.county,
           population: city.population,
           clusterVolume,
           clusterDifficulty,
@@ -217,21 +263,180 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           scoutScore: v.scoutScore,
           dataConfidence: v.dataConfidence,
           isNovelTrade,
+          metroDensityMult: v.metroDensityMult,
+          demandQuality: v.demandQuality,
+          localRankMult: v.localRankMult,
+          demandMult: v.demandMult,
+          hasCensus: signal.hasCensus,
+          refinementSource: 'proxy',
         });
       }
     }
 
     // Rank: rentability-weighted score desc; cluster-backed candidates beat
     // benchmark_only ties (their demand is measured, not imputed).
-    cells.sort((a, b) => {
+    const cellComparator = (a: ScoredCell, b: ScoredCell) => {
       if (b.scoutScore !== a.scoutScore) return b.scoutScore - a.scoutScore;
       if (a.dataConfidence !== b.dataConfidence) {
         return a.dataConfidence === 'cluster' ? -1 : 1;
       }
       return b.estMonthlyValueUsd - a.estMonthlyValueUsd;
-    });
+    };
+    cells.sort(cellComparator);
+
+    // ── Stage-3 bounded local-SERP refinement (ADR 0022 §5) ────────────────
+    // Replace the proxy (cluster-difficulty) winnability of the top-K cells
+    // with a measured local-SERP signal, optionally measuring local volume too.
+    // Budget-bound and graceful: a cold call projecting over the remaining
+    // budget is skipped (cell stays 'proxy'); a $0 cache hit is always served.
+    const refineTopK =
+      input.refine_top_k ?? sys.scoutRefineTopK ?? DEFAULT_SCOUT_REFINE_TOP_K;
+    const refineBudgetUsd =
+      input.refine_budget_usd ??
+      (sys.scoutRefineBudgetUsd != null ? parseFloat(sys.scoutRefineBudgetUsd) : undefined) ??
+      DEFAULT_SCOUT_REFINE_BUDGET_USD;
+    const refineMeasureVolume =
+      input.refine_measure_volume ?? sys.scoutRefineMeasureVolume ?? false;
+
+    let refinedCount = 0;
+    let refineSpendUsd = 0;
+    let refineBudgetExhausted = false;
+
+    if (refineTopK > 0) {
+      ctx.progress({ step: 3, total: 5, label: `refining top ${refineTopK} cells (local SERP)` });
+      // Worst-case cold cost of one cell's calls — used only for the pre-check.
+      const COLD_SERP_COST = 0.075;
+      const COLD_METRICS_COST = 0.0012;
+      const worstCaseCellCost = COLD_SERP_COST + (refineMeasureVolume ? COLD_METRICS_COST : 0);
+
+      // Dedupe defensively by `${city}|${state}|${trade}` — the grid never
+      // produces dups, but a future caller might. Iterate in score order.
+      const seen = new Set<string>();
+      const targets: ScoredCell[] = [];
+      for (const c of cells.slice(0, refineTopK)) {
+        const key = `${c.city}|${c.state}|${c.trade}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        targets.push(c);
+      }
+
+      for (const cell of targets) {
+        // Pre-check (graceful abort): would a worst-case cold call push ACTUAL
+        // spend over budget? Compared against the budget net of what we have
+        // actually spent so far — and actual spend only ever moved on cold calls,
+        // because cache hits report 0 via onCost and never decrement the budget.
+        // That cache-hit-is-free accounting means warm cells encountered earlier
+        // in score order let MORE cells refine before this guard ever trips. Once
+        // a worst-case cold call would exceed the remaining budget we stop issuing
+        // new calls entirely (break) — the simplest correct reconciliation of the
+        // worst-case pre-check with the realized onCost accounting.
+        if (refineSpendUsd + worstCaseCellCost > refineBudgetUsd) {
+          refineBudgetExhausted = true;
+          break;
+        }
+
+        // Local onCost: sum this call's incurred cost into a per-call accumulator
+        // AND forward to the run-level onCost (records usage + run spend). Cache
+        // hits report 0 here, so they never decrement the budget.
+        let cellSpend = 0;
+        const refineOnCost = (usd: number) => {
+          if (usd > 0) cellSpend += usd;
+          onCost(usd);
+        };
+
+        try {
+          const location = dfsLocationName(cell.city, cell.state);
+          const serp = await getSerpComposition({
+            keyword: `${cell.trade} ${cell.city.toLowerCase()}`,
+            location,
+            onCost: refineOnCost,
+          });
+
+          let measuredCityVolume: number | undefined;
+          if (refineMeasureVolume) {
+            const metrics = await getLocalKeywordMetrics({
+              keywords: [cell.trade, `${cell.trade} near me`],
+              location,
+              onCost: refineOnCost,
+            });
+            measuredCityVolume = metrics.reduce((s, m) => s + m.search_volume, 0);
+          }
+
+          // Recompute winnability from measured local-SERP difficulty, then
+          // rescore the cell through the SAME estimateScoutValue math (geo
+          // blends, dollar formula) via overrides — no formula duplication.
+          const measuredWinnability = Math.max(0, Math.min(1, (100 - serp.difficulty) / 100));
+
+          let cityVolumeOverride: number | undefined;
+          if (measuredCityVolume !== undefined && cell.estCityVolume != null) {
+            const resolved = resolveDemandVolume(measuredCityVolume, cell.estCityVolume);
+            cityVolumeOverride = resolved.volume;
+          } else if (measuredCityVolume !== undefined) {
+            // No proxy estCityVolume to backstop with (benchmark_only): trust the
+            // measured figure only when it clears the floor, else leave unset so
+            // the population-derived estimate is recomputed.
+            const resolved = resolveDemandVolume(measuredCityVolume, 0);
+            if (resolved.source === 'dataforseo') cityVolumeOverride = resolved.volume;
+          }
+
+          const signal =
+            marketScores.get(`${cell.city.toLowerCase()}|${cell.state.toUpperCase()}`) ??
+            NEUTRAL_SIGNAL;
+          const v = estimateScoutValue({
+            trade: cell.trade,
+            cityPopulation: cell.population,
+            clusterVolume: cell.clusterVolume,
+            fallbackClusterVolume,
+            ctrAtRank,
+            callRate,
+            clusterDifficulty: cell.clusterDifficulty,
+            metroDensityMult: signal.metroDensityMult,
+            demandQuality: signal.demandQuality,
+            compBlendStrength,
+            demandBlendStrength,
+            winnabilityOverride: measuredWinnability,
+            cityVolumeOverride,
+          });
+
+          cell.winnability = v.winnability;
+          cell.estCityVolume = v.estCityVolume;
+          cell.estMonthlyValueUsd = v.estMonthlyValueUsd;
+          cell.scoutScore = v.scoutScore;
+          cell.localRankMult = v.localRankMult;
+          cell.demandMult = v.demandMult;
+          cell.refinementSource = 'local_serp';
+          cell.localSerpDifficulty = serp.difficulty;
+          cell.localAggregatorShare = serp.aggregator_share;
+          cell.hasLocalPack = serp.has_local_pack;
+          if (measuredCityVolume !== undefined) cell.localMeasuredVolume = measuredCityVolume;
+          refinedCount++;
+        } catch (err) {
+          ctx.log.warn(
+            {
+              trade: cell.trade,
+              city: cell.city,
+              state: cell.state,
+              err: err instanceof Error ? err.message : err,
+            },
+            'niche-scout: local-SERP refinement failed — leaving cell as proxy',
+          );
+          // Leave the cell as proxy; do not abort the whole run.
+        } finally {
+          refineSpendUsd += cellSpend;
+        }
+      }
+
+      // Re-sort: refined cells now carry updated scores. Build report + cap +
+      // slice all proceed over the freshly re-ranked full array.
+      cells.sort(cellComparator);
+    }
 
     const report = buildScoutReport({
+      refinement: {
+        refined_count: refinedCount,
+        refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
+        refine_budget_exhausted: refineBudgetExhausted,
+      },
       cellsDesc: cells,
       grid: {
         trades: allTrades.length,
@@ -250,7 +455,25 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     // 'current' + supersede prior runs for the same states. neon-http has no
     // transactions, so ordering is the integrity mechanism.
     ctx.progress({ step: 4, total: 5, label: `persisting top ${Math.min(input.persist_top, cells.length)} candidates` });
-    const toPersist = cells.slice(0, input.persist_top);
+    // Per-state diversity cap (ADR 0022 §4): when set, admit cells greedily in
+    // score order (cells are already sorted desc), skipping any whose state has
+    // reached `perStateCap`, THEN slice to persist_top. NULL cap = unchanged.
+    // The report above still reflects the whole grid, not the capped set.
+    const admitted =
+      perStateCap != null && perStateCap > 0
+        ? (() => {
+            const perState = new Map<string, number>();
+            const kept: ScoredCell[] = [];
+            for (const c of cells) {
+              const seen = perState.get(c.state) ?? 0;
+              if (seen >= perStateCap) continue;
+              perState.set(c.state, seen + 1);
+              kept.push(c);
+            }
+            return kept;
+          })()
+        : cells;
+    const toPersist = admitted.slice(0, input.persist_top);
     const statesSorted = [...input.states].sort();
 
     const [runRow] = await db
@@ -289,6 +512,16 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           rank: i + j + 1,
           isNovelTrade: c.isNovelTrade,
           dataConfidence: c.dataConfidence,
+          metroDensityMult: c.metroDensityMult.toFixed(3),
+          demandQuality: c.demandQuality.toFixed(3),
+          // Stage-3 measured local-SERP columns (ADR 0022 §5). Null on proxy cells.
+          localSerpDifficulty:
+            c.localSerpDifficulty != null ? c.localSerpDifficulty.toFixed(2) : null,
+          localAggregatorShare:
+            c.localAggregatorShare != null ? c.localAggregatorShare.toFixed(3) : null,
+          hasLocalPack: c.hasLocalPack ?? null,
+          localMeasuredVolume: c.localMeasuredVolume ?? null,
+          refinementSource: c.refinementSource,
         })),
       );
     }
@@ -318,6 +551,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         recommended_n: report.recommendation.n,
         dfs_spend_usd: dfsSpendUsd,
         uncached_trades: uncachedTrades,
+        refined_count: refinedCount,
+        refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
+        refine_budget_exhausted: refineBudgetExhausted,
       },
       'niche-scout completed',
     );
@@ -330,6 +566,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       value_floor_usd: report.recommendation.value_floor_usd,
       est_validation_cost_usd: report.recommendation.est_validation_cost_usd,
       dfs_spend_usd: Number(dfsSpendUsd.toFixed(4)),
+      refined_count: refinedCount,
+      refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
     };
   }
 }

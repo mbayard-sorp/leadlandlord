@@ -45,6 +45,8 @@ export function ScoutForm() {
         <strong className="text-slate-200">Scout (near-zero cost).</strong>{' '}
         Scores the full trade × city grid for the chosen states from cached keyword clusters and
         static benchmarks, then recommends how many candidates are worth paid validation.
+        Optional: Stage-3 local-SERP refinement re-scores the top-K candidates with a live
+        DataForSEO call up to the chosen USD budget cap. Refinement is off by default (top-K = 0).
       </p>
       <label className="text-xs text-slate-400 flex flex-col gap-1">
         States (comma-separated, e.g. AZ,NM)
@@ -103,6 +105,50 @@ export function ScoutForm() {
         Warm missing keyword clusters (~$0.028 per uncached trade; first fully cold run can cost up
         to ~$12.50, then ~$0). Uncheck for a strictly cache-only scout.
       </label>
+
+      {/* Stage-3 local-SERP refinement controls */}
+      <label className="text-xs text-slate-400 flex flex-col gap-1">
+        Refine top-K candidates
+        <input
+          name="refine_top_k"
+          type="number"
+          inputMode="numeric"
+          min="0"
+          step="1"
+          defaultValue=""
+          placeholder="0 (off)"
+          className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
+        />
+        <span className="text-[10px] text-slate-500">
+          Re-scores the top-K cells via live DataForSEO local SERP. 0 or empty = refinement off.
+        </span>
+      </label>
+      <label className="text-xs text-slate-400 flex flex-col gap-1">
+        Refine budget (USD)
+        <input
+          name="refine_budget_usd"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          defaultValue=""
+          placeholder="3.00 (default)"
+          className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
+        />
+        <span className="text-[10px] text-slate-500">
+          DataForSEO spend cap for this refinement pass. Empty = use system default ($3.00).
+        </span>
+      </label>
+      <label className="md:col-span-2 flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          name="refine_measure_volume"
+          value="true"
+          className="h-4 w-4 rounded border border-slate-600 bg-slate-950 accent-emerald-500"
+        />
+        Measure local volume during refinement (adds ~$0.001 per cell; empty system default = off).
+      </label>
+
       <button
         type="submit"
         disabled={pending}

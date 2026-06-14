@@ -7,6 +7,7 @@ import {
   updateOperatorMode,
   setOperatorEnabled,
   updateScoringPriors,
+  updateScoutGeoKnobs,
 } from './_actions';
 
 interface Props {
@@ -28,6 +29,7 @@ export function ControlForms({ state }: Props) {
       <ModeSection state={state} />
       <TargetsSection state={state} />
       <ScoringPriorsSection state={state} />
+      <ScoutGeoTargetingSection state={state} />
     </div>
   );
 }
@@ -137,6 +139,148 @@ function ModeSection({ state }: Props) {
         </button>
       </form>
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</p>}
+    </section>
+  );
+}
+
+/**
+ * Scout geographic-targeting and Stage-3 refinement global knobs (ADR 0022).
+ * All fields are nullable — blank resets to the code default (NULL in DB).
+ * Blend strengths default to 0.0 (inert); set to 0.3–0.5 to activate.
+ * Refine top-K defaults to 0 (Stage 3 disabled).
+ */
+function ScoutGeoTargetingSection({ state }: Props) {
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<Msg>(null);
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setMsg(null);
+    const fd = new FormData(e.currentTarget);
+    // Emit checkbox as 'on' when checked; absent when unchecked.
+    startTransition(async () => {
+      const r = await updateScoutGeoKnobs(fd);
+      setMsg({ ok: r.ok, text: r.message ?? '' });
+    });
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+      <header>
+        <p className="text-xs uppercase tracking-wide text-slate-500">
+          Scout geographic targeting (ADR 0022)
+        </p>
+        <p className="text-sm text-slate-400 mt-1">
+          Global defaults for the geo-blend strengths and Stage-3 local-SERP refinement. Leave a
+          field blank to use the code default. Per-run overrides in the Scout form take precedence
+          over these values.
+        </p>
+      </header>
+      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <label className="text-xs text-slate-400">
+          Geo comp blend α (0–1, default 0 = off)
+          <input
+            type="number"
+            min="0"
+            max="1"
+            step="0.001"
+            name="scoutGeoCompBlend"
+            defaultValue={state.scoutGeoCompBlend ?? ''}
+            placeholder="0 (off)"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+          <span className="block mt-1 text-slate-500">
+            Folds metro competition density into winnability. Suggested start: 0.3–0.5.
+          </span>
+        </label>
+        <label className="text-xs text-slate-400">
+          Geo demand blend α (0–1, default 0 = off)
+          <input
+            type="number"
+            min="0"
+            max="1"
+            step="0.001"
+            name="scoutGeoDemandBlend"
+            defaultValue={state.scoutGeoDemandBlend ?? ''}
+            placeholder="0 (off)"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+          <span className="block mt-1 text-slate-500">
+            Folds Census demand quality (owner-occ, income, home value) into value estimate.
+            Suggested start: 0.3–0.5.
+          </span>
+        </label>
+        <label className="text-xs text-slate-400">
+          Per-state cap (int, blank = no cap)
+          <input
+            type="number"
+            min="1"
+            step="1"
+            name="scoutPerStateCap"
+            defaultValue={state.scoutPerStateCap ?? ''}
+            placeholder="blank (no cap)"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+          <span className="block mt-1 text-slate-500">
+            Max candidates persisted per state. Prevents large states from dominating the top-N list.
+          </span>
+        </label>
+        <label className="text-xs text-slate-400">
+          Global refine top-K (int ≥ 0, default 0 = off)
+          <input
+            type="number"
+            min="0"
+            step="1"
+            name="scoutRefineTopK"
+            defaultValue={state.scoutRefineTopK ?? ''}
+            placeholder="0 (off)"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+          <span className="block mt-1 text-slate-500">
+            Re-scores this many top cells via live DataForSEO local SERP. 0 or blank disables
+            Stage-3 refinement globally. Per-run override in the Scout form takes precedence.
+          </span>
+        </label>
+        <label className="text-xs text-slate-400">
+          Global refine budget (USD, blank = $3.00 default)
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            name="scoutRefineBudgetUsd"
+            defaultValue={state.scoutRefineBudgetUsd ?? ''}
+            placeholder="3.00"
+            className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          />
+          <span className="block mt-1 text-slate-500">
+            DataForSEO spend cap per refinement pass (~$0.075/cold cell). Cache hits cost $0 and
+            never count against the budget.
+          </span>
+        </label>
+        <label className="md:col-span-3 flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none pt-2">
+          <input
+            type="checkbox"
+            name="scoutRefineMeasureVolume"
+            defaultChecked={state.scoutRefineMeasureVolume ?? false}
+            className="h-4 w-4 rounded border border-slate-600 bg-slate-950 accent-emerald-500"
+          />
+          Measure local volume during refinement (global default; adds ~$0.001 per cell)
+        </label>
+        <div className="md:col-span-3">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white"
+          >
+            {pending ? 'Saving…' : 'Save geo-targeting knobs'}
+          </button>
+          {msg && (
+            <span className={`ml-3 text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+              {msg.text}
+            </span>
+          )}
+        </div>
+      </form>
     </section>
   );
 }

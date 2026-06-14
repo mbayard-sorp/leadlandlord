@@ -39,6 +39,45 @@ export const POP_DAMPENING_REFERENCE = 100_000;
  */
 export const DEFAULT_BENCHMARK_WINNABILITY = 0.5;
 
+// ── Scout geographic targeting blend strengths (ADR 0022) ───────────────────
+
+/**
+ * Blend strength (α_comp) folding the structural metro-density competition
+ * proxy into winnability. Shipped at 0.0 so the feature is inert: at α=0,
+ * localRankMult = 1.0 and scout output reproduces the ADR 0021 formula
+ * bit-for-bit. Operator-overridable via system_state.scout_geo_comp_blend;
+ * suggested starting value 0.3–0.5 once the geo-tier report is observed.
+ */
+export const DEFAULT_GEO_COMP_BLEND = 0.0;
+
+/**
+ * Blend strength (α_dem) folding Census-derived demand quality into estimated
+ * monthly value. Shipped at 0.0 so the feature is inert: at α=0,
+ * demandMult = 1.0 and scout output reproduces the ADR 0021 formula
+ * bit-for-bit. Operator-overridable via system_state.scout_geo_demand_blend;
+ * suggested starting value 0.3–0.5 once the geo-tier report is observed.
+ */
+export const DEFAULT_GEO_DEMAND_BLEND = 0.0;
+
+// ── Scout Stage-3 local-SERP refinement budget (ADR 0022 §5) ────────────────
+
+/**
+ * In-run DataForSEO budget cap (USD) for the bounded local-SERP refinement
+ * pass. ~13 cold trios at $0.225 each, far more on a warm cache. The per-agent
+ * and global caps only fire at run start, so this in-run guard is the real
+ * bound on refinement spend. Operator-overridable per-run (ScoutForm) or
+ * globally via system_state.scout_refine_budget_usd.
+ */
+export const DEFAULT_SCOUT_REFINE_BUDGET_USD = 3.00;
+
+/**
+ * Number of top-scoring cells fed to the local-SERP refinement pass. Shipped
+ * at 0 so Stage 3 is disabled by default: no refinement, no DataForSEO spend.
+ * An operator must set a positive scout_refine_top_k (per-run via ScoutForm or
+ * globally via system_state) before any refinement spend can occur.
+ */
+export const DEFAULT_SCOUT_REFINE_TOP_K = 0;
+
 export const DEFAULT_WEIGHTS = {
   demand: 0.30,
   serp_difficulty: 0.30,
