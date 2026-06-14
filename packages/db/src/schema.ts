@@ -264,6 +264,30 @@ export const nicheCandidates = pgTable(
      * Null when no usable kd values existed in the cluster (all kd <= 0).
      */
     clusterDifficulty: numeric('cluster_difficulty', { precision: 5, scale: 2 }),
+    // ──────────────────────────────────────────────────────────
+    // Geographic targeting signals (migration 0045, ADR 0022).
+    // Nullable for rows created before the geo-targeting redesign.
+    // ──────────────────────────────────────────────────────────
+    /**
+     * Local-SERP keyword difficulty from the bounded refinement pass
+     * (getSerpComposition). Null when the cell was never refined (proxy-only).
+     */
+    localSerpDifficulty: numeric('local_serp_difficulty', { precision: 5, scale: 2 }),
+    /** Share of the local SERP held by directory/aggregator results (0-1). */
+    localAggregatorShare: numeric('local_aggregator_share', { precision: 4, scale: 3 }),
+    /** Whether the local SERP rendered a map/local pack. */
+    hasLocalPack: boolean('has_local_pack'),
+    /** Measured local search volume from the refinement pass (gated by knob). */
+    localMeasuredVolume: integer('local_measured_volume'),
+    /** 'proxy' (full-grid structural signal) | 'local_serp' (refined). */
+    refinementSource: text('refinement_source'),
+    /**
+     * Metro density multiplier (0.15-1.0) from computeCityMarketScores:
+     * nearby population excluding the city, a local-competition proxy.
+     */
+    metroDensityMult: numeric('metro_density_mult', { precision: 4, scale: 3 }),
+    /** Composite demand-quality signal (0-1) from owner-occ + wealth ratios. */
+    demandQuality: numeric('demand_quality', { precision: 4, scale: 3 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -1100,6 +1124,22 @@ export const systemState = pgTable('system_state', {
   // in scoring-config.ts. Set via /operator/control for exploratory runs.
   scoutMinLeadPrice: numeric('scout_min_lead_price', { precision: 8, scale: 2 }),
   scoutMinRentabilityPrior: numeric('scout_min_rentability_prior', { precision: 4, scale: 3 }),
+  // Geographic-targeting + refinement knobs (migration 0045, ADR 0022). NULL =
+  // fall back to the defaults in packages/agents/src/niche-hunter/
+  // {value-model,scoring-config}.ts. Set via /operator/control.
+  //   scoutGeoCompBlend / scoutGeoDemandBlend: α-blend strengths for the
+  //     multiplicative geo competition + demand levers (0 = inert, today's output).
+  //   scoutPerStateCap: per-state/metro diversity cap on the persisted set.
+  //   scoutRefineTopK: top-K cells fed to the bounded local-SERP refine pass
+  //     (0 = refinement off).
+  //   scoutRefineBudgetUsd: in-run DataForSEO budget cap for refinement.
+  //   scoutRefineMeasureVolume: also measure local volume during refinement.
+  scoutGeoCompBlend: numeric('scout_geo_comp_blend', { precision: 4, scale: 3 }),
+  scoutGeoDemandBlend: numeric('scout_geo_demand_blend', { precision: 4, scale: 3 }),
+  scoutPerStateCap: integer('scout_per_state_cap'),
+  scoutRefineTopK: integer('scout_refine_top_k'),
+  scoutRefineBudgetUsd: numeric('scout_refine_budget_usd', { precision: 8, scale: 2 }),
+  scoutRefineMeasureVolume: boolean('scout_refine_measure_volume'),
   // ──────────────────────────────────────────────────────────
   // Portfolio-wide daily spend ceiling (orchestrator Phase 2).
   // Enforced in BaseAgent.assertBudgetAvailable BEFORE the per-agent
