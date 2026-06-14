@@ -18,6 +18,12 @@ export const ScoutReport = z.object({
     excluded_denylist: z.number(),
     /** Count of trades dropped by the ability-to-pay floor (ADR 0021). */
     excluded_floor: z.number().default(0),
+    /** Cells held out of the persisted set by the diversity caps (ADR 0023). */
+    excluded_diversity_cap: z.number().default(0),
+    /** Per-trade candidate cap applied to the persisted set (ADR 0023). */
+    diversity_cap_per_trade: z.number().optional(),
+    /** Per-category candidate cap applied to the persisted set (ADR 0023). */
+    diversity_cap_per_category: z.number().optional(),
     uncached_trades: z.number(),
   }),
   /** Sampled at n = 5, 10, 15, ... so the UI can draw the curve cheaply. */

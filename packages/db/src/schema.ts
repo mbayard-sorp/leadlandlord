@@ -1140,6 +1140,12 @@ export const systemState = pgTable('system_state', {
   scoutRefineTopK: integer('scout_refine_top_k'),
   scoutRefineBudgetUsd: numeric('scout_refine_budget_usd', { precision: 8, scale: 2 }),
   scoutRefineMeasureVolume: boolean('scout_refine_measure_volume'),
+  // Candidate diversity caps (migration 0046, ADR 0023). NULL = fall back to
+  // SCOUT_MAX_PER_TRADE (8) and SCOUT_MAX_CATEGORY_SHARE (0.30) in
+  // scoring-config.ts. Bound how much of a scout run any single trade /
+  // category may occupy so a high-ticket category can't sweep the list.
+  scoutMaxPerTrade: integer('scout_max_per_trade'),
+  scoutMaxCategoryShare: numeric('scout_max_category_share', { precision: 4, scale: 3 }),
   // ──────────────────────────────────────────────────────────
   // Portfolio-wide daily spend ceiling (orchestrator Phase 2).
   // Enforced in BaseAgent.assertBudgetAvailable BEFORE the per-agent
