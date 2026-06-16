@@ -136,6 +136,20 @@ describe('LocalContentScoutInput schema', () => {
   it('rejects idea_count = 0', () => {
     expect(() => LocalContentScoutInput.parse({ site_id: SITE_ID, idea_count: 0 })).toThrow();
   });
+
+  it('archetype is optional and defaults to undefined', () => {
+    const parsed = LocalContentScoutInput.parse({ site_id: SITE_ID });
+    expect(parsed.archetype).toBeUndefined();
+  });
+
+  it('accepts a valid archetype override', () => {
+    const parsed = LocalContentScoutInput.parse({ site_id: SITE_ID, archetype: 'job_story_emergency' });
+    expect(parsed.archetype).toBe('job_story_emergency');
+  });
+
+  it('rejects an unknown archetype', () => {
+    expect(() => LocalContentScoutInput.parse({ site_id: SITE_ID, archetype: 'not_an_archetype' })).toThrow();
+  });
 });
 
 describe('LocalContentScoutOutput schema', () => {

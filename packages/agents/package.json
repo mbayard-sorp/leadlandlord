@@ -22,6 +22,7 @@
     "./orchestrator": "./src/orchestrator/index.ts",
     "./error-classify": "./src/error-classify.ts",
     "./scheduler": "./src/scheduler/index.ts",
+    "./local-content-scout": "./src/local-content-scout/index.ts",
     "./niche-hunter": "./src/niche-hunter/index.ts",
     "./niche-hunter/lead-benchmarks": "./src/niche-hunter/lead-benchmarks.ts",
     "./niche-hunter/scoring-config": "./src/niche-hunter/scoring-config.ts",
