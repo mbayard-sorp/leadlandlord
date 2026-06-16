@@ -11,31 +11,20 @@ import { createReadClient, siteDocId } from '@leadlandlord/integrations/sanity';
 import { BaseAgent, type AgentContext } from '../base';
 import { loadNicheKnowledge } from '../shared/niche-knowledge';
 import { resolveSiteThemeKey } from '../shared/site-theme';
-import { LocalContentScoutInput, LocalContentScoutOutput } from './schema';
+import { LocalContentScoutInput, LocalContentScoutOutput, ARCHETYPES, STORY_ARCHETYPES } from './schema';
 
-export { LocalContentScoutInput, LocalContentScoutOutput };
+export { LocalContentScoutInput, LocalContentScoutOutput, ARCHETYPES, STORY_ARCHETYPES };
+export type { Archetype } from './schema';
 
 /**
- * Narrative use-case archetypes. These produce job-story posts — a problem that
- * was discovered and resolved — which Google and LLMs reward over commoditized
- * informative prose. They ride the same per-site/per-week rotation as the
- * informative archetypes, so a portion of each site's posts become stories
- * while the network footprint stays varied.
+ * Narrative use-case archetypes ({@link STORY_ARCHETYPES}) produce job-story
+ * posts — a problem that was discovered and resolved — which Google and LLMs
+ * reward over commoditized informative prose. They ride the same
+ * per-site/per-week rotation as the informative archetypes, so a portion of
+ * each site's posts become stories while the network footprint stays varied.
+ * The archetype list is defined canonically in ./schema so the input enum and
+ * the rotation share one source of truth.
  */
-const STORY_ARCHETYPES = [
-  'job_story_diagnosis',
-  'job_story_second_opinion',
-  'job_story_emergency',
-] as const;
-
-const ARCHETYPES = [
-  'seasonal',
-  'how_to',
-  'cost_guide',
-  'comparison',
-  'local_spotlight',
-  ...STORY_ARCHETYPES,
-] as const;
 
 /** True when an archetype is a narrative job-story format (vs informative prose). */
 export function isStoryArchetype(a: string | null | undefined): boolean {
@@ -167,7 +156,11 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
       inputSchema: LocalContentScoutInput,
       outputSchema: LocalContentScoutOutput,
       defaultDailyCapUsd: 1,
-      dedupeKeyFn: (i) => `scout:${i.site_id}:${isoWeek(new Date())}`,
+      // The weekly cron path (no archetype) keeps its one-run-per-site-per-week
+      // key. An archetype override gets its own key so targeted backfills can
+      // run alongside (and several archetypes for one site in the same week).
+      dedupeKeyFn: (i) =>
+        `scout:${i.site_id}:${isoWeek(new Date())}${i.archetype ? `:${i.archetype}` : ''}`,
     });
   }
 
@@ -184,10 +177,11 @@ export class LocalContentScout extends BaseAgent<typeof LocalContentScoutInput, 
     ctx.progress({ step: 3, total: 4, label: 'fetching local keyword demand' });
     const localKeywords = await this.fetchLocalDemand(site.niche, site.city, site.state, ctx);
 
-    // The archetype for this run is deterministic per site+week. Compute it
-    // before ideation so story runs can request the narrative scaffold.
+    // The archetype is deterministic per site+week on the normal cron path, but
+    // an explicit override (backfill / targeted seeding) wins when supplied.
+    // Computed before ideation so story runs can request the narrative scaffold.
     const weekNumber = parseInt(isoWeek(new Date()).split('-W')[1]!, 10);
-    const archetype = assignArchetype(input.site_id, weekNumber);
+    const archetype = input.archetype ?? assignArchetype(input.site_id, weekNumber);
     const voiceSeed = assignVoiceSeed(input.site_id);
     const story = isStoryArchetype(archetype);
 
