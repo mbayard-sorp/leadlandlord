@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { approveProspect, rejectProspect } from '@/lib/links/prospect-actions';
 import type { BacklinkProspect } from '@leadlandlord/db';
+import { Timestamp } from '../../../../components/Timestamp';
 
 interface ReceptivitySignals {
   receptive: boolean;
@@ -92,7 +93,7 @@ function Top5Card({ prospect, siteLabel }: Top5CardProps) {
           <span>
             Flagged{' '}
             <span className="text-slate-300 font-mono">
-              {new Date(prospect.flaggedTop5At).toLocaleDateString()}
+              <Timestamp value={prospect.flaggedTop5At} mode="date" />
             </span>
           </span>
         )}
@@ -134,7 +135,7 @@ function Top5Card({ prospect, siteLabel }: Top5CardProps) {
       )}
       {prospect.status === 'approved' && (
         <div className="text-xs text-emerald-400 font-medium pt-1">
-          Approved{prospect.approvedAt ? ` on ${new Date(prospect.approvedAt).toLocaleDateString()}` : ''} — pitch send queued for R4.3
+          Approved{prospect.approvedAt ? <> on <Timestamp value={prospect.approvedAt} mode="date" /></> : ''} — pitch send queued for R4.3
         </div>
       )}
     </div>

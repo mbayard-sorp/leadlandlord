@@ -11,6 +11,7 @@ import {
   type OutreachEvent,
 } from '@leadlandlord/db';
 import { runDryRunForSite, promoteProspectToLive } from './actions';
+import { Timestamp } from '../../../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -227,7 +228,7 @@ function ProspectCard({ siteId, group }: { siteId: string; group: ProspectGroup 
                   {body}
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
-                  {new Date(ev.sentAt).toLocaleString()}
+                  <Timestamp value={ev.sentAt} />
                 </td>
               </tr>
             );

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb, maintenanceFindings, sites, type MaintenanceFinding, type Site } from '@leadlandlord/db';
 import { resolveFinding, ignoreFinding } from './_actions';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const revalidate = 30;
 
@@ -127,7 +128,7 @@ export default async function MaintenancePage({ searchParams }: PageProps) {
                       </td>
                       <td className="px-3 py-2 text-slate-300">{f.detail}</td>
                       <td className="px-3 py-2 text-slate-500 text-xs">
-                        {new Date(f.detectedAt).toLocaleString()}
+                        <Timestamp value={f.detectedAt} />
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex gap-2">

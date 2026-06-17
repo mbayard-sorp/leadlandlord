@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import type { SanityKeywordClusterSummary } from '@/lib/sanity-read';
 import { repullKeywords, retargetContent, generateLongform } from './actions';
+import { Timestamp } from '../../../../components/Timestamp';
 
 interface Props {
   siteId: string;
@@ -192,7 +193,7 @@ function ClusterRow({
           <td colSpan={8} className="px-3 py-3">
             <div className="text-xs text-slate-400 mb-2">
               {cluster.keywords.length} keywords · fetched{' '}
-              {cluster.fetchedAt ? new Date(cluster.fetchedAt).toLocaleDateString() : '—'}
+              {cluster.fetchedAt ? <Timestamp value={cluster.fetchedAt} mode="date" /> : '—'}
             </div>
             <div className="overflow-x-auto rounded border border-slate-800">
               <table className="w-full text-xs">

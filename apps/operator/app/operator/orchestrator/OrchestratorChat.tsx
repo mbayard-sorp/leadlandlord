@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
+import { Timestamp } from '../../../components/Timestamp';
 import {
   postOrchestratorMessage,
   resolveQuestion,
@@ -103,7 +104,7 @@ export function OrchestratorChat({
               </span>
               <span className="block text-[10px] text-slate-500 mt-0.5">
                 {t.origin === 'orchestrator_question' ? 'question' : 'chat'} ·{' '}
-                {new Date(t.lastMessageAt).toLocaleString()}
+                <Timestamp value={t.lastMessageAt} />
               </span>
             </Link>
           ))}

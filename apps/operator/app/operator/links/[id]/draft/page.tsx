@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { Marked } from 'marked';
 import { getDb, backlinks, sites, tenants } from '@leadlandlord/db';
 import { DraftReviewActions } from './DraftReviewActions';
+import { Timestamp } from '../../../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,7 @@ export default async function DraftReviewPage({ params }: PageProps) {
           <div className="mt-3 rounded border border-red-700/40 bg-red-900/20 p-2 text-xs text-red-200">
             <span className="font-semibold">Prior rejection</span>{' '}
             <span className="text-red-300/80">
-              ({new Date(draftRejection.at).toLocaleString()})
+              (<Timestamp value={draftRejection.at} />)
             </span>
             <div className="mt-1 text-red-100/90">{draftRejection.reason}</div>
           </div>

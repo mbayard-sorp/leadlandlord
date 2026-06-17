@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import type { SystemState } from '@leadlandlord/db';
+import { Timestamp } from '../../../components/Timestamp';
 import {
   updateOperatorTargets,
   updateOperatorMode,
   setOperatorEnabled,
   updateScoringPriors,
   updateScoutGeoKnobs,
+  updateOperatorTimeZone,
 } from './_actions';
 
 interface Props {
@@ -17,20 +19,83 @@ interface Props {
 type Msg = { ok: boolean; text: string } | null;
 
 /**
- * Operator Control panel forms. Three independent sections:
+ * Operator Control panel forms. Independent sections:
  *  1. Master enable toggle + heartbeat.
  *  2. Mode selector (manual | supervised | autonomous).
  *  3. Targets editor (MRR, sites, margin, auto-approve gates).
+ *  4. Scoring priors / scout geo knobs.
+ *  5. Display time zone.
  */
-export function ControlForms({ state }: Props) {
+export function ControlForms({ state, timeZones }: Props & { timeZones: string[] }) {
   return (
     <div className="space-y-8">
       <EnabledSection state={state} />
       <ModeSection state={state} />
+      <TimeZoneSection state={state} timeZones={timeZones} />
       <TargetsSection state={state} />
       <ScoringPriorsSection state={state} />
       <ScoutGeoTargetingSection state={state} />
     </div>
+  );
+}
+
+function TimeZoneSection({ state, timeZones }: Props & { timeZones: string[] }) {
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<Msg>(null);
+  const [tz, setTz] = useState(state.operatorTimeZone);
+  // 'UTC' isn't in Intl.supportedValuesOf('timeZone') on every runtime; make sure
+  // it's always selectable so the default is never an orphaned value.
+  const options = timeZones.includes('UTC') ? timeZones : ['UTC', ...timeZones];
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setMsg(null);
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const r = await updateOperatorTimeZone(fd);
+      setMsg({ ok: r.ok, text: r.message ?? '' });
+    });
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+      <header>
+        <p className="text-xs uppercase tracking-wide text-slate-500">Display time zone</p>
+        <p className="text-sm text-slate-400 mt-1">
+          The zone all dashboard timestamps are shown in. Display only — cron jobs always run in
+          UTC on Vercel, so changing this does not reschedule anything.
+        </p>
+      </header>
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <label className="block text-xs text-slate-400">
+          Time zone
+          <select
+            name="operatorTimeZone"
+            value={tz}
+            onChange={(e) => setTz(e.target.value)}
+            className="mt-1 block w-full sm:w-72 rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
+          >
+            {options.map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="submit"
+          disabled={pending || tz === state.operatorTimeZone}
+          className="rounded bg-sky-700 hover:bg-sky-600 disabled:opacity-50 inline-flex items-center min-h-[44px] px-4 text-sm font-medium text-white"
+        >
+          {pending ? 'Saving…' : 'Save time zone'}
+        </button>
+        {msg && (
+          <span className={`text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+            {msg.text}
+          </span>
+        )}
+      </form>
+    </section>
   );
 }
 
@@ -64,7 +129,7 @@ function EnabledSection({ state }: Props) {
           </p>
           {state.lastOperatorRunAt ? (
             <p className="text-xs text-slate-500 mt-1">
-              Last run {new Date(state.lastOperatorRunAt).toLocaleString()}
+              Last run <Timestamp value={state.lastOperatorRunAt} />
             </p>
           ) : (
             <p className="text-xs text-slate-500 mt-1">Never run</p>

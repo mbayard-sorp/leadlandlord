@@ -231,6 +231,31 @@ export async function updateScoutGeoKnobs(formData: FormData): Promise<ActionRes
   return { ok: true, message: 'Scout geo-targeting knobs saved. Applies to the next scout run.' };
 }
 
+/**
+ * Set the operator dashboard display time zone (migration 0047). Validated
+ * against the runtime's IANA zone list so a malformed value can never reach the
+ * formatter (an invalid `timeZone` makes Intl.DateTimeFormat throw). Display
+ * only — does not change cron execution, which Vercel always runs in UTC.
+ */
+export async function updateOperatorTimeZone(formData: FormData): Promise<ActionResult> {
+  const tz = String(formData.get('operatorTimeZone') ?? '').trim();
+  if (!tz) {
+    return { ok: false, message: 'Time zone is required.' };
+  }
+  const supported = Intl.supportedValuesOf('timeZone');
+  if (tz !== 'UTC' && !supported.includes(tz)) {
+    return { ok: false, message: `Unknown time zone "${tz}".` };
+  }
+  const db = getDb();
+  await db
+    .update(systemState)
+    .set({ operatorTimeZone: tz, updatedAt: new Date() })
+    .where(eq(systemState.id, 'global'));
+  log.info({ tz }, 'operator display time zone updated from dashboard');
+  revalidatePath('/operator', 'layout');
+  return { ok: true, message: `Time zone set to ${tz}.` };
+}
+
 export async function setOperatorEnabled(formData: FormData): Promise<ActionResult> {
   const enabled = bool(formData.get('enabled'));
   const db = getDb();

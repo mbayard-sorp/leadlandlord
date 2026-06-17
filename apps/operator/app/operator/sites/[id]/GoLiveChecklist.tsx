@@ -6,6 +6,7 @@ import {
   setGoLiveFlag,
   type GoLiveManualFlags,
 } from './go-live-actions';
+import { Timestamp } from '../../../../components/Timestamp';
 
 export interface GoLiveItem {
   key: string;
@@ -164,7 +165,7 @@ function ChecklistRow({
         {item.hint && <div className="text-xs text-slate-500 mt-0.5">{item.hint}</div>}
         {flagTimestamp && (
           <div className="text-xs text-slate-600 mt-0.5">
-            Checked {new Date(flagTimestamp).toLocaleString()}
+            Checked <Timestamp value={flagTimestamp} />
           </div>
         )}
       </div>

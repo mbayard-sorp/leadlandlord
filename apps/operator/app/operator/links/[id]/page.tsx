@@ -5,6 +5,7 @@ import { getDb, backlinks, sites, tenants, emailSends } from '@leadlandlord/db';
 import { StatusBadge } from '@/components/StatusBadge';
 import { DetailActions } from './DetailActions';
 import { ageLabel } from '@/lib/links/stages';
+import { Timestamp } from '../../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ function TimelineEntry({
       <span className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-slate-600 border border-slate-700" />
       <div className="text-xs text-slate-300 font-medium">{label}</div>
       <div className="text-[11px] text-slate-500">
-        {typeof at === 'string' ? new Date(at).toLocaleString() : at.toLocaleString()}
+        <Timestamp value={at} />
       </div>
       {detail && (
         <div className="text-xs text-slate-400 mt-0.5 font-mono bg-slate-900/60 rounded px-2 py-1 break-words">

@@ -1,0 +1,1 @@
+ALTER TABLE "system_state" ADD COLUMN "operator_time_zone" text DEFAULT 'UTC' NOT NULL;
