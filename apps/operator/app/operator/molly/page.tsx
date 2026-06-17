@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { getDb, bccGraduation, agentRuns, type BccGraduation } from '@leadlandlord/db';
 import { MOLLY_PERSONA } from '@leadlandlord/agents/molly/persona';
 import { toggleManualOverride, setBccAddress } from './actions';
+import { Timestamp } from '../../../components/Timestamp';
 
 interface InboxStats {
   lastPollAt: Date | null;
@@ -114,7 +115,7 @@ export default async function MollyPage() {
               <dt className="text-slate-400">Graduated</dt>
               <dd>
                 {row.graduatedAt
-                  ? new Date(row.graduatedAt).toLocaleString()
+                  ? <Timestamp value={row.graduatedAt} />
                   : 'not yet'}
               </dd>
               <dt className="text-slate-400">Manual override</dt>
@@ -167,7 +168,7 @@ export default async function MollyPage() {
           <dt className="text-slate-400">Last poll</dt>
           <dd>
             {inbox.lastPollAt
-              ? `${new Date(inbox.lastPollAt).toLocaleString()} (scanned ${inbox.lastPollScanned ?? 0}, matched ${inbox.lastPollMatched ?? 0})`
+              ? <><Timestamp value={inbox.lastPollAt} /> (scanned {inbox.lastPollScanned ?? 0}, matched {inbox.lastPollMatched ?? 0})</>
               : <span className="text-slate-500">no successful run yet</span>}
           </dd>
           <dt className="text-slate-400">Accepted</dt>

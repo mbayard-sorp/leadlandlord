@@ -101,6 +101,23 @@ export async function setOperatorConfig(args: SetOperatorConfigArgs): Promise<Sy
 }
 
 /**
+ * Set the operator dashboard display time zone (migration 0047). `tz` must be a
+ * valid IANA zone name (e.g. 'America/Phoenix'); validation lives in the control
+ * server action. Display-only — does not affect cron execution.
+ */
+export async function setOperatorTimeZone(tz: string): Promise<SystemState> {
+  await ensureRow();
+  const db = getDb();
+  const [row] = await db
+    .update(systemState)
+    .set({ operatorTimeZone: tz, updatedAt: new Date() })
+    .where(eq(systemState.id, GLOBAL_ID))
+    .returning();
+  if (!row) throw new Error('system_state row missing after ensureRow');
+  return row;
+}
+
+/**
  * Set the portfolio-wide daily spend ceiling (orchestrator Phase 2/4). A value
  * of 0 disables the global cap. Enforced in BaseAgent.assertBudgetAvailable.
  */

@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePolledFetch } from '../../../../lib/use-polled-fetch';
+import { useOperatorTimeZone } from '../../../../components/Timestamp';
+import { formatInTimeZone } from '../../../../lib/format-date';
 import { SiteCombobox } from './SiteCombobox';
 import { SeedEditor } from './SeedEditor';
 import { StepStatusPill } from './StepStatusPill';
@@ -106,6 +108,7 @@ function StepCard({
 
 export function ProspectWorkflow() {
   const router = useRouter();
+  const tz = useOperatorTimeZone();
   const [siteId, setSiteId] = useState<string>('');
   const [siteLabel, setSiteLabel] = useState<string>('');
   const [openStep, setOpenStep] = useState<number>(1);
@@ -146,7 +149,7 @@ export function ProspectWorkflow() {
     mollyLastRunAt != null &&
     mollyLastRunAt.toDateString() === new Date().toDateString();
   const mollyTimeLabel = mollyLastRunAt
-    ? mollyLastRunAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ? formatInTimeZone(mollyLastRunAt, tz, 'time', { hour: '2-digit', minute: '2-digit' })
     : null;
 
   function handleSiteSelect(id: string, label: string) {

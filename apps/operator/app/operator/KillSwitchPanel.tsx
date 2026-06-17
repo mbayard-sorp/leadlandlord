@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import type { SystemState } from '@leadlandlord/db';
 import { activateKillSwitch, deactivateKillSwitch } from './_kill-switch-actions';
+import { Timestamp } from '../../components/Timestamp';
 
 interface Props {
   state: SystemState;
@@ -58,7 +59,7 @@ export function KillSwitchPanel({ state }: Props) {
             <div>
               <dt className="inline text-red-300/70">Activated: </dt>
               <dd className="inline">
-                {new Date(state.killSwitchActivatedAt).toLocaleString()}
+                <Timestamp value={state.killSwitchActivatedAt} />
               </dd>
             </div>
           ) : null}

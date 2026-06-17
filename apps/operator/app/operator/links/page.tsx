@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { MeterBar } from '@/components/MeterBar';
 import { WorkstreamToggle } from './WorkstreamToggle';
 import { CitationSubmitButton } from './CitationSubmitButton';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -475,7 +476,7 @@ function ProspectsTab({
                   {r.domain}
                   {isSnoozed && (
                     <span className="ml-1 text-[10px] text-slate-500">
-                      (snoozed until {snoozedUntil!.toLocaleDateString()})
+                      (snoozed until <Timestamp value={snoozedUntil} mode="date" />)
                     </span>
                   )}
                 </td>
@@ -493,7 +494,7 @@ function ProspectsTab({
                   )}
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500 hidden lg:table-cell">
-                  {r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : '—'}
+                  {r.updatedAt ? <Timestamp value={r.updatedAt} mode="date" /> : '—'}
                 </td>
               </tr>
             );
@@ -543,7 +544,7 @@ function InboxTab({
                 <StatusBadge status={r.status} />
               </td>
               <td className="px-3 py-2 text-xs text-slate-500 hidden lg:table-cell">
-                {r.sentAt ? new Date(r.sentAt).toLocaleString() : '—'}
+                {r.sentAt ? <Timestamp value={r.sentAt} /> : '—'}
               </td>
             </tr>
           ))}

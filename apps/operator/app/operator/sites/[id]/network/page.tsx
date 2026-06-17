@@ -10,6 +10,7 @@ import {
   inArray,
   and,
 } from '@leadlandlord/db';
+import { Timestamp } from '../../../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,7 +152,7 @@ export default async function SiteNetworkPage({ params }: Params) {
                     <Td>{m.linkBudgetOutbound}</Td>
                     <Td>{m.linkBudgetInbound}</Td>
                     <Td className="text-slate-400 whitespace-nowrap">
-                      {new Date(m.joinedAt).toLocaleDateString()}
+                      <Timestamp value={m.joinedAt} mode="date" />
                     </Td>
                   </tr>
                 ))}
@@ -198,7 +199,7 @@ export default async function SiteNetworkPage({ params }: Params) {
                       <code className="text-xs bg-slate-800 px-1 rounded">{l.anchorText}</code>
                     </Td>
                     <Td className="text-slate-400 whitespace-nowrap text-xs">
-                      {l.placedAt ? new Date(l.placedAt).toLocaleString() : '—'}
+                      {l.placedAt ? <Timestamp value={l.placedAt} /> : '—'}
                     </Td>
                     <Td>
                       <StatusPill status={l.status} />
@@ -241,7 +242,7 @@ export default async function SiteNetworkPage({ params }: Params) {
                       <code className="text-xs bg-slate-800 px-1 rounded">{l.anchorText}</code>
                     </Td>
                     <Td className="text-slate-400 whitespace-nowrap text-xs">
-                      {l.placedAt ? new Date(l.placedAt).toLocaleString() : '—'}
+                      {l.placedAt ? <Timestamp value={l.placedAt} /> : '—'}
                     </Td>
                     <Td>
                       <StatusPill status={l.status} />
@@ -280,10 +281,10 @@ export default async function SiteNetworkPage({ params }: Params) {
                     </Td>
                     <Td>{r.desiredCount}</Td>
                     <Td className="text-slate-400 whitespace-nowrap text-xs">
-                      {new Date(r.scheduledFor).toLocaleString()}
+                      <Timestamp value={r.scheduledFor} />
                     </Td>
                     <Td className="text-slate-400 whitespace-nowrap text-xs">
-                      {new Date(r.createdAt).toLocaleString()}
+                      <Timestamp value={r.createdAt} />
                     </Td>
                   </tr>
                 ))}

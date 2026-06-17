@@ -1,6 +1,7 @@
 import { desc, eq, and } from 'drizzle-orm';
 import { getDb, agentRuns, getSystemState, type AgentRun } from '@leadlandlord/db';
 import { ControlForms } from './ControlForms';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const revalidate = 15;
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,9 @@ function flatten(runs: AgentRun[]): FlatDecision[] {
 export default async function ControlPage() {
   const [state, runs] = await Promise.all([getSystemState(), loadOperatorRuns()]);
   const decisions = flatten(runs);
+  // IANA zone list for the time-zone picker, resolved server-side so the option
+  // set is stable regardless of the viewer's browser.
+  const timeZones = Intl.supportedValuesOf('timeZone');
 
   return (
     <div className="space-y-8">
@@ -56,7 +60,7 @@ export default async function ControlPage() {
         </p>
       </header>
 
-      <ControlForms state={state} />
+      <ControlForms state={state} timeZones={timeZones} />
 
       <section>
         <header className="flex items-baseline justify-between mb-2">
@@ -87,7 +91,7 @@ export default async function ControlPage() {
                 {decisions.map((d, i) => (
                   <tr key={`${d.runId}:${i}`} className="hover:bg-slate-900/40">
                     <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
-                      {new Date(d.startedAt).toLocaleString()}
+                      <Timestamp value={d.startedAt} />
                     </td>
                     <td className="px-3 py-2">
                       <DecisionTag type={d.type} />

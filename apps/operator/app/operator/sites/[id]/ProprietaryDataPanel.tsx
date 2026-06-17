@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { saveProprietaryData } from './actions';
+import { Timestamp } from '../../../../components/Timestamp';
 
 interface Props {
   siteId: string;
@@ -55,7 +56,7 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
         </p>
         {updatedAt && (
           <p className="text-[11px] text-slate-600 mt-1">
-            Last saved {new Date(updatedAt).toLocaleString()} by {updatedBy ?? 'operator'}
+            Last saved <Timestamp value={updatedAt} /> by {updatedBy ?? 'operator'}
           </p>
         )}
       </header>

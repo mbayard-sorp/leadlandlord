@@ -1,5 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
 import { getDb, geoSeoAudits, type GeoSeoAudit } from '@leadlandlord/db';
+import { Timestamp } from '../../../../components/Timestamp';
 
 const AUDITORS: Array<{ key: string; label: string }> = [
   { key: 'geo_aeo', label: 'GEO / AEO' },
@@ -77,7 +78,7 @@ function AuditorCard({
         </span>
       </div>
       <p className="text-[11px] text-slate-600">
-        {new Date(latest.auditedAt).toLocaleString()}
+        <Timestamp value={latest.auditedAt} />
         {latest.recommendationCount > 0 && (
           <span className="ml-2 text-amber-300/80">{latest.recommendationCount} rec{latest.recommendationCount === 1 ? '' : 's'}</span>
         )}

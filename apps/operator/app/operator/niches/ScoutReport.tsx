@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { runNicheValidation } from './actions';
 import { CATEGORY_LABELS } from './NicheRow';
+import { Timestamp } from '../../../components/Timestamp';
 
 export interface ScoutCandidateData {
   id: string;
@@ -112,7 +113,7 @@ export function ScoutReport({
             {run.categoryFilter ? ` · ${CATEGORY_LABELS[run.categoryFilter] ?? run.categoryFilter}` : ''}
           </h2>
           <span className="text-xs text-slate-500">
-            {new Date(run.createdAt).toLocaleString()} · {run.report.grid.trades} trades ×{' '}
+            <Timestamp value={run.createdAt} /> · {run.report.grid.trades} trades ×{' '}
             {run.report.grid.cities} cities = {run.gridCells.toLocaleString()} cells ·{' '}
             {run.report.grid.excluded_existing} already in pipeline ·{' '}
             {(run.report.grid.excluded_floor ?? 0) > 0 && (

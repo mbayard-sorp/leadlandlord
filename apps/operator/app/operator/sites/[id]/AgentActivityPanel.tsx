@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ActivityRun, ActivityResponse } from '../../../api/operator/sites/[id]/activity/route';
+import { Timestamp } from '../../../../components/Timestamp';
 
 const POLL_MS = 10000;
 
@@ -108,7 +109,7 @@ export function AgentActivityPanel({ siteId }: Props) {
               <tbody>
                 {recent.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-900/40">
-                    <td className="text-slate-400 whitespace-nowrap">{formatTime(r.startedAt)}</td>
+                    <td className="text-slate-400 whitespace-nowrap"><Timestamp value={r.startedAt} /></td>
                     <td className="font-mono text-xs">{r.agent}</td>
                     <td className="text-slate-400">{formatDuration(durationMs(r))}</td>
                     <td className="text-slate-400">${r.costUsd.toFixed(4)}</td>
@@ -219,10 +220,6 @@ function formatDuration(ms: number): string {
   return `${m}m ${remS.toString().padStart(2, '0')}s`;
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString();
-}
 
 function StatusPill({ status }: { status: ActivityRun['status'] }) {
   const tone =

@@ -6,6 +6,7 @@ import vercelConfig from '../../../vercel.json';
 import { AgentTogglesPanel } from './AgentTogglesPanel';
 import { loadAgentEnabledMap } from './_toggle-actions';
 import { describeRun, type RunSiteInfo } from './_describe-run';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const revalidate = 30;
 
@@ -197,7 +198,7 @@ export default async function AgentsPage() {
               >
                 <div className="flex justify-between text-xs text-amber-300 uppercase tracking-wide">
                   <span>{e.targetAgent ?? e.agent}</span>
-                  <span>{new Date(e.createdAt).toLocaleString()}</span>
+                  <Timestamp value={e.createdAt} />
                 </div>
                 <pre className="mt-2 text-xs text-slate-300 overflow-x-auto">
                   {JSON.stringify(e.payload, null, 2)}
@@ -242,7 +243,7 @@ export default async function AgentsPage() {
                       <RunStatus status={r.status} />
                     </td>
                     <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
-                      {r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}
+                      {r.startedAt ? <Timestamp value={r.startedAt} /> : '—'}
                     </td>
                     <td className="px-3 py-2 text-slate-400 hidden md:table-cell">{dur}</td>
                     <td className="px-3 py-2 text-slate-400 hidden lg:table-cell">

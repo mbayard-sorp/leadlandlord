@@ -2,6 +2,8 @@
 
 import { usePolledFetch } from '@/lib/use-polled-fetch';
 import type { ProgressResponse, ProgressStage } from '../../../api/operator/sites/[id]/progress/route';
+import { useOperatorTimeZone } from '../../../../components/Timestamp';
+import { formatInTimeZone } from '../../../../lib/format-date';
 
 interface Props {
   siteId: string;
@@ -81,6 +83,7 @@ function StepNode({
   total: number;
   isConnectorFilled: boolean;
 }) {
+  const tz = useOperatorTimeZone();
   const isLast = index === total - 1;
 
   const dotClass =
@@ -108,7 +111,7 @@ function StepNode({
         {/* Dot */}
         <span
           className={`shrink-0 w-3 h-3 rounded-full border-2 ${dotClass}`}
-          title={stageTitle(stage)}
+          title={stageTitle(stage, tz)}
           aria-label={`${stage.label}: ${stage.status}`}
         />
         {/* Connector line */}
@@ -138,9 +141,9 @@ function StepNode({
   );
 }
 
-function stageTitle(stage: ProgressStage): string {
+function stageTitle(stage: ProgressStage, tz: string): string {
   const parts = [stage.label, `Status: ${stage.status}`];
-  if (stage.startedAt) parts.push(`Started: ${new Date(stage.startedAt).toLocaleString()}`);
+  if (stage.startedAt) parts.push(`Started: ${formatInTimeZone(stage.startedAt, tz)}`);
   if (stage.durationMs != null) parts.push(`Duration: ${formatDuration(stage.durationMs)}`);
   if (stage.costUsd != null) parts.push(`Cost: $${stage.costUsd.toFixed(4)}`);
   if (stage.error) parts.push(`Error: ${stage.error}`);

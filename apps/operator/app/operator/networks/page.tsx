@@ -1,5 +1,6 @@
 import { getDb, sql } from '@leadlandlord/db';
 import Link from 'next/link';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,7 +113,7 @@ export default async function NetworksPage() {
                     )}
                   </Td>
                   <Td className="text-slate-400 whitespace-nowrap">
-                    {row.lastPlacedAt ? row.lastPlacedAt.toLocaleString() : <span className="text-slate-600">—</span>}
+                    {row.lastPlacedAt ? <Timestamp value={row.lastPlacedAt} /> : <span className="text-slate-600">—</span>}
                   </Td>
                   <Td>
                     <Link

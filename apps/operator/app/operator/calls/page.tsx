@@ -4,6 +4,7 @@ import { desc } from 'drizzle-orm';
 import { getDb, calls, sites, type Call } from '@leadlandlord/db';
 import { SiteFilter, type SiteOption } from './SiteFilter';
 import { DeleteCallButton } from './DeleteCallButton';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -122,7 +123,7 @@ export default async function CallsPage({ searchParams }: SearchParams) {
               {rows.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-900/40">
                   <td className="text-slate-400 whitespace-nowrap">
-                    {new Date(c.startedAt).toLocaleString()}
+                    <Timestamp value={c.startedAt} />
                   </td>
                   <td className="break-words">
                     <Link

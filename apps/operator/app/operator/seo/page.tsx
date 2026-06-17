@@ -11,6 +11,7 @@ import {
   type Site,
 } from '@leadlandlord/db';
 import { ReviewActions } from './ReviewActions';
+import { Timestamp } from '../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,7 +194,7 @@ export default async function SeoDashboardPage() {
                       <StatusBadge status={r.status} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-400">
-                      {new Date(r.createdAt).toLocaleString()}
+                      <Timestamp value={r.createdAt} />
                     </td>
                     <td className="px-3 py-2">
                       {r.status === 'awaiting_review' ? <ReviewActions id={r.id} /> : null}
@@ -243,7 +244,7 @@ export default async function SeoDashboardPage() {
                       {truncate(r.rationale, 160)}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-400">
-                      {r.appliedAt ? new Date(r.appliedAt).toLocaleString() : '—'}
+                      {r.appliedAt ? <Timestamp value={r.appliedAt} /> : '—'}
                     </td>
                   </tr>
                 ))}
@@ -347,7 +348,7 @@ export default async function SeoDashboardPage() {
                       );
                     })}
                     <td className="px-3 py-2 text-xs text-slate-400">
-                      {new Date(a.auditedAt).toLocaleDateString()}
+                      <Timestamp value={a.auditedAt} mode="date" />
                     </td>
                   </tr>
                 ))}

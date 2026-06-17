@@ -1160,6 +1160,14 @@ export const systemState = pgTable('system_state', {
     .notNull()
     .default('0'),
   globalSpendResetAt: timestamp('global_spend_reset_at', { withTimezone: true }),
+  // ──────────────────────────────────────────────────────────
+  // Operator display time zone (migration 0047). IANA zone name
+  // (e.g. 'America/Phoenix'). The operator dashboard renders all
+  // timestamps in this zone via apps/operator/lib/format-date.ts;
+  // it does NOT change cron execution (Vercel runs crons in UTC).
+  // Defaults to UTC. Set via /operator/control.
+  // ──────────────────────────────────────────────────────────
+  operatorTimeZone: text('operator_time_zone').notNull().default('UTC'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

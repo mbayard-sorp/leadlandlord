@@ -37,6 +37,7 @@ import type { GoLiveManualFlags } from './go-live-actions';
 import { LocalContentToggle } from './LocalContentToggle';
 import { ProprietaryDataPanel } from './ProprietaryDataPanel';
 import { GeoSeoAuditPanel } from './GeoSeoAuditPanel';
+import { Timestamp } from '../../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,7 +121,7 @@ export default async function SiteDetailPage({ params }: Params) {
         </h1>
         <div className="flex flex-wrap gap-3 mt-3 text-sm text-slate-400">
           <Pill>{site.status}</Pill>
-          {site.deployedAt && <span>Deployed {new Date(site.deployedAt).toLocaleString()}</span>}
+          {site.deployedAt && <span>Deployed <Timestamp value={site.deployedAt} /></span>}
           {liveSite && (
             <a
               href={liveSite.href}
@@ -473,7 +474,7 @@ function CallsTable({ rows }: { rows: Call[] }) {
       <tbody>
         {rows.map((c) => (
           <tr key={c.id} className="hover:bg-slate-900/40">
-            <td className="text-slate-400 whitespace-nowrap">{new Date(c.startedAt).toLocaleString()}</td>
+            <td className="text-slate-400 whitespace-nowrap"><Timestamp value={c.startedAt} /></td>
             <td className="text-xs">
               {c.callerName ? (
                 <div className="font-medium text-slate-200 break-words">{c.callerName}</div>
@@ -529,7 +530,7 @@ function LeadsTable({ rows }: { rows: Lead[] }) {
       <tbody>
         {rows.map((l) => (
           <tr key={l.id} className="hover:bg-slate-900/40">
-            <td className="text-slate-400 whitespace-nowrap">{new Date(l.createdAt).toLocaleString()}</td>
+            <td className="text-slate-400 whitespace-nowrap"><Timestamp value={l.createdAt} /></td>
             <td className="break-words">
               <div>{l.name ?? '—'}</div>
               <div className="text-xs text-slate-500 font-mono">
