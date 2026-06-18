@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
-import { getDb, niches, agentEvents, agentRuns, getSystemState } from '@leadlandlord/db';
+import { getDb, niches, agentEvents, agentRuns, sites, getSystemState, requeueDeadLetter, sql } from '@leadlandlord/db';
 import { NicheScoutInput } from '@leadlandlord/agents/niche-hunter/scout';
 import { validateNicheCore } from '@leadlandlord/agents/niche-hunter/validate';
 import {
@@ -108,6 +108,16 @@ export async function runNicheValidation(formData: FormData): Promise<ActionResu
 /**
  * Approve a pending niche. Updates the row + emits a `niche.approved`
  * agent_event so the operator-tick fan-out can dispatch Site Builder.
+ *
+ * Crash-safety: the neon-http driver does not support db.transaction(), so we
+ * cannot atomically flip the decision and insert the event. Instead:
+ *   1. We guard the UPDATE to pending→approved (idempotent on re-run).
+ *   2. We surface any insert failure directly to the operator (ok:false) so
+ *      it is never silently lost.
+ *   3. The reEmitStuckNicheApprovals reconciler in operator-tick acts as a
+ *      backstop: if the event insert fails here (or the event later dead-letters
+ *      without producing a site), the next tick re-emits a fresh niche.approved
+ *      event after NICHE_DISPATCH_GRACE_SECONDS (15 min).
  */
 export async function approveNiche(formData: FormData): Promise<ActionResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
@@ -123,17 +133,30 @@ export async function approveNiche(formData: FormData): Promise<ActionResult> {
 
   // Emit downstream event. site-builder is the registered consumer; the
   // existing operator-tick claim+dispatch loop picks this up.
-  await db.insert(agentEvents).values({
-    agent: 'operator',
-    type: 'niche.approved',
-    targetAgent: 'site-builder',
-    payload: {
-      niche: row.niche,
-      city: row.city,
-      state: row.state,
-      niche_id: row.id,
-    },
-  });
+  // NOTE: if this insert throws, the decision flip is already committed — the
+  // reEmitStuckNicheApprovals reconciler will recover it within 15 min. We
+  // surface the error so the operator knows to watch the build status bar.
+  try {
+    await db.insert(agentEvents).values({
+      agent: 'operator',
+      type: 'niche.approved',
+      targetAgent: 'site-builder',
+      payload: {
+        niche: row.niche,
+        city: row.city,
+        state: row.state,
+        niche_id: row.id,
+      },
+    });
+  } catch (err) {
+    log.error({ id, err }, 'approveNiche: event insert failed — reconciler will retry within 15 min');
+    revalidatePath('/operator/niches');
+    return {
+      ok: false,
+      message: `Niche approved but the site-builder event failed to enqueue (${err instanceof Error ? err.message : String(err)}). The auto-reconciler will retry within 15 minutes — check the build status column.`,
+      nicheId: row.id,
+    };
+  }
 
   log.info({ id, niche: row.niche, city: row.city }, 'niche approved, site-builder dispatched');
   revalidatePath('/operator/niches');
@@ -145,13 +168,178 @@ export async function approveNiche(formData: FormData): Promise<ActionResult> {
 }
 
 /**
+ * Human-initiated replay of a dead-lettered niche.approved event. Finds the
+ * most recent dead-lettered niche.approved event for the given niche and clears
+ * it for re-claim. Does NOT violate the orchestrator's niche. protection guard
+ * (that guard is on the orchestrator tool path only, not on human operator actions).
+ */
+export async function requeueNicheBuild(nicheId: string): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!nicheId) return { ok: false, message: 'missing niche id' };
+  const db = getDb();
+
+  // Find the most recent dead-lettered niche.approved event for this niche.
+  // Use a raw query to match on JSONB payload->>'niche_id'.
+  const result = await db.execute(sql`
+    SELECT id FROM agent_events
+    WHERE type = 'niche.approved'
+      AND target_agent = 'site-builder'
+      AND dead_lettered_at IS NOT NULL
+      AND payload->>'niche_id' = ${nicheId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `);
+
+  const deadRow = result.rows?.[0] as { id: string } | undefined;
+  if (!deadRow?.id) {
+    return { ok: false, message: 'no dead-lettered niche.approved event found for this niche — nothing to requeue' };
+  }
+
+  await requeueDeadLetter(deadRow.id);
+  log.info({ nicheId, eventId: deadRow.id }, 'requeueNicheBuild: dead-lettered niche.approved event requeued');
+  revalidatePath('/operator/niches');
+  return { ok: true, message: 'Build requeued — site-builder will pick it up on the next tick.' };
+}
+
+export interface NicheBuildStatus {
+  /** State of the most recent niche.approved agent_events row for this niche. */
+  eventState: 'none' | 'queued' | 'running' | 'processed' | 'failed' | 'dead_letter';
+  /** Error text from the event row, if any. */
+  eventError: string | null;
+  /** ID of the dead-lettered event (present when eventState === 'dead_letter'). */
+  deadLetteredEventId: string | null;
+  /** Status from the most recent site-builder agent_run for this niche. */
+  runStatus: string | null;
+  /** Error from the agent_run row. */
+  runError: string | null;
+  /** Sites row status (build_failed / compliance_blocked / etc.) */
+  siteStatus: string | null;
+  /** Plain-text build error from sites.last_build_error, if any. */
+  siteLastBuildError: string | null;
+  /** Whether the event was created more than 15 min ago without a live site. */
+  stale: boolean;
+}
+
+/**
+ * Returns the combined build state for a single niche: most recent
+ * niche.approved agent_events row + most recent site-builder agent_run
+ * + the linked sites row status. Used by BuildLink to show failure badges
+ * and surface the Retry Build button after NICHE_DISPATCH_GRACE_SECONDS.
+ */
+export async function getNicheBuildStatus(nicheId: string): Promise<NicheBuildStatus> {
+  const empty: NicheBuildStatus = {
+    eventState: 'none',
+    eventError: null,
+    deadLetteredEventId: null,
+    runStatus: null,
+    runError: null,
+    siteStatus: null,
+    siteLastBuildError: null,
+    stale: false,
+  };
+  try { await requireOperatorSession(); } catch { return empty; }
+  if (!nicheId) return empty;
+
+  const db = getDb();
+  const GRACE_MS = 15 * 60 * 1000; // 15 min, mirrors NICHE_DISPATCH_GRACE_SECONDS
+
+  // Fetch recent niche.approved events and filter by payload.niche_id in JS.
+  // Volume is at most MAX_NICHE_DISPATCH_EVENTS (3) per niche, so fetching 20
+  // rows is always fast and avoids a raw SQL JSONB cast.
+  const recentEvents = await db
+    .select({
+      id: agentEvents.id,
+      createdAt: agentEvents.createdAt,
+      processingAt: agentEvents.processingAt,
+      processedAt: agentEvents.processedAt,
+      deadLetteredAt: agentEvents.deadLetteredAt,
+      error: agentEvents.error,
+      payload: agentEvents.payload,
+    })
+    .from(agentEvents)
+    .where(
+      and(
+        eq(agentEvents.type, 'niche.approved'),
+        eq(agentEvents.targetAgent, 'site-builder'),
+      ),
+    )
+    .orderBy(desc(agentEvents.createdAt))
+    .limit(20);
+
+  const nicheEvent = recentEvents.find(
+    (e) => (e.payload as Record<string, unknown>)?.niche_id === nicheId,
+  );
+
+  // Most recent site-builder run linked to this niche's site.
+  const [siteRow] = await db
+    .select({
+      id: sites.id,
+      status: sites.status,
+      lastBuildError: sites.lastBuildError,
+    })
+    .from(sites)
+    .where(eq(sites.nicheId, nicheId))
+    .limit(1);
+
+  let runStatus: string | null = null;
+  let runError: string | null = null;
+  if (siteRow) {
+    const [latestRun] = await db
+      .select({ status: agentRuns.status, error: agentRuns.error })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.agent, 'site-builder'), eq(agentRuns.siteId, siteRow.id)))
+      .orderBy(desc(agentRuns.startedAt))
+      .limit(1);
+    if (latestRun) {
+      runStatus = latestRun.status;
+      runError = latestRun.error ?? null;
+    }
+  }
+
+  // Derive event state.
+  let eventState: NicheBuildStatus['eventState'] = 'none';
+  let eventError: string | null = null;
+  let deadLetteredEventId: string | null = null;
+  let stale = false;
+
+  if (nicheEvent) {
+    eventError = nicheEvent.error ?? null;
+    if (nicheEvent.deadLetteredAt) {
+      eventState = 'dead_letter';
+      deadLetteredEventId = nicheEvent.id;
+    } else if (nicheEvent.processedAt && nicheEvent.error) {
+      eventState = 'failed';
+    } else if (nicheEvent.processedAt) {
+      eventState = 'processed';
+    } else if (nicheEvent.processingAt) {
+      eventState = 'running';
+    } else {
+      eventState = 'queued';
+      // Flag as stale if the event is >15 min old and no site exists yet.
+      const ageMs = Date.now() - new Date(nicheEvent.createdAt).getTime();
+      if (ageMs > GRACE_MS && !siteRow) stale = true;
+    }
+  }
+
+  return {
+    eventState,
+    eventError,
+    deadLetteredEventId,
+    runStatus,
+    runError,
+    siteStatus: siteRow?.status ?? null,
+    siteLastBuildError: siteRow?.lastBuildError ?? null,
+    stale,
+  };
+}
+
+/**
  * Look up the site row created by site-builder for a given niche.
  * Polled by the niche row after approve so we can surface the new site link
  * the moment the agent inserts the sites row (typically 5-30s after dispatch).
  */
 export async function findSiteForNiche(nicheId: string): Promise<{ siteId: string | null }> {
   try { await requireOperatorSession(); } catch { return { siteId: null }; }
-  const { sites } = await import('@leadlandlord/db');
   const db = getDb();
   const [row] = await db
     .select({ id: sites.id })

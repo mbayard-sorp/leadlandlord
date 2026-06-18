@@ -6,6 +6,7 @@ import { BuildLink } from './BuildLink';
 import { ValidateButton } from './ValidateButton';
 import { CalibrationContent } from './CalibrationDrawer';
 import { DeleteNicheButton } from './DeleteNicheButton';
+import { type NicheBuildStatus } from './actions';
 
 // flip to true to revisit the scoring algorithm calibration view
 const SHOW_CALIBRATION = false;
@@ -113,6 +114,7 @@ export function NicheRow({
   showBuildLink = false,
   showDelete = false,
   siteId,
+  initialBuildStatus,
   colSpan,
   demandUsed,
   demandSource,
@@ -122,6 +124,7 @@ export function NicheRow({
   showBuildLink?: boolean;
   showDelete?: boolean;
   siteId?: string | null;
+  initialBuildStatus?: NicheBuildStatus | null;
   colSpan: number;
   demandUsed: number;
   demandSource: 'dataforseo' | 'claude_estimate';
@@ -217,7 +220,11 @@ export function NicheRow({
         )}
         {showBuildLink && (
           <Td>
-            <BuildLink nicheId={row.id} initialSiteId={siteId ?? null} />
+            <BuildLink
+              nicheId={row.id}
+              initialSiteId={siteId ?? null}
+              initialBuildStatus={initialBuildStatus ?? null}
+            />
           </Td>
         )}
       </tr>

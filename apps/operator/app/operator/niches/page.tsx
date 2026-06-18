@@ -8,6 +8,7 @@ import { StatusBar } from './StatusBar';
 import { NicheRow, type NicheRowData } from './NicheRow';
 import { CategoryFilter } from './CategoryFilter';
 import { CollapsibleSection } from './CollapsibleSection';
+import { getNicheBuildStatus, type NicheBuildStatus } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,20 @@ export default async function NichesPage({
     }
   }
 
+  // Pre-fetch build statuses for approved niches that don't yet have a site,
+  // so BuildLink can render the correct badge immediately without a loading flash.
+  // Only fetched for niches without a live site (the happy path is the siteId link).
+  const buildStatusByNiche = new Map<string, NicheBuildStatus>();
+  const approvedWithoutSite = approved.filter((r) => !siteByNiche.has(r.id));
+  if (approvedWithoutSite.length > 0) {
+    const statuses = await Promise.all(
+      approvedWithoutSite.map(async (r) => ({ id: r.id, status: await getNicheBuildStatus(r.id) })),
+    );
+    for (const { id, status } of statuses) {
+      buildStatusByNiche.set(id, status);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -134,7 +149,7 @@ export default async function NichesPage({
         {approved.length === 0 ? (
           <Empty>No approved niches yet.</Empty>
         ) : (
-          <Table rows={approved} showBuildLink siteByNiche={siteByNiche} />
+          <Table rows={approved} showBuildLink siteByNiche={siteByNiche} buildStatusByNiche={buildStatusByNiche} />
         )}
       </CollapsibleSection>
 
@@ -182,12 +197,14 @@ function Table({
   showBuildLink = false,
   showDelete = false,
   siteByNiche,
+  buildStatusByNiche,
 }: {
   rows: NicheRowData[];
   showButtons?: boolean;
   showBuildLink?: boolean;
   showDelete?: boolean;
   siteByNiche?: Map<string, string>;
+  buildStatusByNiche?: Map<string, NicheBuildStatus>;
 }) {
   // Base columns + the optional Decision / Build columns; used for the
   // full-width calibration detail row's colSpan.
@@ -229,6 +246,7 @@ function Table({
               showBuildLink={showBuildLink}
               showDelete={showDelete}
               siteId={siteByNiche?.get(r.id) ?? null}
+              initialBuildStatus={buildStatusByNiche?.get(r.id) ?? null}
               colSpan={colSpan}
               demandUsed={demandUsed}
               demandSource={demandSource}
