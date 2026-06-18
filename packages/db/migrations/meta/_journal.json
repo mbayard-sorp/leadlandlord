@@ -330,6 +330,20 @@
       "when": 1782600000000,
       "tag": "0047_operator_timezone",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1782700000000,
+      "tag": "0048_site_status_build_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1782800000000,
+      "tag": "0049_agent_runs_source_event_sites_build_error",
+      "breakpoints": true
     }
   ]
 }

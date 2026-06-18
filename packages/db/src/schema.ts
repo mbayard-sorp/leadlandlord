@@ -26,6 +26,8 @@ export const siteStatusEnum = pgEnum('site_status', [
   'rented',
   'paused',
   'archived',
+  'build_failed',
+  'compliance_blocked',
 ]);
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -353,6 +355,13 @@ export const sites = pgTable(
      * bumped only when the operator wants fresh content (see SiteBuilderInput).
      */
     buildEpoch: text('build_epoch'),
+    /**
+     * Plain-text summary of the most recent build failure. Set by site-builder
+     * when it writes status='build_failed' or status='compliance_blocked'.
+     * Cleared (set null) when a subsequent build succeeds. Exposed in the
+     * operator site detail panel so Mike can triage without digging into agent_runs.
+     */
+    lastBuildError: text('last_build_error'),
     deployedAt: timestamp('deployed_at', { withTimezone: true }),
     currentRank: integer('current_rank'),
     calls30d: integer('calls_30d').notNull().default(0),
@@ -809,6 +818,15 @@ export const agentRuns = pgTable(
     costUsd: numeric('cost_usd', { precision: 10, scale: 4 }).notNull().default('0'),
     siteId: uuid('site_id').references(() => sites.id, { onDelete: 'set null' }),
     parentRunId: uuid('parent_run_id'),
+    /**
+     * The agent_events.id that triggered this run. Nullable — runs started
+     * directly (e.g. via the operator UI or a scheduler) have no source event.
+     * Used by the reaper liveness guard to correlate a stalled run back to its
+     * originating event so the event's lease can be released without scanning
+     * all of agent_events. No FK — events can be deleted/dead-lettered after
+     * the run completes and we don't want cascades here.
+     */
+    sourceEventId: uuid('source_event_id'),
     /**
      * Latest progress message emitted by the running agent (e.g. "generating
      * page 14/21"). Read by the operator activity panel at ~4s polling. Reset

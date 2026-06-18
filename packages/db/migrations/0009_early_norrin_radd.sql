@@ -84,15 +84,15 @@ CREATE TABLE IF NOT EXISTS "seo_recommendations" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "agent_budgets" ADD COLUMN "weekly_cost_cap_usd" numeric(10, 2) DEFAULT '50' NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_budgets" ADD COLUMN "monthly_cost_cap_usd" numeric(10, 2) DEFAULT '200' NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_budgets" ADD COLUMN "spent_this_week_usd" numeric(10, 4) DEFAULT '0' NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_budgets" ADD COLUMN "spent_this_month_usd" numeric(10, 4) DEFAULT '0' NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_budgets" ADD COLUMN "enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_events" ADD COLUMN "attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_events" ADD COLUMN "next_attempt_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "agent_events" ADD COLUMN "dead_lettered_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "agent_events" ADD COLUMN "failure_kind" text;--> statement-breakpoint
+ALTER TABLE "agent_budgets" ADD COLUMN IF NOT EXISTS "weekly_cost_cap_usd" numeric(10, 2) DEFAULT '50' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_budgets" ADD COLUMN IF NOT EXISTS "monthly_cost_cap_usd" numeric(10, 2) DEFAULT '200' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_budgets" ADD COLUMN IF NOT EXISTS "spent_this_week_usd" numeric(10, 4) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_budgets" ADD COLUMN IF NOT EXISTS "spent_this_month_usd" numeric(10, 4) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_budgets" ADD COLUMN IF NOT EXISTS "enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_events" ADD COLUMN IF NOT EXISTS "attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_events" ADD COLUMN IF NOT EXISTS "next_attempt_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "agent_events" ADD COLUMN IF NOT EXISTS "dead_lettered_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "agent_events" ADD COLUMN IF NOT EXISTS "failure_kind" text;--> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "domain_candidates" ADD CONSTRAINT "domain_candidates_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
