@@ -132,6 +132,47 @@ export async function drainQueueNow(): Promise<
 }
 
 /**
+ * Validate a hand-picked set of scout candidates (operator selection in the
+ * Scout report) instead of the blind top-N. Emits a niche.validate event
+ * carrying candidate_ids, which the niche-validator uses to override its
+ * count-based selection (validator.ts NicheValidatorInput.candidate_ids). The
+ * `count` field is still sent because the agent's input schema requires it, but
+ * it is ignored whenever candidate_ids is present.
+ */
+export async function runNicheValidationForCandidates(
+  scoutRunId: string,
+  candidateIds: string[],
+): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const sys = await getSystemState();
+  if (sys.killSwitch) {
+    const reason = sys.killSwitchReason ? ` (${sys.killSwitchReason})` : '';
+    return { ok: false, message: `Kill switch is active${reason}. Disable it on the operator home page before running agents.` };
+  }
+
+  if (!scoutRunId) return { ok: false, message: 'missing scout_run_id' };
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ids = Array.from(new Set((candidateIds ?? []).filter((id) => uuidRe.test(id))));
+  if (ids.length === 0) return { ok: false, message: 'Select at least one candidate to validate.' };
+  if (ids.length > 50) return { ok: false, message: `Select at most 50 candidates (you picked ${ids.length}).` };
+
+  const db = getDb();
+  await db.insert(agentEvents).values({
+    agent: 'operator',
+    type: 'niche.validate',
+    targetAgent: 'niche-validator',
+    payload: { scout_run_id: scoutRunId, candidate_ids: ids, count: ids.length },
+  });
+  log.info({ scoutRunId, selected: ids.length }, 'niche-validator run (manual selection) enqueued');
+  revalidatePath('/operator/niches');
+  return {
+    ok: true,
+    message: `Validation of ${ids.length} selected candidate(s) queued — the status bar tracks progress.`,
+  };
+}
+
+/**
  * Approve a pending niche. Updates the row + emits a `niche.approved`
  * agent_event so the operator-tick fan-out can dispatch Site Builder.
  *
