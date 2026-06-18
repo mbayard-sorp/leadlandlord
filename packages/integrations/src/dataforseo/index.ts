@@ -253,6 +253,11 @@ const AGGREGATOR_DOMAINS = [
   'mapquest.com',
   'tripadvisor.com',
   'nextdoor.com',
+  'expertise.com',
+  'yellowbook.com',
+  'facebook.com',
+  'reddit.com',
+  'merchantcircle.com',
 ];
 
 function isAggregator(domain: string): boolean {
@@ -283,11 +288,19 @@ export interface SerpComposition {
    * Higher = harder. Stored in the `niches.kd` column so existing UI and
    * filters keep working without a schema migration.
    *
-   * Formula: aggregator_share weighted 70 + local_pack absence weighted 30.
-   * A SERP with 80% aggregators and no local pack scores ~86; a SERP with
-   * 20% aggregators and a local pack scores ~14.
+   * Formula: difficulty measures ORGANIC RANKABILITY. A local pack is treated
+   * as mildly favorable (it tends to displace aggregators from organic results).
+   * Weights: aggregator_share * AGGREGATOR_WEIGHT + (no local pack ? LOCAL_PACK_BOOST : 0).
+   * Both weights are tunable named constants. NOTE: discounting the won slot's
+   * VALUE for local-pack click-theft is a separate follow-up, not handled here.
    */
   difficulty: number;
+  /**
+   * True when the SERP lookup errored and a neutral score (difficulty=50)
+   * was fabricated. Callers should treat measured KD as unavailable when
+   * this is true.
+   */
+  fallback: boolean;
 }
 
 interface SerpCompositionItemRaw extends SerpItemRaw {
@@ -326,6 +339,7 @@ export async function getSerpComposition(args: {
         { rank: 2, domain: 'mock-local-2.com', url: 'https://mock-local-2.com/' },
       ],
       difficulty: 21,
+      fallback: false,
     };
   }
   const cacheKey = stableKey([language, location, keyword.toLowerCase()]);
@@ -340,6 +354,11 @@ export async function getSerpComposition(args: {
   onCost?.(costUsd);
   return value;
 }
+
+/** Weight applied to aggregator_share in the difficulty formula. Tunable. */
+const AGGREGATOR_WEIGHT = 70;
+/** Boost applied when no local pack is present. Tunable. */
+const LOCAL_PACK_BOOST = 30;
 
 async function fetchSerpCompositionFromApi(
   keyword: string,
@@ -379,7 +398,7 @@ async function fetchSerpCompositionFromApi(
     const has_local_pack = Boolean(localPackItem);
     const local_pack_count = localPackChildren.length;
 
-    const difficulty = Math.round(aggregator_share * 70 + (has_local_pack ? 0 : 30));
+    const difficulty = Math.round(aggregator_share * AGGREGATOR_WEIGHT + (has_local_pack ? 0 : LOCAL_PACK_BOOST));
 
     return {
       aggregator_share,
@@ -389,6 +408,7 @@ async function fetchSerpCompositionFromApi(
       top_domains: topDomains,
       top_local,
       difficulty,
+      fallback: false,
     };
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -404,6 +424,7 @@ async function fetchSerpCompositionFromApi(
       top_domains: [],
       top_local: [],
       difficulty: 50,
+      fallback: true,
     };
   }
 }

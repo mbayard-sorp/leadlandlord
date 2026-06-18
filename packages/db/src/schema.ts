@@ -194,6 +194,14 @@ export const niches = pgTable(
     // Claude annotation from the validator (seasonality flag, licensing
     // concern, one-line caution). Null on legacy / manually seeded rows.
     annotations: jsonb('annotations'),
+    // Rentability-weighted validated dollar score (migration 0048, ADR niche-engine fix).
+    validatedScore: numeric('validated_score', { precision: 12, scale: 2 }),
+    // Scout-time proxy winnability carried forward from the originating candidate.
+    scoutWinnability: numeric('scout_winnability', { precision: 4, scale: 3 }),
+    // National cluster KD from the scout pass that produced this niche.
+    scoutClusterDifficulty: numeric('scout_cluster_difficulty', { precision: 5, scale: 2 }),
+    // True when the validation SERP composition was a fabricated fallback (API error).
+    dfsFallback: boolean('dfs_fallback'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
   },
@@ -1124,6 +1132,8 @@ export const systemState = pgTable('system_state', {
   // in scoring-config.ts. Set via /operator/control for exploratory runs.
   scoutMinLeadPrice: numeric('scout_min_lead_price', { precision: 8, scale: 2 }),
   scoutMinRentabilityPrior: numeric('scout_min_rentability_prior', { precision: 4, scale: 3 }),
+  // Operator override for MIN_WINNABILITY_FLOOR (NULL = code default).
+  scoutMinWinnability: numeric('scout_min_winnability', { precision: 4, scale: 3 }),
   // Geographic-targeting + refinement knobs (migration 0045, ADR 0022). NULL =
   // fall back to the defaults in packages/agents/src/niche-hunter/
   // {value-model,scoring-config}.ts. Set via /operator/control.

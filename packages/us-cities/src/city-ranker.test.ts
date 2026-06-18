@@ -456,6 +456,58 @@ describe('computeCityMarketScores (ADR 0022)', () => {
     expect(scores.has(keyOf('NearbyA', 'TX'))).toBe(false);
   });
 
+  it('cross-state metro mass suppresses metroDensityMult for a city in the requested state (#6)', () => {
+    // StateY city sits ~25 km from a large metro in StateX.
+    // Request only StateY — the StateX metro must still suppress metroDensityMult.
+    const cache: Record<string, object> = {
+      'NY|stateytown': {
+        medianIncome: 65_000,
+        medianHomeValue: 250_000,
+        ownerOccupiedPct: 0.65,
+        totalHousingUnits: 20_000,
+        medianAge: 40,
+        populationCensus: 55_000,
+      },
+    };
+    // StateYTown is in NY at (41.0, -74.0). StateXMetro is in NJ at ~25 km away,
+    // pop 800k — well beyond the 500k threshold for 0.4 multiplier.
+    const crossStateCSV = [
+      CSV_HEADER,
+      makeCSVLine('StateYTown', 'NY', 'New York', 41.0, -74.0, 55_000),
+      makeCSVLine('StateXMetro', 'NJ', 'New Jersey', 41.22, -74.0, 800_000),
+    ].join('\n');
+
+    _resetCensusCache();
+    _resetCitiesCache();
+    mockExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s.includes('census-enrichment')) return true;
+      return existsSync(p);
+    });
+    mockReadFileSync.mockImplementation((p, ...args) => {
+      const s = String(p);
+      if (s.includes('census-enrichment')) return JSON.stringify(cache);
+      if (s.includes('uscities.csv')) return crossStateCSV;
+      return (readFileSync as (...a: Parameters<typeof readFileSync>) => ReturnType<typeof readFileSync>)(p, ...args);
+    });
+
+    // Request only NY — StateXMetro (NJ) must still count toward spatial grid.
+    const scores = computeCityMarketScores({ states: ['NY'], populationMin: 1, populationMax: 999_999_999 });
+
+    // StateYTown must appear (it's in NY)
+    const target = scores.get(keyOf('StateYTown', 'NY'));
+    expect(target).toBeDefined();
+    // StateXMetro (NJ, 800k, ~25 km away) must be counted → nearbyPop >= 500k → mult < 1.0
+    expect(target!.metroDensityMult).toBeLessThan(1.0);
+    expect(target!.metroDensityMult).toBe(0.4); // 800k >= 500k, < 1M
+
+    // StateXMetro must NOT be returned (not in the requested states)
+    expect(scores.has(keyOf('StateXMetro', 'NJ'))).toBe(false);
+
+    _resetCitiesCache();
+    vi.restoreAllMocks();
+  });
+
   it('grid index built over ALL cities: a large OUT-OF-BAND city suppresses a nearby IN-BAND city metroDensityMult', () => {
     // BandTarget (55k, in band) sits ~25 km from BigMetro (900k, out of the
     // 50k–70k band). If the grid were built only over the band, BigMetro would

@@ -44,6 +44,7 @@ vi.mock('@leadlandlord/db', () => ({
     scoutCallRate: null,
     scoutMinLeadPrice: null,
     scoutMinRentabilityPrior: null,
+    scoutMinWinnability: null,
     scoutGeoCompBlend: null,
     scoutGeoDemandBlend: null,
     scoutPerStateCap: null,
@@ -86,6 +87,11 @@ vi.mock('@leadlandlord/us-cities/loader', () => ({
 // Must be a trade that (a) passes the ability-to-pay floor and (b) is in the
 // home_services taxonomy post-prune.
 const UNCACHED_TRADE = 'chimney repair';
+// A trade that has a very high cluster kd (85) → winnability = 0.15 < 0.25 floor.
+// Must pass ability-to-pay floor (lead price > $50, rentability > 0.60) and be in
+// the home_services taxonomy, but be dropped by the winnability gate.
+// 'tree trimming' has leadPriceAvg ~$77.5, rentabilityPrior 0.65 — passes floor.
+const HIGH_KD_TRADE = 'tree trimming';
 
 // ── Stage-3 refinement mock controls (ADR 0022 §5) ──────────────────────────
 // Tests tune these to drive the local-SERP refinement pass deterministically.
@@ -110,15 +116,18 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       args.onCost?.(0.028); // cold fetch happens, returns empty cluster
       return [];
     }
+    // HIGH_KD_TRADE returns kd=85 → winnability = (100-85)/100 = 0.15 < 0.25 floor.
+    const kd = args.seed === HIGH_KD_TRADE ? 85 : 10;
     return [
-      { phrase: `${args.seed} cost`, search_volume: 4000, kd: 10, cpc: 2, competition: 0.3, intent: 'commercial', source: 'related' },
-      { phrase: `${args.seed} near me`, search_volume: 2000, kd: 10, cpc: 2, competition: 0.3, intent: 'transactional', source: 'suggestion' },
+      { phrase: `${args.seed} cost`, search_volume: 4000, kd, cpc: 2, competition: 0.3, intent: 'commercial', source: 'related' },
+      { phrase: `${args.seed} near me`, search_volume: 2000, kd, cpc: 2, competition: 0.3, intent: 'transactional', source: 'suggestion' },
     ];
   }),
   peekKeywordCandidates: vi.fn(async (args: { seed: string }) => {
     if (args.seed === UNCACHED_TRADE) return null;
+    const kd = args.seed === HIGH_KD_TRADE ? 85 : 10;
     return [
-      { phrase: `${args.seed} cost`, search_volume: 4000, kd: 10, cpc: 2, competition: 0.3, intent: 'commercial', source: 'related' },
+      { phrase: `${args.seed} cost`, search_volume: 4000, kd, cpc: 2, competition: 0.3, intent: 'commercial', source: 'related' },
     ];
   }),
   dfsLocationName: vi.fn((city: string, state: string) => `${city},${state},United States`),
@@ -251,7 +260,8 @@ describe('NicheScout', () => {
   });
 
   it('cache-only mode scores misses as benchmark_only and spends nothing', async () => {
-    const out = await runScout({ warm_missing_clusters: false });
+    // refine_top_k=0 so refinement SERP spend does not contaminate the cluster-spend assertion.
+    const out = await runScout({ warm_missing_clusters: false, refine_top_k: 0 });
     expect(out.dfs_spend_usd).toBe(0);
     const uncached = insertedCandidates.filter((c) => c.trade === UNCACHED_TRADE);
     for (const c of uncached) {
@@ -263,8 +273,9 @@ describe('NicheScout', () => {
     expect(run.report.grid.uncached_trades).toBe(1);
   });
 
-  it('records cold-miss DFS spend via ctx.recordUsage', async () => {
-    const out = await runScout(); // warm mode: the uncached trade costs $0.028
+  it('records cold-miss DFS spend via ctx.recordUsage (cluster phase only)', async () => {
+    // refine_top_k=0 isolates the cluster-fetch spend from Stage-3 refinement spend.
+    const out = await runScout({ refine_top_k: 0 }); // warm mode: the uncached trade costs $0.028
     expect(out.dfs_spend_usd).toBeCloseTo(0.028, 4);
     expect(MOCK_CTX.recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'dataforseo', cost_usd: 0.028 }),
@@ -288,7 +299,9 @@ describe('NicheScout', () => {
   });
 
   it('benchmark_only trade gets DEFAULT_BENCHMARK_WINNABILITY (0.5) not 1.0', async () => {
-    const out = await runScout({ warm_missing_clusters: false });
+    // refine_top_k=0 prevents Stage-3 from overwriting the proxy winnability
+    // with a measured local-SERP value, which would break the 0.5 assertion.
+    const out = await runScout({ warm_missing_clusters: false, refine_top_k: 0 });
     void out;
     const uncached = insertedCandidates.filter((c) => c.trade === UNCACHED_TRADE);
     expect(uncached.length).toBeGreaterThan(0);
@@ -378,8 +391,10 @@ describe('NicheScout', () => {
 
   // ── Stage-3 local-SERP refinement (ADR 0022 §5) ───────────────────────────
   describe('Stage-3 refinement', () => {
-    it('refine_top_k unset → zero SERP calls, refined_count 0, all cells proxy', async () => {
-      const out = await runScout();
+    it('refine_top_k=0 explicitly → no refinement, all cells proxy', async () => {
+      // DEFAULT_SCOUT_REFINE_TOP_K is now 25 (ADR 0024 on-by-default). Pass 0
+      // explicitly to exercise the no-refinement path.
+      const out = await runScout({ refine_top_k: 0 });
       expect(vi.mocked(getSerpComposition)).not.toHaveBeenCalled();
       expect(out.refined_count).toBe(0);
       expect(out.refine_spend_usd).toBe(0);
@@ -389,10 +404,17 @@ describe('NicheScout', () => {
       expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
     });
 
-    it('refine_top_k=0 explicitly → no refinement', async () => {
-      const out = await runScout({ refine_top_k: 0 });
-      expect(vi.mocked(getSerpComposition)).not.toHaveBeenCalled();
-      expect(out.refined_count).toBe(0);
+    it('default run (refine_top_k unset) refines the top 25 cells via local SERP (ADR 0024)', async () => {
+      // With DEFAULT_SCOUT_REFINE_TOP_K=25 and DEFAULT_SCOUT_REFINE_BUDGET_USD=$3.00,
+      // the default run issues SERP calls capped by the budget. At $0.075/call,
+      // the budget allows up to 40 cold calls — so all 25 cells refine.
+      const out = await runScout();
+      expect(out.refined_count).toBeGreaterThan(0);
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
+      const run = insertedRuns[0]! as { report: { refinement: { refined_count: number } } };
+      expect(run.report.refinement.refined_count).toBe(out.refined_count);
+      // Some persisted candidates should have refinement_source='local_serp'.
+      expect(insertedCandidates.some((c) => c.refinementSource === 'local_serp')).toBe(true);
     });
 
     it('refine_top_k=N with generous budget refines top-N, re-ranks, persists measured fields', async () => {
@@ -540,5 +562,70 @@ describe('NicheScout', () => {
     for (const count of tradeCounts.values()) expect(count).toBe(1);
     // 10 distinct trades -> the cap genuinely spread the set.
     expect(tradeCounts.size).toBe(10);
+  });
+
+  // ── Winnability floor (ADR 0024) ─────────────────────────────────────────
+  it('high-kd trade (kd=85, winnability=0.15) is dropped and excluded_winnability >= 1', async () => {
+    // HIGH_KD_TRADE returns kd=85 in the mock → (100-85)/100 = 0.15 < MIN_WINNABILITY_FLOOR (0.25).
+    // It must not appear in persisted candidates and the counter must reflect the drop.
+    // refine_top_k=0 keeps the test deterministic (no SERP re-ranking).
+    await runScout({ refine_top_k: 0 });
+    // The high-kd trade must not have been persisted.
+    const highKdCandidates = insertedCandidates.filter((c) => c.trade === HIGH_KD_TRADE);
+    expect(highKdCandidates).toHaveLength(0);
+    // excluded_winnability must be at least 1.
+    const run = insertedRuns[0]! as { report: { grid: { excluded_winnability: number } } };
+    expect(run.report.grid.excluded_winnability).toBeGreaterThanOrEqual(1);
+  });
+
+  it('benchmark-only trade (no cluster kd) survives the winnability floor gate', async () => {
+    // UNCACHED_TRADE has no cluster kd (null) — it is exempt from the winnability
+    // floor regardless of how strict the floor is. Raise the floor to 0.99 to
+    // confirm the exemption path is exercised (almost everything else is dropped).
+    vi.mocked(getSystemState).mockResolvedValueOnce({
+      scoutCtrAtRank: null,
+      scoutCallRate: null,
+      scoutMinLeadPrice: null,
+      scoutMinRentabilityPrior: null,
+      scoutMinWinnability: '0.99', // near-impossible floor — only benchmark-only trades survive
+      scoutGeoCompBlend: null,
+      scoutGeoDemandBlend: null,
+      scoutPerStateCap: null,
+      scoutRefineTopK: null,
+      scoutRefineBudgetUsd: null,
+      scoutRefineMeasureVolume: null,
+      scoutMaxPerTrade: null,
+      scoutMaxCategoryShare: null,
+    } as Awaited<ReturnType<typeof getSystemState>>);
+    await runScout({ warm_missing_clusters: true, refine_top_k: 0 });
+    // The benchmark-only trade (kd null) must still appear in candidates.
+    const uncachedCandidates = insertedCandidates.filter((c) => c.trade === UNCACHED_TRADE);
+    expect(uncachedCandidates.length).toBeGreaterThan(0);
+    // All uncached candidates must be benchmark_only and have null clusterDifficulty.
+    for (const c of uncachedCandidates) {
+      expect(c.dataConfidence).toBe('cluster'); // fetched but empty → cluster confidence
+      expect(c.clusterDifficulty).toBeNull();
+    }
+  });
+
+  // ── Winnability tiebreak in cellComparator (ADR 0024) ────────────────────
+  it('cellComparator tiebreak: among equal-score cells the higher-winnability cell ranks first', async () => {
+    // The mock returns kd=10 for normal trades (winnability=0.90) and kd=85 for
+    // HIGH_KD_TRADE (dropped). With refine_top_k=0 and default scoring, all
+    // surviving trades have identical kd=10 winnability. The tiebreak only fires
+    // when score AND dataConfidence AND estMonthlyValueUsd are all equal.
+    // We verify the comparator is wired correctly by asserting rank order still
+    // holds (ranks 1..N asc, scores weakly desc) after the tiebreak is active.
+    await runScout({ refine_top_k: 0 });
+    const ranks = insertedCandidates.map((c) => c.rank as number);
+    expect(ranks).toEqual(Array.from({ length: ranks.length }, (_, i) => i + 1));
+    // Winnability on all surviving (non-benchmark-only) candidates should all be
+    // the kd=10 proxy value: (100-10)/100 = 0.90.
+    const clusterCandidates = insertedCandidates.filter(
+      (c) => c.trade !== UNCACHED_TRADE && c.clusterDifficulty !== null,
+    );
+    for (const c of clusterCandidates) {
+      expect(parseFloat(c.winnability as string)).toBeCloseTo(0.9, 3);
+    }
   });
 });

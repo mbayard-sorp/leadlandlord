@@ -323,12 +323,12 @@ export function computeCityMarketScores(
 ): Map<string, MarketSignal> {
   const { states, populationMin, populationMax } = opts;
 
-  // Build the spatial index over ALL cities (unfiltered) so out-of-band metro
-  // mass still counts toward nearby population.
+  // Build the spatial index over ALL cities (unfiltered, all states) so cross-
+  // state metro mass still counts toward nearby population. The state filter is
+  // applied below when emitting signals — only in-state cities are returned.
   const all = listCitiesEnriched({
     populationMin: 1,
     populationMax: 999_999_999,
-    states,
   });
   const gridBuckets = buildGridBuckets(all);
 
@@ -338,6 +338,10 @@ export function computeCityMarketScores(
   const out = new Map<string, MarketSignal>();
   for (const c of all) {
     if (c.population < min || c.population > max) continue;
+    // Apply state allowlist to the EMIT phase only — cross-state cities still
+    // contributed to the spatial grid above and will suppress metroDensityMult
+    // for in-state neighbors correctly.
+    if (states && states.length > 0 && !states.includes(c.state)) continue;
 
     const demandQuality =
       0.4 * subscoreOwnerOccupied(c) +

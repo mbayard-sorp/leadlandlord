@@ -35,6 +35,9 @@ export type NicheRowData = {
   estMonthlyValueUsd: string | null;
   validatedMonthlyValueUsd: string | null;
   annotations: unknown;
+  scoutWinnability: string | null;
+  scoutClusterDifficulty: string | null;
+  dfsFallback: boolean | null;
 };
 
 interface NicheAnnotations {
@@ -93,7 +96,7 @@ function CategoryBadge({ category }: { category: string | null }) {
 }
 
 function VolCell({ row }: { row: NicheRowData }) {
-  const isValidated = row.volumeSource === 'dataforseo';
+  const isValidated = row.validatedAt !== null;
   const estimate = row.estSearchVolume ?? row.searchVolume;
 
   if (isValidated && row.dfsSearchVolume !== null) {
@@ -105,6 +108,54 @@ function VolCell({ row }: { row: NicheRowData }) {
   }
 
   return <span className="text-slate-500">—</span>;
+}
+
+function WinCell({ row }: { row: NicheRowData }) {
+  let winnability: number | null = null;
+  let badge: React.ReactNode = null;
+
+  if (row.validatedAt !== null && row.dfsKd !== null) {
+    // Measured: derived from real DFS keyword difficulty.
+    winnability = (100 - row.dfsKd) / 100;
+    badge = (
+      <span className="ml-1 inline-block rounded bg-slate-700 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-300">
+        DFS
+      </span>
+    );
+  } else if (row.dfsFallback) {
+    // Validated but SERP lookup failed.
+    return (
+      <span className="inline-flex items-center text-xs text-amber-400">
+        <span className="rounded bg-amber-900/50 px-1 py-px text-[9px] font-semibold uppercase tracking-wide border border-amber-700/60">
+          unmeasured
+        </span>
+      </span>
+    );
+  } else if (row.scoutWinnability !== null) {
+    // Scout-time proxy.
+    winnability = parseFloat(row.scoutWinnability);
+    badge = (
+      <span className="ml-1 inline-block rounded bg-slate-800 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-slate-500">
+        est
+      </span>
+    );
+  } else {
+    return <span className="text-slate-500">—</span>;
+  }
+
+  const pct = Math.round(winnability * 100);
+  const color =
+    winnability >= 0.5
+      ? 'text-emerald-400'
+      : winnability >= 0.3
+        ? 'text-amber-400'
+        : 'text-red-400';
+
+  return (
+    <span className={`inline-flex items-center text-xs font-medium ${color}`}>
+      {pct}%{badge}
+    </span>
+  );
 }
 
 export function NicheRow({
@@ -129,7 +180,7 @@ export function NicheRow({
   const [calOpen, setCalOpen] = useState(false);
   const [rationaleOpen, setRationaleOpen] = useState(false);
   const hasCalibration = row.dfsClusterVolume !== null;
-  const isValidated = row.volumeSource === 'dataforseo';
+  const isValidated = row.validatedAt !== null;
   const annotations = parseAnnotations(row.annotations);
 
   return (
@@ -152,6 +203,9 @@ export function NicheRow({
         </Td>
         <Td className="font-semibold align-middle">
           {isValidated ? <span className="text-slate-600">—</span> : (row.score ?? '—')}
+        </Td>
+        <Td className="align-middle whitespace-nowrap">
+          <WinCell row={row} />
         </Td>
         <Td className="hidden lg:table-cell align-middle">
           {row.rentabilityScore !== null ? (
@@ -206,13 +260,13 @@ export function NicheRow({
         </Td>
         <Td>
           <div className="flex flex-col gap-1">
-            <ValidateButton nicheId={row.id} alreadyValidated={row.volumeSource === 'dataforseo'} />
+            <ValidateButton nicheId={row.id} alreadyValidated={row.validatedAt !== null} />
             {showDelete && <DeleteNicheButton id={row.id} />}
           </div>
         </Td>
         {showButtons && (
           <Td>
-            <DecisionButtons id={row.id} volumeSource={row.volumeSource} />
+            <DecisionButtons id={row.id} validatedAt={row.validatedAt} dfsFallback={row.dfsFallback} />
           </Td>
         )}
         {showBuildLink && (

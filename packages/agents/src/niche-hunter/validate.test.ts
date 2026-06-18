@@ -44,6 +44,7 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       top_domains: [],
       top_local: [],
       difficulty: 21,
+      fallback: false,
     };
   }),
   getPaidAdCount: vi.fn(async (args: { location?: string; onCost?: (u: number) => void }) => {
@@ -72,6 +73,7 @@ vi.mock('@leadlandlord/integrations/google-places', () => ({
 
 import { validateNicheCore } from './validate';
 import { computeRentabilityScore } from './lead-benchmarks';
+import { getSerpComposition, getLocalKeywordMetrics } from '@leadlandlord/integrations/dataforseo';
 
 const NICHE_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -111,6 +113,10 @@ describe('validateNicheCore', () => {
     expect(set.validatedMonthlyValueUsd).toBe('388.68');
     expect(result.validatedMonthlyValueUsd).toBeCloseTo(388.68, 2);
 
+    // validatedScore persisted as a numeric string (2 dp).
+    expect(typeof set.validatedScore).toBe('string');
+    expect(Number.isFinite(parseFloat(set.validatedScore as string))).toBe(true);
+
     const expectedRentability = computeRentabilityScore({
       contractor_count: 7,
       avg_cpc: 2.0,
@@ -138,5 +144,51 @@ describe('validateNicheCore', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain('not found');
     expect(updateSet).not.toHaveBeenCalled();
+  });
+
+  it('writes volumeSource=dataforseo when measured volume is >= trust floor (410 >= 100)', async () => {
+    // Default mock returns 200+210=410 >= DFS_TRUST_FLOOR(100) → dataforseo
+    await validateNicheCore(NICHE_ID);
+    const set = updateSet.mock.calls[0]![0] as Record<string, unknown>;
+    expect(set.volumeSource).toBe('dataforseo');
+    expect(set.dfsKd).toBe(21); // not null — fallback is false
+    expect(set.dfsFallback).toBe(false);
+  });
+
+  it('writes volumeSource=claude_estimate when measured volume is below trust floor (<100)', async () => {
+    // Override keyword metrics to return tiny volume (below DFS_TRUST_FLOOR=100)
+    vi.mocked(getLocalKeywordMetrics).mockResolvedValueOnce([
+      { keyword: 'tree removal', search_volume: 30, cpc: 2.0, competition: 0.4, monthly_searches: [] },
+      { keyword: 'tree removal near me', search_volume: 20, cpc: 2.0, competition: 0.4, monthly_searches: [] },
+    ]);
+    await validateNicheCore(NICHE_ID);
+    const set = updateSet.mock.calls[0]![0] as Record<string, unknown>;
+    // 30+20=50 < 100 → resolver falls back to claudeMid (150 from estSearchVolume)
+    expect(set.dfsSearchVolume).toBe(50);
+    expect(set.volumeSource).toBe('claude_estimate');
+  });
+
+  it('writes dfsFallback=true and dfsKd=null when SERP lookup returns fallback composition', async () => {
+    vi.mocked(getSerpComposition).mockResolvedValueOnce({
+      aggregator_share: 0,
+      organic_count: 0,
+      has_local_pack: false,
+      local_pack_count: 0,
+      top_domains: [],
+      top_local: [],
+      difficulty: 50,
+      fallback: true,
+    });
+    await validateNicheCore(NICHE_ID);
+    const set = updateSet.mock.calls[0]![0] as Record<string, unknown>;
+    expect(set.dfsFallback).toBe(true);
+    expect(set.dfsKd).toBeNull();
+  });
+
+  it('writes dfsFallback=false and a numeric dfsKd on the happy path', async () => {
+    await validateNicheCore(NICHE_ID);
+    const set = updateSet.mock.calls[0]![0] as Record<string, unknown>;
+    expect(set.dfsFallback).toBe(false);
+    expect(typeof set.dfsKd).toBe('number');
   });
 });

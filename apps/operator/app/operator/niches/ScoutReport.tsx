@@ -37,6 +37,7 @@ export interface ScoutRunData {
       excluded_existing: number;
       excluded_denylist: number;
       excluded_floor?: number;
+      excluded_winnability?: number;
       uncached_trades: number;
     };
     value_curve: Array<{ n: number; min_value_usd: number; cumulative_validation_cost_usd: number }>;
@@ -118,6 +119,9 @@ export function ScoutReport({
             {run.report.grid.excluded_existing} already in pipeline ·{' '}
             {(run.report.grid.excluded_floor ?? 0) > 0 && (
               <span className="text-amber-400">{run.report.grid.excluded_floor} below floor · </span>
+            )}
+            {(run.report.grid.excluded_winnability ?? 0) > 0 && (
+              <span className="text-amber-400">{run.report.grid.excluded_winnability} unrankable · </span>
             )}
             {run.report.grid.uncached_trades} trades benchmark-only
           </span>

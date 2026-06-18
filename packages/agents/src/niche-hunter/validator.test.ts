@@ -124,6 +124,8 @@ function candidate(over: Partial<Record<string, unknown>> = {}): Record<string, 
     status: 'scouted',
     nicheId: null,
     validatedValueUsd: null,
+    winnability: '0.720',
+    clusterDifficulty: '28.00',
     ...over,
   };
 }
@@ -170,6 +172,8 @@ describe('NicheValidator', () => {
     expect((out.promoted_niche_ids as string[]).length).toBe(3);
     expect(insertedNiches).toHaveLength(3);
     expect(insertedNiches[0]).toMatchObject({ niche: 'trade 1', city: 'City1', state: 'WY', category: 'home_services' });
+    // Competition signal carried forward from candidate.
+    expect(insertedNiches[0]).toMatchObject({ scoutWinnability: '0.720', scoutClusterDifficulty: '28.00' });
 
     // Candidate lifecycle: queued then validated, with the measured value.
     const validatedUpdates = candidateUpdates.filter((u) => u.values.status === 'validated');
