@@ -46,7 +46,8 @@ export function ScoutForm() {
         Scores the full trade × city grid for the chosen states from cached keyword clusters and
         static benchmarks, then recommends how many candidates are worth paid validation.
         Optional: Stage-3 local-SERP refinement re-scores the top-K candidates with a live
-        DataForSEO call up to the chosen USD budget cap. Refinement is off by default (top-K = 0).
+        DataForSEO call and measures real per-city SERP competition. Refinement is on by default
+        (top 25); set top-K to 0 to disable.
       </p>
       <label className="text-xs text-slate-400 flex flex-col gap-1">
         States (comma-separated, e.g. AZ,NM)
@@ -116,11 +117,11 @@ export function ScoutForm() {
           min="0"
           step="1"
           defaultValue=""
-          placeholder="0 (off)"
+          placeholder="25 (default)"
           className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
         />
         <span className="text-[10px] text-slate-500">
-          Re-scores the top-K cells via live DataForSEO local SERP. 0 or empty = refinement off.
+          Re-scores the top-K cells via live DataForSEO local SERP. Empty = system default (25). Set 0 to disable.
         </span>
       </label>
       <label className="text-xs text-slate-400 flex flex-col gap-1">

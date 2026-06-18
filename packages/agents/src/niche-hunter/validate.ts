@@ -132,7 +132,7 @@ export async function validateNicheCore(
     // est city volume for promoted candidates). Legacy rows predating
     // estSearchVolume carry the estimate in searchVolume.
     const claudeMid = row.estSearchVolume ?? row.searchVolume ?? 0;
-    const { volume: demandVolume } = resolveDemandVolume(search_volume, claudeMid);
+    const { volume: demandVolume, source: demandSource } = resolveDemandVolume(search_volume, claudeMid);
 
     const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume, contractor_count };
 
@@ -182,14 +182,16 @@ export async function validateNicheCore(
       .set({
         dfsSearchVolume: search_volume,
         dfsClusterVolume: clusterVolume,
-        dfsKd: Math.round(kd),
+        dfsKd: serpComposition.fallback ? null : Math.round(kd),
+        dfsFallback: serpComposition.fallback,
         dfsRaw,
         validatedAt: new Date(),
-        volumeSource: 'dataforseo',
+        volumeSource: demandSource,
         score: score.toFixed(2),
         contractorCount: contractor_count,
         rentabilityScore: rentability_score.toFixed(2),
         validatedMonthlyValueUsd: validated.validatedValueUsd.toFixed(2),
+        validatedScore: validated.validatedScore.toFixed(2),
       })
       .where(eq(niches.id, nicheId));
 

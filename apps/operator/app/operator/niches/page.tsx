@@ -1,4 +1,4 @@
-import { desc, asc, eq, inArray } from 'drizzle-orm';
+import { desc, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, niches, sites, nicheScoutRuns, nicheCandidates } from '@leadlandlord/db';
 import { resolveDemandVolume } from '@leadlandlord/agents/niche-hunter';
 import { ScoutForm } from './ScoutForm';
@@ -18,7 +18,16 @@ export default async function NichesPage({
 }) {
   const { category } = await searchParams;
   const db = getDb();
-  const allRows = await db.select().from(niches).orderBy(desc(niches.score)).limit(200);
+  const allRows = await db
+    .select()
+    .from(niches)
+    .orderBy(
+      sql`${niches.validatedMonthlyValueUsd} desc nulls last`,
+      sql`${niches.estMonthlyValueUsd} desc nulls last`,
+      sql`${niches.validatedScore} desc nulls last`,
+      desc(niches.score),
+    )
+    .limit(200);
 
   // Latest current scout run + its top 100 candidates.
   const [scoutRun] = await db
@@ -128,6 +137,9 @@ export default async function NichesPage({
         ) : (
           <Table rows={pending} showButtons />
         )}
+        <p className="mt-2 text-[11px] text-slate-600">
+          $/mo value and rentability use uncalibrated market priors (lead-benchmarks.ts) — treat as order-of-magnitude until calibrated against live results.
+        </p>
       </Section>
 
       <CollapsibleSection title="Approved" count={approved.length} muted>
@@ -191,7 +203,7 @@ function Table({
 }) {
   // Base columns + the optional Decision / Build columns; used for the
   // full-width calibration detail row's colSpan.
-  const colSpan = 10 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
+  const colSpan = 11 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
       <table className="w-full text-sm">
@@ -202,6 +214,7 @@ function Table({
             <Th className="hidden md:table-cell">City</Th>
             <Th>Value</Th>
             <Th>Score</Th>
+            <Th>Win%</Th>
             <Th className="hidden lg:table-cell">Rent.</Th>
             <Th className="hidden md:table-cell">Vol</Th>
             <Th className="hidden lg:table-cell">Job $</Th>

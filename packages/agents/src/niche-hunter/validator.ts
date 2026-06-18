@@ -189,6 +189,8 @@ export class NicheValidator extends BaseAgent<typeof NicheValidatorInput, typeof
               cand.estCityVolume != null ? Math.round(parseFloat(cand.estCityVolume)) : null,
             estMonthlyValueUsd: cand.estMonthlyValueUsd,
             rationale: `Scouted at rank ${cand.rank}: est $${parseFloat(cand.estMonthlyValueUsd).toFixed(0)}/mo (${cand.dataConfidence}${cand.isNovelTrade ? ', novel trade' : ''}).`,
+            scoutWinnability: cand.winnability,
+            scoutClusterDifficulty: cand.clusterDifficulty,
           })
           .onConflictDoNothing({ target: [niches.niche, niches.city, niches.state] })
           .returning({ id: niches.id });
