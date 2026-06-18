@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ActivityRun, ActivityResponse } from '../../../api/operator/sites/[id]/activity/route';
 import { Timestamp } from '../../../../components/Timestamp';
 
-const POLL_MS = 10000;
+const POLL_MS = 15000;
 
 interface Props {
   siteId: string;
