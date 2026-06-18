@@ -178,6 +178,11 @@ export abstract class BaseAgent<I extends z.ZodTypeAny, O extends z.ZodTypeAny> 
         input: input as object,
         siteId: opts.siteId ?? null,
         parentRunId: opts.parentRunId ?? null,
+        // Stamp the source event so the reaper can correlate on
+        // ar.source_event_id = agent_events.id rather than the old
+        // dedupe_key = 'event:' || id hack (which broke for agents whose
+        // dedupeKeyFn produces a domain key like 'niche:city:state').
+        sourceEventId: opts.eventId ?? null,
       })
       .returning({ id: agentRuns.id });
 

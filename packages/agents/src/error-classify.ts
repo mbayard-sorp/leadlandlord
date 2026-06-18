@@ -2,9 +2,13 @@ import { ZodError } from 'zod';
 import {
   AgentRunError,
   AgentDisabledError,
+  BudgetExceededError,
+  ComplianceBlockedError,
   KillSwitchActiveError,
   GlobalBudgetExceededError,
   NotImplementedError,
+  ThinNicheError,
+  UpstreamUnavailableError,
 } from '@leadlandlord/shared/errors';
 
 /**
@@ -19,6 +23,9 @@ export type AgentFailureKind =
   | 'agent_disabled'
   | 'kill_switch'
   | 'global_budget'
+  | 'budget_exceeded'
+  | 'compliance_blocked'
+  | 'content_quality'
   | 'runtime_error';
 
 /**
@@ -40,8 +47,24 @@ export type AgentFailureKind =
  *    the agent never ran (the portfolio daily cap tripped at the gate), so the
  *    event is released without consuming an attempt and stays claimable until
  *    the global counter resets at the next UTC day. Never dead-letters.
+ *  - BudgetExceededError → budget_exceeded. Per-agent daily/monthly cap
+ *    tripped mid-run. base.ts re-throws it RAW (unwrapped) at every level, so
+ *    it arrives here as the error itself, not wrapped in AgentRunError. Same
+ *    non-attempt-consuming lease-release treatment as global_budget.
+ *  - ComplianceBlockedError → compliance_blocked. Single-wrapped by BaseAgent
+ *    (thrown inside execute(), caught and re-wrapped). Terminal: dead-letter.
+ *  - ThinNicheError → content_quality. Thrown by keyword-planner when the
+ *    niche has < 5 keyword candidates. Caught by site-builder but may propagate
+ *    if uncaught. Terminal: the thin-market signal won't change on retry.
+ *  - UpstreamUnavailableError → runtime_error. Provider down / seeds errored.
+ *    Transient — retried with linear backoff.
  *  - Anything else (integration timeouts, DB hiccups, bugs in execute) →
  *    runtime_error, eligible for backoff retry.
+ *
+ * Single-level unwrap only: do NOT add recursive unwrap. A deep
+ * ContentBundle ZodError wrapped inside AgentRunError must stay
+ * 'runtime_error' (retryable) rather than becoming a terminal 'validation_error'.
+ * Only the immediate AgentRunError.underlying is checked.
  *
  * `unknown_agent` is NOT classified here — that's a registry lookup error
  * surfaced by the dispatcher itself before agent.run() is called. The
@@ -52,13 +75,29 @@ export function classifyAgentError(err: unknown): AgentFailureKind {
   if (err instanceof AgentDisabledError) return 'agent_disabled';
   if (err instanceof KillSwitchActiveError) return 'kill_switch';
   if (err instanceof GlobalBudgetExceededError) return 'global_budget';
+  // BudgetExceededError: base.ts re-throws it RAW (not wrapped) at every level
+  // so it always arrives here directly, never inside AgentRunError.
+  if (err instanceof BudgetExceededError) return 'budget_exceeded';
+  // ThinNicheError and UpstreamUnavailableError: thrown inside execute() and
+  // wrapped by BaseAgent into AgentRunError. Check both raw and wrapped forms
+  // for callers that catch and re-throw without re-wrapping.
+  if (err instanceof ThinNicheError) return 'content_quality';
+  if (err instanceof UpstreamUnavailableError) return 'runtime_error';
   if (err instanceof AgentRunError) {
     if (err.underlying instanceof ZodError) return 'validation_error';
     if (err.underlying instanceof NotImplementedError) return 'not_implemented';
     if (err.underlying instanceof AgentDisabledError) return 'agent_disabled';
     if (err.underlying instanceof KillSwitchActiveError) return 'kill_switch';
     if (err.underlying instanceof GlobalBudgetExceededError) return 'global_budget';
+    if (err.underlying instanceof BudgetExceededError) return 'budget_exceeded';
+    // ComplianceBlockedError is thrown directly inside site-builder.execute()
+    // and single-wrapped by BaseAgent's catch block into AgentRunError.
+    if (err.underlying instanceof ComplianceBlockedError) return 'compliance_blocked';
+    if (err.underlying instanceof ThinNicheError) return 'content_quality';
+    if (err.underlying instanceof UpstreamUnavailableError) return 'runtime_error';
   }
   if (err instanceof NotImplementedError) return 'not_implemented';
+  // ComplianceBlockedError raw (defensive — normally arrives wrapped):
+  if (err instanceof ComplianceBlockedError) return 'compliance_blocked';
   return 'runtime_error';
 }
