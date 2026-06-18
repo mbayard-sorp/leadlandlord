@@ -35,14 +35,26 @@ export async function dfsPost<TaskResult>(
 ): Promise<TaskResult[]> {
   // Throttle to stay under DataForSEO's 10 req/s ceiling (default 8 rps).
   await acquireDataForSeoSlot();
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: authHeader(),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  // 30 s hard outer timeout. DataForSEO's own server timeout is typically
+  // 60 s, but undici's default header-timeout is 300 s — this is a tightening
+  // so a stalled upstream fails fast rather than consuming the lambda budget.
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new IntegrationError('dataforseo', `${path} timed out after 30 s`);
+    }
+    throw err;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '<no body>');
     throw new IntegrationError(

@@ -64,6 +64,8 @@ export async function scrapeReceptivity(domain: string): Promise<ReceptivityResu
 
     const url = `https://${bare}${path}`;
     try {
+      // 30 s outer abort guard. Firecrawl's own server timeout is 15 s (passed
+      // in the JSON body), so this fires only if the connection itself stalls.
       const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
         method: 'POST',
         headers: {
@@ -80,6 +82,7 @@ export async function scrapeReceptivity(domain: string): Promise<ReceptivityResu
           onlyMainContent: true,
           timeout: 15000,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!res.ok) {
@@ -190,6 +193,8 @@ export async function scrapeContact(domain: string): Promise<ContactResult | nul
   for (const path of CONTACT_PROBE_PATHS) {
     const url = `https://${bare}${path}`;
     try {
+      // 30 s outer abort guard (same as scrapeReceptivity). Firecrawl's own
+      // server timeout is 15 s in the body; this guards against stalled TCP.
       const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
         method: 'POST',
         headers: {
@@ -204,6 +209,7 @@ export async function scrapeContact(domain: string): Promise<ContactResult | nul
           onlyMainContent: true,
           timeout: 15000,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!res.ok) {
@@ -257,6 +263,8 @@ export async function scrapeUrlMarkdown(url: string): Promise<string | null> {
     throw new IntegrationError('firecrawl', 'FIRECRAWL_API_KEY is not set');
   }
   try {
+    // 30 s outer abort guard. Firecrawl's own server timeout is 15 s in the
+    // body; this guards against stalled TCP connections consuming lambda time.
     const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
       method: 'POST',
       headers: {
@@ -271,6 +279,7 @@ export async function scrapeUrlMarkdown(url: string): Promise<string | null> {
         onlyMainContent: true,
         timeout: 15000,
       }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       if (res.status !== 404) {
