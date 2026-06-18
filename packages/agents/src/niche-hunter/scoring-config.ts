@@ -33,6 +33,16 @@ export const MIN_RENTABILITY_PRIOR = 0.60;
 export const POP_DAMPENING_REFERENCE = 100_000;
 
 /**
+ * Hard floor on proxy winnability. Trades whose MEASURED cluster difficulty
+ * exceeds ~75 (i.e. (100 - kd) / 100 < 0.25) are dropped before scoring
+ * because the SERP is too competitive to rank profitably. Benchmark-only /
+ * unmeasured trades (clusterDifficulty null) are exempt — we simply lack
+ * evidence they are hard. Operator-overridable via
+ * system_state.scout_min_winnability.
+ */
+export const MIN_WINNABILITY_FLOOR = 0.25;
+
+/**
  * Winnability fallback when no usable kd values exist in the cluster
  * (all kd <= 0). Conservative: an uncached trade should not get an
  * assumed-easy SERP that lets it leapfrog measured-hard trades.
@@ -71,12 +81,12 @@ export const DEFAULT_GEO_DEMAND_BLEND = 0.0;
 export const DEFAULT_SCOUT_REFINE_BUDGET_USD = 3.00;
 
 /**
- * Number of top-scoring cells fed to the local-SERP refinement pass. Shipped
- * at 0 so Stage 3 is disabled by default: no refinement, no DataForSEO spend.
- * An operator must set a positive scout_refine_top_k (per-run via ScoutForm or
- * globally via system_state) before any refinement spend can occur.
+ * Number of top-scoring cells fed to the local-SERP refinement pass. ON by
+ * default at 25 (ADR 0024): Stage 3 now runs on every scout, budget-capped by
+ * DEFAULT_SCOUT_REFINE_BUDGET_USD (~13 cold calls). Set to 0 per-run via
+ * ScoutForm or globally via system_state.scout_refine_top_k to disable.
  */
-export const DEFAULT_SCOUT_REFINE_TOP_K = 0;
+export const DEFAULT_SCOUT_REFINE_TOP_K = 25;
 
 // ── Candidate diversity caps (ADR 0023) ─────────────────────────────────────
 //

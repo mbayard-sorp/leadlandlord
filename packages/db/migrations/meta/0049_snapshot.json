@@ -1,6 +1,6 @@
 {
-  "id": "a1b2c3d4-e5f6-7890-ab12-cd34ef560049",
-  "prevId": "a1b2c3d4-e5f6-7890-ab12-cd34ef560048",
+  "id": "a1b2c3d4-e5f6-7890-ab12-cd34ef560048",
+  "prevId": "2dc4ece6-ce36-402a-ad5c-fbfd07175c52",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -457,12 +457,6 @@
         "ended_at": {
           "name": "ended_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_event_id": {
-          "name": "source_event_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         }
@@ -5661,12 +5655,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "last_build_error": {
-          "name": "last_build_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {

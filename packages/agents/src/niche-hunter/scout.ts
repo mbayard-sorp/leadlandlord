@@ -18,6 +18,7 @@ import {
   DEFAULT_SCOUT_REFINE_TOP_K,
   SCOUT_MAX_PER_TRADE,
   SCOUT_MAX_CATEGORY_SHARE,
+  MIN_WINNABILITY_FLOOR,
 } from './scoring-config';
 import { buildScoutReport, type ScoredCell } from './scout-report';
 import { selectDiversified } from './selection';
@@ -114,6 +115,10 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutMaxCategoryShare != null
         ? parseFloat(sys.scoutMaxCategoryShare)
         : SCOUT_MAX_CATEGORY_SHARE;
+    // Winnability floor (ADR 0024) — NULL = code default (MIN_WINNABILITY_FLOOR).
+    // Benchmark-only trades (clusterDifficulty null) are always exempt.
+    const minWinnability =
+      sys.scoutMinWinnability != null ? parseFloat(sys.scoutMinWinnability) : MIN_WINNABILITY_FLOOR;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -226,6 +231,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     ctx.progress({ step: 3, total: 5, label: `scoring ${allTrades.length} x ${cities.length} cells` });
     let excludedExisting = 0;
     let excludedFloor = 0;
+    let excludedWinnability = 0;
     const cells: ScoredCell[] = [];
     for (const { trade, category } of allTrades) {
       // Hard ability-to-pay floor: drop trades that can't sustain rent before
@@ -238,6 +244,13 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       }
       const clusterVolume = clusterVolumes.get(trade) ?? null;
       const clusterDifficulty = clusterDifficulties.get(trade) ?? null;
+      // Winnability floor (ADR 0024): drop trades whose MEASURED cluster
+      // difficulty implies a SERP too hard to rank in profitably. Exempt when
+      // clusterDifficulty is null (benchmark-only / no usable kd data).
+      if (clusterDifficulty !== null && (100 - clusterDifficulty) / 100 < minWinnability) {
+        excludedWinnability++;
+        continue;
+      }
       const isNovelTrade = !surfacedTrades.has(trade.toLowerCase());
       for (const city of cities) {
         if (existingCombos.has(`${trade.toLowerCase()}|${city.city.toLowerCase()}|${city.state.toUpperCase()}`)) {
@@ -288,13 +301,16 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     }
 
     // Rank: rentability-weighted score desc; cluster-backed candidates beat
-    // benchmark_only ties (their demand is measured, not imputed).
+    // benchmark_only ties (their demand is measured, not imputed). Final
+    // tiebreak: prefer higher winnability so the more-rankable cell surfaces
+    // when score and confidence are both identical (ADR 0024).
     const cellComparator = (a: ScoredCell, b: ScoredCell) => {
       if (b.scoutScore !== a.scoutScore) return b.scoutScore - a.scoutScore;
       if (a.dataConfidence !== b.dataConfidence) {
         return a.dataConfidence === 'cluster' ? -1 : 1;
       }
-      return b.estMonthlyValueUsd - a.estMonthlyValueUsd;
+      if (b.estMonthlyValueUsd !== a.estMonthlyValueUsd) return b.estMonthlyValueUsd - a.estMonthlyValueUsd;
+      return b.winnability - a.winnability;
     };
     cells.sort(cellComparator);
 
@@ -315,6 +331,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     let refinedCount = 0;
     let refineSpendUsd = 0;
     let refineBudgetExhausted = false;
+    // TODO(niche): consider sampling beyond top-K so buried low-competition cells can surface (ADR 0024 follow-up)
 
     if (refineTopK > 0) {
       ctx.progress({ step: 3, total: 5, label: `refining top ${refineTopK} cells (local SERP)` });
@@ -490,6 +507,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         excluded_existing: excludedExisting,
         excluded_denylist: excludedDenylist,
         excluded_floor: excludedFloor,
+        excluded_winnability: excludedWinnability,
         excluded_diversity_cap: excludedByCap,
         diversity_cap_per_trade: capPerTrade,
         diversity_cap_per_category: capPerCategory,

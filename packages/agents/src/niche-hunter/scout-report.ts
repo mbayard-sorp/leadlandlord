@@ -18,6 +18,8 @@ export const ScoutReport = z.object({
     excluded_denylist: z.number(),
     /** Count of trades dropped by the ability-to-pay floor (ADR 0021). */
     excluded_floor: z.number().default(0),
+    /** Count of trades dropped by the winnability floor (ADR 0024). Null on older reports. */
+    excluded_winnability: z.number().default(0),
     /** Cells held out of the persisted set by the diversity caps (ADR 0023). */
     excluded_diversity_cap: z.number().default(0),
     /** Per-trade candidate cap applied to the persisted set (ADR 0023). */
@@ -186,7 +188,12 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
     });
   }
 
-  const cliff = findValueCliff(values);
+  // findValueCliff requires a DESC-sorted value array. cellsDesc is sorted by
+  // scoutScore, which can diverge from estMonthlyValueUsd when high-rentabilityPrior
+  // low-value cells rank above low-prior high-value cells. Build a separate
+  // value-desc copy so the cliff is computed on value order, not score order.
+  const valuesDesc = [...cellsDesc].map((c) => c.estMonthlyValueUsd).sort((a, b) => b - a);
+  const cliff = findValueCliff(valuesDesc);
   const recommendation: ScoutReport['recommendation'] = {
     n: cliff.n,
     value_floor_usd: cliff.valueFloorUsd,

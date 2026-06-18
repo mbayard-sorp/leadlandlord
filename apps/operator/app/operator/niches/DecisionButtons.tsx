@@ -5,16 +5,23 @@ import { approveNiche, rejectNiche } from './actions';
 
 interface Props {
   id: string;
-  volumeSource: string;
+  validatedAt: Date | null;
+  dfsFallback?: boolean | null;
 }
 
-export function DecisionButtons({ id, volumeSource }: Props) {
+export function DecisionButtons({ id, validatedAt, dfsFallback }: Props) {
   const [pending, startTransition] = useTransition();
   const [confirmingApprove, setConfirmingApprove] = useState(false);
-  const isEstimate = volumeSource === 'claude_estimate';
+  const isUnvalidated = validatedAt == null;
+  const isUnmeasured = !isUnvalidated && !!dfsFallback;
+  const needsConfirm = isUnvalidated || isUnmeasured;
+
+  const confirmCopy = isUnvalidated
+    ? 'Unvalidated — estimate only. Approve anyway?'
+    : 'Competition was not measured (SERP lookup failed). Approve anyway?';
 
   function handleApproveClick() {
-    if (isEstimate) {
+    if (needsConfirm) {
       setConfirmingApprove(true);
     } else {
       doApprove();
@@ -41,7 +48,7 @@ export function DecisionButtons({ id, volumeSource }: Props) {
   if (confirmingApprove) {
     return (
       <div className="flex flex-col gap-1">
-        <p className="text-xs text-amber-400 font-medium">Unvalidated — estimate only. Approve anyway?</p>
+        <p className="text-xs text-amber-400 font-medium">{confirmCopy}</p>
         <div className="flex gap-2">
           <button
             type="button"
