@@ -66,3 +66,56 @@ export class IntegrationError extends Error {
     this.name = 'IntegrationError';
   }
 }
+
+/**
+ * Thrown by compliance-guard inside site-builder.execute when one or more
+ * content pages fail a compliance rule. Terminal — the build is blocked until
+ * the operator fixes the content or overrides the rule. Surfaces as
+ * FailureKind='compliance_blocked' in agent_events (TERMINAL_KINDS).
+ *
+ * `failures` is a list of per-page violations so the operator UI can show
+ * exactly which slugs need attention.
+ */
+export class ComplianceBlockedError extends Error {
+  readonly code = 'COMPLIANCE_BLOCKED';
+  constructor(
+    public readonly siteId: string,
+    public readonly failures: Array<{ slug: string; rule: string; message: string }>,
+  ) {
+    super(
+      `Site "${siteId}" blocked by compliance check: ${failures.map((f) => `[${f.slug}] ${f.rule} — ${f.message}`).join('; ')}`,
+    );
+    this.name = 'ComplianceBlockedError';
+  }
+}
+
+/**
+ * Thrown by keyword-planner when the niche has fewer than 5 keyword
+ * candidates even though DataForSEO is healthy. Signals a thin-market niche
+ * rather than a transient API failure. CAUGHT by site-builder (build proceeds
+ * with empty clusters). Surfaces as FailureKind='content_quality' (TERMINAL_KINDS).
+ */
+export class ThinNicheError extends Error {
+  readonly code = 'THIN_NICHE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'ThinNicheError';
+  }
+}
+
+/**
+ * Thrown by keyword-planner (and other integration-heavy agents) when the
+ * upstream provider is down or all seed queries errored. Distinguishes a
+ * provider outage from a thin-market signal. NOT caught by site-builder —
+ * propagates upward and is classified as 'runtime_error' (retryable).
+ */
+export class UpstreamUnavailableError extends Error {
+  readonly code = 'UPSTREAM_UNAVAILABLE';
+  constructor(
+    public readonly service: string,
+    message: string,
+  ) {
+    super(`[${service}] ${message}`);
+    this.name = 'UpstreamUnavailableError';
+  }
+}
