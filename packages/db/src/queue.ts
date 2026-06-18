@@ -429,8 +429,12 @@ export const MAX_NICHE_DISPATCH_EVENTS = 3;
  * This finds niches where:
  *  - decision = 'approved'
  *  - decided_at is older than graceSeconds (past the in-flight window)
- *  - NO sites row exists linked to this niche (sites.niche_id = niches.id)
- *    in a non-failed state (i.e. excluding build_failed / compliance_blocked)
+ *  - NO sites row exists linked to this niche AT ALL (sites.niche_id = niches.id).
+ *    Any site row — including build_failed / compliance_blocked — blocks re-emit:
+ *    those mean a build ran and exhausted its budget, so recovery is the
+ *    deliberate operator Retry button (requeueNicheBuild / requeueDeadLetter),
+ *    NOT an automatic restart. This closes the cross-event blast radius where a
+ *    failed build would be auto-re-dispatched into another budget-burning loop.
  *  - NO live (non-dead-lettered) niche.approved event exists
  *  - The total niche.approved event count is under MAX_NICHE_DISPATCH_EVENTS
  *
@@ -454,7 +458,6 @@ export async function reEmitStuckNicheApprovals(
         AND NOT EXISTS (
           SELECT 1 FROM sites s
           WHERE s.niche_id = n.id
-            AND s.status NOT IN ('build_failed', 'compliance_blocked')
         )
         AND NOT EXISTS (
           SELECT 1 FROM agent_events e
@@ -511,6 +514,46 @@ export async function reapOrphanedRuns(leaseSeconds = LEASE_SECONDS): Promise<{ 
       AND (
         progress_updated_at IS NULL
         OR progress_updated_at < NOW() - (INTERVAL '1 second' * ${PROGRESS_FRESHNESS_SECONDS})
+      )
+    RETURNING id
+  `)) as unknown as { rows: Array<{ id: string }> };
+  const result = Array.isArray(rows)
+    ? (rows as unknown as Array<{ id: string }>)
+    : rows.rows;
+  return { count: result.length };
+}
+
+/**
+ * Reap sites stuck in `building` with no live run behind them. A site flips to
+ * `building` at the start of a site-builder run; on success it flips to
+ * `warming`, on failure to `build_failed`. If the lambda is killed AFTER the
+ * `building` flip but BEFORE either terminal stamp (e.g. it hit the Vercel
+ * maxDuration ceiling), the row is stranded at `building` forever — the
+ * activity panel shows a phantom in-progress build.
+ *
+ * This finds rows that are `building`, untouched for longer than the lease
+ * window plus a 120s buffer, and have NO agent_run still running for that
+ * site_id, then stamps them `build_failed` with a clear message. Recovery is
+ * the operator Retry button, same as any other build_failed row.
+ *
+ * Existing columns only — no migration. Returns the count for logging.
+ */
+export async function reapStrandedBuildingSites(
+  leaseSeconds = LEASE_SECONDS,
+): Promise<{ count: number }> {
+  const db = getDb();
+  const rows = (await db.execute(sql`
+    UPDATE sites
+    SET status = 'build_failed',
+        last_build_error = 'stranded: no active run after lease window (worker likely died mid-build)',
+        updated_at = NOW()
+    WHERE status = 'building'
+      AND updated_at < NOW() - (INTERVAL '1 second' * ${leaseSeconds + 120})
+      AND NOT EXISTS (
+        SELECT 1 FROM agent_runs ar
+        WHERE ar.site_id = sites.id
+          AND ar.status = 'running'
+          AND ar.ended_at IS NULL
       )
     RETURNING id
   `)) as unknown as { rows: Array<{ id: string }> };

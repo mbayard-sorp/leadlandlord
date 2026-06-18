@@ -1,6 +1,39 @@
-import { describe, expect, it } from 'vitest';
-import { loadNicheOverlay, composeSystemPrompt, decorateSchemaWithClusterEnum, buildUserPrompt } from './index';
+import { describe, expect, it, vi } from 'vitest';
+import { loadNicheOverlay, composeSystemPrompt, decorateSchemaWithClusterEnum, buildUserPrompt, ContentEngine } from './index';
 import type { CompetitorBrief } from '../competitor-analyzer/schema';
+
+// Stateful stub for the Anthropic client: the FIRST stream (initial generation)
+// resolves with a Zod-valid but density-lint-failing bundle; the SECOND stream
+// (density-lint retry) rejects to simulate a timeout. This exercises Fix 1's
+// graceful-degradation path without a live API call.
+const streamState = vi.hoisted(() => ({ calls: 0, bundle: null as unknown }));
+
+vi.mock('@leadlandlord/integrations/anthropic', () => ({
+  getAnthropicClient: () => ({
+    messages: {
+      stream: () => {
+        streamState.calls += 1;
+        const isInitial = streamState.calls === 1;
+        return {
+          on: () => {},
+          finalMessage: async () => {
+            if (isInitial) {
+              return {
+                content: [
+                  { type: 'tool_use', name: 'output_content_bundle', input: streamState.bundle },
+                ],
+                usage: { input_tokens: 10, output_tokens: 10 },
+                stop_reason: 'tool_use',
+              };
+            }
+            throw new Error('content-engine density-lint-retry stream timed out after 300s');
+          },
+        };
+      },
+    },
+  }),
+  estimateCostUsd: () => 0,
+}));
 
 describe('content-engine niche overlays', () => {
   it('loadNicheOverlay returns non-empty content with Terminology section for classic', () => {
@@ -205,6 +238,91 @@ describe('buildUserPrompt competitor brief injection', () => {
     const prompt = buildUserPrompt({ ...baseInput, competitor_brief: sampleBrief }, basePools);
     expect(prompt).not.toContain('example.com');
     expect(prompt).not.toContain('serp_rank');
+  });
+});
+
+describe('content-engine graceful degradation (Fix 1)', () => {
+  function craftLintFailingBundle() {
+    // home targets the 'home-c' cluster but its title/slug/meta/body omit the
+    // primary keyword → density-lint flags keyword-in-h1 (error) on '/'.
+    const page = (over: Record<string, unknown>) => ({
+      kind: 'home',
+      slug: '/',
+      title: 'Welcome',
+      meta_description: 'welcome',
+      mdx: '## Hello\n\nSome generic content with no target phrase at all.',
+      targeted_keywords: [],
+      faqs: [],
+      ...over,
+    });
+    return {
+      niche: 'auto glass repair',
+      city: 'Austin',
+      state: 'TX',
+      business_name: 'Austin Auto Glass Pros',
+      variant: 'classic',
+      home: page({ cluster_key: 'home-c', primary_keyword: 'auto glass repair' }),
+      services: [],
+      service_areas: [],
+      about: page({ kind: 'about', slug: '/about', title: 'About', cluster_key: undefined, primary_keyword: undefined }),
+      contact: page({ kind: 'contact', slug: '/contact', title: 'Contact', cluster_key: undefined, primary_keyword: undefined }),
+      blog_posts: [],
+      info_pages: [],
+      faq_pages: [],
+      neighborhoods: [],
+      generated_at: '2026-01-01T00:00:00Z',
+    };
+  }
+
+  const ctx = {
+    runId: 'test-run',
+    parentRunId: null,
+    log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    recordUsage: () => {},
+    progress: () => {},
+    emitNextStepEvent: async () => {},
+  };
+
+  it('publishes the initial bundle (degraded) when the density-lint retry stream rejects', async () => {
+    streamState.calls = 0;
+    streamState.bundle = craftLintFailingBundle();
+
+    const engine = new ContentEngine();
+    const input = {
+      site_id: '00000000-0000-0000-0000-000000000001',
+      niche: 'auto glass repair',
+      city: 'Austin',
+      state: 'TX',
+      keyword_clusters: [
+        {
+          cluster_key: 'home-c',
+          page_kind: 'home',
+          intent: 'commercial',
+          primary_keyword: 'auto glass repair',
+          supporting_keywords: [],
+          search_volume: 100,
+          total_volume: 100,
+        },
+      ],
+      site_mode: 'thin',
+    };
+
+    // execute() is protected; call it directly to isolate the degradation logic
+    // from BaseAgent's DB-backed run() wrapper.
+    const result = await (engine as unknown as {
+      execute: (i: unknown, c: unknown) => Promise<{ home: { title: string } }>;
+    }).execute(input, ctx);
+
+    // Both streams were consumed: initial succeeded, retry rejected.
+    expect(streamState.calls).toBe(2);
+    // No throw — the publishable initial bundle was returned.
+    expect(result.home.title).toBe('Welcome');
+    // Degradation marker recorded for site-builder to stamp on sites.metadata.
+    const degradation = engine.consumeDensityDegradation();
+    expect(degradation).not.toBeNull();
+    expect(degradation!.residualSlugs).toContain('/');
+    // consume() clears the marker.
+    expect(engine.consumeDensityDegradation()).toBeNull();
   });
 });
 

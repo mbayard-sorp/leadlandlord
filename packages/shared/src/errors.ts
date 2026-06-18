@@ -104,6 +104,29 @@ export class ThinNicheError extends Error {
 }
 
 /**
+ * Thrown by content-engine ONLY when there is no publishable bundle to fall
+ * back on — i.e. the *initial* generation stream timed out or the model never
+ * invoked the output tool, so no Zod-valid ContentBundle ever existed. The
+ * density-lint *retry* failing is NOT this case: that path degrades gracefully
+ * and publishes the initial bundle (see content-engine/index.ts).
+ *
+ * Classified as FailureKind='content_quality' (TERMINAL_KINDS) so the event
+ * dead-letters on attempt 1 — a labeled, one-click-Retry dead-letter instead of
+ * a 5× retry storm. Recovery is the operator Retry button / scripts/finish-site.ts.
+ */
+export class DensityLintExhaustedError extends Error {
+  readonly code = 'DENSITY_LINT_EXHAUSTED';
+  constructor(
+    message: string,
+    public readonly siteId?: string,
+    public readonly failedPages?: string[],
+  ) {
+    super(message);
+    this.name = 'DensityLintExhaustedError';
+  }
+}
+
+/**
  * Thrown by keyword-planner (and other integration-heavy agents) when the
  * upstream provider is down or all seed queries errored. Distinguishes a
  * provider outage from a thin-market signal. NOT caught by site-builder —
