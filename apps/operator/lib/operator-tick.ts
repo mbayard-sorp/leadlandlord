@@ -7,6 +7,7 @@ import {
   reEmitStuckContentApprovals,
   reEmitStuckNicheApprovals,
   reapOrphanedRuns,
+  reapStrandedBuildingSites,
   releaseEventLease,
 } from '@leadlandlord/db/queue';
 import { isKillSwitchActive } from '@leadlandlord/db/system-state';
@@ -28,6 +29,7 @@ export interface TickResult {
   dispatched: string[];
   reaped?: { reclaimed: number; deadLettered: number };
   reapedOrphanedRuns?: number;
+  reapedStrandedBuilds?: number;
   reEmittedContent?: string[];
   reEmittedNiches?: string[];
   skipped?: 'kill_switch';
@@ -74,6 +76,14 @@ export async function runOperatorTick(): Promise<TickResult> {
   const { count: reapedOrphanedRuns } = await reapOrphanedRuns();
   if (reapedOrphanedRuns) {
     log.warn({ count: reapedOrphanedRuns }, 'operator-tick reaped orphaned agent runs');
+  }
+
+  // Reap sites stranded at `building` after a worker died between the building
+  // flip and the terminal status stamp. Keeps the activity panel free of
+  // phantom in-progress builds; recovery is the operator Retry button.
+  const { count: reapedStrandedBuilds } = await reapStrandedBuildingSites();
+  if (reapedStrandedBuilds) {
+    log.warn({ count: reapedStrandedBuilds }, 'operator-tick reaped stranded building sites');
   }
 
   // Recover approved content ideas whose dispatch event was lost or
@@ -218,5 +228,5 @@ export async function runOperatorTick(): Promise<TickResult> {
     })(),
   );
 
-  return { claimed: events.length, dispatched, reaped, reapedOrphanedRuns, reEmittedContent, reEmittedNiches };
+  return { claimed: events.length, dispatched, reaped, reapedOrphanedRuns, reapedStrandedBuilds, reEmittedContent, reEmittedNiches };
 }

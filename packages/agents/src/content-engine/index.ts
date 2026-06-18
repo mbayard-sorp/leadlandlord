@@ -6,6 +6,7 @@ import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngineInput, ContentEngineOutput } from './schema';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { ContentBundle, Page } from '@leadlandlord/shared/types';
+import { DensityLintExhaustedError } from '@leadlandlord/shared/errors';
 import { getTrustSignals } from './trust-signal-pool';
 import { getHeadlineTemplate } from './headline-templates';
 import { lintBundle } from './density-lint';
@@ -236,7 +237,34 @@ async function withStreamTimeout<T>(
   }
 }
 
+export interface DensityDegradation {
+  /** Page slugs that still carried density-lint errors at publish time. */
+  residualSlugs: string[];
+}
+
 export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof ContentEngineOutput> {
+  /**
+   * Set by execute() when the build published a best-effort bundle after the
+   * density-lint retry failed or was skipped. The output schema is the plain
+   * ContentBundle (Zod strips extra keys), so this instance field is the
+   * side-channel site-builder reads via consumeDensityDegradation() right after
+   * .run() to stamp sites.metadata.density_lint_degraded. Reset to null at the
+   * start of every execute() so a warm-lambda reuse never reports stale state.
+   */
+  private _lastDensityDegradation: DensityDegradation | null = null;
+
+  /**
+   * Read-and-clear the density-degradation marker from the most recent execute().
+   * site-builder calls this immediately after contentEngine.run() returns.
+   * Returns null when the build was clean (or served from the dedupe cache,
+   * where the original run already recorded its own marker).
+   */
+  consumeDensityDegradation(): DensityDegradation | null {
+    const d = this._lastDensityDegradation;
+    this._lastDensityDegradation = null;
+    return d;
+  }
+
   constructor() {
     super({
       name: 'content-engine',
@@ -255,6 +283,10 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     // very first statement so all withStreamTimeout calls below see a fresh
     // 740s window regardless of lambda warm-reuse.
     resetBuildDeadline();
+
+    // Clear any density-degradation marker from a previous run on this warm
+    // lambda instance. A clean build leaves this null.
+    this._lastDensityDegradation = null;
 
     const client = getAnthropicClient();
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
@@ -323,7 +355,22 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
         label: `receiving content from Claude (${Math.round(streamedChars / 1024)} KB streamed)`,
       });
     });
-    const response = await withStreamTimeout(stream.finalMessage(), 'initial');
+    // The INITIAL stream is the one case graceful degradation cannot cover: if
+    // it times out (or insufficient budget), no Zod-valid bundle ever exists to
+    // fall back on. Convert that into a terminal DensityLintExhaustedError so
+    // the event dead-letters on attempt 1 for one-click operator Retry instead
+    // of a 5× runtime_error storm.
+    let response: Awaited<ReturnType<typeof stream.finalMessage>>;
+    try {
+      response = await withStreamTimeout(stream.finalMessage(), 'initial');
+    } catch (err) {
+      throw new DensityLintExhaustedError(
+        `content-engine initial stream produced no bundle: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        input.site_id,
+      );
+    }
     ctx.progress({ label: 'validating content bundle' });
 
     const usage = response.usage;
@@ -347,9 +394,12 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
         block.type === 'tool_use' && block.name === OUTPUT_TOOL_NAME,
     );
     if (!toolUse) {
-      throw new Error(
+      // No tool call on the initial stream → no bundle to publish. Terminal,
+      // same rationale as the initial-stream timeout above.
+      throw new DensityLintExhaustedError(
         `Content engine: model did not invoke ${OUTPUT_TOOL_NAME}. ` +
           `Stop reason: ${response.stop_reason}.`,
+        input.site_id,
       );
     }
 
@@ -384,10 +434,31 @@ export class ContentEngine extends BaseAgent<typeof ContentEngineInput, typeof C
     let lintResults = lintBundle(parsed, { primaryKeyword, clusters: input.keyword_clusters });
     const errorPages = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
     if (errorPages.length > 0) {
+      // The initial stream already produced this Zod-valid, fully-paged bundle.
+      // Density-lint is a quality ADVISORY, not a structural gate — so if the
+      // retry fails (timeout, no-tool, or still-violating), we publish this
+      // best-effort bundle rather than throwing the whole build away. Never-fail.
+      const preRetryBundle = parsed;
+      const residualSlugs = errorPages.map((r) => r.pageSlug);
       ctx.log.warn(
         { errorPages: errorPages.map((r) => ({ slug: r.pageSlug, count: r.violations.filter((v) => v.severity === 'error').length })) },
         'density lint errors detected — retrying LLM once',
       );
+
+      try {
+      // Fix 2 — budget guard. Starting a ~300s retry stream with seconds of
+      // budget left is a guaranteed timeout that burns the rest of the lambda.
+      // Skip straight to publishing the initial bundle when budget is tight.
+      // _buildDeadlineAt is Infinity off-lambda, so this never trips there.
+      const retryBudgetMs = _buildDeadlineAt - Date.now();
+      if (retryBudgetMs < 120_000) {
+        ctx.log.warn(
+          { retryBudgetMs, residualSlugs },
+          'insufficient budget for density-lint retry — publishing initial bundle (degraded)',
+        );
+        this._lastDensityDegradation = { residualSlugs };
+        parsed = preRetryBundle;
+      } else {
       // Build violation annotation for retry
       const violationSummary = errorPages
         .map((r) => `Page ${r.pageSlug}:\n${r.violations.filter((v) => v.severity === 'error').map((v) => `  [${v.rule}] ${v.detail}`).join('\n')}`)
@@ -451,21 +522,50 @@ Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
           block.type === 'tool_use' && block.name === OUTPUT_TOOL_NAME,
       );
       if (!retryToolUse) {
-        throw new Error(`density lint retry: model did not invoke ${OUTPUT_TOOL_NAME}. Stop: ${retryResponse.stop_reason}`);
-      }
-      const retryNormalized = normalizeBundle(retryToolUse.input, input);
-      parsed = ContentBundle.parse(retryNormalized);
-      // Pass the same options as the initial lint (including clusters) so the
-      // re-check actually evaluates per-cluster keyword rules. Omitting clusters
-      // here caused the cluster map to be empty, making every page fall through
-      // to phone-only lint — violations were never caught and broken bundles
-      // published silently.
-      lintResults = lintBundle(parsed, { primaryKeyword, clusters: input.keyword_clusters });
-      const retryErrors = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
-      if (retryErrors.length > 0) {
-        throw new Error(
-          `density lint failed after retry. Violations:\n${retryErrors.map((r) => `${r.pageSlug}: ${r.violations.map((v) => v.detail).join('; ')}`).join('\n')}`,
+        // No tool call on the retry — keep the known-good initial bundle.
+        ctx.log.warn(
+          { stopReason: retryResponse.stop_reason, residualSlugs },
+          'density-lint retry returned no tool call — publishing initial bundle (degraded)',
         );
+        this._lastDensityDegradation = { residualSlugs };
+        parsed = preRetryBundle;
+      } else {
+        const retryNormalized = normalizeBundle(retryToolUse.input, input);
+        const retryParsed = ContentBundle.parse(retryNormalized);
+        // Pass the same options as the initial lint (including clusters) so the
+        // re-check actually evaluates per-cluster keyword rules. Omitting clusters
+        // here caused the cluster map to be empty, making every page fall through
+        // to phone-only lint — violations were never caught and broken bundles
+        // published silently.
+        lintResults = lintBundle(retryParsed, { primaryKeyword, clusters: input.keyword_clusters });
+        const retryErrors = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
+        if (retryErrors.length > 0) {
+          // Retry still violates — publish the initial bundle and flag degraded.
+          ctx.log.warn(
+            {
+              residualSlugs: retryErrors.map((r) => r.pageSlug),
+              detail: retryErrors.map((r) => `${r.pageSlug}: ${r.violations.map((v) => v.detail).join('; ')}`),
+            },
+            'density lint still failing after retry — publishing best-effort bundle (degraded)',
+          );
+          this._lastDensityDegradation = { residualSlugs: retryErrors.map((r) => r.pageSlug) };
+          parsed = preRetryBundle;
+        } else {
+          // Retry produced a clean bundle — use it.
+          parsed = retryParsed;
+        }
+      }
+      }
+      } catch (err) {
+        // Any failure in the retry path (stream timeout, transient API error,
+        // unexpected parse issue) must not throw away the publishable initial
+        // bundle. Publish it and flag the build as density-degraded.
+        ctx.log.warn(
+          { err: err instanceof Error ? err.message : err, residualSlugs },
+          'density-lint retry failed — publishing best-effort bundle (degraded)',
+        );
+        this._lastDensityDegradation = { residualSlugs };
+        parsed = preRetryBundle;
       }
     }
 

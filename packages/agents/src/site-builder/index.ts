@@ -10,6 +10,7 @@ import {
   uploadArticleImage,
 } from '@leadlandlord/integrations/sanity';
 import type { Page } from '@leadlandlord/shared/types';
+import { ContentBundle } from '@leadlandlord/shared/types';
 import { BaseAgent, type AgentContext } from '../base';
 import { ContentEngine } from '../content-engine/index';
 import { generateLongformBody } from '../content-engine/index';
@@ -266,20 +267,88 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     }
     const theme = pickTheme(input.niche, category);
     ctx.log.info({ niche: input.niche, category, theme }, 'theme resolved for content engine');
-    const bundle = await this.contentEngine.run(
-      {
-        site_id: siteId,
-        niche: input.niche,
-        city: input.city,
-        state: input.state.toUpperCase(),
-        fast_mode: input.fast_mode ?? false,
-        keyword_clusters: clusters,
-        theme,
-        site_mode: siteMode,
-        competitor_brief: competitorBrief,
-      },
-      { siteId, parentRunId: ctx.runId, dedupeKey: `ce:${siteId}:${buildEpoch}` },
-    );
+    // Checkpoint/resume: if a prior run for THIS build_epoch already generated
+    // and persisted a valid bundle, reuse it instead of paying for another
+    // multi-minute content-engine run. The agent_runs dedupe key already skips a
+    // re-run that *succeeded*; this also covers a retry that failed AFTER content
+    // generation (e.g. a Sanity hiccup). Skipped when the operator forces fresh
+    // content (build_epoch bumped → stored epoch no longer matches).
+    let cachedBundle: ContentBundle | null = null;
+    if (!wantsFreshContent) {
+      try {
+        const [bundleRow] = await db
+          .select({ contentBundle: sites.contentBundle })
+          .from(sites)
+          .where(eq(sites.id, siteId))
+          .limit(1);
+        const stored = bundleRow?.contentBundle as
+          | { epoch?: string; bundle?: unknown }
+          | null
+          | undefined;
+        if (stored && stored.epoch === buildEpoch && stored.bundle) {
+          cachedBundle = ContentBundle.parse(stored.bundle);
+        }
+      } catch (err) {
+        // Defensive: a pre-migration prod DB has no content_bundle column, and a
+        // stale/invalid checkpoint must never block a build. Fall back to a
+        // fresh content-engine run.
+        ctx.log.warn(
+          { siteId, err: err instanceof Error ? err.message : err },
+          'content_bundle checkpoint read failed — regenerating',
+        );
+      }
+    }
+
+    let bundle: ContentBundle;
+    let densityDegradation: ReturnType<ContentEngine['consumeDensityDegradation']> = null;
+    if (cachedBundle) {
+      ctx.log.info({ siteId, buildEpoch }, 'reusing checkpointed content bundle — skipping content-engine');
+      bundle = cachedBundle;
+    } else {
+      bundle = await this.contentEngine.run(
+        {
+          site_id: siteId,
+          niche: input.niche,
+          city: input.city,
+          state: input.state.toUpperCase(),
+          fast_mode: input.fast_mode ?? false,
+          keyword_clusters: clusters,
+          theme,
+          site_mode: siteMode,
+          competitor_brief: competitorBrief,
+        },
+        { siteId, parentRunId: ctx.runId, dedupeKey: `ce:${siteId}:${buildEpoch}` },
+      );
+      // Read-and-clear the density-degradation side-channel. When set, the
+      // content engine published a best-effort bundle (density-lint retry failed
+      // or was budget-skipped). The bundle is fully valid and publishable; we
+      // record the advisory on sites.metadata at the warming flip so the operator
+      // can schedule a manual content refresh. A clean rebuild clears it.
+      densityDegradation = this.contentEngine.consumeDensityDegradation();
+      if (densityDegradation) {
+        ctx.log.warn(
+          { siteId, residualSlugs: densityDegradation.residualSlugs },
+          'content-engine published a density-degraded bundle',
+        );
+      }
+      // Persist the checkpoint scoped to this build_epoch so a retry that fails
+      // downstream can resume without re-running content-engine. Best-effort:
+      // a write failure (e.g. pre-migration column) must not abort the build.
+      try {
+        await db
+          .update(sites)
+          .set({
+            contentBundle: { epoch: buildEpoch, bundle } as Record<string, unknown>,
+            contentBundleAt: new Date(),
+          })
+          .where(eq(sites.id, siteId));
+      } catch (err) {
+        ctx.log.warn(
+          { siteId, err: err instanceof Error ? err.message : err },
+          'content_bundle checkpoint write failed — proceeding without checkpoint',
+        );
+      }
+    }
     ctx.log.info(
       { pages: countPages(bundle) },
       'content bundle generated',
@@ -443,6 +512,16 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
         status: 'warming',
         deployedAt,
         updatedAt: deployedAt,
+        // Record (or clear) the density-degradation advisory in metadata without
+        // disturbing other keys. jsonb `||` merges; `-` drops stale keys on a
+        // clean rebuild so the operator panel doesn't show a phantom warning.
+        metadata: densityDegradation
+          ? sql`COALESCE(${sites.metadata}, '{}'::jsonb) || ${JSON.stringify({
+              density_lint_degraded: true,
+              density_lint_residual_slugs: densityDegradation.residualSlugs,
+              density_lint_degraded_at: deployedAt.toISOString(),
+            })}::jsonb`
+          : sql`COALESCE(${sites.metadata}, '{}'::jsonb) - 'density_lint_degraded' - 'density_lint_residual_slugs' - 'density_lint_degraded_at'`,
       })
       .where(eq(sites.id, siteId));
 

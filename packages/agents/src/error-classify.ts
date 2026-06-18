@@ -8,6 +8,7 @@ import {
   GlobalBudgetExceededError,
   NotImplementedError,
   ThinNicheError,
+  DensityLintExhaustedError,
   UpstreamUnavailableError,
 } from '@leadlandlord/shared/errors';
 
@@ -82,6 +83,10 @@ export function classifyAgentError(err: unknown): AgentFailureKind {
   // wrapped by BaseAgent into AgentRunError. Check both raw and wrapped forms
   // for callers that catch and re-throw without re-wrapping.
   if (err instanceof ThinNicheError) return 'content_quality';
+  // DensityLintExhaustedError: content-engine had no publishable bundle (initial
+  // stream timeout / no tool call). Terminal — a re-run faces the same budget
+  // squeeze. Dead-letters on attempt 1 for one-click operator Retry.
+  if (err instanceof DensityLintExhaustedError) return 'content_quality';
   if (err instanceof UpstreamUnavailableError) return 'runtime_error';
   if (err instanceof AgentRunError) {
     if (err.underlying instanceof ZodError) return 'validation_error';
@@ -94,6 +99,7 @@ export function classifyAgentError(err: unknown): AgentFailureKind {
     // and single-wrapped by BaseAgent's catch block into AgentRunError.
     if (err.underlying instanceof ComplianceBlockedError) return 'compliance_blocked';
     if (err.underlying instanceof ThinNicheError) return 'content_quality';
+    if (err.underlying instanceof DensityLintExhaustedError) return 'content_quality';
     if (err.underlying instanceof UpstreamUnavailableError) return 'runtime_error';
   }
   if (err instanceof NotImplementedError) return 'not_implemented';

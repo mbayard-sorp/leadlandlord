@@ -370,6 +370,17 @@ export const sites = pgTable(
      * operator site detail panel so Mike can triage without digging into agent_runs.
      */
     lastBuildError: text('last_build_error'),
+    /**
+     * Checkpoint of the last successfully-generated ContentBundle, scoped to the
+     * build_epoch it was produced under. Lets site-builder skip a multi-minute
+     * content-engine re-run on a retry that failed AFTER content generation
+     * (e.g. a Sanity hiccup) — the dedupe key already covers a re-run that fails
+     * before/during content-engine, this covers the tail. Loosely typed (jsonb)
+     * so the db package takes no dep on @leadlandlord/shared. Nullable.
+     */
+    contentBundle: jsonb('content_bundle').$type<Record<string, unknown>>(),
+    /** When `content_bundle` was last written. Pairs with build_epoch for staleness. */
+    contentBundleAt: timestamp('content_bundle_at', { withTimezone: true }),
     deployedAt: timestamp('deployed_at', { withTimezone: true }),
     currentRank: integer('current_rank'),
     calls30d: integer('calls_30d').notNull().default(0),

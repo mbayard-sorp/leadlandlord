@@ -9,6 +9,7 @@ import {
   GlobalBudgetExceededError,
   NotImplementedError,
   ThinNicheError,
+  DensityLintExhaustedError,
   UpstreamUnavailableError,
 } from '@leadlandlord/shared/errors';
 import { classifyAgentError } from './error-classify';
@@ -99,5 +100,16 @@ describe('classifyAgentError', () => {
   it('classifies UpstreamUnavailableError wrapped in AgentRunError as runtime_error', () => {
     const wrapped = new AgentRunError('keyword-planner', 'upstream down', new UpstreamUnavailableError('dataforseo', 'timeout'));
     expect(classifyAgentError(wrapped)).toBe('runtime_error');
+  });
+
+  it('classifies DensityLintExhaustedError as content_quality (raw)', () => {
+    // No publishable bundle (initial stream timeout / no tool call) — terminal,
+    // dead-letters on attempt 1 for one-click operator Retry.
+    expect(classifyAgentError(new DensityLintExhaustedError('initial stream produced no bundle', 'site-abc'))).toBe('content_quality');
+  });
+
+  it('classifies DensityLintExhaustedError wrapped in AgentRunError as content_quality', () => {
+    const wrapped = new AgentRunError('content-engine', 'no bundle', new DensityLintExhaustedError('no tool call', 'site-abc'));
+    expect(classifyAgentError(wrapped)).toBe('content_quality');
   });
 });
