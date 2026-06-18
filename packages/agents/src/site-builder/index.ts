@@ -17,7 +17,7 @@ import { KeywordPlanner } from '../keyword-planner/index';
 import { ComplianceGuard } from '../compliance-guard/index';
 import { CompetitorAnalyzer } from '../competitor-analyzer/index';
 import type { CompetitorBrief } from '../competitor-analyzer/schema';
-import { IntegrationError } from '@leadlandlord/shared/errors';
+import { ComplianceBlockedError, ThinNicheError } from '@leadlandlord/shared/errors';
 import { SiteBuilderInput, SiteBuilderOutput } from './schema';
 import { ensureSiteDocStub, writeSiteToSanity, patchLongformInSanity } from './persist-sanity';
 import { loadKeywordClustersForSite, type KeywordClusterInput } from './read-clusters';
@@ -93,9 +93,15 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       return this.runLongformOnly(input, ctx);
     }
 
+    // Declare siteId in outer scope so the terminal-failure catch block can
+    // stamp sites.status='build_failed' even after the site row is created.
+    let siteId!: string;
+
+    try {
+
     // 1. Insert/find site row.
     ctx.progress({ step: 1, total: 8, label: 'preparing site record' });
-    const siteId = await this.upsertSite(input);
+    siteId = await this.upsertSite(input);
     ctx.log.info({ siteId }, 'site row ready');
     this.emit({ step: 'site_row_ready', site_id: siteId });
 
@@ -160,25 +166,45 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
     if (!skipPlanner) {
       ctx.progress({ step: 2, total: 8, label: 'planning keyword clusters' });
       this.emit({ step: 'keywords_planning_started' });
-      const planResult = await this.keywordPlanner.run(
-        {
-          site_id: siteId,
-          niche: input.niche,
-          city: input.city,
-          state: input.state.toUpperCase(),
-          site_mode: siteMode,
-        },
-        { siteId, parentRunId: ctx.runId, dedupeKey: `kp:${siteId}:${buildEpoch}` },
-      );
-      ctx.log.info(
-        { clusters: planResult.clusters_persisted, totalVolume: planResult.total_volume },
-        'keyword clusters planned',
-      );
-      this.emit({
-        step: 'keywords_planned',
-        clusters: planResult.clusters_persisted,
-        total_volume: planResult.total_volume,
-      });
+      try {
+        const planResult = await this.keywordPlanner.run(
+          {
+            site_id: siteId,
+            niche: input.niche,
+            city: input.city,
+            state: input.state.toUpperCase(),
+            site_mode: siteMode,
+          },
+          { siteId, parentRunId: ctx.runId, dedupeKey: `kp:${siteId}:${buildEpoch}` },
+        );
+        ctx.log.info(
+          { clusters: planResult.clusters_persisted, totalVolume: planResult.total_volume },
+          'keyword clusters planned',
+        );
+        this.emit({
+          step: 'keywords_planned',
+          clusters: planResult.clusters_persisted,
+          total_volume: planResult.total_volume,
+        });
+      } catch (planErr) {
+        if (planErr instanceof ThinNicheError) {
+          // Thin market: DataForSEO returned < 5 keyword candidates. Not a
+          // transient failure — the niche simply has shallow search demand.
+          // Log a warning and proceed with empty clusters; Content Engine
+          // tolerates this gracefully. Clusters are reloaded from Sanity right
+          // after this block and will just be empty. The build continues so
+          // the site can still launch without keyword-rich pages.
+          ctx.log.warn(
+            { siteId, niche: input.niche, err: planErr.message },
+            'keyword-planner: thin niche (< 5 candidates) — proceeding with empty clusters',
+          );
+          this.emit({ step: 'keywords_planned', clusters: 0, total_volume: 0 });
+        } else {
+          // UpstreamUnavailableError or any other error: propagate so the
+          // event is retried (transient provider outage).
+          throw planErr;
+        }
+      }
     }
     // Always read clusters from Sanity (whether we just wrote them or
     // they're being reused for a re-target). Empty list is acceptable for
@@ -281,7 +307,7 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
 
     // 4a. Compliance gate. Run compliance-guard on every page's MDX before we
     //     publish to Sanity. Any blocker → emit `site.compliance.failed` and
-    //     throw an IntegrationError so the agent_runs row fails (no publish).
+    //     throw a ComplianceBlockedError (terminal, dead-lettered on attempt 1).
     //     Soft override via COMPLIANCE_GATE_DISABLED=true for dev only.
     if (process.env.COMPLIANCE_GATE_DISABLED === 'true') {
       ctx.log.warn(
@@ -325,17 +351,31 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       }
       if (failures.length > 0) {
         ctx.log.error({ siteId, failures }, 'compliance gate blocked publish');
+        // Mark the site row as blocked immediately so the operator dashboard
+        // shows the correct status (compliance_blocked) without waiting for
+        // the queue's markEventFailed sweep. Store a human-readable summary
+        // in last_build_error for operator triage.
+        const blockedSummary = `compliance gate blocked: ${failures.length} blocker(s) across ${
+          new Set(failures.map((f) => f.slug)).size
+        } page(s): ${failures.map((f) => `[${f.slug}] ${f.rule}`).join(', ')}`;
+        await db
+          .update(sites)
+          .set({
+            status: 'compliance_blocked',
+            lastBuildError: blockedSummary,
+            updatedAt: new Date(),
+          })
+          .where(eq(sites.id, siteId));
+        // Notify the operator agent so a human can inspect the violations.
         await ctx.emitNextStepEvent({
           type: 'site.compliance.failed',
           targetAgent: 'operator',
           payload: { site_id: siteId, failures },
         });
-        throw new IntegrationError(
-          'compliance-guard',
-          `compliance gate blocked publish: ${failures.length} blocker(s) across ${
-            new Set(failures.map((f) => f.slug)).size
-          } page(s)`,
-        );
+        // ComplianceBlockedError is terminal (TERMINAL_KINDS in queue.ts) —
+        // the event is dead-lettered on attempt 1 rather than retried 5x.
+        // Classified as 'compliance_blocked' by error-classify.ts.
+        throw new ComplianceBlockedError(siteId, failures);
       }
     }
 
@@ -386,6 +426,38 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       site_doc_id: persisted.siteDocId,
       theme: bundle.variant,
       color_palette: persisted.colorPalette,
+    });
+
+    // 5.5. Flip status to 'warming' immediately after the atomic Sanity
+    //      publish commits. Doing this here (rather than after the hero/network/
+    //      klaviyo tail) closes the split-brain window: if the lambda dies after
+    //      publish but before the old post-hero flip, the site stays at
+    //      'building' indefinitely. The warming flip is the durable "published"
+    //      signal — hero image + network join are non-fatal extras that follow.
+    // NOTE: vercelProjectId / vercelProjectName columns are left unset — all
+    //       rendering goes through the shared leadlandlord-sites project.
+    const deployedAt = new Date();
+    await db
+      .update(sites)
+      .set({
+        status: 'warming',
+        deployedAt,
+        updatedAt: deployedAt,
+      })
+      .where(eq(sites.id, siteId));
+
+    // Emit site.deployed immediately after the Sanity publish + warming flip.
+    // Helper auto-suppresses when site-builder is itself running as a sub-agent
+    // (cascade-prevention — same guard as keyword-planner's cluster.ready emit).
+    await ctx.emitNextStepEvent({
+      type: 'site.deployed',
+      targetAgent: 'seo-operator',
+      payload: {
+        site_id: siteId,
+        sanity_site_doc_id: persisted.siteDocId,
+        theme: bundle.variant,
+        color_palette: persisted.colorPalette,
+      },
     });
 
     // 6.5. Join the default network (idempotent). Looks up the 'default' network
@@ -452,37 +524,6 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       this.emit({ step: 'hero_image_done', url: heroUrl });
     }
 
-    const deployedAt = new Date();
-
-    // 6. Update site row. NOTE: we keep the legacy `vercelProjectId` /
-    //    `vercelProjectName` columns nullable + leave them unset — every site
-    //    now renders out of the shared `leadlandlord-sites` project, so per-
-    //    tenant Vercel project IDs aren't a thing anymore. The columns stay
-    //    on the schema for backward compat with rows from before the pivot.
-    await db
-      .update(sites)
-      .set({
-        status: 'warming',
-        deployedAt,
-        updatedAt: deployedAt,
-      })
-      .where(eq(sites.id, siteId));
-
-    // 7. Emit event so downstream agents (SEO Operator, Backlink Builder)
-    //    wake up. Helper auto-suppresses when site-builder is itself running
-    //    as a sub-agent (e.g. via a future portfolio-level orchestrator) —
-    //    same cascade-prevention as keyword-planner's cluster.ready emit.
-    await ctx.emitNextStepEvent({
-      type: 'site.deployed',
-      targetAgent: 'seo-operator',
-      payload: {
-        site_id: siteId,
-        sanity_site_doc_id: persisted.siteDocId,
-        theme: bundle.variant,
-        color_palette: persisted.colorPalette,
-      },
-    });
-
     ctx.progress({ step: 8, total: 8, label: 'finalizing site' });
     this.emit({ step: 'site_ready', site_doc_id: persisted.siteDocId });
 
@@ -497,6 +538,45 @@ export class SiteBuilder extends BaseAgent<typeof SiteBuilderInput, typeof SiteB
       tracking_provider: null,
       deployed_at: deployedAt.toISOString(),
     };
+
+    } catch (err) {
+      // ComplianceBlockedError already stamped compliance_blocked on the sites
+      // row in the compliance gate block above — just rethrow so BaseAgent
+      // wraps it and error-classify marks the event as terminal.
+      if (err instanceof ComplianceBlockedError) throw err;
+
+      // For all other failures: stamp build_failed + last_build_error only when
+      // the sites row exists (siteId is set). We intentionally do NOT try to
+      // distinguish terminal from retryable here — the queue's markEventFailed /
+      // reaper handles retries, and stamping build_failed on a transient error
+      // would confuse operators into thinking the build is permanently dead.
+      // Therefore we only stamp build_failed when there IS a siteId (build got
+      // far enough to matter). Transient retries will flip status back to
+      // 'building' on the next attempt via the COALESCE epoch update at step 1.
+      // This conservative choice is documented in the Phase 3 followups.
+      if (siteId) {
+        const errorMessage =
+          err instanceof Error ? err.message : String(err);
+        try {
+          await db
+            .update(sites)
+            .set({
+              status: 'build_failed',
+              lastBuildError: errorMessage.slice(0, 1000), // guard against oversized error strings
+              updatedAt: new Date(),
+            })
+            .where(eq(sites.id, siteId));
+          ctx.log.info({ siteId, errorMessage }, 'sites.status set to build_failed');
+        } catch (stampErr) {
+          // Never let the status-stamp failure shadow the original error.
+          ctx.log.warn(
+            { siteId, stampErr: stampErr instanceof Error ? stampErr.message : stampErr },
+            'failed to stamp build_failed on sites row — original error will still propagate',
+          );
+        }
+      }
+      throw err;
+    }
   }
 
   /**

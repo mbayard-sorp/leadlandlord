@@ -238,7 +238,7 @@ export class Operator extends BaseAgent<typeof OperatorInput, typeof OperatorOut
           type: 'niche.approved',
           targetAgent: 'site-builder',
           payload: {
-            nicheId: target.id,
+            niche_id: target.id,
             niche: target.niche,
             city: target.city,
             state: target.state,
@@ -386,7 +386,7 @@ export class Operator extends BaseAgent<typeof OperatorInput, typeof OperatorOut
             type: 'niche.approved',
             targetAgent: 'site-builder',
             payload: {
-              nicheId: pick.id,
+              niche_id: pick.id,
               niche: pick.niche,
               city: pick.city,
               state: pick.state,

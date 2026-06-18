@@ -93,8 +93,12 @@ export const PROGRESS_FRESHNESS_SECONDS = 180;
  *
  * Progress-freshness guard: an event is NOT reclaimed if its correlated
  * agent_run is still actively progressing. The correlation is
+ *   agent_runs.source_event_id = agent_events.id
+ * stamped by BaseAgent.run() at row insertion. This replaces the old
  *   agent_runs.dedupe_key = 'event:' || agent_events.id::text
- * matching the dedupeKey the dispatcher passes to BaseAgent.run(). If that run
+ * guard which broke for agents (like site-builder) whose dedupeKeyFn produces
+ * a domain key ('niche:city:state') rather than an event-based key — the old
+ * guard never matched, so live builds were incorrectly reapable. If that run
  * has ended_at IS NULL (still in flight) AND progress_updated_at is within
  * PROGRESS_FRESHNESS_SECONDS (the run is alive, not merely stalled), we skip
  * the reap. This prevents the orphan->reclaim->double-run loop that occurs
@@ -131,7 +135,7 @@ export async function reapStaleLeases(
       AND processing_at < NOW() - (INTERVAL '1 second' * ${leaseSeconds})
       AND NOT EXISTS (
         SELECT 1 FROM agent_runs ar
-        WHERE ar.dedupe_key = 'event:' || agent_events.id::text
+        WHERE ar.source_event_id = agent_events.id
           AND ar.ended_at IS NULL
           AND ar.progress_updated_at > NOW() - (INTERVAL '1 second' * ${PROGRESS_FRESHNESS_SECONDS})
       )
@@ -169,6 +173,13 @@ export async function markEventProcessed(id: string) {
  *    target_agent string is a code-level constant.
  *  - `not_implemented`: agent stub throws NotImplementedError — terminal.
  *    Deterministic, retrying re-runs the same throw.
+ *  - `budget_exceeded`: per-agent daily/monthly spend cap tripped mid-run.
+ *    Released without consuming an attempt (like global_budget) so the event
+ *    stays claimable and resumes after the next UTC-day cap reset.
+ *  - `compliance_blocked`: compliance-guard blocked the site build. Terminal —
+ *    the operator must fix content or override the rule, then manually replay.
+ *  - `content_quality`: thin niche (fewer than 5 keyword candidates). Terminal —
+ *    the content signal is too weak; no retry will produce a meaningful build.
  *  - `runtime_error`: any other failure (integration timeout, transient DB
  *    error, etc.) — retried with linear backoff up to RUNTIME_MAX_ATTEMPTS.
  */
@@ -179,6 +190,9 @@ export type FailureKind =
   | 'agent_disabled'
   | 'kill_switch'
   | 'global_budget'
+  | 'budget_exceeded'
+  | 'compliance_blocked'
+  | 'content_quality'
   | 'runtime_error';
 
 /**
@@ -196,26 +210,41 @@ export const TERMINAL_KINDS: ReadonlySet<FailureKind> = new Set([
   // agent stays disabled would just produce a 5-attempt retry storm. The
   // operator manually replays via requeueDeadLetter once they re-enable.
   'agent_disabled',
+  // compliance_blocked: operator must fix content or override rule before replay.
+  'compliance_blocked',
+  // content_quality: thin niche (< 5 keyword candidates). No retry will change
+  // the underlying data signal; operator evaluates whether to retire the niche.
+  'content_quality',
 ]);
 
 /**
  * Kinds that release the lease WITHOUT consuming an attempt — the agent never
- * ran, so the event must stay claimable and never drift toward dead-letter:
+ * ran (or did not complete meaningful work), so the event must stay claimable
+ * and never drift toward dead-letter:
  *  - kill_switch: portfolio switch was on.
  *  - global_budget: portfolio-wide daily spend cap tripped at the gate; the
  *    event resumes once the global counter resets at the next UTC day.
+ *  - budget_exceeded: per-agent daily/monthly spend cap tripped mid-run; the
+ *    agent bailed before producing output. The event resumes after the next
+ *    UTC-day cap reset (same semantics as global_budget for the per-agent gate).
  */
 export const RELEASE_WITHOUT_ATTEMPT_KINDS: ReadonlySet<FailureKind> = new Set([
   'kill_switch',
   'global_budget',
+  'budget_exceeded',
 ]);
 
 /**
  * Mark an event as failed.
  *
- * Terminal kinds (validation/unknown_agent/not_implemented) → dead-letter.
- * Runtime errors → increment attempts. If attempts ≥ RUNTIME_MAX_ATTEMPTS,
- * dead-letter; else schedule a retry via next_attempt_at with linear backoff.
+ * RELEASE_WITHOUT_ATTEMPT_KINDS (kill_switch, global_budget, budget_exceeded)
+ *   → release lease without consuming an attempt. The agent never completed
+ *   work; event stays claimable and resumes after the next UTC-day cap reset.
+ * TERMINAL_KINDS (validation_error, unknown_agent, not_implemented,
+ *   agent_disabled, compliance_blocked, content_quality) → dead-letter immediately.
+ *   Operator manually replays via requeueDeadLetter after fixing root cause.
+ * Runtime errors → increment attempts. If attempts >= RUNTIME_MAX_ATTEMPTS,
+ *   dead-letter; else schedule a retry via next_attempt_at with linear backoff.
  */
 export async function markEventFailed(
   id: string,
@@ -224,12 +253,12 @@ export async function markEventFailed(
 ) {
   const db = getDb();
 
-  // kill_switch / global_budget are NOT failures of the work — the agent never
-  // ran (portfolio switch on, or the global daily spend cap tripped at the
-  // gate). Release the lease without consuming an attempt so legit work isn't
-  // poisoned toward dead-letter just for being claimed during a pause. The
-  // event stays claimable and resumes once the switch flips off / the global
-  // counter resets at the next UTC day.
+  // kill_switch / global_budget / budget_exceeded are NOT failures of the work.
+  // The agent never completed meaningful work (portfolio switch on, portfolio
+  // daily cap tripped at the gate, or per-agent cap tripped mid-run). Release
+  // the lease without consuming an attempt so legit work isn't poisoned toward
+  // dead-letter just for being claimed during a pause. The event stays
+  // claimable and resumes once the switch flips off / the cap resets.
   if (RELEASE_WITHOUT_ATTEMPT_KINDS.has(kind)) {
     await db.execute(sql`
       UPDATE agent_events
@@ -371,4 +400,142 @@ export async function reEmitStuckContentApprovals(
     ? (rows as unknown as Array<{ idea_id: string }>)
     : rows.rows;
   return { reEmitted: result.map((r) => r.idea_id) };
+}
+
+/**
+ * Grace period before the niche reconciler considers an approved niche "stuck".
+ * A normal site-builder dispatch completes claim-to-building transition in
+ * seconds, so 15 min (900 s) is ample headroom to avoid racing a still-in-flight
+ * dispatch.
+ */
+export const NICHE_DISPATCH_GRACE_SECONDS = 900;
+
+/**
+ * Hard cap on how many `niche.approved` events may exist for a single niche.
+ * Without it, a niche whose site-builder keeps failing would get a fresh event
+ * re-emitted every tick once the prior one dead-letters — a slow storm of dead
+ * rows. After this many, the niche is left for manual triage.
+ */
+export const MAX_NICHE_DISPATCH_EVENTS = 3;
+
+/**
+ * Defense-in-depth reconciler for the niche approval → site-builder dispatch chain.
+ *
+ * When the operator approves a niche in /operator/niches, a `niche.approved`
+ * event is emitted inline. If that single emit is lost (the action errored after
+ * the decision flip but before the insert, or the event later dead-lettered and
+ * the niche never got a site built), nothing recovers it automatically.
+ *
+ * This finds niches where:
+ *  - decision = 'approved'
+ *  - decided_at is older than graceSeconds (past the in-flight window)
+ *  - NO sites row exists linked to this niche (sites.niche_id = niches.id)
+ *    in a non-failed state (i.e. excluding build_failed / compliance_blocked)
+ *  - NO live (non-dead-lettered) niche.approved event exists
+ *  - The total niche.approved event count is under MAX_NICHE_DISPATCH_EVENTS
+ *
+ * Re-emit is safe against double-build: site-builder's dedupeKeyFn produces
+ * 'site-builder:niche:city:state', so a duplicate niche.approved event
+ * collapses into the cached successful run via findExistingSuccess.
+ *
+ * Returns the niche ids re-emitted, for logging.
+ */
+export async function reEmitStuckNicheApprovals(
+  graceSeconds = NICHE_DISPATCH_GRACE_SECONDS,
+): Promise<{ reEmitted: string[] }> {
+  const db = getDb();
+  const rows = (await db.execute(sql`
+    WITH stuck AS (
+      SELECT n.id AS niche_id, n.niche, n.city, n.state
+      FROM niches n
+      WHERE n.decision = 'approved'
+        AND n.decided_at IS NOT NULL
+        AND n.decided_at < NOW() - (INTERVAL '1 second' * ${graceSeconds})
+        AND NOT EXISTS (
+          SELECT 1 FROM sites s
+          WHERE s.niche_id = n.id
+            AND s.status NOT IN ('build_failed', 'compliance_blocked')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_events e
+          WHERE e.type = 'niche.approved'
+            AND e.payload->>'niche_id' = n.id::text
+            AND e.dead_lettered_at IS NULL
+        )
+        AND (
+          SELECT count(*) FROM agent_events e2
+          WHERE e2.type = 'niche.approved'
+            AND e2.payload->>'niche_id' = n.id::text
+        ) < ${MAX_NICHE_DISPATCH_EVENTS}
+    )
+    INSERT INTO agent_events (agent, type, target_agent, payload)
+    SELECT 'operator', 'niche.approved', 'site-builder',
+           jsonb_build_object(
+             'niche', niche,
+             'city', city,
+             'state', state,
+             'niche_id', niche_id,
+             'reconciled', true
+           )
+    FROM stuck
+    RETURNING payload->>'niche_id' AS niche_id
+  `)) as unknown as { rows: Array<{ niche_id: string }> };
+  const result = Array.isArray(rows)
+    ? (rows as unknown as Array<{ niche_id: string }>)
+    : rows.rows;
+  return { reEmitted: result.map((r) => r.niche_id) };
+}
+
+/**
+ * Mark orphaned agent_runs as failed. An orphaned run is one that is still
+ * `running` but whose worker clearly died (started_at is older than
+ * leaseSeconds + 60 s with no recent progress update). Without this, a
+ * crashed mid-run worker leaves a `running` row forever and the operator
+ * panel shows a stale "in progress" indicator.
+ *
+ * This is complementary to reapStaleLeases: the reaper recovers the
+ * agent_events lease; this recovers the agent_runs row for the same worker
+ * crash. Run both in the same tick for consistent state.
+ *
+ * Returns the count of orphaned runs marked failed.
+ */
+export async function reapOrphanedRuns(leaseSeconds = LEASE_SECONDS): Promise<{ count: number }> {
+  const db = getDb();
+  const rows = (await db.execute(sql`
+    UPDATE agent_runs
+    SET status = 'failed',
+        error = 'orphaned: worker died mid-run',
+        ended_at = NOW()
+    WHERE status = 'running'
+      AND started_at < NOW() - (INTERVAL '1 second' * ${leaseSeconds + 60})
+      AND (
+        progress_updated_at IS NULL
+        OR progress_updated_at < NOW() - (INTERVAL '1 second' * ${PROGRESS_FRESHNESS_SECONDS})
+      )
+    RETURNING id
+  `)) as unknown as { rows: Array<{ id: string }> };
+  const result = Array.isArray(rows)
+    ? (rows as unknown as Array<{ id: string }>)
+    : rows.rows;
+  return { count: result.length };
+}
+
+/**
+ * Release the processing lease on an agent_events row WITHOUT incrementing
+ * attempts. Used for events that were claimed (processing_at stamped) but
+ * never dispatched to an agent — e.g. a tail event that the dispatcher
+ * claimed in a batch but the process died before the dispatch call. Without
+ * this, the event counts that claim as an attempt even though no work was
+ * ever attempted, drifting it toward dead-letter prematurely.
+ */
+export async function releaseEventLease(id: string): Promise<void> {
+  const db = getDb();
+  await db.execute(sql`
+    UPDATE agent_events
+    SET processing_at = NULL
+    WHERE id = ${id}
+      AND processing_at IS NOT NULL
+      AND processed_at IS NULL
+      AND dead_lettered_at IS NULL
+  `);
 }

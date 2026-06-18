@@ -193,6 +193,10 @@ function StatusBadge({ status }: { status: string }) {
       ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/50'
       : status === 'warming' || status === 'building'
       ? 'bg-sky-900/40 text-sky-300 border-sky-700/50'
+      : status === 'build_failed'
+      ? 'bg-rose-900/50 text-rose-300 border-rose-600/60'
+      : status === 'compliance_blocked'
+      ? 'bg-amber-900/50 text-amber-300 border-amber-600/60'
       : status === 'paused' || status === 'archived'
       ? 'bg-slate-800/60 text-slate-400 border-slate-700'
       : 'bg-amber-900/30 text-amber-300 border-amber-700/50';

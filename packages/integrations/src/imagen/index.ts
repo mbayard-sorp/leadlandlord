@@ -97,11 +97,21 @@ async function bufferViaGoogle(
   };
   log.info({ model, aspectRatio, prompt: prompt.slice(0, 80) }, 'requesting hero image (google)');
   const url = `${GOOGLE_AI_BASE}/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // 60 s hard outer timeout — image gen is slow but lambdas have hard deadlines.
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new IntegrationError('google-imagen', 'Image generation timed out after 60 s');
+    }
+    throw err;
+  }
   if (!res.ok) {
     const errBody = await safeBody(res);
     log.error({ status: res.status, body: errBody, model }, 'google-imagen error response');
@@ -141,11 +151,21 @@ async function bufferViaAiGateway(
     ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
   };
   log.info({ model, aspectRatio, prompt: prompt.slice(0, 80) }, 'requesting hero image (ai-gateway)');
-  const res = await fetch(`${AI_GATEWAY_BASE}/images/generations`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // 60 s hard outer timeout — image gen is slow but lambdas have hard deadlines.
+  let res: Response;
+  try {
+    res = await fetch(`${AI_GATEWAY_BASE}/images/generations`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new IntegrationError('ai-gateway', 'Image generation timed out after 60 s');
+    }
+    throw err;
+  }
   if (!res.ok) {
     const errBody = await safeBody(res);
     log.error({ status: res.status, body: errBody, model }, 'ai-gateway error response');
@@ -175,7 +195,15 @@ async function readImageBuffer(item: { b64_json?: string; url?: string }): Promi
     return Buffer.from(item.b64_json, 'base64');
   }
   if (item.url) {
-    const dl = await fetch(item.url);
+    let dl: Response;
+    try {
+      dl = await fetch(item.url, { signal: AbortSignal.timeout(60_000) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        throw new IntegrationError('imagen', 'Image download timed out after 60 s');
+      }
+      throw err;
+    }
     if (!dl.ok) {
       throw new IntegrationError('imagen', `Failed to download image: ${dl.status}`);
     }

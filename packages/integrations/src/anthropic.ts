@@ -29,7 +29,11 @@ export function getAnthropicClient(apiKey?: string): Anthropic {
   if (!key) {
     throw new Error('ANTHROPIC_API_KEY is not set.');
   }
-  cachedReal = new Anthropic({ apiKey: key });
+  // maxRetries: 4 retries transient 529/overloaded/429 responses at the SDK
+  // level before surfacing to the queue failure handler. The SDK uses
+  // exponential back-off with jitter; total extra wall-time is bounded to
+  // well under LEASE_SECONDS (900). Leave the MOCK_AI path untouched.
+  cachedReal = new Anthropic({ apiKey: key, maxRetries: 4 });
   return cachedReal;
 }
 

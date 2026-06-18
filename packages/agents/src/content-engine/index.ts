@@ -455,7 +455,12 @@ Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
       }
       const retryNormalized = normalizeBundle(retryToolUse.input, input);
       parsed = ContentBundle.parse(retryNormalized);
-      lintResults = lintBundle(parsed, { primaryKeyword });
+      // Pass the same options as the initial lint (including clusters) so the
+      // re-check actually evaluates per-cluster keyword rules. Omitting clusters
+      // here caused the cluster map to be empty, making every page fall through
+      // to phone-only lint — violations were never caught and broken bundles
+      // published silently.
+      lintResults = lintBundle(parsed, { primaryKeyword, clusters: input.keyword_clusters });
       const retryErrors = lintResults.filter((r) => r.violations.some((v) => v.severity === 'error'));
       if (retryErrors.length > 0) {
         throw new Error(

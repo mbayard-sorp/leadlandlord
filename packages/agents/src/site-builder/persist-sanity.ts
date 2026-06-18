@@ -323,7 +323,7 @@ export async function writeSiteToSanity(
     generatedAt: bundle.generated_at,
   });
 
-  const res = await tx.commit({ visibility: 'sync' });
+  const res = await commitWithRetry(tx);
 
   return {
     siteDocId: siteRef,
@@ -406,6 +406,77 @@ export async function patchFaqPagesInSanity(
 
   const res = await tx.commit({ visibility: 'sync' });
   return { siteDocId: siteRef, transactionId: res.transactionId, pagesWritten: faqPages.length };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Commit retry helper
+// ────────────────────────────────────────────────────────────────────────────
+
+const COMMIT_MAX_ATTEMPTS = 4;
+const COMMIT_BASE_DELAY_MS = 500;
+
+/**
+ * Sanity transaction errors that are worth distinguishing:
+ *  - 429 / 503 / 502 / 5xx → transient, retry after backoff.
+ *  - Retry-After header on 429 → honor it (in seconds).
+ *  - 4xx (client errors) → permanent mis-use; rethrow immediately.
+ */
+function isSanityTransient(err: unknown): { transient: boolean; retryAfterMs?: number } {
+  if (err !== null && typeof err === 'object') {
+    const e = err as Record<string, unknown>;
+    const status = typeof e.statusCode === 'number' ? e.statusCode
+      : typeof e.status === 'number' ? e.status
+      : 0;
+    if (status === 429) {
+      // Honour Retry-After when the SDK surfaces it. Different Sanity SDK
+      // versions surface it differently; fall back to 0 (use base delay).
+      const retryAfterSec =
+        typeof e.retryAfter === 'number' ? e.retryAfter
+        : typeof e.headers === 'object' && e.headers !== null
+          ? Number((e.headers as Record<string, unknown>)['retry-after'] ?? 0)
+          : 0;
+      return { transient: true, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined };
+    }
+    if (status >= 500) return { transient: true };
+    if (status >= 400) return { transient: false }; // 4xx client error — don't retry
+  }
+  // Network errors (ECONNRESET, ETIMEDOUT, fetch failures) have no statusCode;
+  // treat them as transient.
+  return { transient: true };
+}
+
+/** Minimal structural type for what commitWithRetry needs from a Sanity transaction. */
+interface CommittableTransaction {
+  commit(opts: { visibility: 'sync' | 'async' }): Promise<{ transactionId: string }>;
+}
+
+/**
+ * Commit a Sanity transaction with exponential backoff retry on transient
+ * errors (HTTP 429/5xx or network failures). Rethrows immediately on 4xx.
+ *
+ * Attempts: up to COMMIT_MAX_ATTEMPTS (4). Delays: 500ms, 1000ms, 2000ms
+ * with ±25% jitter so concurrent lambda retries don't thunderherd.
+ */
+async function commitWithRetry(
+  tx: CommittableTransaction,
+): Promise<{ transactionId: string }> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < COMMIT_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await tx.commit({ visibility: 'sync' });
+    } catch (err) {
+      lastErr = err;
+      const { transient, retryAfterMs } = isSanityTransient(err);
+      if (!transient) throw err; // 4xx: permanent, rethrow immediately
+      if (attempt < COMMIT_MAX_ATTEMPTS - 1) {
+        const base = COMMIT_BASE_DELAY_MS * Math.pow(2, attempt);
+        const jitter = base * 0.25 * (Math.random() * 2 - 1); // ±25%
+        const delay = retryAfterMs ?? Math.max(0, base + jitter);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 function bundleSlug(bundle: ContentBundle): string {

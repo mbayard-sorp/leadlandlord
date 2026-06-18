@@ -5,6 +5,9 @@ import {
   markEventFailed,
   reapStaleLeases,
   reEmitStuckContentApprovals,
+  reEmitStuckNicheApprovals,
+  reapOrphanedRuns,
+  releaseEventLease,
 } from '@leadlandlord/db/queue';
 import { isKillSwitchActive } from '@leadlandlord/db/system-state';
 import { getAgent } from '@leadlandlord/agents/registry';
@@ -14,11 +17,19 @@ import * as Sentry from '@sentry/nextjs';
 
 const BATCH_LIMIT = 5;
 
+// Host route maxDuration is 800 s. We stop dispatching new agents when the
+// remaining wall-clock falls below this threshold, then release the leases of
+// any claimed-but-not-yet-started events so their attempts aren't burned.
+const HOST_MAX_DURATION_MS = 800_000;
+const DISPATCH_CUTOFF_REMAINING_MS = 120_000;
+
 export interface TickResult {
   claimed: number;
   dispatched: string[];
   reaped?: { reclaimed: number; deadLettered: number };
+  reapedOrphanedRuns?: number;
   reEmittedContent?: string[];
+  reEmittedNiches?: string[];
   skipped?: 'kill_switch';
 }
 
@@ -57,13 +68,35 @@ export async function runOperatorTick(): Promise<TickResult> {
     log.warn(reaped, 'operator-tick reaped stale leases');
   }
 
+  // Mark orphaned agent_runs rows as failed. Complements reapStaleLeases: the
+  // reaper recovers the agent_events lease; this recovers the agent_runs row
+  // for the same crash, keeping the operator panel accurate.
+  const { count: reapedOrphanedRuns } = await reapOrphanedRuns();
+  if (reapedOrphanedRuns) {
+    log.warn({ count: reapedOrphanedRuns }, 'operator-tick reaped orphaned agent runs');
+  }
+
   // Recover approved content ideas whose dispatch event was lost or
   // dead-lettered. Runs before claim so a re-emitted event is claimable this
   // same tick. Safe against double-publish via the writer's dedupeKeyFn.
-  const { reEmitted } = await reEmitStuckContentApprovals();
-  if (reEmitted.length) {
-    log.warn({ reEmitted }, 'operator-tick re-emitted stuck content approvals');
+  const { reEmitted: reEmittedContent } = await reEmitStuckContentApprovals();
+  if (reEmittedContent.length) {
+    log.warn({ reEmitted: reEmittedContent }, 'operator-tick re-emitted stuck content approvals');
   }
+
+  // Recover approved niches whose site-builder dispatch event was lost or
+  // dead-lettered. Runs before claim so a re-emitted event is claimable this
+  // same tick. Guards: niche has no live non-failed site, no live niche.approved
+  // event, and has not been re-emitted more than MAX_NICHE_DISPATCH_EVENTS times.
+  const { reEmitted: reEmittedNiches } = await reEmitStuckNicheApprovals();
+  if (reEmittedNiches.length) {
+    log.warn({ reEmitted: reEmittedNiches }, 'operator-tick re-emitted stuck niche approvals');
+  }
+
+  // Snapshot wall-clock before claiming. The sequential dispatch loop uses this
+  // to detect when approaching the host maxDuration and release unleased events
+  // so their attempts are not burned by a dispatch that never started.
+  const requestStartedAt = Date.now();
 
   const events = await claimEvents(BATCH_LIMIT);
   log.info({ claimed: events.length }, 'operator-tick claimed events');
@@ -104,7 +137,41 @@ export async function runOperatorTick(): Promise<TickResult> {
   // race. Latency cost: 5 events × ~60s p95 = ~5 min within maxDuration.
   waitUntil(
     (async () => {
-      for (const { ev, agent, targetAgent } of toDispatch) {
+      for (let i = 0; i < toDispatch.length; i++) {
+        const item = toDispatch[i];
+        // toDispatch is a dense array — item is always defined here, but TS
+        // infers the element type as T | undefined when using index access.
+        if (!item) continue;
+        const { ev, agent, targetAgent } = item;
+
+        // Wall-clock budget guard: if the remaining time before the host's
+        // maxDuration would expire is under DISPATCH_CUTOFF_REMAINING_MS, stop
+        // dispatching and release the leases of all remaining events so their
+        // attempts are NOT burned. They will be re-claimed on the next tick.
+        const elapsedMs = Date.now() - requestStartedAt;
+        if (HOST_MAX_DURATION_MS - elapsedMs < DISPATCH_CUTOFF_REMAINING_MS) {
+          log.warn(
+            { agent: targetAgent, event_id: ev.id, elapsedMs },
+            'operator-tick wall-clock budget exhausted — releasing remaining event leases',
+          );
+          // Release this event and all remaining ones (index i onward).
+          // Awaited sequentially to avoid fire-and-forget that races with exit.
+          for (let j = i; j < toDispatch.length; j++) {
+            const tail = toDispatch[j];
+            if (!tail) continue;
+            await releaseEventLease(tail.ev.id).catch((releaseErr) => {
+              log.error(
+                {
+                  event_id: tail.ev.id,
+                  err: releaseErr instanceof Error ? releaseErr.message : releaseErr,
+                },
+                'failed to release event lease on budget cutoff',
+              );
+            });
+          }
+          break;
+        }
+
         const payload = ev.payload as Record<string, unknown>;
         const payloadSiteId =
           typeof payload?.site_id === 'string' ? payload.site_id : undefined;
@@ -151,5 +218,5 @@ export async function runOperatorTick(): Promise<TickResult> {
     })(),
   );
 
-  return { claimed: events.length, dispatched, reaped, reEmittedContent: reEmitted };
+  return { claimed: events.length, dispatched, reaped, reapedOrphanedRuns, reEmittedContent, reEmittedNiches };
 }

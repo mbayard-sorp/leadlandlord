@@ -161,10 +161,15 @@ async function semrushFetch(params: Record<string, string | number>): Promise<st
   });
 
   const url = `${SEMRUSH_API_BASE}?${qs.toString()}`;
+  // 30 s hard outer timeout — undici's default header-timeout is 300 s, which
+  // would silently consume most of the lambda budget if SEMrush hangs.
   let res: Response;
   try {
-    res = await fetch(url);
+    res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new IntegrationError('semrush', 'Request timed out after 30 s');
+    }
     throw new IntegrationError(
       'semrush',
       `Network error: ${err instanceof Error ? err.message : String(err)}`,
