@@ -15,7 +15,7 @@ import {
   type KeywordSource,
 } from '@leadlandlord/sanity-schema/ids';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
-import { IntegrationError } from '@leadlandlord/shared/errors';
+import { IntegrationError, ThinNicheError, UpstreamUnavailableError } from '@leadlandlord/shared/errors';
 
 /**
  * Keyword Planner — runs after `niche.approved`, before site-builder.
@@ -211,12 +211,13 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
 
     // If every seed failed, this is an upstream API problem (auth, balance,
     // outage) — not a filter or niche-thinness issue. Surface that distinctly
-    // so triage skips the filter rabbit hole.
+    // so triage skips the filter rabbit hole. Classified as 'runtime_error'
+    // (retryable) so the queue retries after the provider recovers.
     if (candidatesFetched === 0 && seedErrors.length === seeds.length) {
       const firstErr = seedErrors[0]?.err ?? 'unknown';
-      throw new IntegrationError(
-        'keyword-planner',
-        `DataForSEO returned no data — every seed failed (${seedErrors.length}/${seeds.length}). ` +
+      throw new UpstreamUnavailableError(
+        'dataforseo',
+        `returned no data — every seed failed (${seedErrors.length}/${seeds.length}). ` +
           `First error: ${firstErr.slice(0, 200)}. Check API auth and account balance at https://app.dataforseo.com.`,
       );
     }
@@ -239,8 +240,12 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     ctx.log.info({ candidatesAfterFilter }, 'keyword-planner candidates after filter');
 
     if (filtered.length < 5) {
-      throw new IntegrationError(
-        'keyword-planner',
+      // DataForSEO is healthy (at least some seeds returned data) but the niche
+      // has too few rankable candidates. Classified as 'content_quality' (terminal)
+      // so the queue does not retry — the market is genuinely thin and a retry
+      // would produce the same result. site-builder catches ThinNicheError and
+      // proceeds with empty clusters rather than failing the whole build.
+      throw new ThinNicheError(
         `only ${filtered.length} candidates after filter (fetched ${candidatesFetched}, ${seedErrors.length}/${seeds.length} seed errors) — ` +
           (candidatesFetched < 10
             ? 'DataForSEO returned little data; check API health and account balance'

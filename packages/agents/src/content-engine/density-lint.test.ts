@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { lintPage } from './density-lint';
+import { lintPage, lintBundle } from './density-lint';
+import { ContentBundle } from '@leadlandlord/shared/types';
 
 const KW = 'auto glass repair';
 
@@ -182,5 +183,58 @@ describe('lintPage — phone-in-first-100', () => {
     const violations = lintPage('/auto-glass-repair', mdx, 'Baton Rouge Auto Glass Repair', 'auto glass repair Baton Rouge', { primaryKeyword: KW });
     const v = violations.filter((v) => v.rule === 'phone-in-first-100');
     expect(v).toHaveLength(0);
+  });
+});
+
+// Regression test for the post-retry re-lint bug (Fix 11):
+// lintBundle without `clusters` cannot evaluate per-cluster keyword rules —
+// every page with a cluster_key falls through to the phone-only path and
+// returns zero keyword violations even when the page is broken. The fix in
+// content-engine/index.ts passes `clusters: input.keyword_clusters` to the
+// post-retry call, matching the initial lint call.
+describe('lintBundle — clusters option is required for keyword rule evaluation', () => {
+  // Minimal bundle whose home page fails keyword-in-h1, keyword-in-slug,
+  // keyword-in-meta, and keyword-min-occurrences. The page has a cluster_key
+  // but no keyword anywhere in the MDX, title, slug, or meta.
+  const BAD_MDX = `${'filler word '.repeat(50)}`;
+  const minimalPage = {
+    kind: 'home' as const,
+    slug: '/home',
+    title: 'Welcome to Our Company',
+    meta_description: 'We are great.',
+    mdx: BAD_MDX,
+    cluster_key: 'home-auto-glass',
+  };
+  const bundle = ContentBundle.parse({
+    niche: 'auto glass repair',
+    city: 'Baton Rouge',
+    state: 'LA',
+    business_name: 'Baton Rouge Glass Co',
+    variant: 'classic',
+    generated_at: '2026-01-01T00:00:00Z',
+    home: minimalPage,
+    about: { kind: 'about', slug: '/about', title: 'About Us', meta_description: 'About us.', mdx: 'We fix glass.' },
+    contact: { kind: 'contact', slug: '/contact', title: 'Contact', meta_description: 'Contact us.', mdx: 'Call us.' },
+    services: [],
+    service_areas: [],
+    blog_posts: [],
+  });
+
+  const clusters = [{ cluster_key: 'home-auto-glass', primary_keyword: 'auto glass repair', page_kind: 'home' as const, intent: 'commercial' as const, supporting_keywords: [], search_volume: 500 }];
+
+  it('without clusters: no keyword violations (the bug — omitting clusters silently skips rules)', () => {
+    // This mirrors the broken post-retry call: lintBundle(parsed, { primaryKeyword })
+    const results = lintBundle(bundle, { primaryKeyword: 'auto glass repair' });
+    const keywordErrors = results.flatMap((r) => r.violations).filter((v) => v.severity === 'error');
+    // Without clusters, clusterMap is empty → page falls to phone-only path → zero keyword errors.
+    expect(keywordErrors).toHaveLength(0);
+  });
+
+  it('with clusters: keyword violations are detected (the fixed call)', () => {
+    // This mirrors the corrected post-retry call: lintBundle(parsed, { primaryKeyword, clusters })
+    const results = lintBundle(bundle, { primaryKeyword: 'auto glass repair', clusters });
+    const keywordErrors = results.flatMap((r) => r.violations).filter((v) => v.severity === 'error');
+    // With clusters, clusterMap resolves the page keyword and keyword rules fire.
+    expect(keywordErrors.length).toBeGreaterThan(0);
   });
 });
