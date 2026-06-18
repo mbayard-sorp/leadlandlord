@@ -5,6 +5,7 @@ import { ScoutForm } from './ScoutForm';
 import { ScoutReport, type ScoutRunData, type ScoutCandidateData } from './ScoutReport';
 import { SeedNicheForm } from './SeedNicheForm';
 import { StatusBar } from './StatusBar';
+import { DrainNowButton } from './DrainNowButton';
 import { NicheRow, type NicheRowData } from './NicheRow';
 import { CategoryFilter } from './CategoryFilter';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -126,7 +127,8 @@ export default async function NichesPage({
         <div className="shrink-0">
           <CategoryFilter counts={categoryCounts} />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 space-y-2">
+          <DrainNowButton />
           <StatusBar />
         </div>
       </div>

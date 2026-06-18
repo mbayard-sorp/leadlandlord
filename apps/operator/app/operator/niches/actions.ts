@@ -106,6 +106,32 @@ export async function runNicheValidation(formData: FormData): Promise<ActionResu
 }
 
 /**
+ * Drain the agent_events queue immediately instead of waiting for the next
+ * scheduled operator-tick cron (every 10 minutes). Operator-only — calls into
+ * the same runOperatorTick() helper Vercel Cron uses, so behavior matches
+ * exactly.
+ *
+ * Use case: operator just queued a niche scout/validation and doesn't want to
+ * wait ~10 minutes for the cron to pick it up.
+ */
+export async function drainQueueNow(): Promise<
+  ActionResult & { claimed?: number; dispatched?: string[] }
+> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  try {
+    // Lazy import: pulls the entire agent registry transitively. Keeping it
+    // inside the function prevents the niches page render path from loading
+    // every agent at module init, which can 500 the page if any agent's
+    // module-load throws (e.g. missing env var).
+    const { runOperatorTick } = await import('@/lib/operator-tick');
+    const result = await runOperatorTick();
+    return { ok: true, claimed: result.claimed, dispatched: result.dispatched };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'tick failed' };
+  }
+}
+
+/**
  * Approve a pending niche. Updates the row + emits a `niche.approved`
  * agent_event so the operator-tick fan-out can dispatch Site Builder.
  */
