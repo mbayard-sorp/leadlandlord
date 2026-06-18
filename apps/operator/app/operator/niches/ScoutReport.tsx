@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { runNicheValidation } from './actions';
+import { runNicheValidation, runNicheValidationForCandidates } from './actions';
 import { CATEGORY_LABELS } from './NicheRow';
 import { Timestamp } from '../../../components/Timestamp';
 
@@ -100,6 +100,47 @@ export function ScoutReport({
     startTransition(async () => {
       const r = await runNicheValidation(fd);
       setMsg({ ok: r.ok, text: r.message ?? '' });
+    });
+  }
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const eligible = candidates.filter((c) => c.status === 'scouted');
+  const selectedTrades = new Set(
+    candidates.filter((c) => selectedIds.has(c.id)).map((c) => c.trade.toLowerCase()),
+  );
+
+  function toggleOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /**
+   * Pick the best-ranked (lowest rank) eligible candidate of each distinct
+   * trade — one of each, no duplicate trades — capped at the validator's
+   * 50-candidate ceiling (keeping the best-ranked trades). Expands the table so
+   * every auto-selected row is visible.
+   */
+  function selectBestPerTrade() {
+    const byTrade = new Map<string, string>();
+    for (const c of [...eligible].sort((a, b) => a.rank - b.rank)) {
+      const key = c.trade.toLowerCase();
+      if (!byTrade.has(key)) byTrade.set(key, c.id);
+    }
+    setSelectedIds(new Set([...byTrade.values()].slice(0, 50)));
+    setExpanded(true);
+    setMsg(null);
+  }
+
+  function validateSelected() {
+    setMsg(null);
+    startTransition(async () => {
+      const r = await runNicheValidationForCandidates(run.id, [...selectedIds]);
+      setMsg({ ok: r.ok, text: r.message ?? '' });
+      if (r.ok) setSelectedIds(new Set());
     });
   }
 
@@ -292,11 +333,41 @@ export function ScoutReport({
         )}
       </div>
 
+      {/* Manual selection toolbar — hand-pick candidates for validation */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-2">
+        <button
+          type="button"
+          onClick={selectBestPerTrade}
+          disabled={pending || eligible.length === 0}
+          className="inline-flex items-center min-h-[34px] rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-3 text-xs font-medium text-slate-200"
+        >
+          Select best per trade
+        </button>
+        {selectedIds.size > 0 && (
+          <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-400 hover:text-slate-200">
+            Clear
+          </button>
+        )}
+        <span className="text-xs text-slate-400">
+          {selectedIds.size} selected · {selectedTrades.size} trade{selectedTrades.size === 1 ? '' : 's'}
+          {selectedIds.size > 50 && <span className="text-amber-400"> · max 50, deselect {selectedIds.size - 50}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={validateSelected}
+          disabled={pending || selectedIds.size === 0 || selectedIds.size > 50}
+          className="ml-auto inline-flex items-center justify-center min-h-[34px] rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 px-4 text-xs font-medium text-white"
+        >
+          {pending ? 'Queuing…' : `Validate selected (${selectedIds.size})`}
+        </button>
+      </div>
+
       {/* Candidate table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+              <Th className="w-8" />
               <Th>#</Th>
               <Th>Trade</Th>
               <Th className="hidden md:table-cell">Category</Th>
@@ -311,7 +382,21 @@ export function ScoutReport({
           </thead>
           <tbody>
             {shown.map((c) => (
-              <tr key={c.id} className="border-b border-slate-800/60 last:border-0">
+              <tr
+                key={c.id}
+                className={`border-b border-slate-800/60 last:border-0 ${selectedIds.has(c.id) ? 'bg-emerald-950/30' : ''}`}
+              >
+                <Td className="w-8">
+                  {c.status === 'scouted' ? (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleOne(c.id)}
+                      aria-label={`Select ${c.trade} in ${c.city}, ${c.state}`}
+                      className="h-4 w-4 cursor-pointer accent-emerald-600"
+                    />
+                  ) : null}
+                </Td>
                 <Td className="text-slate-500">{c.rank}</Td>
                 <Td className="break-words">{c.trade}</Td>
                 <Td className="hidden md:table-cell text-xs text-slate-400">
