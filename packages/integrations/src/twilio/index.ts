@@ -147,6 +147,36 @@ export async function updateNumber(args: UpdateNumberArgs): Promise<void> {
 }
 
 /**
+ * Permanently release (delete) a Twilio IncomingPhoneNumber. Used when a site
+ * is decommissioned so we stop paying ~$1/mo for the number.
+ *
+ * Returns `released: false` (instead of throwing) when Twilio creds aren't
+ * configured or the number was a mock — callers treat this as a no-op.
+ *
+ * Twilio API docs: https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource#delete-an-incomingphonenumber-resource
+ */
+export async function releaseNumber(twilioSid: string): Promise<{ released: boolean }> {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) return { released: false };
+
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  const res = await fetch(
+    `${TWILIO_BASE}/Accounts/${sid}/IncomingPhoneNumbers/${twilioSid}.json`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Basic ${auth}` },
+    },
+  );
+  // 204 = deleted, 404 = already gone (treat as success — the goal is "no longer billed").
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new IntegrationError('twilio', `release failed: ${res.status} ${text}`, res.status, text);
+  }
+  return { released: true };
+}
+
+/**
  * Build TwiML for the inbound-call handler:
  *   1. Whisper to the answering party (so they know it's a tracking number).
  *      The whisper is delivered by a self-hosted whisperUrl that returns
