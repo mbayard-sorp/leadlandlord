@@ -84,6 +84,8 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'fleet-digest': [['ZOHO_MCP_URL'], ['ZOHO_ACCOUNT_ID'], ['FLEET_DIGEST_TO', 'OPERATOR_EMAIL']],
   // FIRECRAWL_API_KEY is optional: NAP verification is skipped (not errored) when absent.
   'citation-runner': [],
+  // Build & Sell spec-site builder. Imagen is used when available; falls back to no hero image.
+  'spec-site-builder': [],
 };
 
 /**
