@@ -1,9 +1,45 @@
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
+import { upsertBuildsellLeads, type NewBuildsellLead } from '@leadlandlord/db';
 import { withDataForSeoCache, stableKey } from '../dataforseo/cache';
 
 const PLACES_BASE = 'https://places.googleapis.com/v1';
+
+// ── Per-instance throttle + hard daily cap ────────────────────────────────
+// The rate limiter is in-memory (per-lambda), so concurrent ticks each have
+// their own gate; it only smooths bursts. The DB-backed daily cap below is
+// the REAL spend ceiling. Both are reset/bounded per UTC day.
+let lastRequestAt = 0;
+let dayKey = '';
+let requestsToday = 0;
+
+function utcDayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function throttlePlaces(): Promise<void> {
+  const minInterval = Number(process.env.GOOGLE_PLACES_MIN_INTERVAL_MS ?? '250');
+  const wait = lastRequestAt + minInterval - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastRequestAt = Date.now();
+}
+
+function assertDailyCap(): void {
+  const today = utcDayKey();
+  if (today !== dayKey) {
+    dayKey = today;
+    requestsToday = 0;
+  }
+  const cap = Number(process.env.GOOGLE_PLACES_DAILY_CAP ?? '500');
+  if (requestsToday >= cap) {
+    throw new IntegrationError(
+      'google-places',
+      `daily request cap reached (${requestsToday}/${cap} for ${today}); refusing further Places calls`,
+    );
+  }
+  requestsToday += 1;
+}
 
 // Default field mask — keep narrow to control cost. Each field added to the
 // mask increases the per-request cost (Google bills by SKU tier).
@@ -94,15 +130,31 @@ export async function searchText(args: SearchTextArgs): Promise<{
     };
   }
 
-  const res = await fetch(`${PLACES_BASE}/places:searchText`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': SEARCH_FIELD_MASK,
-    },
-    body: JSON.stringify(body),
-  });
+  // Hard daily cap (real spend ceiling) + per-instance burst smoother.
+  assertDailyCap();
+  await throttlePlaces();
+
+  const timeoutMs = Number(process.env.GOOGLE_PLACES_TIMEOUT_MS ?? '10000');
+  let res: Response;
+  try {
+    res = await fetch(`${PLACES_BASE}/places:searchText`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': SEARCH_FIELD_MASK,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new IntegrationError('google-places', `searchText timed out after ${timeoutMs}ms`);
+    }
+    throw err instanceof IntegrationError
+      ? err
+      : new IntegrationError('google-places', `searchText network error: ${String(err)}`);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new IntegrationError(
@@ -202,4 +254,135 @@ export async function searchN(
     await new Promise((r) => setTimeout(r, 1500));
   }
   return out.slice(0, count);
+}
+
+export interface SearchLeadsArgs {
+  /** Trade, e.g. "pool service". */
+  trade: string;
+  city: string;
+  state: string;
+  /** How many qualified leads to return. Default 20. */
+  count?: number;
+  /** Minimum Google rating to qualify. Default 4.0. */
+  ratingMin?: number;
+  /** Minimum review count to qualify. Default 10. */
+  reviewsMin?: number;
+}
+
+export interface BuildSellLeadResult {
+  placeId: string;
+  displayName?: string;
+  formattedAddress?: string;
+  nationalPhone?: string;
+  primaryType?: string;
+  types: string[];
+  rating?: number;
+  userRatingCount?: number;
+  lat?: number;
+  lng?: number;
+  trade: string;
+  city: string;
+  state: string;
+}
+
+/**
+ * Pure qualification filter for B&S leads: keep only no-website businesses
+ * with a strong-enough rating and review count. Exported for unit testing.
+ */
+export function qualifyLeadPlaces(
+  places: Place[],
+  opts: { ratingMin?: number; reviewsMin?: number } = {},
+): Place[] {
+  const ratingMin = opts.ratingMin ?? 4.0;
+  const reviewsMin = opts.reviewsMin ?? 10;
+  return places.filter(
+    (p) =>
+      p.websiteUri == null &&
+      (p.rating ?? 0) >= ratingMin &&
+      (p.userRatingCount ?? 0) >= reviewsMin,
+  );
+}
+
+/**
+ * Build & Sell lead search: find strong-review businesses with NO website.
+ *
+ * Pipeline: searchN(query) → filter (no website && rating >= ratingMin &&
+ * reviews >= reviewsMin) → upsert survivors into `buildsell_leads` with
+ * `cached_until = now()+30d` (the table doubles as the 30-day cache) → return
+ * the filtered list transiently to the caller. The persisted row holds the
+ * ToS-mandated place_id indefinitely; the reaper nulls PII at 30 days.
+ *
+ * MOCK_AI bypass: returns deterministic mock leads (still upserted) so the
+ * operator search UI and tests never hit the network.
+ */
+export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadResult[]> {
+  const { trade, city, state } = args;
+  const ratingMin = args.ratingMin ?? 4.0;
+  const reviewsMin = args.reviewsMin ?? 10;
+  const count = args.count ?? 20;
+
+  let places: Place[];
+  if (process.env.MOCK_AI === 'true') {
+    places = Array.from({ length: count }, (_, i) => ({
+      id: `mock-place-${city}-${i}`.toLowerCase().replace(/\s+/g, '-'),
+      displayName: { text: `${trade} pro ${i + 1}` },
+      formattedAddress: `${100 + i} Main St, ${city}, ${state}`,
+      types: [trade.replace(/\s+/g, '_')],
+      primaryType: trade.replace(/\s+/g, '_'),
+      // No websiteUri → qualifies as a no-website lead.
+      nationalPhoneNumber: `(555) 010-${String(1000 + i).slice(-4)}`,
+      rating: 4.6,
+      userRatingCount: 42 + i,
+      businessStatus: 'OPERATIONAL',
+      location: { latitude: 33.4 + i * 0.01, longitude: -111.9 - i * 0.01 },
+    }));
+  } else {
+    // Over-fetch: many results have websites and get filtered out.
+    places = await searchN(`${trade} in ${city}, ${state}`, count * 3, { excludeClosed: true });
+  }
+
+  const qualified = qualifyLeadPlaces(places, { ratingMin, reviewsMin });
+
+  const results: BuildSellLeadResult[] = qualified.slice(0, count).map((p) => ({
+    placeId: p.id,
+    displayName: p.displayName?.text,
+    formattedAddress: p.formattedAddress,
+    nationalPhone: p.nationalPhoneNumber,
+    primaryType: p.primaryType,
+    types: p.types,
+    rating: p.rating,
+    userRatingCount: p.userRatingCount,
+    lat: p.location?.latitude,
+    lng: p.location?.longitude,
+    trade,
+    city,
+    state,
+  }));
+
+  // Persist as the 30-day cache + indefinite place_id store (ToS).
+  const cachedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const rows: NewBuildsellLead[] = results.map((r) => ({
+    placeId: r.placeId,
+    displayName: r.displayName ?? null,
+    formattedAddress: r.formattedAddress ?? null,
+    nationalPhone: r.nationalPhone ?? null,
+    primaryType: r.primaryType ?? null,
+    types: r.types,
+    rating: r.rating != null ? r.rating.toFixed(1) : null,
+    userRatingCount: r.userRatingCount ?? null,
+    websiteUri: null,
+    lat: r.lat != null ? r.lat.toFixed(7) : null,
+    lng: r.lng != null ? r.lng.toFixed(7) : null,
+    trade,
+    city,
+    state,
+    cachedUntil,
+  }));
+  await upsertBuildsellLeads(rows);
+
+  log.info(
+    { trade, city, state, scanned: places.length, qualified: results.length },
+    'google-places searchLeads',
+  );
+  return results;
 }

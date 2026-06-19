@@ -12,7 +12,8 @@
     "./system-state": "./src/system-state.ts",
     "./client": "./src/client.ts",
     "./suppression": "./src/suppression.ts",
-    "./email-throttle": "./src/email-throttle.ts"
+    "./email-throttle": "./src/email-throttle.ts",
+    "./buildsell": "./src/buildsell.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
