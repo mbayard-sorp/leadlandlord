@@ -254,6 +254,8 @@ const BUILDSELL_PROJECTION = `{
   robotsDisallow,
   generatedAt,
   navigation[]{ label, href },
+  navShowPhone,
+  navCta{ label, href, style },
   "theme": {
     "layoutVariant": theme.layoutVariant,
     "preset": theme.preset,
@@ -350,6 +352,7 @@ export interface BuildSellSection {
   // bsAboutSection
   body?: string | null;
   stats?: Array<{ value?: string | null; label?: string | null }> | null;
+  cta?: { label?: string | null; href?: string | null; style?: string | null } | null;
   // bsProcessSection
   steps?: Array<{ icon?: string | null; title?: string | null; description?: string | null }> | null;
   // bsReviewsSection
@@ -363,6 +366,16 @@ export interface BuildSellSection {
     hours?: string | null;
     serviceArea?: string | null;
   } | null;
+  formLabels?: {
+    name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    message?: string | null;
+    submit?: string | null;
+  } | null;
+  formEndpoint?: string | null;
+  showDetails?: boolean | null;
+  showMap?: boolean | null;
   // bsFooterSection
   tagline?: string | null;
   columns?: Array<{
@@ -397,6 +410,8 @@ export interface BuildSellSite {
   robotsDisallow?: boolean | null;
   generatedAt?: string | null;
   navigation?: BuildSellNavLink[] | null;
+  navShowPhone?: boolean | null;
+  navCta?: { label?: string | null; href?: string | null; style?: string | null } | null;
   theme: BuildSellTheme;
   seo?: { metaTitle?: string | null; metaDescription?: string | null; ogImageUrl?: string | null } | null;
   sections?: BuildSellSection[] | null;

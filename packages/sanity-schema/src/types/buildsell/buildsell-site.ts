@@ -41,6 +41,8 @@ export const buildsellSite = defineType({
     defineField({ name: 'ownerEmail', title: 'Owner Email', type: 'string', hidden: true, description: 'Operator-entered outreach target. Hidden from public rendering.' }),
     defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'businessName' } }),
     defineField({ name: 'navigation', title: 'Navigation', type: 'array', of: [{ type: 'bsNavLink' }] }),
+    defineField({ name: 'navShowPhone', title: 'Nav: Show Phone', type: 'boolean', initialValue: true, description: 'Show the click-to-call phone in the sticky nav.' }),
+    defineField({ name: 'navCta', title: 'Nav: CTA Button', type: 'bsCtaButton', description: 'The nav action button (defaults to a "Get a Free Quote" → #contact button when empty).' }),
     defineField({ name: 'theme', title: 'Theme', type: 'buildsellTheme' }),
     defineField({
       name: 'draftMode',
