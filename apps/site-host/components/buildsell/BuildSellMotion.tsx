@@ -17,6 +17,7 @@
  */
 
 import { useEffect } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 function parseNumericPrefix(text: string): { prefix: string; num: number; suffix: string } | null {
   const match = text.match(/^(\d[\d,.]*)(.*)$/);
@@ -49,6 +50,13 @@ function animateCounter(el: HTMLElement, num: number, suffix: string, duration: 
 }
 
 export function BuildSellMotion() {
+  // The draft preview theme bar switches layout via a soft navigation, which
+  // re-renders the server block structure into fresh DOM nodes. Re-key the
+  // effect on the route + query string so the observers re-attach to the new
+  // `.bs-reveal` / `.bs-stat-value` elements (otherwise they stay at opacity 0).
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
+
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const cleanups: Array<() => void> = [];
@@ -113,7 +121,7 @@ export function BuildSellMotion() {
     // reduced-motion: server-rendered final stat value is already visible (no-op)
 
     return () => cleanups.forEach((fn) => fn());
-  }, []);
+  }, [pathname, search]);
 
   return null;
 }

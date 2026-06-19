@@ -2174,6 +2174,10 @@ a.bs-ugc-card:hover {
 }
 .bs-root .bs-social-links a:hover { color: var(--bs-primary); border-color: color-mix(in srgb, var(--bs-primary) 35%, transparent); }
 .bs-root .bs-footer-legal { border-top: var(--bs-hairline); color: var(--bs-muted); }
+.bs-root .bs-footer-legal-links a,
+.bs-root .bs-footer-maps-link { color: var(--bs-muted); }
+.bs-root .bs-footer-legal-links a:hover,
+.bs-root .bs-footer-maps-link:hover { color: var(--bs-primary); }
 
 /* ---- Respect reduced motion for the new motion --------------------------- */
 @media (prefers-reduced-motion: reduce) {

@@ -85,7 +85,7 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
       ? [addr.city, addr.state, addr.zip].filter(Boolean).join(', ')
       : null;
     return (
-      <div className={`bs-contact-info${isTrust ? ' bs-contact-info--dark' : ''}`}>
+      <div className="bs-contact-info bs-contact-info--dark">
         <h2 className="bs-section-title">{section.heading ?? 'Get in Touch'}</h2>
         {section.subhead && (
           <p className="bs-section-intro">{section.subhead}</p>

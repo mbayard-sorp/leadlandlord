@@ -21,15 +21,17 @@ export async function generateMetadata({
   };
 }
 
+const VALID_LAYOUTS = ['split', 'bold', 'trust'] as const;
+
 export default async function PreviewPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ t?: string }>;
+  searchParams: Promise<{ t?: string; layout?: string; preset?: string; fh?: string; fb?: string }>;
 }) {
   const { id } = await params;
-  const { t: saveToken } = await searchParams;
+  const { t: saveToken, layout, preset, fh, fb } = await searchParams;
 
   // Defense layer 2: inline meta tag rendered in JSX as a third barrier
   // against indexing, applied regardless of whether the doc is found.
@@ -56,13 +58,36 @@ export default async function PreviewPage({
     notFound();
   }
 
+  // Draft-only theme overrides from the preview theme bar. The per-variant block
+  // STRUCTURE (hero/contact arrangement) is server-rendered from site.theme and
+  // can't change via client-side CSS alone, so the bar's layout toggle pushes the
+  // selection here as a query param to force a server re-render. preset/fonts ride
+  // along so an in-progress color/font preview survives the layout round-trip
+  // without flashing back to the saved values.
+  const layoutOverride = VALID_LAYOUTS.includes(layout as (typeof VALID_LAYOUTS)[number])
+    ? (layout as (typeof VALID_LAYOUTS)[number])
+    : undefined;
+  const effectiveSite =
+    layoutOverride || preset || fh || fb
+      ? {
+          ...site,
+          theme: {
+            ...site.theme,
+            ...(layoutOverride ? { layoutVariant: layoutOverride } : {}),
+            ...(preset ? { preset } : {}),
+            ...(fh ? { fontHeading: fh } : {}),
+            ...(fb ? { fontBody: fb } : {}),
+          },
+        }
+      : site;
+
   const fontVars = ALL_BS_FONTS.map((f) => f.variable).join(' ');
 
   return (
     <div className={fontVars}>
       {/* Defense layer 2: explicit meta in rendered JSX output */}
       {noindexMeta}
-      <BuildSellHome site={site} draft={true} saveToken={saveToken} />
+      <BuildSellHome site={effectiveSite} draft={true} saveToken={saveToken} />
     </div>
   );
 }
