@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { getDb, buildsellSites } from '@leadlandlord/db';
 import { BuildSellImagePanel } from '../BuildSellImagePanel';
+import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,13 @@ export default async function BuildSellDetailPage({ params }: Params) {
   if (!site) notFound();
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
+
+  // Last clarification (if any) for the revise panel — stored in metadata jsonb.
+  const meta = (site.metadata ?? {}) as Record<string, unknown>;
+  const lastClarifyingPrompt =
+    meta.lastClarifyingPrompt && typeof meta.lastClarifyingPrompt === 'object'
+      ? (meta.lastClarifyingPrompt as { prompt: string; revisedAt: string })
+      : null;
 
   // Preview/Live links resolve to the site-host Vercel project, not operator.
   // A relative `/preview/...` would 404 against the operator domain.
@@ -95,6 +103,11 @@ export default async function BuildSellDetailPage({ params }: Params) {
           </a>
         )}
       </section>
+
+      {/* Copy revision — hidden on sold/indexed sites */}
+      {!isPaidOrLive && (
+        <BuildSellRevisePanel siteId={site.id} lastPrompt={lastClarifyingPrompt} />
+      )}
 
       {/* Image prompt control panel */}
       <BuildSellImagePanel siteId={site.id} />

@@ -13,6 +13,8 @@ export interface ExistingDocFields {
   ownerEmail?: string | null;
   /** Preserved when incoming payload has no street (reaped-lead rebuild degrades cleanly). */
   existingStreet?: string | null;
+  /** Preserved when incoming payload has no phone (revise/rebuild keeps the NAP number). */
+  existingPhone?: string | null;
 }
 
 export interface WriteBuildSellArgs {
@@ -241,7 +243,8 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     trade: args.trade,
     city: args.city,
     state: args.state,
-    phone: args.phone ?? undefined,
+    // Keep the existing NAP phone when this run carries none (revise/rebuild).
+    phone: args.phone ?? ex.existingPhone ?? undefined,
     ownerEmail: ownerEmail ?? undefined,
     placeId: args.placeId ?? undefined,
     slug: { _type: 'slug', current: args.slug },

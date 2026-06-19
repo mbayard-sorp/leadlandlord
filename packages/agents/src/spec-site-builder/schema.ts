@@ -12,6 +12,19 @@ export const SpecSiteBuilderInput = z.object({
   phone: z.string().optional(),
   /** Full display-line address (e.g. "2240 S Archibald Ave, Ontario, CA"). No parsing. */
   address_line: z.string().optional(),
+  /**
+   * Operator correction fed via a `buildsell.revise` event. Injected into the
+   * content prompt as a subordinate refinement hint (system.md ToS rules still
+   * win). Bounded so it can't smuggle a large adversarial payload.
+   */
+  clarifying_prompt: z.string().max(500).optional(),
+  /**
+   * When true, reuse the existing doc's theme (preset/colors/layout/fonts)
+   * instead of re-rolling rotation — a copy-only revision keeps the design.
+   */
+  preserve_theme: z.boolean().optional(),
+  /** Override the paid/live rebuild guard (operator confirmation). */
+  force_rebuild: z.boolean().optional(),
 });
 export type SpecSiteBuilderInput = z.infer<typeof SpecSiteBuilderInput>;
 
