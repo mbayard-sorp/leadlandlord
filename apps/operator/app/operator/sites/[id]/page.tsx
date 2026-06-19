@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { desc, eq, inArray, and } from 'drizzle-orm';
+import { desc, eq, inArray, and, ne } from 'drizzle-orm';
 import {
   getDb,
   sites,
   calls,
   leads,
+  tenants,
   domainCandidates,
   siteOriginalDataInputs,
   type Site,
@@ -37,6 +38,7 @@ import type { GoLiveManualFlags } from './go-live-actions';
 import { LocalContentToggle } from './LocalContentToggle';
 import { ProprietaryDataPanel } from './ProprietaryDataPanel';
 import { GeoSeoAuditPanel } from './GeoSeoAuditPanel';
+import { DeleteSitePanel } from './DeleteSitePanel';
 import { Timestamp } from '../../../../components/Timestamp';
 
 export const dynamic = 'force-dynamic';
@@ -53,13 +55,14 @@ interface SiteDetailData {
   keywordClusters: SanityKeywordClusterSummary[];
   domainCandidatesList: DomainCandidate[];
   originalData: SiteOriginalDataInputs | null;
+  liveTenantCount: number;
 }
 
 async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
   const db = getDb();
   const siteRow = (await db.select().from(sites).where(eq(sites.id, id)).limit(1))[0];
   if (!siteRow) return null;
-  const [recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData] = await Promise.all([
+  const [recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData, liveTenants] = await Promise.all([
     db.select().from(calls).where(eq(calls.siteId, id)).orderBy(desc(calls.startedAt)).limit(20),
     db.select().from(leads).where(eq(leads.siteId, id)).orderBy(desc(leads.createdAt)).limit(20),
     fetchSanitySiteDetail(id).catch(() => null),
@@ -81,15 +84,28 @@ async function loadSiteDetail(id: string): Promise<SiteDetailData | null> {
       .where(eq(siteOriginalDataInputs.siteId, id))
       .limit(1)
       .then((r) => r[0] ?? null),
+    db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(and(eq(tenants.siteId, id), ne(tenants.status, 'churned'))),
   ]);
-  return { site: siteRow, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData };
+  return {
+    site: siteRow,
+    recentCalls,
+    recentLeads,
+    sanity,
+    keywordClusters,
+    domainCandidatesList,
+    originalData,
+    liveTenantCount: liveTenants.length,
+  };
 }
 
 export default async function SiteDetailPage({ params }: Params) {
   const { id } = await params;
   const data = await loadSiteDetail(id);
   if (!data) notFound();
-  const { site, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData } = data;
+  const { site, recentCalls, recentLeads, sanity, keywordClusters, domainCandidatesList, originalData, liveTenantCount } = data;
 
   const primaryHost = sanity?.domains.find((d) => d.isPrimary)?.host
     ?? sanity?.domains[0]?.host
@@ -328,6 +344,14 @@ export default async function SiteDetailPage({ params }: Params) {
             inflight + completed runs; this section is reserved for older history
             once a paginated view is built (post R3.5 scope). */}
         <p className="text-sm text-slate-500">TBD — older agent runs</p>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Danger zone">
+        <DeleteSitePanel
+          siteId={site.id}
+          label={sanity?.businessName ?? `${site.niche} — ${site.city}, ${site.state}`}
+          liveTenantCount={liveTenantCount}
+        />
       </CollapsibleSection>
     </div>
   );

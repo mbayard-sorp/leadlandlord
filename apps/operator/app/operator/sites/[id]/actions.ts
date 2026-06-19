@@ -2,18 +2,19 @@
 
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   getDb,
   sites,
   calls,
+  tenants,
   agentEvents,
   siteOriginalDataInputs,
   type Call,
   type Site,
 } from '@leadlandlord/db';
-import { updateNumber } from '@leadlandlord/integrations/twilio';
+import { updateNumber, releaseNumber } from '@leadlandlord/integrations/twilio';
 import {
   attachDomain as vercelAttachDomain,
   detachDomain as vercelDetachDomain,
@@ -580,6 +581,140 @@ export async function regenerateContent(siteId: string): Promise<ActionResult & 
 
 function hostKey(host: string): string {
   return host.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 63);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Destructive — permanently delete a site and everything attached to it.
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface DeleteSiteResult extends ActionResult {
+  /** True when the delete was blocked because a live tenant is still attached. */
+  blocked?: boolean;
+  /** Non-fatal cleanup problems (Twilio/Vercel/Sanity) — the DB row was still deleted. */
+  warnings?: string[];
+}
+
+/**
+ * Hard-delete a site and ALL of its content:
+ *   - Postgres `sites` row (cascades to prospects, calls, leads, trials,
+ *     backlinks, and outreach events; agent_runs + suppression rows are
+ *     orphaned via ON DELETE SET NULL for the audit trail).
+ *   - Sanity site doc + every page doc + every keyword-cluster doc.
+ *   - Releases the Twilio tracking number (stops the ~$1/mo charge).
+ *   - Detaches all custom domains from the Vercel sites project.
+ *
+ * BLOCKS if a non-churned tenant is still attached — off-board the tenant
+ * (and cancel their Stripe subscription) before deleting the site, so we never
+ * nuke a revenue-generating site by accident.
+ *
+ * External cleanup is best-effort: a Twilio/Vercel/Sanity failure is reported
+ * as a warning but does not abort the DB delete (the operator decided to kill
+ * the site; we don't strand it half-deleted).
+ */
+export async function deleteSite(siteId: string): Promise<DeleteSiteResult> {
+  if (!z.string().uuid().safeParse(siteId).success) {
+    return { ok: false, message: 'invalid site id' };
+  }
+
+  const db = getDb();
+  const site = (await db.select().from(sites).where(eq(sites.id, siteId)).limit(1))[0];
+  if (!site) return { ok: false, message: 'site not found' };
+
+  // Guard: refuse to delete a site that still has a live tenant.
+  const liveTenants = await db
+    .select({ id: tenants.id, businessName: tenants.businessName, status: tenants.status })
+    .from(tenants)
+    .where(and(eq(tenants.siteId, siteId), ne(tenants.status, 'churned')));
+  if (liveTenants.length > 0) {
+    const names = liveTenants.map((t) => `${t.businessName} (${t.status})`).join(', ');
+    return {
+      ok: false,
+      blocked: true,
+      message: `Blocked: ${liveTenants.length} live tenant(s) still attached — ${names}. Off-board the tenant and cancel their Stripe subscription first.`,
+    };
+  }
+
+  const warnings: string[] = [];
+
+  // 1. Release the Twilio tracking number so we stop paying for it.
+  if (site.twilioPhoneSid) {
+    try {
+      await releaseNumber(site.twilioPhoneSid);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      warnings.push(`Twilio number ${site.twilioPhoneSid} not released: ${msg}`);
+      log.warn({ err: msg, siteId, twilioSid: site.twilioPhoneSid }, 'deleteSite: twilio release failed');
+    }
+  }
+
+  // 2. Detach custom domains from Vercel (best-effort, per host).
+  const projectId = process.env.VERCEL_SITES_PROJECT_ID;
+  try {
+    const client = createWriteClient();
+    const domains = await client.fetch<Array<{ host: string }>>(`*[_id==$id][0].domains`, {
+      id: siteDocId(siteId),
+    });
+    if (projectId) {
+      for (const d of domains ?? []) {
+        try {
+          await vercelDetachDomain(projectId, d.host);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'unknown';
+          warnings.push(`Domain ${d.host} not detached from Vercel: ${msg}`);
+          log.warn({ err: msg, siteId, host: d.host }, 'deleteSite: vercel detach failed');
+        }
+      }
+    } else if ((domains ?? []).length > 0) {
+      warnings.push('VERCEL_SITES_PROJECT_ID not set — custom domains left attached in Vercel.');
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'unknown';
+    warnings.push(`Could not read domains for Vercel cleanup: ${msg}`);
+  }
+
+  // 3. Delete every Sanity doc belonging to this site (site + pages + clusters),
+  //    drafts included, in a single transaction so reference constraints between
+  //    pages and the site doc don't block the deletion.
+  try {
+    const client = createWriteClient();
+    const ids = await client.fetch<string[]>(
+      `*[_id == $siteDoc || (_type == "page" && site._ref == $siteDoc) || (_type == "keywordCluster" && siteId == $siteId)]._id`,
+      { siteDoc: siteDocId(siteId), siteId },
+    );
+    const allIds = new Set<string>();
+    for (const id of ids ?? []) {
+      allIds.add(id);
+      allIds.add(`drafts.${id.replace(/^drafts\./, '')}`);
+    }
+    if (allIds.size > 0) {
+      let tx = client.transaction();
+      for (const id of allIds) tx = tx.delete(id);
+      await tx.commit({ visibility: 'async' });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'unknown';
+    warnings.push(`Sanity content not fully deleted: ${msg}. Remove leftover docs in Studio.`);
+    log.warn({ err: msg, siteId }, 'deleteSite: sanity delete failed');
+  }
+
+  // 4. Delete the DB row. FK cascades handle prospects, calls, leads, trials,
+  //    backlinks, and outreach events; agent_runs + suppression rows are nulled.
+  try {
+    await db.delete(sites).where(eq(sites.id, siteId));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'unknown';
+    log.error({ err: msg, siteId }, 'deleteSite: db delete failed');
+    return {
+      ok: false,
+      message: `External cleanup ran, but the database delete failed: ${msg}`,
+      warnings,
+    };
+  }
+
+  log.info({ siteId, warnings: warnings.length }, 'site deleted');
+  revalidatePath('/operator/portfolio');
+  revalidatePath('/operator/sites');
+  return { ok: true, warnings: warnings.length ? warnings : undefined };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
