@@ -24,6 +24,11 @@ export default async function BuildSellDetailPage({ params }: Params) {
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
 
+  // Preview/Live links resolve to the site-host Vercel project, not operator.
+  // A relative `/preview/...` would 404 against the operator domain.
+  const siteHost =
+    process.env.NEXT_PUBLIC_SITES_PREVIEW_HOST ?? 'leadlandlord-sites.vercel.app';
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
@@ -62,7 +67,7 @@ export default async function BuildSellDetailPage({ params }: Params) {
       {/* Quick links */}
       <section className="flex flex-wrap gap-3 text-sm">
         <a
-          href={`/preview/${site.id}`}
+          href={`https://${siteHost}/preview/${site.id}`}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sky-400 hover:text-sky-300 underline"
@@ -71,7 +76,7 @@ export default async function BuildSellDetailPage({ params }: Params) {
         </a>
         {site.status === 'live' && site.slug && (
           <a
-            href={`/buildsell/${site.slug}`}
+            href={`https://${siteHost}/buildsell/${site.slug}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-emerald-400 hover:text-emerald-300 underline"
