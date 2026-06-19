@@ -1,7 +1,10 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { createHmac } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { getDb, buildsellSites } from '@leadlandlord/db';
+import { createWriteClient } from '@leadlandlord/integrations/sanity';
+import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import { BuildSellImagePanel } from '../BuildSellImagePanel';
 import { MigrationReviewPanel } from '../MigrationReviewPanel';
 import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
@@ -41,6 +44,44 @@ export default async function BuildSellDetailPage({ params }: Params) {
   const siteHost =
     process.env.NEXT_PUBLIC_SITES_PREVIEW_HOST ?? 'leadlandlord-sites.vercel.app';
 
+  // Sign the preview URL so the buyer's "Save my theme" POST can be authorized
+  // by site-host. The token is HMAC-SHA256 over `bs-theme:${id}` using
+  // BS_PREVIEW_HMAC_SECRET. If the secret is unset we fall back to the plain
+  // preview URL — the page still works, Save just won't authorize.
+  // NOTE: BS_PREVIEW_HMAC_SECRET must also be set in the site-host Vercel
+  // project (same value) — the verifier there mirrors this exact signing call.
+  const hmacSecret = process.env.BS_PREVIEW_HMAC_SECRET;
+  let previewUrl: string;
+  if (hmacSecret) {
+    const token = createHmac('sha256', hmacSecret).update(`bs-theme:${site.id}`).digest('hex');
+    previewUrl = `https://${siteHost}/preview/${site.id}?t=${token}`;
+  } else {
+    console.warn('[buildsell] BS_PREVIEW_HMAC_SECRET is not set — preview link is unsigned; buyer Save will not authorize');
+    previewUrl = `https://${siteHost}/preview/${site.id}`;
+  }
+
+  // Fetch theme-lock status from the Sanity doc. Non-fatal — if the doc doesn't
+  // exist yet (build still in progress) we show "not built" gracefully.
+  type ThemeSnap = {
+    themeLocked?: boolean;
+    theme?: {
+      preset?: string;
+      layoutVariant?: string;
+      fontHeading?: string;
+      fontBody?: string;
+    };
+  };
+  let themeSnap: ThemeSnap | null = null;
+  try {
+    const client = createWriteClient();
+    themeSnap = await client.fetch<ThemeSnap | null>(
+      `*[_id==$id][0]{ themeLocked, theme{ preset, layoutVariant, fontHeading, fontBody } }`,
+      { id: buildsellSiteDocId(site.id) },
+    );
+  } catch {
+    // Non-fatal — Sanity may be transiently unavailable or doc not yet created.
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
@@ -79,7 +120,7 @@ export default async function BuildSellDetailPage({ params }: Params) {
       {/* Quick links */}
       <section className="flex flex-wrap gap-3 text-sm">
         <a
-          href={`https://${siteHost}/preview/${site.id}`}
+          href={previewUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sky-400 hover:text-sky-300 underline"
@@ -105,6 +146,45 @@ export default async function BuildSellDetailPage({ params }: Params) {
           >
             Payment link
           </a>
+        )}
+      </section>
+
+      {/* Buyer theme-lock status */}
+      <section className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-sm space-y-1">
+        <p className="font-medium text-slate-300">Buyer theme selection</p>
+        {themeSnap === null ? (
+          <p className="text-slate-500 text-xs">Site doc not yet built — theme status unavailable.</p>
+        ) : themeSnap.themeLocked ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-emerald-400">
+            <span>Buyer locked theme: &#10003;</span>
+            {themeSnap.theme?.preset && (
+              <span className="text-slate-300">Preset: <span className="font-medium">{themeSnap.theme.preset}</span></span>
+            )}
+            {themeSnap.theme?.layoutVariant && (
+              <span className="text-slate-300">Layout: <span className="font-medium">{themeSnap.theme.layoutVariant}</span></span>
+            )}
+            {themeSnap.theme?.fontHeading && (
+              <span className="text-slate-300">Heading font: <span className="font-medium">{themeSnap.theme.fontHeading}</span></span>
+            )}
+            {themeSnap.theme?.fontBody && (
+              <span className="text-slate-300">Body font: <span className="font-medium">{themeSnap.theme.fontBody}</span></span>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            <p className="text-amber-400">Buyer has not locked a theme yet.</p>
+            {themeSnap.theme && (
+              <p className="text-slate-500 text-xs">
+                Current generated theme:{' '}
+                {[
+                  themeSnap.theme.preset && `preset: ${themeSnap.theme.preset}`,
+                  themeSnap.theme.layoutVariant && `layout: ${themeSnap.theme.layoutVariant}`,
+                  themeSnap.theme.fontHeading && `heading: ${themeSnap.theme.fontHeading}`,
+                  themeSnap.theme.fontBody && `body: ${themeSnap.theme.fontBody}`,
+                ].filter(Boolean).join(' / ')}
+              </p>
+            )}
+          </div>
         )}
       </section>
 

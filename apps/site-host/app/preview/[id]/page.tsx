@@ -23,10 +23,13 @@ export async function generateMetadata({
 
 export default async function PreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ t?: string }>;
 }) {
   const { id } = await params;
+  const { t: saveToken } = await searchParams;
 
   // Defense layer 2: inline meta tag rendered in JSX as a third barrier
   // against indexing, applied regardless of whether the doc is found.
@@ -59,7 +62,7 @@ export default async function PreviewPage({
     <div className={fontVars}>
       {/* Defense layer 2: explicit meta in rendered JSX output */}
       {noindexMeta}
-      <BuildSellHome site={site} draft={true} />
+      <BuildSellHome site={site} draft={true} saveToken={saveToken} />
     </div>
   );
 }

@@ -55,6 +55,12 @@ export const buildsellSite = defineType({
       initialValue: true,
       description: 'Sanity layer of the triple-defense noindex.',
     }),
+    defineField({
+      name: 'themeLocked',
+      title: 'Theme Locked',
+      type: 'boolean',
+      description: 'Set true when the buyer confirms their theme on the draft preview. Builder preserves theme.{preset,layoutVariant,fontHeading,fontBody} on rebuild while this is true.',
+    }),
     defineField({ name: 'seo', title: 'SEO', type: 'bsSeo' }),
     defineField({
       name: 'migrated',
