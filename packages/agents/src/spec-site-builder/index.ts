@@ -20,7 +20,6 @@ import {
 import { writeBuildSellToSanity, type ExistingDocFields, type MigratedOverlay } from './persist-sanity';
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
-import { presetByName } from '@leadlandlord/sanity-schema/presets';
 import {
   pick,
   rotationSeed,
