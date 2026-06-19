@@ -163,10 +163,14 @@ async function uploadToBlob(
     return { uploadSkipped: 'no_token' };
   }
   try {
-    // Dynamic import — bundler won't error on missing pkg until runtime.
+    // Dynamic import of an optional, intentionally-uninstalled package. The
+    // ignore magic comments stop Turbopack/webpack from statically resolving it
+    // at build time (the `as string` cast alone does NOT — Turbopack still
+    // resolves it and fails the build). Resolution is deferred to runtime, where
+    // the missing package rejects and is caught → null.
     // TODO: add `@vercel/blob` to apps/operator/package.json once we confirm
     // the cron path runs end-to-end with sanity export.
-    const blob = await import('@vercel/blob' as string).catch(() => null);
+    const blob = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ '@vercel/blob' as string).catch(() => null);
     if (!blob || typeof (blob as { put?: unknown }).put !== 'function') {
       log.warn({ blobPath }, '@vercel/blob not installed — skipping upload');
       return { uploadSkipped: 'pkg_not_installed' };

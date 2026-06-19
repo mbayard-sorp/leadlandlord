@@ -7,7 +7,6 @@ import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
 import { uploadHeroImage } from '@leadlandlord/integrations/sanity';
 import { generateAndUploadFavicon } from '@leadlandlord/integrations/favicon';
-import { presetByName } from '@leadlandlord/sanity-schema/presets';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BudgetExceededError } from '@leadlandlord/shared/errors';
 import { BaseAgent, type AgentContext } from '../base';
