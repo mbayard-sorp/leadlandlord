@@ -292,6 +292,13 @@ const BUILDSELL_PROJECTION = `{
       source,
       date,
       "avatar": avatar{ "asset": asset->{ url } }
+    },
+    "items": items[]{
+      platform,
+      postUrl,
+      caption,
+      order,
+      "thumbnailUrl": thumbnail.asset->url
     }
   }
 }`;
@@ -374,6 +381,14 @@ export interface BuildSellSection {
   social?: Array<{ platform?: string | null; href?: string | null }> | null;
   legal?: string | null;
   legalLinks?: Array<{ label?: string | null; href?: string | null }> | null;
+  // bsUgcSection
+  items?: Array<{
+    platform?: string | null;
+    postUrl?: string | null;
+    caption?: string | null;
+    order?: number | null;
+    thumbnailUrl?: string | null;
+  }> | null;
 }
 
 export interface BuildSellSite {

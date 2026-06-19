@@ -155,6 +155,84 @@ export const bsSeo = defineType({
   ],
 });
 
+/**
+ * One curated social / UGC post shown in the bsUgcSection gallery.
+ *
+ * `thumbnail` is the displayed image (a post screenshot captured during the
+ * migration crawl, or an operator upload). `postUrl` links out to the live
+ * post. `embedHtml` is reserved for a future post-sale live-embed phase and
+ * is unused by the curated-gallery renderer.
+ */
+export const bsUgcItem = defineType({
+  name: 'bsUgcItem',
+  title: 'UGC Item',
+  type: 'object',
+  fields: [
+    defineField({
+      name: 'platform',
+      title: 'Platform',
+      type: 'string',
+      description: 'lucide brand icon name (e.g. "instagram", "facebook", "music-2" for TikTok).',
+    }),
+    defineField({ name: 'postUrl', title: 'Post URL', type: 'url', validation: (r) => r.uri({ scheme: ['http', 'https'] }) }),
+    defineField({ name: 'caption', title: 'Caption', type: 'text', rows: 2 }),
+    defineField({ name: 'thumbnail', title: 'Thumbnail', type: 'image', options: { hotspot: true }, description: 'Displayed image — post screenshot or operator upload.' }),
+    defineField({ name: 'order', title: 'Display Order', type: 'number' }),
+    defineField({ name: 'embedHtml', title: 'Embed HTML', type: 'text', rows: 3, hidden: true, description: 'Reserved for post-sale live embeds. Unused by the curated gallery.' }),
+  ],
+  preview: { select: { title: 'platform', subtitle: 'caption', media: 'thumbnail' } },
+});
+
+/**
+ * Durable record of operator-approved content migrated from the prospect's
+ * existing website. The spec-site-builder reads this on rebuild and overlays
+ * it onto generated content (after lint) so a regen never clobbers approved
+ * real copy/images. Asset ids are stored as plain strings; the builder
+ * re-attaches them as image references on the doc.
+ */
+export const bsMigrated = defineType({
+  name: 'bsMigrated',
+  title: 'Migrated Content',
+  type: 'object',
+  fields: [
+    defineField({ name: 'headline', title: 'Hero Headline', type: 'string' }),
+    defineField({ name: 'aboutBody', title: 'About Body', type: 'text', rows: 5 }),
+    defineField({ name: 'services', title: 'Services', type: 'array', of: [{ type: 'bsServiceCard' }] }),
+    defineField({ name: 'socials', title: 'Social Links', type: 'array', of: [{ type: 'bsSocialLink' }] }),
+    defineField({ name: 'logoAssetId', title: 'Logo Asset ID', type: 'string', description: 'Sanity asset _id for the migrated logo.' }),
+    defineField({ name: 'heroImageAssetId', title: 'Hero Image Asset ID', type: 'string' }),
+    defineField({ name: 'aboutImageAssetId', title: 'About Image Asset ID', type: 'string' }),
+    defineField({
+      name: 'ugc',
+      title: 'Social Gallery Items',
+      type: 'array',
+      of: [{ type: 'bsMigratedUgcItem' }],
+      description: 'Approved social-proof items, re-materialized as a bsUgcSection on rebuild.',
+    }),
+    defineField({ name: 'source', title: 'Source URL', type: 'url', description: 'The crawled website this content came from (provenance).' }),
+    defineField({ name: 'migratedAt', title: 'Approved At', type: 'datetime' }),
+  ],
+  preview: { prepare: () => ({ title: 'Migrated Content' }) },
+});
+
+/**
+ * A migrated UGC item as stored in the durable `bsMigrated.ugc` overlay.
+ * Holds the thumbnail as a plain asset id (re-attached as an image ref when
+ * the builder materializes the bsUgcSection) rather than an inline image.
+ */
+export const bsMigratedUgcItem = defineType({
+  name: 'bsMigratedUgcItem',
+  title: 'Migrated UGC Item',
+  type: 'object',
+  fields: [
+    defineField({ name: 'platform', title: 'Platform', type: 'string' }),
+    defineField({ name: 'postUrl', title: 'Post URL', type: 'url' }),
+    defineField({ name: 'caption', title: 'Caption', type: 'text', rows: 2 }),
+    defineField({ name: 'thumbnailAssetId', title: 'Thumbnail Asset ID', type: 'string' }),
+  ],
+  preview: { select: { title: 'platform', subtitle: 'caption' } },
+});
+
 export const buildsellObjectTypes = [
   bsCtaButton,
   bsServiceCard,
@@ -166,4 +244,7 @@ export const buildsellObjectTypes = [
   bsSocialLink,
   bsAddress,
   bsSeo,
+  bsUgcItem,
+  bsMigrated,
+  bsMigratedUgcItem,
 ];

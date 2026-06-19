@@ -3,6 +3,33 @@ import { buildsellSiteDocId, buildsellReviewDocId } from '@leadlandlord/sanity-s
 import type { SpecSiteContent } from './schema';
 
 /**
+ * Operator-approved content migrated from the prospect's existing site
+ * (content-migrator → review queue → applyMigrationSelections). The builder
+ * reads this from the existing doc and re-applies it on every rebuild, so a
+ * regen never clobbers approved real copy/images. Mirrors the `bsMigrated`
+ * Sanity object. Asset ids are plain strings; we re-attach them as image refs.
+ */
+export interface MigratedUgcOverlayItem {
+  platform: string;
+  postUrl?: string | null;
+  caption?: string | null;
+  thumbnailAssetId?: string | null;
+}
+
+export interface MigratedOverlay {
+  headline?: string | null;
+  aboutBody?: string | null;
+  services?: Array<{ icon: string; title: string; description: string }> | null;
+  socials?: Array<{ platform: string; href: string }> | null;
+  logoAssetId?: string | null;
+  heroImageAssetId?: string | null;
+  aboutImageAssetId?: string | null;
+  ugc?: MigratedUgcOverlayItem[] | null;
+  source?: string | null;
+  migratedAt?: string | null;
+}
+
+/**
  * Operator-owned fields that survive a rebuild unchanged.
  * Populated by the builder by fetching the existing doc before writing.
  */
@@ -13,6 +40,8 @@ export interface ExistingDocFields {
   ownerEmail?: string | null;
   /** Preserved when incoming payload has no street (reaped-lead rebuild degrades cleanly). */
   existingStreet?: string | null;
+  /** Approved migrated content — re-applied on every rebuild. */
+  migrated?: MigratedOverlay | null;
 }
 
 export interface WriteBuildSellArgs {
@@ -124,20 +153,39 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
   // so a reaped-lead rebuild doesn't blank the field.
   const streetToWrite = args.addressLine ?? ex.existingStreet ?? undefined;
 
+  // Migration overlay (operator-approved). Applied AFTER the builder's lint
+  // (which runs in index.ts on generated content only), so approved real copy
+  // bypasses the invention-guard. Everything migration-owned is re-derived
+  // from this object on each rebuild — that's what makes it durable.
+  const m = ex.migrated ?? null;
+  const heroHeadline = m?.headline?.trim() || content.hero.headline;
+  // Drop the model's highlight fragment when a migrated headline replaces it
+  // (the fragment likely no longer appears in the new headline).
+  const heroHighlight = m?.headline ? undefined : content.hero.highlight;
+  const aboutBody = m?.aboutBody?.trim() || content.about.body;
+  const heroImageAssetId = m?.heroImageAssetId ?? args.heroImageAssetId ?? null;
+  const aboutImageAssetId = m?.aboutImageAssetId ?? args.aboutImageAssetId ?? null;
+  const serviceCards =
+    m?.services && m.services.length > 0
+      ? m.services.map((s) => ({ icon: s.icon, title: s.title, description: s.description }))
+      : content.services.cards;
+  const footerSocial =
+    m?.socials && m.socials.length > 0 ? m.socials : (content.footer.social ?? []);
+
   const sections = [
     {
       _key: 'hero',
       _type: 'bsHeroSection',
       eyebrow: content.hero.eyebrow,
-      headline: content.hero.headline,
-      highlight: content.hero.highlight,
+      headline: heroHeadline,
+      highlight: heroHighlight,
       subhead: content.hero.subhead,
       showRating: true,
       badges: content.hero.badges.map((b, i) => ({ _key: `bdg${i}`, _type: 'bsTrustBadge', ...b })),
       primaryCta: { _type: 'bsCtaButton', ...content.hero.primaryCta },
       secondaryCta: { _type: 'bsCtaButton', ...content.hero.secondaryCta },
-      ...(args.heroImageAssetId
-        ? { image: { _type: 'image', asset: { _type: 'reference', _ref: args.heroImageAssetId } } }
+      ...(heroImageAssetId
+        ? { image: { _type: 'image', asset: { _type: 'reference', _ref: heroImageAssetId } } }
         : {}),
     },
     {
@@ -146,23 +194,23 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       // B-HEADINGS fix: heading comes from model output, never hardcoded.
       heading: content.services.heading,
       subhead: content.services.subhead ?? undefined,
-      services: content.services.cards.map((s, i) => ({
+      services: serviceCards.map((s, i) => ({
         _key: `svc${i}`,
         _type: 'bsServiceCard',
         icon: s.icon,
         title: s.title,
         description: s.description,
-        ...(s.link ? { link: s.link } : {}),
+        ...('link' in s && s.link ? { link: s.link } : {}),
       })),
     },
     {
       _key: 'about',
       _type: 'bsAboutSection',
       heading: content.about.heading,
-      body: content.about.body,
+      body: aboutBody,
       stats: content.about.stats.map((s, i) => ({ _key: `st${i}`, _type: 'bsStatItem', ...s })),
-      ...(args.aboutImageAssetId
-        ? { image: { _type: 'image', asset: { _type: 'reference', _ref: args.aboutImageAssetId } } }
+      ...(aboutImageAssetId
+        ? { image: { _type: 'image', asset: { _type: 'reference', _ref: aboutImageAssetId } } }
         : {}),
     },
     {
@@ -201,6 +249,28 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
         serviceArea: content.contact.serviceArea,
       },
     },
+    // Social gallery — materialized from the migration overlay only (no model
+    // content drives it). Omitted entirely when there are no approved items.
+    ...(m?.ugc && m.ugc.length > 0
+      ? [
+          {
+            _key: 'ugc',
+            _type: 'bsUgcSection',
+            heading: 'From Our Community',
+            items: m.ugc.map((u, i) => ({
+              _key: `ugc${i}`,
+              _type: 'bsUgcItem',
+              platform: u.platform,
+              ...(u.postUrl ? { postUrl: u.postUrl } : {}),
+              ...(u.caption ? { caption: u.caption } : {}),
+              order: i,
+              ...(u.thumbnailAssetId
+                ? { thumbnail: { _type: 'image', asset: { _type: 'reference', _ref: u.thumbnailAssetId } } }
+                : {}),
+            })),
+          },
+        ]
+      : []),
     {
       _key: 'footer',
       _type: 'bsFooterSection',
@@ -212,7 +282,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
         heading: col.heading,
         links: col.links.map((l, j) => ({ _key: `fcl${i}_${j}`, _type: 'bsFooterLink', ...l })),
       })),
-      social: (content.footer.social ?? []).map((s, i) => ({
+      social: footerSocial.map((s, i) => ({
         _key: `soc${i}`,
         _type: 'bsSocialLink',
         platform: s.platform,
@@ -279,6 +349,59 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
         ? { ogImage: { _type: 'image', asset: { _type: 'reference', _ref: args.ogImageAssetId } } }
         : {}),
     },
+    // Doc-root logo from the migration overlay (createOrReplace would otherwise
+    // drop it on rebuild — it lives only here, not in generated content).
+    ...(m?.logoAssetId
+      ? { logo: { _type: 'image', asset: { _type: 'reference', _ref: m.logoAssetId } } }
+      : {}),
+    // Re-emit the migration overlay so it survives the next createOrReplace.
+    ...(m
+      ? {
+          migrated: {
+            _type: 'bsMigrated',
+            ...(m.headline ? { headline: m.headline } : {}),
+            ...(m.aboutBody ? { aboutBody: m.aboutBody } : {}),
+            ...(m.services && m.services.length > 0
+              ? {
+                  services: m.services.map((s, i) => ({
+                    _key: `msvc${i}`,
+                    _type: 'bsServiceCard',
+                    icon: s.icon,
+                    title: s.title,
+                    description: s.description,
+                  })),
+                }
+              : {}),
+            ...(m.socials && m.socials.length > 0
+              ? {
+                  socials: m.socials.map((s, i) => ({
+                    _key: `msoc${i}`,
+                    _type: 'bsSocialLink',
+                    platform: s.platform,
+                    href: s.href,
+                  })),
+                }
+              : {}),
+            ...(m.logoAssetId ? { logoAssetId: m.logoAssetId } : {}),
+            ...(m.heroImageAssetId ? { heroImageAssetId: m.heroImageAssetId } : {}),
+            ...(m.aboutImageAssetId ? { aboutImageAssetId: m.aboutImageAssetId } : {}),
+            ...(m.ugc && m.ugc.length > 0
+              ? {
+                  ugc: m.ugc.map((u, i) => ({
+                    _key: `mugc${i}`,
+                    _type: 'bsMigratedUgcItem',
+                    platform: u.platform,
+                    ...(u.postUrl ? { postUrl: u.postUrl } : {}),
+                    ...(u.caption ? { caption: u.caption } : {}),
+                    ...(u.thumbnailAssetId ? { thumbnailAssetId: u.thumbnailAssetId } : {}),
+                  })),
+                }
+              : {}),
+            ...(m.source ? { source: m.source } : {}),
+            ...(m.migratedAt ? { migratedAt: m.migratedAt } : {}),
+          },
+        }
+      : {}),
     sections,
     generatedAt: args.generatedAt,
   });

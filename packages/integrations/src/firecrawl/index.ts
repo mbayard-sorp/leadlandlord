@@ -298,3 +298,149 @@ export async function scrapeUrlMarkdown(url: string): Promise<string | null> {
     return null;
   }
 }
+
+// ── Build & Sell content migration scrape ────────────────────────────────────
+
+/** Image-file extensions we treat as candidate site imagery. */
+const IMAGE_EXT_RE = /\.(?:png|jpe?g|webp|gif|avif|svg)(?:\?[^"')\s]*)?$/i;
+
+/** Tiny tracking-pixel / icon / sprite filename hints we drop from candidates. */
+const IMAGE_NOISE_RE =
+  /(?:sprite|icon|favicon|pixel|spacer|1x1|blank|loader|spinner|placeholder|avatar-default|data:image)/i;
+
+export interface MigrationScrapeResult {
+  /** Main-content markdown (copy source for the migration agent). Capped. */
+  markdown: string;
+  /** Raw HTML (header + footer retained) so logos/social icons survive. Capped. */
+  html: string;
+  /** Absolute image URLs discovered on the page, de-duped + noise-filtered. */
+  imageUrls: string[];
+  /** Outbound links (absolute), de-duped. Social profiles live here. */
+  links: string[];
+}
+
+/** Resolve a possibly-relative URL against the page origin. Returns null on failure. */
+function absolutize(href: string, base: string): string | null {
+  try {
+    return new URL(href, base).toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Extract `src`/`srcset`/`data-src` image URLs from raw HTML, absolutized + filtered. */
+function extractImageUrls(html: string, base: string): string[] {
+  const out = new Set<string>();
+  // src="...", data-src="...", and the first URL of each srcset entry.
+  const attrRe = /(?:src|data-src|data-lazy-src)\s*=\s*["']([^"']+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = attrRe.exec(html)) !== null) {
+    const raw = m[1]!;
+    if (IMAGE_NOISE_RE.test(raw)) continue;
+    if (!IMAGE_EXT_RE.test(raw)) continue;
+    const abs = absolutize(raw, base);
+    if (abs) out.add(abs);
+  }
+  // og:image / twitter:image meta tags — usually the best hero candidate.
+  const metaRe = /<meta[^>]+(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["'][^>]*>/gi;
+  let meta: RegExpExecArray | null;
+  while ((meta = metaRe.exec(html)) !== null) {
+    const content = /content\s*=\s*["']([^"']+)["']/i.exec(meta[0]);
+    if (content?.[1]) {
+      const abs = absolutize(content[1], base);
+      if (abs && !IMAGE_NOISE_RE.test(abs)) out.add(abs);
+    }
+  }
+  return [...out].slice(0, 40);
+}
+
+/** Extract absolute outbound link hrefs from raw HTML, de-duped. */
+function extractLinks(html: string, base: string): string[] {
+  const out = new Set<string>();
+  const hrefRe = /<a[^>]+href\s*=\s*["']([^"']+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = hrefRe.exec(html)) !== null) {
+    const raw = m[1]!;
+    if (raw.startsWith('#') || raw.startsWith('mailto:') || raw.startsWith('tel:')) continue;
+    const abs = absolutize(raw, base);
+    if (abs) out.add(abs);
+  }
+  return [...out].slice(0, 200);
+}
+
+/**
+ * Scrape a prospect's homepage for Build & Sell content migration.
+ *
+ * Unlike the receptivity/contact probes, this deliberately KEEPS the header
+ * and footer (logos live in the header, social links in the footer) and pulls
+ * raw HTML so image + link extraction can see them. Returns markdown for copy,
+ * the capped HTML, plus discovered image URLs and outbound links.
+ *
+ * Returns a safe empty shape (`{ markdown:'', html:'', imageUrls:[], links:[] }`)
+ * on any fetch failure — never throws except when FIRECRAWL_API_KEY is missing,
+ * matching the rest of this module. Cost: one Firecrawl scrape credit.
+ */
+export async function scrapeSiteForMigration(url: string): Promise<MigrationScrapeResult> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) {
+    throw new IntegrationError('firecrawl', 'FIRECRAWL_API_KEY is not set');
+  }
+  const empty: MigrationScrapeResult = { markdown: '', html: '', imageUrls: [], links: [] };
+
+  // Normalize to an absolute https URL so the relative-URL resolver has a base.
+  const pageUrl = /^https?:\/\//i.test(url) ? url : `https://${url.replace(/^\/+/, '')}`;
+
+  try {
+    const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: pageUrl,
+        // markdown for copy, html + links for logo/image/social extraction.
+        formats: ['markdown', 'html', 'links'],
+        // Light exclude set ONLY — keep nav/footer so the logo and social
+        // icons are in the returned HTML (the other probes strip them).
+        excludeTags: ['script', 'style'],
+        onlyMainContent: false,
+        timeout: 20000,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!res.ok) {
+      log.warn({ url: pageUrl, status: res.status }, 'firecrawl scrapeSiteForMigration non-ok');
+      return empty;
+    }
+
+    const json = (await res.json()) as {
+      success?: boolean;
+      data?: { markdown?: string; html?: string; links?: string[] };
+    };
+    if (!json.success || !json.data) return empty;
+
+    const html = json.data.html ?? '';
+    const markdown = (json.data.markdown ?? '').slice(0, 12000);
+
+    // Prefer Firecrawl's own link list; fall back to parsing the HTML.
+    const fcLinks = Array.isArray(json.data.links) ? json.data.links : [];
+    const links = fcLinks.length > 0
+      ? [...new Set(fcLinks.filter((l) => typeof l === 'string'))].slice(0, 200)
+      : extractLinks(html, pageUrl);
+
+    return {
+      markdown,
+      html: html.slice(0, 200000),
+      imageUrls: extractImageUrls(html, pageUrl),
+      links,
+    };
+  } catch (err) {
+    log.warn(
+      { url: pageUrl, err: err instanceof Error ? err.message : err },
+      'firecrawl scrapeSiteForMigration error',
+    );
+    return empty;
+  }
+}

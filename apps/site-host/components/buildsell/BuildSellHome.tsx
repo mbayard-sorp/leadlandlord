@@ -11,6 +11,7 @@ import { ProcessBlock } from './blocks/ProcessBlock';
 import { ReviewsBlock } from './blocks/ReviewsBlock';
 import { ContactBlock } from './blocks/ContactBlock';
 import { FooterBlock } from './blocks/FooterBlock';
+import { UgcBlock } from './blocks/UgcBlock';
 
 // Import the base B&S stylesheet
 import '@/styles/themes/buildsell.css';
@@ -139,6 +140,14 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
           case 'bsReviewsSection':
             return (
               <ReviewsBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
+          case 'bsUgcSection':
+            return (
+              <UgcBlock
                 key={section._key}
                 section={section}
                 layoutVariant={layoutVariant}

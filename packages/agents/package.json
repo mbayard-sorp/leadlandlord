@@ -18,6 +18,8 @@
     "./outreach-agent": "./src/outreach-agent/index.ts",
     "./backlink-builder": "./src/backlink-builder/index.ts",
     "./registry": "./src/registry.ts",
+    "./content-migrator": "./src/content-migrator/index.ts",
+    "./content-migrator/types": "./src/content-migrator/types.ts",
     "./audit": "./src/audit/health.ts",
     "./orchestrator": "./src/orchestrator/index.ts",
     "./error-classify": "./src/error-classify.ts",

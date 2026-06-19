@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { getDb, buildsellSites } from '@leadlandlord/db';
 import { BuildSellImagePanel } from '../BuildSellImagePanel';
+import { MigrationReviewPanel } from '../MigrationReviewPanel';
+import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +25,10 @@ export default async function BuildSellDetailPage({ params }: Params) {
   if (!site) notFound();
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
+
+  // Pending content-migration suggestions (staged by the content-migrator agent).
+  const meta = (site.metadata ?? {}) as Record<string, unknown>;
+  const pendingMigration = (meta[PENDING_MIGRATION_KEY] as PendingMigration | undefined) ?? null;
 
   // Preview/Live links resolve to the site-host Vercel project, not operator.
   // A relative `/preview/...` would 404 against the operator domain.
@@ -95,6 +101,13 @@ export default async function BuildSellDetailPage({ params }: Params) {
           </a>
         )}
       </section>
+
+      {/* Content migration review queue */}
+      <MigrationReviewPanel
+        siteId={site.id}
+        pending={pendingMigration}
+        canCrawl={!isPaidOrLive}
+      />
 
       {/* Image prompt control panel */}
       <BuildSellImagePanel siteId={site.id} />

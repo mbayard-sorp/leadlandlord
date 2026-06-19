@@ -11,7 +11,7 @@ import {
   releaseEventLease,
 } from '@leadlandlord/db/queue';
 import { isKillSwitchActive } from '@leadlandlord/db/system-state';
-import { reapExpiredBuildSellPii } from '@leadlandlord/db/buildsell';
+import { reapExpiredBuildSellPii, sweepStalePendingMigrations } from '@leadlandlord/db/buildsell';
 import { getAgent } from '@leadlandlord/agents/registry';
 import { classifyAgentError } from '@leadlandlord/agents/error-classify';
 import { log } from '@leadlandlord/shared/log';
@@ -96,6 +96,17 @@ export async function runOperatorTick(): Promise<TickResult> {
     }
   } catch (err) {
     log.error({ err }, 'operator-tick build-sell PII reaper failed');
+  }
+
+  // Discard stale raw content-migration suggestions (approved content already
+  // lives in Sanity). Keeps the "discard raw crawl output" guarantee.
+  try {
+    const sweptMigrations = await sweepStalePendingMigrations();
+    if (sweptMigrations) {
+      log.info({ count: sweptMigrations }, 'operator-tick swept stale pending migrations');
+    }
+  } catch (err) {
+    log.error({ err }, 'operator-tick pending-migration sweep failed');
   }
 
   // Recover approved content ideas whose dispatch event was lost or

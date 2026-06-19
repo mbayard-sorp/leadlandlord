@@ -109,6 +109,23 @@ export const bsFooterSection = defineType({
   preview: { prepare: () => ({ title: 'Footer' }) },
 });
 
+/**
+ * Curated social-proof / UGC gallery. Operator-picked post screenshots +
+ * links. Renders only when it has items (an empty placeholder is harmless).
+ * Populated from the migration review queue or by hand in Studio.
+ */
+export const bsUgcSection = defineType({
+  name: 'bsUgcSection',
+  title: 'Social Gallery',
+  type: 'object',
+  fields: [
+    defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    defineField({ name: 'subhead', title: 'Subhead', type: 'text', rows: 2 }),
+    defineField({ name: 'items', title: 'Posts', type: 'array', of: [{ type: 'bsUgcItem' }] }),
+  ],
+  preview: { prepare: () => ({ title: 'Social Gallery' }) },
+});
+
 export const buildsellSectionTypes = [
   bsHeroSection,
   bsServicesSection,
@@ -117,4 +134,5 @@ export const buildsellSectionTypes = [
   bsReviewsSection,
   bsContactSection,
   bsFooterSection,
+  bsUgcSection,
 ];

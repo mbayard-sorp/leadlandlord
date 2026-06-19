@@ -39,6 +39,7 @@ import { FleetDigest } from './fleet-digest/index';
 import { CitationRunner } from './citation-runner/index';
 import { Molly } from './molly/index';
 import { SpecSiteBuilder } from './spec-site-builder/index';
+import { ContentMigrator } from './content-migrator/index';
 import type { BaseAgent } from './base';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyAgent = BaseAgent<any, any>;
@@ -87,6 +88,9 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   // Build & Sell — its own queue lane (targetAgent:'spec-site-builder'),
   // fully separate from R&R's 'site-builder'.
   'spec-site-builder': () => new SpecSiteBuilder(),
+  // Build & Sell content migration: crawls a prospect's existing site and
+  // stages operator-reviewable suggestions (never touches the live doc).
+  'content-migrator': () => new ContentMigrator(),
   // NOTE: the `orchestrator` agent (packages/agents/src/orchestrator/brain.ts)
   // is intentionally NOT registered here. The registry feeds the cron worker
   // (/api/cron/agent/[name]); registering it would make the chat brain firable

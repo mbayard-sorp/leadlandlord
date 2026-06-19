@@ -15,7 +15,7 @@ import {
   SpecSiteContent,
   type SpecSiteContent as SpecSiteContentType,
 } from './schema';
-import { writeBuildSellToSanity, type ExistingDocFields } from './persist-sanity';
+import { writeBuildSellToSanity, type ExistingDocFields, type MigratedOverlay } from './persist-sanity';
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import {
@@ -49,6 +49,48 @@ export class RebuildProtectedError extends Error {
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Parse the raw `migrated` field off an existing Sanity doc into a clean
+ * MigratedOverlay (strip _type/_key, coerce types). Returns null when absent.
+ */
+function parseMigrated(raw: unknown): MigratedOverlay | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
+  const services = Array.isArray(r['services'])
+    ? (r['services'] as Array<Record<string, unknown>>)
+        .map((s) => ({ icon: String(s['icon'] ?? ''), title: String(s['title'] ?? ''), description: String(s['description'] ?? '') }))
+        .filter((s) => s.title && s.icon)
+    : undefined;
+  const socials = Array.isArray(r['socials'])
+    ? (r['socials'] as Array<Record<string, unknown>>)
+        .map((s) => ({ platform: String(s['platform'] ?? ''), href: String(s['href'] ?? '') }))
+        .filter((s) => s.platform && s.href)
+    : undefined;
+  const ugc = Array.isArray(r['ugc'])
+    ? (r['ugc'] as Array<Record<string, unknown>>)
+        .map((u) => ({
+          platform: String(u['platform'] ?? ''),
+          postUrl: str(u['postUrl']),
+          caption: str(u['caption']),
+          thumbnailAssetId: str(u['thumbnailAssetId']),
+        }))
+        .filter((u) => u.platform && (u.thumbnailAssetId || u.postUrl))
+    : undefined;
+  return {
+    headline: str(r['headline']),
+    aboutBody: str(r['aboutBody']),
+    services: services && services.length > 0 ? services : undefined,
+    socials: socials && socials.length > 0 ? socials : undefined,
+    logoAssetId: str(r['logoAssetId']),
+    heroImageAssetId: str(r['heroImageAssetId']),
+    aboutImageAssetId: str(r['aboutImageAssetId']),
+    ugc: ugc && ugc.length > 0 ? ugc : undefined,
+    source: str(r['source']),
+    migratedAt: str(r['migratedAt']),
+  };
 }
 
 /**
@@ -257,6 +299,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
           purchaseUrl: typeof existing['purchaseUrl'] === 'string' ? existing['purchaseUrl'] : null,
           ownerEmail: typeof existing['ownerEmail'] === 'string' ? existing['ownerEmail'] : null,
           existingStreet: typeof addr?.['street'] === 'string' ? addr['street'] : null,
+          migrated: parseMigrated(existing['migrated']),
         };
       }
     } catch (err) {
@@ -333,9 +376,13 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       }
     }
 
+    // Migration overlay: when the operator approved a real hero/about photo,
+    // use it verbatim and SKIP image generation (saves cost + preserves it).
+    const migrated = existingDoc?.migrated ?? null;
+
     // ── Step 2a: Hero image (most important — skip last) ──
-    let heroImageAssetId: string | null = null;
-    if (this.underCap()) {
+    let heroImageAssetId: string | null = migrated?.heroImageAssetId ?? null;
+    if (!heroImageAssetId && this.underCap()) {
       try {
         ctx.progress({ label: 'Generating hero image' });
         const hero = await generateHeroImageBuffer(finalContent.hero.imagePrompt, { aspectRatio: '16:9' });
@@ -347,13 +394,15 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       } catch (err) {
         ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'spec-site hero image failed (non-fatal)');
       }
+    } else if (heroImageAssetId) {
+      ctx.log.info({ siteId: site.id }, 'spec-site using migrated hero image — skipping generation');
     } else {
       ctx.log.info({ spent: this.spentThisRun, cap: this.perRunCap }, 'skipping hero image — per-run cap reached');
     }
 
-    // ── Step 2b: About image (skip if cap reached) ──
-    let aboutImageAssetId: string | null = null;
-    if (this.underCap() && finalContent.about.imagePrompt) {
+    // ── Step 2b: About image (skip if cap reached or migrated) ──
+    let aboutImageAssetId: string | null = migrated?.aboutImageAssetId ?? null;
+    if (!aboutImageAssetId && this.underCap() && finalContent.about.imagePrompt) {
       try {
         ctx.progress({ label: 'Generating about image' });
         const about = await generateHeroImageBuffer(finalContent.about.imagePrompt, { aspectRatio: '4:3' });

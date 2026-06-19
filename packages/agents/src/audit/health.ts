@@ -86,6 +86,9 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   'citation-runner': [],
   // Build & Sell spec-site builder. Imagen is used when available; falls back to no hero image.
   'spec-site-builder': [],
+  // Build & Sell content migrator. FIRECRAWL_API_KEY is required — the crawl
+  // hard-fails without it (Anthropic vision uses the fleet-wide ANTHROPIC_API_KEY).
+  'content-migrator': [['FIRECRAWL_API_KEY']],
 };
 
 /**
