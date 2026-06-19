@@ -3,6 +3,7 @@ import { structureTool } from 'sanity/structure';
 import { visionTool } from '@sanity/vision';
 import { colorInput } from '@sanity/color-input';
 import { schemaTypes } from '@leadlandlord/sanity-schema';
+import { structure } from './structure';
 
 const projectId = process.env.SANITY_STUDIO_PROJECT_ID ?? 'ybdv5za2';
 
@@ -13,7 +14,7 @@ export default defineConfig([
     basePath: '/production',
     projectId,
     dataset: 'production',
-    plugins: [structureTool(), visionTool(), colorInput()],
+    plugins: [structureTool({ structure }), visionTool(), colorInput()],
     schema: { types: schemaTypes },
   },
   {
@@ -22,7 +23,7 @@ export default defineConfig([
     basePath: '/development',
     projectId,
     dataset: 'development',
-    plugins: [structureTool(), visionTool(), colorInput()],
+    plugins: [structureTool({ structure }), visionTool(), colorInput()],
     schema: { types: schemaTypes },
   },
 ]);
