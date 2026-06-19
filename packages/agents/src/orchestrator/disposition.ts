@@ -68,6 +68,7 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   'niche-validator': ARMED(15), // operator-approved validation spend
   'niche-keyword-refresher': ON(15), // quarterly cluster warm (~$12.50 fully stale)
   'site-builder': ARMED(10), // fires only on niche.approved
+  'spec-site-builder': ARMED(5), // Build & Sell; fires only on operator buildsell.build (~$0.50/build)
   'domain-procurer': ARMED(3),
   'tracking-setup': ARMED(3),
 

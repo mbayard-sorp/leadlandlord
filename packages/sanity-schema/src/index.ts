@@ -9,6 +9,9 @@ export {
   keywordCluster,
   review,
 } from './types/index';
+// Build & Sell schema types + presets (all bs-prefixed).
+export { buildsellSchemaTypes, buildsellSite, buildsellTheme, bsReview, BUILDSELL_PRESETS } from './types/buildsell';
+export type { BuildsellPreset } from './types/buildsell';
 export {
   siteDocId,
   pageDocId,
@@ -16,6 +19,8 @@ export {
   corporateSiteDocId,
   corporatePageDocId,
   keywordClusterDocId,
+  buildsellSiteDocId,
+  buildsellReviewDocId,
   CORPORATE_PAGE_KINDS,
   THEME_NAMES,
   type PageKind,

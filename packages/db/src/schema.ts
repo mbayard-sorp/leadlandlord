@@ -1979,3 +1979,136 @@ export type SiteOriginalDataInputs = typeof siteOriginalDataInputs.$inferSelect;
 export type NewSiteOriginalDataInputs = typeof siteOriginalDataInputs.$inferInsert;
 export type SiteNetworkMetric = typeof siteNetworkMetrics.$inferSelect;
 export type NewSiteNetworkMetric = typeof siteNetworkMetrics.$inferInsert;
+
+// ════════════════════════════════════════════════════════════
+// Build & Sell (B&S) — spec-site business line.
+//
+// Deliberately ISOLATED from the Rank-and-Rent (R&R) tables above:
+// NONE of the three tables below FK into `sites`, `niches`, `tenants`,
+// or `invoices`. B&S brings its own lead store, its own draft-site
+// table, and its own lead-capture table so the two business lines
+// share no mutable surface. See docs plan "Build & Sell".
+// ════════════════════════════════════════════════════════════
+
+export const buildsellStatusEnum = pgEnum('buildsell_status', [
+  'draft',
+  'building',
+  'invoiced',
+  'paid',
+  'live',
+  'failed',
+]);
+
+/**
+ * Ephemeral Google Places store + B&S lead source of truth.
+ *
+ * ToS guard: `place_id` is the ONLY field persisted indefinitely. Every
+ * other column is a 30-day cache that `reapExpiredBuildSellPii()` nulls
+ * once `cached_until` passes (the reaper keeps place_id/trade/city/state,
+ * drops all PII). The table doubles as the 30-day Places cache: repeat
+ * searches serve fresh rows; only stale/missing places hit the API.
+ */
+export const buildsellLeads = pgTable(
+  'buildsell_leads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // The only field persisted indefinitely (Places ToS).
+    placeId: text('place_id').notNull().unique(),
+    // Cache fields — nulled by the reaper past cached_until.
+    displayName: text('display_name'),
+    formattedAddress: text('formatted_address'),
+    nationalPhone: text('national_phone'),
+    primaryType: text('primary_type'),
+    types: jsonb('types'),
+    rating: numeric('rating', { precision: 2, scale: 1 }),
+    userRatingCount: integer('user_rating_count'),
+    websiteUri: text('website_uri'),
+    lat: numeric('lat', { precision: 10, scale: 7 }),
+    lng: numeric('lng', { precision: 10, scale: 7 }),
+    // Search context (trade/city/state survive the reaper).
+    trade: text('trade'),
+    city: text('city'),
+    state: text('state'),
+    cachedUntil: timestamp('cached_until', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    cachedUntilIdx: index('buildsell_leads_cached_until_idx').on(t.cachedUntil),
+  }),
+);
+
+/**
+ * The B&S draft/sold site — an independent mirror of what `sites` is for
+ * R&R. `placeId` is a soft link BY VALUE to buildsell_leads, NOT a FK.
+ * The full theme + content lives in the Sanity `bs-site-${id}` doc.
+ */
+export const buildsellSites = pgTable(
+  'buildsell_sites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    placeId: text('place_id'),
+    businessName: text('business_name').notNull(),
+    trade: text('trade').notNull(),
+    city: text('city').notNull(),
+    state: text('state').notNull(),
+    // Set at build; powers the /buildsell/{slug} live URL.
+    slug: text('slug').unique(),
+    ownerEmail: text('owner_email'),
+    status: buildsellStatusEnum('status').notNull().default('draft'),
+    // The palette preset name chosen (e.g. "Aqua Slate"); full theme in Sanity.
+    themePreset: text('theme_preset'),
+    // Invoice fields — operator-driven, out-of-band payment.
+    priceUsd: numeric('price_usd', { precision: 10, scale: 2 }),
+    paymentLink: text('payment_link'),
+    invoiceNumber: text('invoice_number').unique(),
+    invoiceSentAt: timestamp('invoice_sent_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    liveAt: timestamp('live_at', { withTimezone: true }),
+    // Dedupe anchor for the spec-site-builder agent.
+    buildEpoch: text('build_epoch'),
+    lastBuildError: text('last_build_error'),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    statusIdx: index('buildsell_sites_status_idx').on(t.status),
+  }),
+);
+
+/**
+ * Draft contact-form submissions. Cannot reuse R&R `leads` (that table's
+ * site_id FKs `sites` CASCADE); B&S leads FK their own buildsell_sites.
+ */
+export const buildsellSiteLeads = pgTable(
+  'buildsell_site_leads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    buildsellSiteId: uuid('buildsell_site_id')
+      .notNull()
+      .references(() => buildsellSites.id, { onDelete: 'cascade' }),
+    name: text('name'),
+    phone: text('phone'),
+    email: text('email'),
+    message: text('message'),
+    source: text('source').default('contact'),
+    // pending | sent | skipped | failed
+    forwardStatus: text('forward_status'),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteCreatedIdx: index('buildsell_site_leads_site_created_idx').on(
+      t.buildsellSiteId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export type BuildsellLead = typeof buildsellLeads.$inferSelect;
+export type NewBuildsellLead = typeof buildsellLeads.$inferInsert;
+export type BuildsellSite = typeof buildsellSites.$inferSelect;
+export type NewBuildsellSite = typeof buildsellSites.$inferInsert;
+export type BuildsellSiteLead = typeof buildsellSiteLeads.$inferSelect;
+export type NewBuildsellSiteLead = typeof buildsellSiteLeads.$inferInsert;

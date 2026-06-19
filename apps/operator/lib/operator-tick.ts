@@ -11,6 +11,7 @@ import {
   releaseEventLease,
 } from '@leadlandlord/db/queue';
 import { isKillSwitchActive } from '@leadlandlord/db/system-state';
+import { reapExpiredBuildSellPii } from '@leadlandlord/db/buildsell';
 import { getAgent } from '@leadlandlord/agents/registry';
 import { classifyAgentError } from '@leadlandlord/agents/error-classify';
 import { log } from '@leadlandlord/shared/log';
@@ -84,6 +85,17 @@ export async function runOperatorTick(): Promise<TickResult> {
   const { count: reapedStrandedBuilds } = await reapStrandedBuildingSites();
   if (reapedStrandedBuilds) {
     log.warn({ count: reapedStrandedBuilds }, 'operator-tick reaped stranded building sites');
+  }
+
+  // Build & Sell ToS guarantee: null PII on buildsell_leads past their 30-day
+  // cached_until every tick (keeps only place_id/trade/city/state). No new cron.
+  try {
+    const reapedBuildSellPii = await reapExpiredBuildSellPii();
+    if (reapedBuildSellPii) {
+      log.info({ count: reapedBuildSellPii }, 'operator-tick reaped expired build-sell PII');
+    }
+  } catch (err) {
+    log.error({ err }, 'operator-tick build-sell PII reaper failed');
   }
 
   // Recover approved content ideas whose dispatch event was lost or

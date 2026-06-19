@@ -1,0 +1,121 @@
+import { desc } from 'drizzle-orm';
+import { getDb, buildsellSites } from '@leadlandlord/db';
+import { SearchPanel } from './SearchPanel';
+import { BuildSellButtons } from './BuildSellButtons';
+
+export const dynamic = 'force-dynamic';
+
+export default async function BuildSellPage() {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(buildsellSites)
+    .orderBy(desc(buildsellSites.createdAt));
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-xl md:text-2xl font-semibold">Build &amp; Sell</h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Find no-website businesses via Google Places, create a draft spec site, send an invoice,
+          and flip it live once paid.
+        </p>
+      </header>
+
+      <SearchPanel />
+
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide mb-2 text-slate-300">
+          Sites ({rows.length})
+        </h2>
+        {rows.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/20 p-4 text-sm text-slate-500">
+            No B&amp;S sites yet. Use the search panel above to find leads and create a draft.
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+                  <Th>Business</Th>
+                  <Th>Location</Th>
+                  <Th>Trade</Th>
+                  <Th>Status</Th>
+                  <Th>Price</Th>
+                  <Th>Preview</Th>
+                  <Th>Actions</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((site) => (
+                  <tr
+                    key={site.id}
+                    className="border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20"
+                  >
+                    <td className="px-2 py-2 font-medium text-slate-200">{site.businessName}</td>
+                    <td className="px-2 py-2 text-slate-400">
+                      {site.city}, {site.state}
+                    </td>
+                    <td className="px-2 py-2 text-slate-400">{site.trade}</td>
+                    <td className="px-2 py-2">
+                      <StatusBadge status={site.status} />
+                    </td>
+                    <td className="px-2 py-2 text-slate-400">
+                      {site.priceUsd ? `$${Number(site.priceUsd).toFixed(0)}` : '—'}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex flex-col gap-1">
+                        <a
+                          href={`/preview/${site.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-sky-400 hover:text-sky-300 underline"
+                        >
+                          Preview
+                        </a>
+                        {site.status === 'live' && site.slug && (
+                          <a
+                            href={`/buildsell/${site.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+                          >
+                            Live
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <BuildSellButtons site={site} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="px-2 py-2 font-medium">{children}</th>;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    draft: 'bg-slate-700 text-slate-300',
+    building: 'bg-amber-900/60 text-amber-300',
+    invoiced: 'bg-blue-900/60 text-blue-300',
+    paid: 'bg-purple-900/60 text-purple-300',
+    live: 'bg-emerald-900/60 text-emerald-300',
+    failed: 'bg-red-900/60 text-red-300',
+  };
+  const cls = map[status] ?? 'bg-slate-700 text-slate-300';
+  return (
+    <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>
+      {status}
+    </span>
+  );
+}

@@ -36,6 +36,16 @@ const EnvSchema = z.object({
   KLAVIYO_PRIVATE_API_KEY: z.string().optional(),
   /** Google Cloud API key with Places API (New) enabled. */
   GOOGLE_PLACES_API_KEY: z.string().optional(),
+  /** Per-request timeout (ms) for Google Places fetches. Default 10000. */
+  GOOGLE_PLACES_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  /** Minimum interval (ms) between Places requests (per-instance burst smoother). Default 250. */
+  GOOGLE_PLACES_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(250),
+  /** Hard per-UTC-day Places request cap — the real spend ceiling. Default 500. */
+  GOOGLE_PLACES_DAILY_CAP: z.coerce.number().int().positive().default(500),
+  /** Build & Sell per-build cost ceiling (USD), enforced mid-run in spec-site-builder. Default 0.50. */
+  BUILDSELL_PER_RUN_CAP_USD: z.coerce.number().positive().default(0.5),
+  /** Default quoted price (USD) for a Build & Sell spec site. Optional. */
+  BUILDSELL_DEFAULT_PRICE_USD: z.coerce.number().positive().optional(),
   /** Apollo restricted API key for organizations/enrich + organization_top_people. */
   APOLLO_API_KEY: z.string().optional(),
   /** ElevenLabs API key for Conversational AI outbound voice (Phase 6). */
