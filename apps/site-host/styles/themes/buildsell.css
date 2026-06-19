@@ -761,6 +761,65 @@
 }
 
 /* ====================================================================
+   TASTE PASS — per-variant token ramps (values only; all via tokens).
+   split = crisp/editorial (tight radii, subtle elevation, restrained lift)
+   bold  = architectural/dramatic (sharper radii, heavy elevation, big lift+scale)
+   trust = warm/calm (generous radii, soft diffuse elevation, gentle lift)
+   Shadows use color-mix against --bs-text so dark palettes stay correct.
+   ====================================================================== */
+[data-bs-layout='split'] {
+  --bs-radius-card: 0.75rem;
+  --bs-radius-btn: 0.5rem;
+  --bs-shadow-sm: 0 1px 2px color-mix(in srgb, var(--bs-text) 6%, transparent),
+                  0 1px 1px color-mix(in srgb, var(--bs-text) 4%, transparent);
+  --bs-shadow-md: 0 6px 20px color-mix(in srgb, var(--bs-text) 9%, transparent);
+  --bs-shadow-lg: 0 14px 40px color-mix(in srgb, var(--bs-text) 11%, transparent);
+  --bs-hover-lift: -2px;
+  --bs-hover-scale: 1;
+  --bs-hover-ease: 0.2s ease;
+}
+
+[data-bs-layout='bold'] {
+  --bs-radius-card: 0.5rem;
+  --bs-radius-btn: 0.375rem;
+  --bs-shadow-sm: 0 2px 4px color-mix(in srgb, var(--bs-text) 12%, transparent),
+                  0 1px 2px color-mix(in srgb, var(--bs-text) 8%, transparent);
+  --bs-shadow-md: 0 8px 24px color-mix(in srgb, var(--bs-text) 18%, transparent);
+  --bs-shadow-lg: 0 18px 50px color-mix(in srgb, var(--bs-text) 28%, transparent);
+  --bs-hover-lift: -4px;
+  --bs-hover-scale: 1.01;
+  --bs-hover-ease: 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-bs-layout='trust'] {
+  --bs-radius-card: 1.25rem;
+  --bs-radius-btn: 0.75rem;
+  --bs-shadow-sm: 0 2px 8px color-mix(in srgb, var(--bs-text) 6%, transparent);
+  --bs-shadow-md: 0 8px 28px color-mix(in srgb, var(--bs-text) 9%, transparent);
+  --bs-shadow-lg: 0 16px 48px color-mix(in srgb, var(--bs-text) 12%, transparent);
+  --bs-hover-lift: -2px;
+  --bs-hover-scale: 1;
+  --bs-hover-ease: 0.25s ease;
+}
+
+/* Hover intensity wired through the per-variant tokens above.
+   Reduced-motion users get no transform. */
+.bs-card {
+  transition: box-shadow var(--bs-hover-ease, 0.2s ease),
+              transform var(--bs-hover-ease, 0.2s ease);
+}
+.bs-card:hover {
+  transform: translateY(var(--bs-hover-lift, -2px)) scale(var(--bs-hover-scale, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-card,
+  .bs-card:hover {
+    transform: none;
+    transition: box-shadow 0.2s ease;
+  }
+}
+
+/* ====================================================================
    MOBILE CALL BAR
    Sticky bottom bar — visible only on mobile (< 768px).
    A spacer div in MobileCallBar reserves the height so content is
