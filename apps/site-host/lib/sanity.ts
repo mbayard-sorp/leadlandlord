@@ -1,4 +1,4 @@
-import { createClient, type SanityClient } from 'next-sanity';
+import { createClient, stegaClean, type SanityClient } from 'next-sanity';
 import imageUrlBuilder from '@sanity/image-url';
 import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
 
@@ -13,6 +13,25 @@ export const sanity: SanityClient = createClient({
   apiVersion: '2024-10-01',
   useCdn: true,
   perspective: 'published',
+});
+
+/**
+ * Stega-enabled client used only by the /preview/[id] subtree.
+ * The `stegaClean` applied in stegaCleanStructural() strips stega watermarks
+ * from structural/routing fields while leaving display text encoded for
+ * Presentation overlays. Do NOT use this client on the public /buildsell/[slug]
+ * route — that path must stay fast with the plain `sanity` client above.
+ */
+export const sanityStega: SanityClient = createClient({
+  projectId,
+  dataset,
+  apiVersion: '2024-10-01',
+  useCdn: false, // draft perspective requires API, not CDN
+  perspective: 'previewDrafts',
+  stega: {
+    enabled: true,
+    studioUrl: process.env.NEXT_PUBLIC_SANITY_STUDIO_URL ?? '/studio',
+  },
 });
 
 const imageBuilder = imageUrlBuilder(sanity);
@@ -426,9 +445,134 @@ export interface BuildSellSite {
   faviconUrl?: string | null;
 }
 
+/**
+ * Strip stega watermarks from structural (non-display) fields ONLY.
+ *
+ * Stega injects invisible Unicode chars into every string the `sanityStega`
+ * client returns. Fields used as switch values, CSS class fragments, icon
+ * names, href attributes, or any JS logic must be cleaned or comparisons break
+ * and icons/links silently fail. Display text (headlines, body copy, labels,
+ * review text, business name, etc.) is intentionally left stega-encoded so the
+ * Presentation overlay can pinpoint clickable regions.
+ *
+ * Fields cleaned and why:
+ *   theme.layoutVariant  — switch('split'|'bold'|'trust') in every block component
+ *   theme.preset         — presetByName() lookup in buildsell-theme.ts
+ *   theme.fontHeading    — resolveBsFont() lookup + CSS var reference
+ *   theme.fontBody       — resolveBsFont() lookup + CSS var reference
+ *   section._type        — switch statement in BuildSellHome render loop
+ *   section._key         — React key prop (must be stable identifier)
+ *   badge.icon / step.icon / service.icon — lucide icon lookup via Icon.tsx
+ *   social[].platform    — socialIconName() map lookup in FooterBlock
+ *   ugc items[].platform — platformIcon() map lookup in UgcBlock
+ *   navCta.style         — conditionally used as href fallback check
+ *   cta.style            — 'secondary'|'ghost' class selection in AboutBlock
+ *   primaryCta.style     — same pattern in HeroBlock
+ *   review.source        — 'google'|'manual'|'facebook' display label
+ *   navigation[].href    — rendered as href attribute
+ *   navCta.href          — href attribute
+ *   section link hrefs   — href attributes in service/footer links
+ */
+export function stegaCleanStructural(site: BuildSellSite): BuildSellSite {
+  return {
+    ...site,
+    theme: {
+      ...site.theme,
+      layoutVariant: stegaClean(site.theme.layoutVariant),
+      preset: site.theme.preset != null ? stegaClean(site.theme.preset) : site.theme.preset,
+      fontHeading: site.theme.fontHeading != null ? stegaClean(site.theme.fontHeading) : site.theme.fontHeading,
+      fontBody: site.theme.fontBody != null ? stegaClean(site.theme.fontBody) : site.theme.fontBody,
+    },
+    navigation: site.navigation?.map((link) => ({
+      ...link,
+      href: stegaClean(link.href),
+    })),
+    navCta: site.navCta
+      ? {
+          ...site.navCta,
+          href: site.navCta.href != null ? stegaClean(site.navCta.href) : site.navCta.href,
+          style: site.navCta.style != null ? stegaClean(site.navCta.style) : site.navCta.style,
+        }
+      : site.navCta,
+    sections: site.sections?.map((section) => ({
+      ...section,
+      _type: stegaClean(section._type),
+      _key: stegaClean(section._key),
+      // icon fields in badges, steps, services
+      badges: section.badges?.map((b) => ({
+        ...b,
+        icon: b.icon != null ? stegaClean(b.icon) : b.icon,
+      })),
+      steps: section.steps?.map((s) => ({
+        ...s,
+        icon: s.icon != null ? stegaClean(s.icon) : s.icon,
+      })),
+      services: section.services?.map((s) => ({
+        ...s,
+        icon: s.icon != null ? stegaClean(s.icon) : s.icon,
+        link: s.link != null ? stegaClean(s.link) : s.link,
+      })),
+      // CTA hrefs and style selectors
+      primaryCta: section.primaryCta
+        ? {
+            ...section.primaryCta,
+            href: section.primaryCta.href != null ? stegaClean(section.primaryCta.href) : section.primaryCta.href,
+            style: section.primaryCta.style != null ? stegaClean(section.primaryCta.style) : section.primaryCta.style,
+          }
+        : section.primaryCta,
+      secondaryCta: section.secondaryCta
+        ? {
+            ...section.secondaryCta,
+            href: section.secondaryCta.href != null ? stegaClean(section.secondaryCta.href) : section.secondaryCta.href,
+          }
+        : section.secondaryCta,
+      cta: section.cta
+        ? {
+            ...section.cta,
+            href: section.cta.href != null ? stegaClean(section.cta.href) : section.cta.href,
+            style: section.cta.style != null ? stegaClean(section.cta.style) : section.cta.style,
+          }
+        : section.cta,
+      // Social platform names (used as icon map keys)
+      social: section.social?.map((s) => ({
+        ...s,
+        platform: s.platform != null ? stegaClean(s.platform) : s.platform,
+        href: s.href != null ? stegaClean(s.href) : s.href,
+      })),
+      // UGC platform names (used as icon map keys) and URLs
+      items: section.items?.map((it) => ({
+        ...it,
+        platform: it.platform != null ? stegaClean(it.platform) : it.platform,
+        postUrl: it.postUrl != null ? stegaClean(it.postUrl) : it.postUrl,
+      })),
+      // Footer link hrefs
+      columns: section.columns?.map((col) => ({
+        ...col,
+        links: col.links?.map((l) => ({
+          ...l,
+          href: l.href != null ? stegaClean(l.href) : l.href,
+        })),
+      })),
+      legalLinks: section.legalLinks?.map((l) => ({
+        ...l,
+        href: l.href != null ? stegaClean(l.href) : l.href,
+      })),
+    })),
+  };
+}
+
 export async function fetchBuildSellSiteById(id: string): Promise<BuildSellSite | null> {
-  const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_ID_QUERY, { id });
-  return result ?? null;
+  // Import lazily to avoid pulling SanityLive/stega into the public route bundle.
+  // This module is server-only; the dynamic import resolves at build time in
+  // the server bundle and does not create a client-side chunk.
+  const { sanityFetch } = await import('./sanity-live');
+  const { data } = await sanityFetch({
+    query: BUILDSELL_BY_ID_QUERY,
+    params: { id },
+  });
+  const site = data as BuildSellSite | null;
+  if (!site) return null;
+  return stegaCleanStructural(site);
 }
 
 export async function fetchBuildSellSiteBySlug(slug: string): Promise<BuildSellSite | null> {
