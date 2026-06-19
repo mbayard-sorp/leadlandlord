@@ -22,6 +22,7 @@
     "./dataforseo/backlinks": "./src/dataforseo/backlinks.ts",
     "./namecheap": "./src/namecheap/index.ts",
     "./imagen": "./src/imagen/index.ts",
+    "./favicon": "./src/favicon/index.ts",
     "./geocode": "./src/geocode/index.ts",
     "./indexnow": "./src/indexnow/index.ts",
     "./sanity": "./src/sanity/index.ts",

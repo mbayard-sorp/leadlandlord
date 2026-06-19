@@ -26,6 +26,7 @@ export const buildsellSite = defineType({
     defineField({ name: 'rating', title: 'Google Rating', type: 'number', description: 'Aggregate star rating from Places API metadata. Non-PII.' }),
     defineField({ name: 'reviewCount', title: 'Review Count', type: 'number', description: 'Aggregate review count from Places API metadata. Non-PII.' }),
     defineField({ name: 'logo', title: 'Logo', type: 'image', options: { hotspot: true }, description: 'Business logo. Optional; uploaded by image gen (Phase 4).' }),
+    defineField({ name: 'favicon', title: 'Favicon', type: 'image', description: 'Browser tab icon. Auto-generated as an initials monogram on the preset color (or derived from the logo when one exists). Regenerable in the operator image panel.' }),
     defineField({ name: 'socials', title: 'Social Links', type: 'array', of: [{ type: 'bsSocialLink' }], description: 'Brand social profiles.' }),
     defineField({
       name: 'purchaseUrl',

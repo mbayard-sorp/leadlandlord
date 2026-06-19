@@ -573,6 +573,20 @@
   height: 100%;
 }
 
+/* Scrim over the bold hero photo: re-tints with the primary palette so the
+   photo reads at a higher opacity (0.45) while text-on-primary keeps its
+   contrast. Sits above the image, below the text (.bs-hero-inner z-index 1). */
+[data-bs-layout='bold'] .bs-hero-bold-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bs-primary) 45%, transparent),
+    color-mix(in srgb, var(--bs-primary-dark) 65%, transparent)
+  );
+}
+
 [data-bs-layout='bold'] .bs-hero-inner {
   position: relative;
   z-index: 1;

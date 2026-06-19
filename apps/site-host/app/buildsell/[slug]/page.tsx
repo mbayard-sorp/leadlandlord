@@ -32,6 +32,9 @@ export async function generateMetadata({
     robots: site.robotsDisallow
       ? { index: false, follow: false }
       : { index: true, follow: true },
+    ...(site.faviconUrl
+      ? { icons: { icon: [{ url: site.faviconUrl, type: 'image/svg+xml' }] } }
+      : {}),
     alternates: {
       canonical: canonicalPath,
       types: {

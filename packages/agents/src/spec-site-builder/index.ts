@@ -6,6 +6,8 @@ import { getDb, buildsellSites } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
 import { uploadHeroImage } from '@leadlandlord/integrations/sanity';
+import { generateAndUploadFavicon } from '@leadlandlord/integrations/favicon';
+import { presetByName } from '@leadlandlord/sanity-schema/presets';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BudgetExceededError } from '@leadlandlord/shared/errors';
 import { BaseAgent, type AgentContext } from '../base';
@@ -559,6 +561,52 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       }
     }
 
+    // ── Step 2d: Trust-layout hero strip (tiles 2 & 3) ──
+    // Only the Trust layout renders a 3-tile strip. Fill the extra two tiles
+    // with variations of the single hero prompt so the strip isn't 2 empty
+    // gradients. Skipped for other layouts and when the cap is reached.
+    let heroImageBAssetId: string | null = null;
+    let heroImageCAssetId: string | null = null;
+    if (finalContent.theme.layoutVariant === 'trust' && heroImageAssetId) {
+      const stripVariants: Array<['b' | 'c', string]> = [
+        ['b', `${finalContent.hero.imagePrompt}. Alternate angle, different composition.`],
+        ['c', `${finalContent.hero.imagePrompt}. Close-up detail shot.`],
+      ];
+      for (const [tile, prompt] of stripVariants) {
+        if (!this.underCap()) break;
+        try {
+          ctx.progress({ label: `Generating hero strip tile ${tile.toUpperCase()}` });
+          const img = await generateHeroImageBuffer(prompt, { aspectRatio: '4:3' });
+          if (img) {
+            if (img.costUsd) this.spentThisRun += img.costUsd;
+            const uploaded = await uploadHeroImage(site.id, img.buffer, `bs-hero-${tile}-${site.id}.jpg`, img.contentType);
+            if (tile === 'b') heroImageBAssetId = uploaded.assetId;
+            else heroImageCAssetId = uploaded.assetId;
+          }
+        } catch (err) {
+          ctx.log.warn({ tile, err: err instanceof Error ? err.message : err }, 'spec-site hero strip tile failed (non-fatal)');
+        }
+      }
+    }
+
+    // ── Step 2e: Favicon (logo when available, else initials monogram) ──
+    // Prefer a migrated real logo; otherwise generate a monogram on the preset
+    // primary color. Cheap (an SVG upload, no Imagen spend), so no cap gate.
+    let faviconAssetId: string | null = null;
+    if (migrated?.logoAssetId) {
+      faviconAssetId = migrated.logoAssetId;
+    } else {
+      try {
+        const preset = presetByName(finalContent.theme.preset);
+        const bgHex = preset?.primary ?? '#0f172a';
+        const fgHex = preset?.onPrimary ?? '#ffffff';
+        const fav = await generateAndUploadFavicon(site.id, site.businessName, { bgHex, fgHex });
+        faviconAssetId = fav.assetId;
+      } catch (err) {
+        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'spec-site favicon generation failed (non-fatal)');
+      }
+    }
+
     // ── Step 3: persist watermarked draft to Sanity ──
     const slug = `${slugify(site.businessName)}-${slugify(site.city)}-${site.state.toLowerCase()}-${site.id.slice(0, 6)}`;
     const generatedAt = new Date().toISOString();
@@ -574,6 +622,9 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       slug,
       content: finalContent,
       heroImageAssetId,
+      heroImageBAssetId,
+      heroImageCAssetId,
+      faviconAssetId,
       aboutImageAssetId,
       ogImageAssetId,
       addressLine,

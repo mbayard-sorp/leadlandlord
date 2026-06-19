@@ -115,7 +115,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
               fill
               priority
               sizes="100vw"
-              style={{ objectFit: 'cover', opacity: 0.2 }}
+              style={{ objectFit: 'cover', opacity: 0.45 }}
             />
           ) : (
             <div className="bs-hero-bold-bg-gradient" />
@@ -169,29 +169,28 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
             <BadgeRow />
           </div>
 
-          {/* 3-image strip — uses the single imageUrl if present, else 3 gradient tiles */}
+          {/* 3-image strip — each tile uses its own image when present (auto-filled
+              from the hero prompt by the builder / operator), else a gradient. */}
           <div className="bs-hero-trust-strip">
-            {section.imageUrl ? (
-              <>
-                <div className="bs-hero-trust-tile" style={{ position: 'relative' }}>
+            {[
+              { url: section.imageUrl, gradient: 'bs-hero-trust-tile--gradient-a' },
+              { url: section.imageUrlB, gradient: 'bs-hero-trust-tile--gradient-b' },
+              { url: section.imageUrlC, gradient: 'bs-hero-trust-tile--gradient-c' },
+            ].map((tile, i) =>
+              tile.url ? (
+                <div key={i} className="bs-hero-trust-tile" style={{ position: 'relative' }}>
                   <Image
-                    src={section.imageUrl}
-                    alt={headline}
+                    src={tile.url}
+                    alt={i === 0 ? headline : ''}
                     fill
-                    priority
+                    priority={i === 0}
                     sizes="(max-width: 767px) 100vw, 33vw"
                     style={{ objectFit: 'cover' }}
                   />
                 </div>
-                <div className="bs-hero-trust-tile bs-hero-trust-tile--gradient-b" aria-hidden="true" />
-                <div className="bs-hero-trust-tile bs-hero-trust-tile--gradient-c" aria-hidden="true" />
-              </>
-            ) : (
-              <>
-                <div className="bs-hero-trust-tile bs-hero-trust-tile--gradient-a" aria-hidden="true" />
-                <div className="bs-hero-trust-tile bs-hero-trust-tile--gradient-b" aria-hidden="true" />
-                <div className="bs-hero-trust-tile bs-hero-trust-tile--gradient-c" aria-hidden="true" />
-              </>
+              ) : (
+                <div key={i} className={`bs-hero-trust-tile ${tile.gradient}`} aria-hidden="true" />
+              ),
             )}
           </div>
         </div>

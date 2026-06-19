@@ -256,14 +256,6 @@ const BUILDSELL_PROJECTION = `{
   "theme": {
     "layoutVariant": theme.layoutVariant,
     "preset": theme.preset,
-    "primary": theme.primary.hex,
-    "primaryDark": theme.primaryDark.hex,
-    "accent": theme.accent.hex,
-    "onPrimary": theme.onPrimary.hex,
-    "bg": theme.bg.hex,
-    "surface": theme.surface.hex,
-    "text": theme.text.hex,
-    "muted": theme.muted.hex,
     "fontHeading": theme.fontHeading,
     "fontBody": theme.fontBody
   },
@@ -275,12 +267,15 @@ const BUILDSELL_PROJECTION = `{
   aboutImagePrompt,
   ogImagePrompt,
   "logo": logo{ "asset": asset->{ url } },
+  "faviconUrl": favicon.asset->url,
   seo{ metaTitle, metaDescription, "ogImageUrl": ogImage.asset->url },
   "sections": sections[]{
     _type,
     _key,
     ...,
     "imageUrl": image.asset->url,
+    "imageUrlB": imageB.asset->url,
+    "imageUrlC": imageC.asset->url,
     "reviews": reviews[]->{
       author,
       rating,
@@ -309,14 +304,6 @@ const BUILDSELL_BY_SLUG_QUERY = `*[_type=="buildsellSite" && slug.current==$slug
 export interface BuildSellTheme {
   layoutVariant: 'split' | 'bold' | 'trust';
   preset?: string | null;
-  primary?: string | null;
-  primaryDark?: string | null;
-  accent?: string | null;
-  onPrimary?: string | null;
-  bg?: string | null;
-  surface?: string | null;
-  text?: string | null;
-  muted?: string | null;
   fontHeading?: string | null;
   fontBody?: string | null;
 }
@@ -349,6 +336,9 @@ export interface BuildSellSection {
   highlight?: string | null;
   subhead?: string | null;
   imageUrl?: string | null;
+  /** Trust-variant hero strip tiles 2 & 3 (auto-filled from the hero prompt). */
+  imageUrlB?: string | null;
+  imageUrlC?: string | null;
   showRating?: boolean | null;
   badges?: Array<{ icon?: string | null; label?: string | null }> | null;
   primaryCta?: { label?: string | null; href?: string | null; style?: string | null } | null;
@@ -416,6 +406,7 @@ export interface BuildSellSite {
   aboutImagePrompt?: string | null;
   ogImagePrompt?: string | null;
   logo?: { asset?: { url?: string | null } | null } | null;
+  faviconUrl?: string | null;
 }
 
 export async function fetchBuildSellSiteById(id: string): Promise<BuildSellSite | null> {

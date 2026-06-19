@@ -8,8 +8,9 @@ import { BUILDSELL_PRESETS, type BuildsellPreset } from './presets';
  *
  * The named `preset` is authoritative for COLORS at render time (resolved
  * against BUILDSELL_PRESETS in apps/site-host/lib/buildsell-theme.ts). The 8
- * per-doc hex fields below are a legacy fallback for docs whose preset name
- * predates the table. `layoutVariant` + fonts stay independent per-doc fields.
+ * per-doc hex color fields were removed 2026-06-19 — colors are now 100%
+ * preset-driven (all live docs already use a known preset). `layoutVariant` +
+ * fonts stay independent per-doc fields.
  *
  * The preset table itself lives in ./presets (sanity-free) so site-host and
  * packages/agents can import it without pulling the Studio bundle.
@@ -45,17 +46,10 @@ export const buildsellTheme = defineType({
       name: 'preset',
       title: 'Preset',
       type: 'string',
+      description: 'Authoritative for colors at render time (resolved against BUILDSELL_PRESETS). The per-doc hex color fields were removed 2026-06-19 — colors are 100% preset-driven.',
       options: { list: PRESET_NAMES },
       initialValue: seed.name,
     }),
-    defineField({ name: 'primary', title: 'Primary', type: 'color', initialValue: { hex: seed.primary } as never }),
-    defineField({ name: 'primaryDark', title: 'Primary Dark', type: 'color', initialValue: { hex: seed.primaryDark } as never }),
-    defineField({ name: 'accent', title: 'Accent', type: 'color', initialValue: { hex: seed.accent } as never }),
-    defineField({ name: 'onPrimary', title: 'On Primary', type: 'color', initialValue: { hex: seed.onPrimary } as never }),
-    defineField({ name: 'bg', title: 'Background', type: 'color', initialValue: { hex: seed.bg } as never }),
-    defineField({ name: 'surface', title: 'Surface', type: 'color', initialValue: { hex: seed.surface } as never }),
-    defineField({ name: 'text', title: 'Text', type: 'color', initialValue: { hex: seed.text } as never }),
-    defineField({ name: 'muted', title: 'Muted', type: 'color', initialValue: { hex: seed.muted } as never }),
     defineField({
       name: 'fontHeading',
       title: 'Heading Font',
