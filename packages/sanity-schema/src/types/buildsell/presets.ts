@@ -12,9 +12,14 @@
  * table. Fonts + layoutVariant stay independent per-doc fields (the build
  * rotates them separately from the palette to reduce footprint similarity).
  *
- * APPEND-ONLY: never rename or recolor an existing entry. Live sites store the
- * preset NAME; renaming/recoloring an entry would silently restyle every site
- * that already picked it. Add new presets at the end instead.
+ * CANONICAL: this table mirrors the claude.ai/design "Pool Spec Site" Style
+ * Guide (12 palettes, §7) exactly — names + hex. It was reconciled to the design
+ * on 2026-06-19 (all live sites were draft at the time, so the rename was safe).
+ * Going forward this is APPEND-ONLY: never rename or recolor an existing entry —
+ * live sites store the preset NAME, and renaming/recoloring would silently
+ * restyle every site that already picked it. Add new presets at the end instead.
+ * Unknown names resolve to the default preset (see buildsell-theme.ts), so a
+ * legacy doc never renders colorless.
  */
 
 export interface BuildsellPreset {
@@ -32,20 +37,29 @@ export interface BuildsellPreset {
   fontBody: string;
 }
 
-/** 12 named presets seeded from the claude.ai/design palette set. */
+/**
+ * 12 named presets — the claude.ai/design "Pool Spec Site" Style Guide palettes,
+ * exact names + hex (§7). All ship the spec's premium type pair (Space Grotesk
+ * headings / Plus Jakarta Sans body). `layoutVariant` is a balanced default
+ * rotation (4 split / 4 bold / 4 trust) — buyers can still switch it per-doc.
+ * The last three are dark palettes with a NON-white `onPrimary` (their primaries
+ * are light amber/teal/lime, so on-primary text must be dark for AA contrast).
+ */
+const FH = 'Space Grotesk';
+const FB = 'Plus Jakarta Sans';
 export const BUILDSELL_PRESETS: BuildsellPreset[] = [
-  { name: 'Aqua Slate', layoutVariant: 'split', primary: '#0e7490', primaryDark: '#155e75', accent: '#f59e0b', onPrimary: '#ffffff', bg: '#f8fafc', surface: '#ffffff', text: '#0f172a', muted: '#64748b', fontHeading: 'Poppins', fontBody: 'Inter' },
-  { name: 'Forest Trust', layoutVariant: 'trust', primary: '#15803d', primaryDark: '#166534', accent: '#ca8a04', onPrimary: '#ffffff', bg: '#f7faf7', surface: '#ffffff', text: '#14201a', muted: '#5b6b60', fontHeading: 'Sora', fontBody: 'Inter' },
-  { name: 'Midnight Bold', layoutVariant: 'bold', primary: '#4f46e5', primaryDark: '#3730a3', accent: '#f43f5e', onPrimary: '#ffffff', bg: '#0b1020', surface: '#161d33', text: '#f1f5f9', muted: '#94a3b8', fontHeading: 'Space Grotesk', fontBody: 'Plus Jakarta Sans' },
-  { name: 'Sunset Clay', layoutVariant: 'split', primary: '#c2410c', primaryDark: '#9a3412', accent: '#0891b2', onPrimary: '#ffffff', bg: '#fff8f4', surface: '#ffffff', text: '#1c1917', muted: '#78716c', fontHeading: 'Fraunces', fontBody: 'Inter' },
-  { name: 'Royal Navy', layoutVariant: 'trust', primary: '#1d4ed8', primaryDark: '#1e3a8a', accent: '#eab308', onPrimary: '#ffffff', bg: '#f8fafc', surface: '#ffffff', text: '#0f172a', muted: '#64748b', fontHeading: 'Manrope', fontBody: 'Inter' },
-  { name: 'Crimson Pro', layoutVariant: 'bold', primary: '#be123c', primaryDark: '#9f1239', accent: '#0d9488', onPrimary: '#ffffff', bg: '#fff7f8', surface: '#ffffff', text: '#1a1115', muted: '#7c6068', fontHeading: 'Sora', fontBody: 'Inter' },
-  { name: 'Emerald Frost', layoutVariant: 'split', primary: '#059669', primaryDark: '#047857', accent: '#7c3aed', onPrimary: '#ffffff', bg: '#f6fdfa', surface: '#ffffff', text: '#0c1f18', muted: '#5b7268', fontHeading: 'Poppins', fontBody: 'Inter' },
-  { name: 'Graphite Amber', layoutVariant: 'bold', primary: '#334155', primaryDark: '#1e293b', accent: '#f59e0b', onPrimary: '#ffffff', bg: '#f8fafc', surface: '#ffffff', text: '#0f172a', muted: '#64748b', fontHeading: 'Space Grotesk', fontBody: 'Plus Jakarta Sans' },
-  { name: 'Coastal Teal', layoutVariant: 'trust', primary: '#0d9488', primaryDark: '#0f766e', accent: '#f97316', onPrimary: '#ffffff', bg: '#f5fbfb', surface: '#ffffff', text: '#0d1b1a', muted: '#5a6f6d', fontHeading: 'Manrope', fontBody: 'Inter' },
-  { name: 'Violet Studio', layoutVariant: 'split', primary: '#7c3aed', primaryDark: '#6d28d9', accent: '#10b981', onPrimary: '#ffffff', bg: '#faf8ff', surface: '#ffffff', text: '#1a1430', muted: '#6b6486', fontHeading: 'Fraunces', fontBody: 'Inter' },
-  { name: 'Brick Trust', layoutVariant: 'trust', primary: '#b45309', primaryDark: '#92400e', accent: '#0e7490', onPrimary: '#ffffff', bg: '#fdfaf6', surface: '#ffffff', text: '#1f1812', muted: '#766656', fontHeading: 'Sora', fontBody: 'Inter' },
-  { name: 'Steel Sky', layoutVariant: 'bold', primary: '#0284c7', primaryDark: '#0369a1', accent: '#f43f5e', onPrimary: '#ffffff', bg: '#f6fafd', surface: '#ffffff', text: '#0c1a26', muted: '#5c6f7d', fontHeading: 'Space Grotesk', fontBody: 'Plus Jakarta Sans' },
+  { name: 'Aqua Slate', layoutVariant: 'split', primary: '#0d9488', primaryDark: '#0f766e', accent: '#f59e0b', onPrimary: '#ffffff', bg: '#f4f7f8', surface: '#ffffff', text: '#0f1f24', muted: '#5b6b72', fontHeading: FH, fontBody: FB },
+  { name: 'Deep Marine', layoutVariant: 'bold', primary: '#2563eb', primaryDark: '#1e40af', accent: '#f97316', onPrimary: '#ffffff', bg: '#f5f7fb', surface: '#ffffff', text: '#0f1729', muted: '#5a6782', fontHeading: FH, fontBody: FB },
+  { name: 'Forest Pro', layoutVariant: 'trust', primary: '#15803d', primaryDark: '#14532d', accent: '#d97706', onPrimary: '#ffffff', bg: '#f5f8f4', surface: '#ffffff', text: '#14241a', muted: '#5c6b5e', fontHeading: FH, fontBody: FB },
+  { name: 'Crimson Trust', layoutVariant: 'trust', primary: '#dc2626', primaryDark: '#991b1b', accent: '#0ea5e9', onPrimary: '#ffffff', bg: '#f9f6f6', surface: '#ffffff', text: '#261617', muted: '#6e5a5b', fontHeading: FH, fontBody: FB },
+  { name: 'Pacific Cyan', layoutVariant: 'split', primary: '#0891b2', primaryDark: '#0e7490', accent: '#f43f5e', onPrimary: '#ffffff', bg: '#f3f9fb', surface: '#ffffff', text: '#0c1f26', muted: '#57707a', fontHeading: FH, fontBody: FB },
+  { name: 'Sunset Clay', layoutVariant: 'bold', primary: '#ea580c', primaryDark: '#c2410c', accent: '#0d9488', onPrimary: '#ffffff', bg: '#fbf7f4', surface: '#ffffff', text: '#2a1c14', muted: '#7a6354', fontHeading: FH, fontBody: FB },
+  { name: 'Royal Plum', layoutVariant: 'bold', primary: '#7c3aed', primaryDark: '#5b21b6', accent: '#f59e0b', onPrimary: '#ffffff', bg: '#f8f6fc', surface: '#ffffff', text: '#1f1630', muted: '#6b5f7e', fontHeading: FH, fontBody: FB },
+  { name: 'Olive Stone', layoutVariant: 'split', primary: '#4d7c0f', primaryDark: '#3f6212', accent: '#ca8a04', onPrimary: '#ffffff', bg: '#f8f8f3', surface: '#ffffff', text: '#1f2410', muted: '#6b7155', fontHeading: FH, fontBody: FB },
+  { name: 'Sky & Sand', layoutVariant: 'trust', primary: '#0284c7', primaryDark: '#0369a1', accent: '#f59e0b', onPrimary: '#ffffff', bg: '#f8f6f0', surface: '#ffffff', text: '#14222e', muted: '#5d6f7c', fontHeading: FH, fontBody: FB },
+  { name: 'Midnight Gold', layoutVariant: 'bold', primary: '#f59e0b', primaryDark: '#d97706', accent: '#38bdf8', onPrimary: '#1a1206', bg: '#0b1220', surface: '#131c2e', text: '#eef2f8', muted: '#90a0b8', fontHeading: FH, fontBody: FB },
+  { name: 'Charcoal Teal', layoutVariant: 'trust', primary: '#2dd4bf', primaryDark: '#14b8a6', accent: '#fbbf24', onPrimary: '#06231f', bg: '#0f1418', surface: '#1a2228', text: '#e7eef0', muted: '#8ba0a5', fontHeading: FH, fontBody: FB },
+  { name: 'Graphite Lime', layoutVariant: 'split', primary: '#84cc16', primaryDark: '#65a30d', accent: '#22d3ee', onPrimary: '#16210a', bg: '#14171a', surface: '#1e2329', text: '#e8ede6', muted: '#93a08f', fontHeading: FH, fontBody: FB },
 ];
 
 /** Preset names in declaration order — used by the build rotation + Studio dropdown. */

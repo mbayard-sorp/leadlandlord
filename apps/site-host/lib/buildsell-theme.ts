@@ -1,4 +1,4 @@
-import { presetByName } from '@leadlandlord/sanity-schema/presets';
+import { presetByName, BUILDSELL_PRESETS } from '@leadlandlord/sanity-schema/presets';
 import type { BuildSellTheme } from './sanity';
 
 /**
@@ -9,9 +9,10 @@ import type { BuildSellTheme } from './sanity';
  * per-doc (the build rotates them independently of the palette); the preset
  * only supplies them as a fallback when the doc field is empty.
  *
- * The per-doc hex color fields were removed 2026-06-19. If a doc somehow lacks
- * a known preset, colors resolve to undefined and the CSS custom-property
- * fallbacks in buildsell.css apply — never a crash.
+ * The per-doc hex color fields were removed 2026-06-19. If a doc lacks a known
+ * preset (e.g. a legacy name predating the 2026-06-19 spec reconciliation),
+ * colors resolve to the DEFAULT preset (BUILDSELL_PRESETS[0]) so the site still
+ * renders a complete premium palette — never colorless, never a crash.
  */
 export interface ResolvedBuildSellTheme {
   layoutVariant: 'split' | 'bold' | 'trust';
@@ -28,7 +29,9 @@ export interface ResolvedBuildSellTheme {
 }
 
 export function resolveBuildSellTheme(theme: BuildSellTheme): ResolvedBuildSellTheme {
-  const p = presetByName(theme.preset);
+  // Unknown/legacy preset names fall back to the default preset so colors are
+  // always a complete premium palette (see file header).
+  const p = presetByName(theme.preset) ?? BUILDSELL_PRESETS[0]!;
 
   return {
     layoutVariant: (theme.layoutVariant ?? p?.layoutVariant ?? 'split') as 'split' | 'bold' | 'trust',
