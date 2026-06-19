@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchBuildSellSiteBySlug } from '@/lib/sanity';
+import { currentRequestBaseUrl } from '@/lib/seo-meta';
 import { BuildSellHome } from '@/components/buildsell/BuildSellHome';
+import { BuildSellLocalBusinessJsonLd } from '@/components/buildsell/BuildSellLocalBusinessJsonLd';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +19,35 @@ export async function generateMetadata({
     return { robots: { index: false, follow: false } };
   }
 
+  const base = await currentRequestBaseUrl();
+  const canonicalPath = `/buildsell/${slug}`;
+  const title = site.seo?.metaTitle ?? site.businessName;
+  const description = site.seo?.metaDescription ?? undefined;
+
   return {
-    title: site.seo?.metaTitle ?? site.businessName,
-    description: site.seo?.metaDescription ?? undefined,
-    robots: { index: true, follow: true },
+    metadataBase: new URL(base),
+    title,
+    description,
+    robots: site.robotsDisallow
+      ? { index: false, follow: false }
+      : { index: true, follow: true },
+    alternates: {
+      canonical: canonicalPath,
+      types: {
+        'text/markdown': `/buildsell/${slug}/index.md`,
+      },
+    },
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url: canonicalPath,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
   };
 }
 
@@ -34,5 +61,13 @@ export default async function BuildSellPage({
 
   if (!site) notFound();
 
-  return <BuildSellHome site={site} draft={false} />;
+  const base = await currentRequestBaseUrl();
+  const pageUrl = `${base}/buildsell/${slug}`;
+
+  return (
+    <>
+      <BuildSellLocalBusinessJsonLd site={site} url={pageUrl} />
+      <BuildSellHome site={site} draft={false} />
+    </>
+  );
 }

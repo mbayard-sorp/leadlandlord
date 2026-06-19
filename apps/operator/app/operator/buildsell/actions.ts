@@ -62,24 +62,39 @@ interface BuildDraftResult {
 export async function buildDraft(formData: FormData): Promise<BuildDraftResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
 
-  const businessName = String(formData.get('business_name') ?? '').trim();
-  const trade        = String(formData.get('trade')         ?? '').trim();
-  const city         = String(formData.get('city')          ?? '').trim();
-  const state        = String(formData.get('state')         ?? '').trim().toUpperCase();
-  const placeId      = String(formData.get('place_id')      ?? '').trim() || null;
-  const ownerEmail   = String(formData.get('owner_email')   ?? '').trim() || null;
+  const businessName    = String(formData.get('business_name')     ?? '').trim();
+  const trade           = String(formData.get('trade')             ?? '').trim();
+  const city            = String(formData.get('city')              ?? '').trim();
+  const state           = String(formData.get('state')             ?? '').trim().toUpperCase();
+  const placeId         = String(formData.get('place_id')          ?? '').trim() || null;
+  const ownerEmail      = String(formData.get('owner_email')       ?? '').trim() || null;
+  const ratingRaw       = String(formData.get('rating')            ?? '').trim();
+  const ratingCountRaw  = String(formData.get('user_rating_count') ?? '').trim();
+  const primaryType     = String(formData.get('primary_type')      ?? '').trim() || null;
 
   if (!businessName) return { ok: false, message: 'Business name is required.' };
   if (!trade)        return { ok: false, message: 'Trade is required.' };
   if (!city)         return { ok: false, message: 'City is required.' };
   if (state.length !== 2) return { ok: false, message: 'State must be a two-letter code.' };
 
+  // Carry forward Places signal fields into metadata (jsonb) so the agent
+  // can use them for prompt enrichment. These survive the reaper in metadata.
+  const rating         = ratingRaw       ? parseFloat(ratingRaw)       : null;
+  const userRatingCount = ratingCountRaw ? parseInt(ratingCountRaw, 10) : null;
+  const metadata: Record<string, unknown> = {};
+  if (rating != null && !isNaN(rating))              metadata.rating          = rating;
+  if (userRatingCount != null && !isNaN(userRatingCount)) metadata.userRatingCount = userRatingCount;
+  if (primaryType)                                   metadata.primaryType     = primaryType;
+
   const buildEpoch = Date.now().toString();
   const db = getDb();
 
   const [row] = await db
     .insert(buildsellSites)
-    .values({ businessName, trade, city, state, placeId, ownerEmail, buildEpoch })
+    .values({
+      businessName, trade, city, state, placeId, ownerEmail, buildEpoch,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
+    })
     .returning({ id: buildsellSites.id });
 
   if (!row) return { ok: false, message: 'Insert failed — no row returned.' };

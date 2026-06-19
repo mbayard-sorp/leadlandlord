@@ -22,9 +22,8 @@ export function HeroBlock({ section, phone, layoutVariant }: HeroBlockProps) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={section.imageUrl}
-          alt=""
+          alt={headline}
           className="bs-hero-bg-image"
-          aria-hidden="true"
         />
       )}
 

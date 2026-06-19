@@ -168,11 +168,20 @@ function LeadCard({ lead }: { lead: BuildSellLeadResult }) {
       ) : (
         <form onSubmit={handleBuild} className="space-y-2 pt-1 border-t border-slate-800">
           {/* Hidden fields from the card */}
-          <input type="hidden" name="business_name" value={lead.displayName ?? ''} />
-          <input type="hidden" name="trade"         value={lead.trade} />
-          <input type="hidden" name="city"          value={lead.city} />
-          <input type="hidden" name="state"         value={lead.state} />
-          <input type="hidden" name="place_id"      value={lead.placeId} />
+          <input type="hidden" name="business_name"     value={lead.displayName ?? ''} />
+          <input type="hidden" name="trade"             value={lead.trade} />
+          <input type="hidden" name="city"              value={lead.city} />
+          <input type="hidden" name="state"             value={lead.state} />
+          <input type="hidden" name="place_id"          value={lead.placeId} />
+          {lead.rating != null && (
+            <input type="hidden" name="rating"          value={String(lead.rating)} />
+          )}
+          {lead.userRatingCount != null && (
+            <input type="hidden" name="user_rating_count" value={String(lead.userRatingCount)} />
+          )}
+          {lead.primaryType && (
+            <input type="hidden" name="primary_type"   value={lead.primaryType} />
+          )}
 
           <label className="flex flex-col gap-1 text-xs text-slate-400">
             Owner email (optional)

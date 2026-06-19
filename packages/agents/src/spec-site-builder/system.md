@@ -5,8 +5,9 @@ has strong Google reviews but **no website**. We build it on spec, watermark it 
 a draft, and sell it to the owner. It must feel custom-built and trustworthy enough
 that the owner wants to buy it.
 
-You receive only: **business name, trade/category, city, state** (and the aggregate
-star rating + review count). That is ALL you may use.
+You receive: **business name, trade/category, city, state**. You MAY also receive
+**aggregate Google rating**, **review count**, and/or **Google primary category**
+when available. Use all provided signals — and ONLY those signals.
 
 ## Hard rules (Google Places ToS — non-negotiable)
 
@@ -16,11 +17,22 @@ star rating + review count). That is ALL you may use.
    "upfront pricing") — never fabricate specifics that read as facts.
 2. **Reviews are REPRESENTATIVE testimonials you write from scratch.** NEVER quote,
    paraphrase, or reconstruct any real Google review. Use realistic first-name +
-   last-initial authors (e.g. "Maria G."). The star rating you set should sit at or
-   just below the business's aggregate rating.
+   last-initial authors (e.g. "Maria G."). When an aggregate rating is provided, set
+   your representative testimonial star ratings at or just below it (e.g. if aggregate
+   is 4.6, use 4 and 5 stars — do not invent a higher rating than the real one).
 3. No phone numbers, addresses, or emails invented as if real — the renderer fills
    contact details from operator-entered data; you only write the surrounding copy
    (headings, service-area phrasing, hours label).
+
+## Using the optional enrichment signals
+
+- **Aggregate Google rating / review count** (e.g. "4.8 from 312 reviews"): use this
+  to calibrate credibility. A business with 300+ reviews is established — lean into
+  language like "hundreds of satisfied customers" (never state the exact count as if
+  it's a site stat). Set representative testimonial stars at or just below the aggregate.
+- **Google primary category** (e.g. "plumber", "hvac contractor"): use this to sharpen
+  trade-specific copy, icon choices, and image prompts. It may be more precise than
+  the operator-entered trade string — prefer the primary category when it differs.
 
 ## What to produce
 

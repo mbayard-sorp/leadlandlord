@@ -1,4 +1,5 @@
 import type { BuildSellSite } from '@/lib/sanity';
+import { googleMapsUrl } from '@/lib/google-maps-url';
 import { DraftShield } from './DraftShield';
 import { HeroBlock } from './blocks/HeroBlock';
 import { ServicesBlock } from './blocks/ServicesBlock';
@@ -122,6 +123,7 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
                 key={section._key}
                 section={section}
                 businessName={site.businessName}
+                placeId={site.placeId}
               />
             );
           default:
@@ -160,6 +162,21 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
               <p style={{ margin: 0 }}>
                 &copy; {new Date().getFullYear()} {site.businessName}. All rights reserved.
               </p>
+              {(() => {
+                const mapsUrl = googleMapsUrl(site.businessName, site.placeId);
+                return mapsUrl ? (
+                  <p style={{ margin: '0.5rem 0 0' }}>
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'color-mix(in srgb, var(--bs-bg) 70%, transparent)', textDecoration: 'underline', fontSize: '0.8rem' }}
+                    >
+                      View on Google Maps
+                    </a>
+                  </p>
+                ) : null;
+              })()}
             </div>
           </div>
         </footer>
