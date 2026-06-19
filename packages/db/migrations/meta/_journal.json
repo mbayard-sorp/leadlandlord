@@ -1,363 +1,370 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1777836691676,
-      "tag": "0000_even_vindicator",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1777837584595,
-      "tag": "0001_high_miek",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1777874635857,
-      "tag": "0002_skinny_wiccan",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1777929938790,
-      "tag": "0003_watery_famine",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1778011963027,
-      "tag": "0004_yielding_shaman",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1778900000000,
-      "tag": "0005_agent_runs_progress",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1779000000000,
-      "tag": "0006_agent_events_resilience",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1779100000000,
-      "tag": "0007_agent_disabled_flag",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1779200000000,
-      "tag": "0008_dataforseo_cache",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1778257414275,
-      "tag": "0009_early_norrin_radd",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1779300000000,
-      "tag": "0010_backlinks_extension",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1779500000000,
-      "tag": "0011_stripe_webhook_events",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1779550000000,
-      "tag": "0012_flaky_karen_page",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1779600000000,
-      "tag": "0013_alert_rules",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1779700000000,
-      "tag": "0014_operator_targets",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1778346379730,
-      "tag": "0015_gray_eddie_brock",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1778400000000,
-      "tag": "0016_sites_competitor_seeds",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1779800000000,
-      "tag": "0017_pretty_patriot",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1779900000000,
-      "tag": "0018_r4_molly",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1780000000000,
-      "tag": "0019_bcc_graduation",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1780100000000,
-      "tag": "0020_sites_inbound_greeting",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1747267200000,
-      "tag": "0021_sprint_0_foundations",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1780200000000,
-      "tag": "0022_sprint_3_network_indexes",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "7",
-      "when": 1780300000000,
-      "tag": "0023_sprint_5_waves",
-      "breakpoints": true
-    },
-    {
-      "idx": 24,
-      "version": "7",
-      "when": 1780400000000,
-      "tag": "0024_niches_validation",
-      "breakpoints": true
-    },
-    {
-      "idx": 25,
-      "version": "7",
-      "when": 1780500000000,
-      "tag": "0025_niches_cluster_volume",
-      "breakpoints": true
-    },
-    {
-      "idx": 26,
-      "version": "7",
-      "when": 1780600000000,
-      "tag": "0026_niches_rentability",
-      "breakpoints": true
-    },
-    {
-      "idx": 27,
-      "version": "7",
-      "when": 1780700000000,
-      "tag": "0027_scoring_priors",
-      "breakpoints": true
-    },
-    {
-      "idx": 28,
-      "version": "7",
-      "when": 1780800000000,
-      "tag": "0028_sites_build_epoch",
-      "breakpoints": true
-    },
-    {
-      "idx": 29,
-      "version": "7",
-      "when": 1780900000000,
-      "tag": "0030_content_ideas",
-      "breakpoints": true
-    },
-    {
-      "idx": 30,
-      "version": "7",
-      "when": 1781000000000,
-      "tag": "0031_niches_category",
-      "breakpoints": true
-    },
-    {
-      "idx": 31,
-      "version": "7",
-      "when": 1781100000000,
-      "tag": "0032_calls_caller_name",
-      "breakpoints": true
-    },
-    {
-      "idx": 32,
-      "version": "7",
-      "when": 1781200000000,
-      "tag": "0033_sites_competitor_brief",
-      "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1781300000000,
-      "tag": "0034_agent_runs_started_idx",
-      "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "7",
-      "when": 1781400000000,
-      "tag": "0035_geo_seo_auditors",
-      "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "7",
-      "when": 1781500000000,
-      "tag": "0036_agent_health",
-      "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "7",
-      "when": 1781600000000,
-      "tag": "0037_global_spend_cap",
-      "breakpoints": true
-    },
-    {
-      "idx": 37,
-      "version": "7",
-      "when": 1781700000000,
-      "tag": "0038_agent_schedules",
-      "breakpoints": true
-    },
-    {
-      "idx": 38,
-      "version": "7",
-      "when": 1781800000000,
-      "tag": "0039_orchestrator_chat",
-      "breakpoints": true
-    },
-    {
-      "idx": 39,
-      "version": "7",
-      "when": 1781900000000,
-      "tag": "0040_drop_approval_gates",
-      "breakpoints": true
-    },
-    {
-      "idx": 40,
-      "version": "7",
-      "when": 1782000000000,
-      "tag": "0041_link_building_surface",
-      "breakpoints": true
-    },
-    {
-      "idx": 41,
-      "version": "7",
-      "when": 1782100000000,
-      "tag": "0042_content_idea_story_scaffold",
-      "breakpoints": true
-    },
-    {
-      "idx": 42,
-      "version": "7",
-      "when": 1782200000000,
-      "tag": "0043_niche_scout_engine",
-      "breakpoints": true
-    },
-    {
-      "idx": 43,
-      "version": "7",
-      "when": 1782300000000,
-      "tag": "0044_niche_scout_scoring",
-      "breakpoints": true
-    },
-    {
-      "idx": 44,
-      "version": "7",
-      "when": 1782400000000,
-      "tag": "0045_niche_scout_geo",
-      "breakpoints": true
-    },
-    {
-      "idx": 45,
-      "version": "7",
-      "when": 1782500000000,
-      "tag": "0046_niche_scout_diversity",
-      "breakpoints": true
-    },
-    {
-      "idx": 46,
-      "version": "7",
-      "when": 1782600000000,
-      "tag": "0047_operator_timezone",
-      "breakpoints": true
-    },
-    {
-      "idx": 47,
-      "version": "7",
-      "when": 1782900000000,
-      "tag": "0048_niche_competition_signal",
-      "breakpoints": true
-    },
-    {
-      "idx": 48,
-      "version": "7",
-      "when": 1783000000000,
-      "tag": "0049_site_status_build_states",
-      "breakpoints": true
-    },
-    {
-      "idx": 49,
-      "version": "7",
-      "when": 1783100000000,
-      "tag": "0050_agent_runs_source_event_sites_build_error",
-      "breakpoints": true
-    },
-    {
-      "idx": 50,
-      "version": "7",
-      "when": 1783200000000,
-      "tag": "0051_sites_content_bundle_checkpoint",
-      "breakpoints": true
-    }
-  ]
+	"version": "7",
+	"dialect": "postgresql",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "7",
+			"when": 1777836691676,
+			"tag": "0000_even_vindicator",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1777837584595,
+			"tag": "0001_high_miek",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1777874635857,
+			"tag": "0002_skinny_wiccan",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "7",
+			"when": 1777929938790,
+			"tag": "0003_watery_famine",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "7",
+			"when": 1778011963027,
+			"tag": "0004_yielding_shaman",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "7",
+			"when": 1778900000000,
+			"tag": "0005_agent_runs_progress",
+			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1779000000000,
+			"tag": "0006_agent_events_resilience",
+			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "7",
+			"when": 1779100000000,
+			"tag": "0007_agent_disabled_flag",
+			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "7",
+			"when": 1779200000000,
+			"tag": "0008_dataforseo_cache",
+			"breakpoints": true
+		},
+		{
+			"idx": 9,
+			"version": "7",
+			"when": 1778257414275,
+			"tag": "0009_early_norrin_radd",
+			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "7",
+			"when": 1779300000000,
+			"tag": "0010_backlinks_extension",
+			"breakpoints": true
+		},
+		{
+			"idx": 11,
+			"version": "7",
+			"when": 1779500000000,
+			"tag": "0011_stripe_webhook_events",
+			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "7",
+			"when": 1779550000000,
+			"tag": "0012_flaky_karen_page",
+			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "7",
+			"when": 1779600000000,
+			"tag": "0013_alert_rules",
+			"breakpoints": true
+		},
+		{
+			"idx": 14,
+			"version": "7",
+			"when": 1779700000000,
+			"tag": "0014_operator_targets",
+			"breakpoints": true
+		},
+		{
+			"idx": 15,
+			"version": "7",
+			"when": 1778346379730,
+			"tag": "0015_gray_eddie_brock",
+			"breakpoints": true
+		},
+		{
+			"idx": 16,
+			"version": "7",
+			"when": 1778400000000,
+			"tag": "0016_sites_competitor_seeds",
+			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "7",
+			"when": 1779800000000,
+			"tag": "0017_pretty_patriot",
+			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1779900000000,
+			"tag": "0018_r4_molly",
+			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "7",
+			"when": 1780000000000,
+			"tag": "0019_bcc_graduation",
+			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "7",
+			"when": 1780100000000,
+			"tag": "0020_sites_inbound_greeting",
+			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "7",
+			"when": 1747267200000,
+			"tag": "0021_sprint_0_foundations",
+			"breakpoints": true
+		},
+		{
+			"idx": 22,
+			"version": "7",
+			"when": 1780200000000,
+			"tag": "0022_sprint_3_network_indexes",
+			"breakpoints": true
+		},
+		{
+			"idx": 23,
+			"version": "7",
+			"when": 1780300000000,
+			"tag": "0023_sprint_5_waves",
+			"breakpoints": true
+		},
+		{
+			"idx": 24,
+			"version": "7",
+			"when": 1780400000000,
+			"tag": "0024_niches_validation",
+			"breakpoints": true
+		},
+		{
+			"idx": 25,
+			"version": "7",
+			"when": 1780500000000,
+			"tag": "0025_niches_cluster_volume",
+			"breakpoints": true
+		},
+		{
+			"idx": 26,
+			"version": "7",
+			"when": 1780600000000,
+			"tag": "0026_niches_rentability",
+			"breakpoints": true
+		},
+		{
+			"idx": 27,
+			"version": "7",
+			"when": 1780700000000,
+			"tag": "0027_scoring_priors",
+			"breakpoints": true
+		},
+		{
+			"idx": 28,
+			"version": "7",
+			"when": 1780800000000,
+			"tag": "0028_sites_build_epoch",
+			"breakpoints": true
+		},
+		{
+			"idx": 29,
+			"version": "7",
+			"when": 1780900000000,
+			"tag": "0030_content_ideas",
+			"breakpoints": true
+		},
+		{
+			"idx": 30,
+			"version": "7",
+			"when": 1781000000000,
+			"tag": "0031_niches_category",
+			"breakpoints": true
+		},
+		{
+			"idx": 31,
+			"version": "7",
+			"when": 1781100000000,
+			"tag": "0032_calls_caller_name",
+			"breakpoints": true
+		},
+		{
+			"idx": 32,
+			"version": "7",
+			"when": 1781200000000,
+			"tag": "0033_sites_competitor_brief",
+			"breakpoints": true
+		},
+		{
+			"idx": 33,
+			"version": "7",
+			"when": 1781300000000,
+			"tag": "0034_agent_runs_started_idx",
+			"breakpoints": true
+		},
+		{
+			"idx": 34,
+			"version": "7",
+			"when": 1781400000000,
+			"tag": "0035_geo_seo_auditors",
+			"breakpoints": true
+		},
+		{
+			"idx": 35,
+			"version": "7",
+			"when": 1781500000000,
+			"tag": "0036_agent_health",
+			"breakpoints": true
+		},
+		{
+			"idx": 36,
+			"version": "7",
+			"when": 1781600000000,
+			"tag": "0037_global_spend_cap",
+			"breakpoints": true
+		},
+		{
+			"idx": 37,
+			"version": "7",
+			"when": 1781700000000,
+			"tag": "0038_agent_schedules",
+			"breakpoints": true
+		},
+		{
+			"idx": 38,
+			"version": "7",
+			"when": 1781800000000,
+			"tag": "0039_orchestrator_chat",
+			"breakpoints": true
+		},
+		{
+			"idx": 39,
+			"version": "7",
+			"when": 1781900000000,
+			"tag": "0040_drop_approval_gates",
+			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1782000000000,
+			"tag": "0041_link_building_surface",
+			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "7",
+			"when": 1782100000000,
+			"tag": "0042_content_idea_story_scaffold",
+			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "7",
+			"when": 1782200000000,
+			"tag": "0043_niche_scout_engine",
+			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "7",
+			"when": 1782300000000,
+			"tag": "0044_niche_scout_scoring",
+			"breakpoints": true
+		},
+		{
+			"idx": 44,
+			"version": "7",
+			"when": 1782400000000,
+			"tag": "0045_niche_scout_geo",
+			"breakpoints": true
+		},
+		{
+			"idx": 45,
+			"version": "7",
+			"when": 1782500000000,
+			"tag": "0046_niche_scout_diversity",
+			"breakpoints": true
+		},
+		{
+			"idx": 46,
+			"version": "7",
+			"when": 1782600000000,
+			"tag": "0047_operator_timezone",
+			"breakpoints": true
+		},
+		{
+			"idx": 47,
+			"version": "7",
+			"when": 1782900000000,
+			"tag": "0048_niche_competition_signal",
+			"breakpoints": true
+		},
+		{
+			"idx": 48,
+			"version": "7",
+			"when": 1783000000000,
+			"tag": "0049_site_status_build_states",
+			"breakpoints": true
+		},
+		{
+			"idx": 49,
+			"version": "7",
+			"when": 1783100000000,
+			"tag": "0050_agent_runs_source_event_sites_build_error",
+			"breakpoints": true
+		},
+		{
+			"idx": 50,
+			"version": "7",
+			"when": 1783200000000,
+			"tag": "0051_sites_content_bundle_checkpoint",
+			"breakpoints": true
+		},
+		{
+			"idx": 51,
+			"version": "7",
+			"when": 1781832545310,
+			"tag": "0052_buildsell",
+			"breakpoints": true
+		}
+	]
 }

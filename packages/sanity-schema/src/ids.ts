@@ -77,3 +77,17 @@ export type ClusterStatus =
 export type KeywordRole = 'primary' | 'secondary' | 'supporting';
 
 export type KeywordSource = 'related' | 'suggestion' | 'seed' | 'operator';
+
+// ────────────────────────────────────────────────────────────
+// Build & Sell deterministic ids. `bs-` prefix guarantees no
+// collision with R&R `site-`/`page-`/`theme-` ids in the shared
+// dataset.
+// ────────────────────────────────────────────────────────────
+
+export function buildsellSiteDocId(id: string): string {
+  return `bs-site-${id}`;
+}
+
+export function buildsellReviewDocId(id: string): string {
+  return `bs-review-${id}`;
+}
