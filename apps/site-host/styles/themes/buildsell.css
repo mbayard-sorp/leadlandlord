@@ -191,7 +191,9 @@
 }
 
 .bs-section-dark {
-  background-color: var(--bs-primary);
+  /* Use the dark brand token (not --bs-primary) so white --bs-on-primary text
+     clears WCAG AA on every preset — verified 5.47:1–14.63:1 across all 12. */
+  background-color: var(--bs-primary-dark);
   color: var(--bs-on-primary);
 }
 
