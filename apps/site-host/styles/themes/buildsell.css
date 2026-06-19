@@ -64,23 +64,33 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: clamp(0.75rem, 1.5vw, 1rem);
   height: 64px;
 }
 
 .bs-nav-brand {
   font-family: var(--bs-font-heading);
   font-weight: 700;
-  font-size: 1.125rem;
+  font-size: 1rem;
   color: var(--bs-text);
   text-decoration: none;
   white-space: nowrap;
+  /* Brand gives way first when the row is tight: shrink + ellipsis,
+     so nav links and CTAs never get pushed into an overlap. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bs-nav-links {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: nowrap;
+  /* Absorb free space (stay centered) but never shrink the links themselves. */
+  flex: 1 0 auto;
+  gap: clamp(0.5rem, 1.5vw, 1.25rem);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -91,6 +101,7 @@
   font-weight: 500;
   color: var(--bs-muted);
   text-decoration: none;
+  white-space: nowrap;
   transition: color 0.15s;
 }
 
@@ -107,6 +118,9 @@
 
 @media (max-width: 767px) {
   .bs-nav-links { display: none; }
+  /* The outline phone button duplicates the sticky bottom call bar on
+     mobile; hide it so the business name keeps room and doesn't collapse. */
+  .bs-nav-cta-group .bs-btn-outline { display: none; }
 }
 
 /* ---- Buttons ------------------------------------------------------------- */
