@@ -2,28 +2,40 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq, isNotNull, sql } from 'drizzle-orm';
-import { getDb, buildsellSites, agentEvents } from '@leadlandlord/db';
-import type { BuildsellSite } from '@leadlandlord/db';
-import { searchLeads, type BuildSellLeadResult } from '@leadlandlord/integrations/google-places';
+import {
+  getDb,
+  buildsellSites,
+  agentEvents,
+  upsertLeadCrm,
+  fetchLeadCrmByPlaceIds,
+  type LeadSnapshot,
+} from '@leadlandlord/db';
+import { searchLeads } from '@leadlandlord/integrations/google-places';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import { buildInvoicePdf } from '@/lib/buildsell-invoice';
 import { requireOperatorSession } from '@/lib/auth';
 import { log } from '@leadlandlord/shared/log';
+import type { SearchLead } from './types';
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
 interface SearchResult {
   ok: boolean;
-  leads?: BuildSellLeadResult[];
+  leads?: SearchLead[];
   message?: string;
 }
 
+/** YYYY-MM-DD from a Date (or null). */
+function isoDate(d: Date | null): string | null {
+  return d ? d.toISOString().slice(0, 10) : null;
+}
+
 /**
- * Ephemeral Places search. Returns transient results only — do NOT query
- * buildsell_leads to render these (ToS: ephemeral UI only).
- * searchLeads itself handles the 30-day cache upsert.
+ * Ephemeral Places search. searchLeads writes nothing (read-only); we overlay
+ * the operator's saved CRM state (called / note / follow-up) by place_id so a
+ * fresh search still shows which leads have already been worked.
  */
 export async function runBuildSellSearch(formData: FormData): Promise<SearchResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
@@ -39,10 +51,115 @@ export async function runBuildSellSearch(formData: FormData): Promise<SearchResu
   if (state.length !== 2) return { ok: false, message: 'State must be a two-letter code (e.g. AZ).' };
 
   try {
-    const leads = await searchLeads({ trade, city, state, count });
+    const results = await searchLeads({ trade, city, state, count });
+    const overlay = await fetchLeadCrmByPlaceIds(results.map((r) => r.placeId));
+    const leads: SearchLead[] = results.map((r) => {
+      const crm = overlay.get(r.placeId);
+      return {
+        ...r,
+        called: crm?.called ?? false,
+        calledAt: crm?.calledAt ? crm.calledAt.toISOString() : null,
+        note: crm?.note ?? null,
+        followUpAt: isoDate(crm?.followUpAt ?? null),
+      };
+    });
     return { ok: true, leads };
   } catch (err) {
     log.error({ trade, city, state, err }, 'runBuildSellSearch failed');
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ─── Lead CRM (lazy-persist on first interaction) ─────────────────────────────
+
+/** Pull the Places snapshot the client carries on each lead card. */
+function snapshotFromForm(fd: FormData): LeadSnapshot {
+  const numOr = (k: string): number | null => {
+    const v = fd.get(k);
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const strOr = (k: string): string | null => {
+    const v = fd.get(k);
+    return v == null || v === '' ? null : String(v);
+  };
+  return {
+    displayName: strOr('display_name'),
+    formattedAddress: strOr('formatted_address'),
+    nationalPhone: strOr('national_phone'),
+    primaryType: strOr('primary_type'),
+    rating: numOr('rating'),
+    userRatingCount: numOr('user_rating_count'),
+    websiteUri: strOr('website_uri'),
+    lat: numOr('lat'),
+    lng: numOr('lng'),
+    trade: strOr('trade'),
+    city: strOr('city'),
+    state: strOr('state'),
+  };
+}
+
+interface CrmResult {
+  ok: boolean;
+  message?: string;
+  called?: boolean;
+  calledAt?: string | null;
+  note?: string | null;
+  followUpAt?: string | null;
+}
+
+/** Toggle the Called flag; stamps called_at when set, clears it when unset. */
+export async function markCalled(formData: FormData): Promise<CrmResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  const placeId = String(formData.get('place_id') ?? '').trim();
+  if (!placeId) return { ok: false, message: 'Missing place id.' };
+  const called = String(formData.get('called') ?? '') === 'true';
+  const calledAt = called ? new Date() : null;
+  try {
+    await upsertLeadCrm(placeId, snapshotFromForm(formData), { called, calledAt });
+    revalidatePath('/operator/buildsell');
+    return { ok: true, called, calledAt: calledAt ? calledAt.toISOString() : null };
+  } catch (err) {
+    log.error({ placeId, err }, 'markCalled failed');
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Save (or clear) the operator's note on a lead. */
+export async function saveLeadNote(formData: FormData): Promise<CrmResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  const placeId = String(formData.get('place_id') ?? '').trim();
+  if (!placeId) return { ok: false, message: 'Missing place id.' };
+  const raw = String(formData.get('note') ?? '').trim();
+  const note = raw === '' ? null : raw.slice(0, 4000);
+  try {
+    await upsertLeadCrm(placeId, snapshotFromForm(formData), { note });
+    revalidatePath('/operator/buildsell');
+    return { ok: true, note };
+  } catch (err) {
+    log.error({ placeId, err }, 'saveLeadNote failed');
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Set (or clear) a follow-up date (YYYY-MM-DD). */
+export async function setFollowUp(formData: FormData): Promise<CrmResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  const placeId = String(formData.get('place_id') ?? '').trim();
+  if (!placeId) return { ok: false, message: 'Missing place id.' };
+  const raw = String(formData.get('follow_up_at') ?? '').trim();
+  // Parse YYYY-MM-DD at UTC midnight; empty clears the follow-up.
+  const followUpAt = raw ? new Date(`${raw}T00:00:00.000Z`) : null;
+  if (raw && Number.isNaN(followUpAt?.getTime())) {
+    return { ok: false, message: 'Invalid date.' };
+  }
+  try {
+    await upsertLeadCrm(placeId, snapshotFromForm(formData), { followUpAt });
+    revalidatePath('/operator/buildsell');
+    return { ok: true, followUpAt: followUpAt ? followUpAt.toISOString().slice(0, 10) : null };
+  } catch (err) {
+    log.error({ placeId, err }, 'setFollowUp failed');
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
 }

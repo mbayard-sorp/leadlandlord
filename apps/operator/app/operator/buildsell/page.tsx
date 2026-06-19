@@ -1,16 +1,29 @@
 import { desc } from 'drizzle-orm';
-import { getDb, buildsellSites } from '@leadlandlord/db';
+import { getDb, buildsellSites, listWorkedLeads } from '@leadlandlord/db';
+import type { BuildsellLead } from '@leadlandlord/db';
 import { SearchPanel } from './SearchPanel';
 import { BuildSellButtons } from './BuildSellButtons';
 
 export const dynamic = 'force-dynamic';
 
+/** YYYY-MM-DD string from a Date, in the local (server) timezone. */
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Today's date as YYYY-MM-DD (UTC, consistent with how followUpAt is stored). */
+function todayYmd(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default async function BuildSellPage() {
   const db = getDb();
-  const rows = await db
-    .select()
-    .from(buildsellSites)
-    .orderBy(desc(buildsellSites.createdAt));
+  const [rows, worked] = await Promise.all([
+    db.select().from(buildsellSites).orderBy(desc(buildsellSites.createdAt)),
+    listWorkedLeads(),
+  ]);
+
+  const today = todayYmd();
 
   return (
     <div className="space-y-6">
@@ -24,6 +37,40 @@ export default async function BuildSellPage() {
 
       <SearchPanel />
 
+      {/* Follow-ups & worked leads board */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide mb-2 text-slate-300">
+          Follow-ups &amp; worked leads ({worked.length})
+        </h2>
+        {worked.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/20 p-4 text-sm text-slate-500">
+            No leads worked yet — search above and mark calls as you go.
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+                  <Th>Business</Th>
+                  <Th>Phone</Th>
+                  <Th>Location</Th>
+                  <Th>Website</Th>
+                  <Th>Called</Th>
+                  <Th>Follow-up</Th>
+                  <Th>Note</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {worked.map((lead) => (
+                  <WorkedLeadRow key={lead.placeId} lead={lead} today={today} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Sites list */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide mb-2 text-slate-300">
           Sites ({rows.length})
@@ -96,6 +143,79 @@ export default async function BuildSellPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function WorkedLeadRow({ lead, today }: { lead: BuildsellLead; today: string }) {
+  const followUpYmd = lead.followUpAt ? ymd(lead.followUpAt) : null;
+  const isOverdue = followUpYmd !== null && followUpYmd <= today;
+
+  const rowCls = isOverdue
+    ? 'border-b border-slate-800/50 last:border-0 bg-red-950/20'
+    : 'border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20';
+
+  return (
+    <tr className={rowCls}>
+      <td className="px-2 py-2 font-medium text-slate-200">
+        {lead.displayName ?? <span className="text-slate-600 italic">(name reaped)</span>}
+      </td>
+      <td className="px-2 py-2 text-slate-400 whitespace-nowrap">
+        {lead.nationalPhone ?? '—'}
+      </td>
+      <td className="px-2 py-2 text-slate-400 whitespace-nowrap">
+        {lead.city && lead.state ? `${lead.city}, ${lead.state}` : lead.city ?? lead.state ?? '—'}
+      </td>
+      <td className="px-2 py-2">
+        {lead.websiteUri ? (
+          <a
+            href={lead.websiteUri}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-sky-400 hover:text-sky-300 underline truncate max-w-[140px] block"
+          >
+            {lead.websiteUri.replace(/^https?:\/\//, '')}
+          </a>
+        ) : (
+          <span className="text-xs text-emerald-400">no site</span>
+        )}
+      </td>
+      <td className="px-2 py-2 whitespace-nowrap">
+        {lead.called ? (
+          <span className="text-xs text-emerald-400">
+            Called{lead.calledAt ? ` ${new Date(lead.calledAt).toLocaleDateString()}` : ''}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-600">—</span>
+        )}
+      </td>
+      <td className="px-2 py-2 whitespace-nowrap">
+        {followUpYmd ? (
+          <span
+            className={`text-xs font-medium ${
+              isOverdue ? 'text-red-400' : 'text-amber-300'
+            }`}
+          >
+            {followUpYmd}
+            {isOverdue && (
+              <span className="ml-1 inline-block rounded px-1 py-0.5 text-xs bg-red-900/50 text-red-300">
+                Due
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-600">—</span>
+        )}
+      </td>
+      <td className="px-2 py-2 max-w-[200px]">
+        {lead.note ? (
+          <span className="text-xs text-slate-400 line-clamp-2" title={lead.note}>
+            {lead.note}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-700">—</span>
+        )}
+      </td>
+    </tr>
   );
 }
 

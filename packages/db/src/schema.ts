@@ -2029,12 +2029,20 @@ export const buildsellLeads = pgTable(
     trade: text('trade'),
     city: text('city'),
     state: text('state'),
+    // ── Operator CRM fields (NOT Places-sourced → NOT nulled by the reaper) ──
+    // Persisted lazily when the operator first acts on a lead while working a
+    // call list. A lead with any of these set is a "saved" lead.
+    called: boolean('called').notNull().default(false),
+    calledAt: timestamp('called_at', { withTimezone: true }),
+    note: text('note'),
+    followUpAt: timestamp('follow_up_at', { withTimezone: true }),
     cachedUntil: timestamp('cached_until', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     cachedUntilIdx: index('buildsell_leads_cached_until_idx').on(t.cachedUntil),
+    followUpIdx: index('buildsell_leads_follow_up_idx').on(t.followUpAt),
   }),
 );
 
