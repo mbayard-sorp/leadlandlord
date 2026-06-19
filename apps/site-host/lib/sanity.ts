@@ -231,3 +231,154 @@ export async function fetchCorporatePageList(): Promise<CorporatePageStub[]> {
   const result = await sanity.fetch<CorporatePageStub[] | null>(CORPORATE_PAGE_LIST_QUERY, {});
   return result ?? [];
 }
+
+// --- Build & Sell (B&S) spec sites ----------------------------------------
+
+/**
+ * Full GROQ projection for a buildsellSite doc. Colors are unpacked from the
+ * Sanity @sanity/color-input `color` object to plain hex strings. Review refs
+ * inside bsReviewsSection are dereffed inline.
+ */
+const BUILDSELL_PROJECTION = `{
+  _id,
+  buildsellSiteId,
+  businessName,
+  trade,
+  city,
+  state,
+  phone,
+  "slug": slug.current,
+  draftMode,
+  robotsDisallow,
+  generatedAt,
+  navigation[]{ label, href },
+  "theme": {
+    "layoutVariant": theme.layoutVariant,
+    "preset": theme.preset,
+    "primary": theme.primary.hex,
+    "primaryDark": theme.primaryDark.hex,
+    "accent": theme.accent.hex,
+    "onPrimary": theme.onPrimary.hex,
+    "bg": theme.bg.hex,
+    "surface": theme.surface.hex,
+    "text": theme.text.hex,
+    "muted": theme.muted.hex,
+    "fontHeading": theme.fontHeading,
+    "fontBody": theme.fontBody
+  },
+  seo{ metaTitle, metaDescription },
+  "sections": sections[]{
+    _type,
+    _key,
+    ...,
+    "imageUrl": image.asset->url,
+    "reviews": reviews[]->{
+      author,
+      rating,
+      text,
+      featured,
+      order
+    }
+  }
+}`;
+
+const BUILDSELL_BY_ID_QUERY = `*[_type=="buildsellSite" && buildsellSiteId==$id][0]${BUILDSELL_PROJECTION}`;
+const BUILDSELL_BY_SLUG_QUERY = `*[_type=="buildsellSite" && slug.current==$slug && draftMode==false][0]${BUILDSELL_PROJECTION}`;
+
+export interface BuildSellTheme {
+  layoutVariant: 'split' | 'bold' | 'trust';
+  preset?: string | null;
+  primary?: string | null;
+  primaryDark?: string | null;
+  accent?: string | null;
+  onPrimary?: string | null;
+  bg?: string | null;
+  surface?: string | null;
+  text?: string | null;
+  muted?: string | null;
+  fontHeading?: string | null;
+  fontBody?: string | null;
+}
+
+export interface BuildSellNavLink {
+  label: string;
+  href: string;
+}
+
+export interface BuildSellReview {
+  author: string;
+  rating: number;
+  text: string;
+  featured?: boolean | null;
+  order?: number | null;
+}
+
+export interface BuildSellSection {
+  _type: string;
+  _key: string;
+  // bsHeroSection
+  eyebrow?: string | null;
+  headline?: string | null;
+  highlight?: string | null;
+  subhead?: string | null;
+  imageUrl?: string | null;
+  showRating?: boolean | null;
+  badges?: Array<{ icon?: string | null; label?: string | null }> | null;
+  primaryCta?: { label?: string | null; href?: string | null; style?: string | null } | null;
+  secondaryCta?: { label?: string | null; href?: string | null } | null;
+  // bsServicesSection
+  heading?: string | null;
+  services?: Array<{ icon?: string | null; title?: string | null; description?: string | null }> | null;
+  // bsAboutSection
+  body?: string | null;
+  stats?: Array<{ value?: string | null; label?: string | null }> | null;
+  // bsProcessSection
+  steps?: Array<{ icon?: string | null; title?: string | null; description?: string | null }> | null;
+  // bsReviewsSection
+  reviews?: BuildSellReview[] | null;
+  // bsContactSection
+  address?: {
+    street?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+    hours?: string | null;
+    serviceArea?: string | null;
+  } | null;
+  // bsFooterSection
+  tagline?: string | null;
+  columns?: Array<{
+    heading?: string | null;
+    links?: Array<{ label?: string | null; href?: string | null }> | null;
+  }> | null;
+  social?: Array<{ platform?: string | null; href?: string | null }> | null;
+  legal?: string | null;
+}
+
+export interface BuildSellSite {
+  _id: string;
+  buildsellSiteId: string;
+  businessName: string;
+  trade: string;
+  city: string;
+  state: string;
+  phone?: string | null;
+  slug: string;
+  draftMode?: boolean | null;
+  robotsDisallow?: boolean | null;
+  generatedAt?: string | null;
+  navigation?: BuildSellNavLink[] | null;
+  theme: BuildSellTheme;
+  seo?: { metaTitle?: string | null; metaDescription?: string | null } | null;
+  sections?: BuildSellSection[] | null;
+}
+
+export async function fetchBuildSellSiteById(id: string): Promise<BuildSellSite | null> {
+  const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_ID_QUERY, { id });
+  return result ?? null;
+}
+
+export async function fetchBuildSellSiteBySlug(slug: string): Promise<BuildSellSite | null> {
+  const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_SLUG_QUERY, { slug });
+  return result ?? null;
+}

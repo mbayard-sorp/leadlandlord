@@ -1,0 +1,716 @@
+/*
+ * Build & Sell spec-site theme
+ *
+ * All brand colors are injected as inline CSS custom properties on the root
+ * wrapper by BuildSellHome.tsx (from the Sanity theme doc). These fallback
+ * values provide a safe render if the Sanity doc is missing a color field.
+ *
+ * Layout variants are toggled by [data-bs-layout="split|bold|trust"] on the
+ * root container. All three variants share the same section content; the
+ * variant changes hero layout and section rhythm to reduce cross-site footprint.
+ */
+
+/* ---- Fallback token defaults (overridden by inline style on root) -------- */
+.bs-root {
+  --bs-primary: #1e6fba;
+  --bs-primary-dark: #155694;
+  --bs-accent: #f5a623;
+  --bs-on-primary: #ffffff;
+  --bs-bg: #f8f9fa;
+  --bs-surface: #ffffff;
+  --bs-text: #1a1a1a;
+  --bs-muted: #6b7280;
+  --bs-font-heading: system-ui, sans-serif;
+  --bs-font-body: system-ui, sans-serif;
+
+  /* Derived utility tokens */
+  --bs-primary-10: color-mix(in srgb, var(--bs-primary) 10%, transparent);
+  --bs-accent-10: color-mix(in srgb, var(--bs-accent) 10%, transparent);
+  --bs-shadow-sm: 0 1px 3px rgba(0 0 0 / 0.08), 0 1px 2px rgba(0 0 0 / 0.06);
+  --bs-shadow-md: 0 4px 16px rgba(0 0 0 / 0.10);
+  --bs-shadow-lg: 0 8px 32px rgba(0 0 0 / 0.12);
+  --bs-radius-card: 1rem;
+  --bs-radius-btn: 0.5rem;
+  --bs-section-py: clamp(64px, 9vw, 112px);
+  --bs-container: 1200px;
+
+  color: var(--bs-text);
+  background-color: var(--bs-bg);
+  font-family: var(--bs-font-body);
+  scroll-behavior: smooth;
+}
+
+/* ---- Container ----------------------------------------------------------- */
+.bs-container {
+  width: 100%;
+  max-width: var(--bs-container);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 48px);
+}
+
+/* ---- Sticky nav ---------------------------------------------------------- */
+.bs-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: color-mix(in srgb, var(--bs-surface) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-text) 8%, transparent);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.bs-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: 64px;
+}
+
+.bs-nav-brand {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--bs-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.bs-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bs-nav-links a {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--bs-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.bs-nav-links a:hover {
+  color: var(--bs-primary);
+}
+
+.bs-nav-cta-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .bs-nav-links { display: none; }
+}
+
+/* ---- Buttons ------------------------------------------------------------- */
+.bs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.6em 1.25em;
+  border-radius: var(--bs-radius-btn);
+  font-family: var(--bs-font-body);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.bs-btn:active {
+  transform: scale(0.98);
+}
+
+.bs-btn-primary {
+  background-color: var(--bs-primary);
+  color: var(--bs-on-primary);
+  border-color: var(--bs-primary);
+}
+
+.bs-btn-primary:hover {
+  background-color: var(--bs-primary-dark);
+  border-color: var(--bs-primary-dark);
+  box-shadow: var(--bs-shadow-md);
+}
+
+.bs-btn-outline {
+  background-color: transparent;
+  color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.bs-btn-outline:hover {
+  background-color: var(--bs-primary-10);
+}
+
+.bs-btn-ghost {
+  background-color: transparent;
+  color: var(--bs-on-primary);
+  border-color: color-mix(in srgb, var(--bs-on-primary) 50%, transparent);
+}
+
+.bs-btn-ghost:hover {
+  background-color: color-mix(in srgb, var(--bs-on-primary) 15%, transparent);
+}
+
+.bs-btn-lg {
+  padding: 0.8em 1.75em;
+  font-size: 1.05rem;
+}
+
+/* ---- Cards --------------------------------------------------------------- */
+.bs-card {
+  background-color: var(--bs-surface);
+  border-radius: var(--bs-radius-card);
+  box-shadow: var(--bs-shadow-sm);
+  padding: 1.5rem;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.bs-card:hover {
+  box-shadow: var(--bs-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ---- Section base -------------------------------------------------------- */
+.bs-section {
+  padding-block: var(--bs-section-py);
+}
+
+.bs-section-alt {
+  background-color: var(--bs-surface);
+}
+
+.bs-section-dark {
+  background-color: var(--bs-primary);
+  color: var(--bs-on-primary);
+}
+
+.bs-section-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  line-height: 1.2;
+  color: inherit;
+  margin: 0 0 0.75rem;
+}
+
+.bs-section-intro {
+  font-size: 1.1rem;
+  color: var(--bs-muted);
+  max-width: 60ch;
+  margin: 0 0 2.5rem;
+}
+
+.bs-section-dark .bs-section-intro {
+  color: color-mix(in srgb, var(--bs-on-primary) 75%, transparent);
+}
+
+/* ---- Grid helpers -------------------------------------------------------- */
+.bs-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+
+.bs-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+/* ---- Icon box ------------------------------------------------------------ */
+.bs-icon-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 0.75rem;
+  background-color: var(--bs-primary-10);
+  color: var(--bs-primary);
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+/* ---- Star rating --------------------------------------------------------- */
+.bs-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--bs-accent);
+  font-size: 1.1rem;
+}
+
+.bs-rating-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bs-text);
+  margin-left: 0.25rem;
+}
+
+/* ---- Stat badge ---------------------------------------------------------- */
+.bs-stat {
+  text-align: center;
+}
+
+.bs-stat-value {
+  display: block;
+  font-family: var(--bs-font-heading);
+  font-weight: 800;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+  color: var(--bs-primary);
+}
+
+.bs-stat-label {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--bs-muted);
+  margin-top: 0.25rem;
+}
+
+/* ---- Form ---------------------------------------------------------------- */
+.bs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bs-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 599px) {
+  .bs-form-row { grid-template-columns: 1fr; }
+}
+
+.bs-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.bs-form-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bs-text);
+}
+
+.bs-form-field input,
+.bs-form-field textarea {
+  padding: 0.65em 0.875em;
+  border: 1.5px solid color-mix(in srgb, var(--bs-text) 20%, transparent);
+  border-radius: 0.5rem;
+  font-family: var(--bs-font-body);
+  font-size: 1rem;
+  color: var(--bs-text);
+  background-color: var(--bs-surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.bs-form-field input:focus,
+.bs-form-field textarea:focus {
+  outline: none;
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 3px var(--bs-primary-10);
+}
+
+.bs-form-field textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.bs-honeypot {
+  display: none !important;
+  visibility: hidden;
+  position: absolute;
+  left: -9999px;
+}
+
+/* ---- Draft shield -------------------------------------------------------- */
+.bs-draft-watermark {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.bs-draft-watermark-text {
+  font-family: var(--bs-font-heading, system-ui, sans-serif);
+  font-size: clamp(2rem, 6vw, 5rem);
+  font-weight: 900;
+  color: color-mix(in srgb, var(--bs-primary, #1e6fba) 18%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  transform: rotate(-35deg);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.bs-draft-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background-color: #1e293b;
+  color: #f8fafc;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.bs-draft-banner a {
+  color: #facc15;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+/* Push page content below the draft banner */
+.bs-root[data-draft='true'] {
+  padding-top: 40px;
+}
+
+/* ---- Process steps ------------------------------------------------------- */
+.bs-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  position: relative;
+}
+
+.bs-step {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.bs-step-num {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--bs-primary);
+  color: var(--bs-on-primary);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+/* ---- Review card --------------------------------------------------------- */
+.bs-review-card {
+  background-color: var(--bs-surface);
+  border-radius: var(--bs-radius-card);
+  box-shadow: var(--bs-shadow-sm);
+  padding: 1.5rem;
+}
+
+.bs-review-author {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+  color: var(--bs-text);
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.bs-footer {
+  background-color: color-mix(in srgb, var(--bs-text) 95%, transparent);
+  color: color-mix(in srgb, var(--bs-bg) 80%, transparent);
+  padding-block: 3rem 1.5rem;
+}
+
+.bs-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 2rem;
+  margin-bottom: 2.5rem;
+}
+
+.bs-footer-heading {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bs-bg);
+  margin-bottom: 0.75rem;
+}
+
+.bs-footer-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.bs-footer-links a {
+  font-size: 0.875rem;
+  color: color-mix(in srgb, var(--bs-bg) 60%, transparent);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.bs-footer-links a:hover {
+  color: var(--bs-bg);
+}
+
+.bs-footer-legal {
+  border-top: 1px solid color-mix(in srgb, var(--bs-bg) 12%, transparent);
+  padding-top: 1.25rem;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--bs-bg) 45%, transparent);
+  text-align: center;
+}
+
+.bs-social-links {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.bs-social-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: color-mix(in srgb, var(--bs-bg) 12%, transparent);
+  color: var(--bs-bg);
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+
+.bs-social-links a:hover {
+  background-color: var(--bs-primary);
+}
+
+/* ====================================================================
+   LAYOUT VARIANTS
+   Same content, different hero/section presentation for footprint diversity.
+   All three use the same token system above.
+   ====================================================================== */
+
+/* -- VARIANT: split (default) --
+   Hero: two-column, text left / image right.
+   Sections: alternating surface/bg backgrounds.
+*/
+[data-bs-layout='split'] .bs-hero {
+  padding-block: clamp(72px, 10vw, 120px);
+  background-color: var(--bs-bg);
+}
+
+[data-bs-layout='split'] .bs-hero-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: clamp(2rem, 5vw, 5rem);
+}
+
+[data-bs-layout='split'] .bs-hero-image {
+  border-radius: var(--bs-radius-card);
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  box-shadow: var(--bs-shadow-lg);
+}
+
+@media (max-width: 767px) {
+  [data-bs-layout='split'] .bs-hero-inner {
+    grid-template-columns: 1fr;
+  }
+  [data-bs-layout='split'] .bs-hero-image {
+    display: none;
+  }
+}
+
+/* -- VARIANT: bold --
+   Full-width dark-primary hero, centered text, image as background overlay.
+*/
+[data-bs-layout='bold'] .bs-hero {
+  background-color: var(--bs-primary);
+  color: var(--bs-on-primary);
+  padding-block: clamp(80px, 12vw, 140px);
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+}
+
+[data-bs-layout='bold'] .bs-hero-bg-image {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  opacity: 0.18;
+  width: 100%;
+  height: 100%;
+}
+
+[data-bs-layout='bold'] .bs-hero-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+[data-bs-layout='bold'] .bs-hero-headline {
+  color: var(--bs-on-primary);
+}
+
+[data-bs-layout='bold'] .bs-hero-subhead {
+  color: color-mix(in srgb, var(--bs-on-primary) 80%, transparent);
+}
+
+[data-bs-layout='bold'] .bs-section:nth-child(even) {
+  background-color: var(--bs-surface);
+}
+
+/* -- VARIANT: trust --
+   Hero: narrow centered with a large trust badge row, image below the fold.
+   Emphasis on credibility signals.
+*/
+[data-bs-layout='trust'] .bs-hero {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--bs-primary) 8%, var(--bs-bg)),
+    var(--bs-bg)
+  );
+  padding-block: clamp(80px, 10vw, 128px);
+  text-align: center;
+}
+
+[data-bs-layout='trust'] .bs-hero-inner {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+[data-bs-layout='trust'] .bs-hero-image {
+  margin-inline: auto;
+  margin-top: 2.5rem;
+  border-radius: var(--bs-radius-card);
+  overflow: hidden;
+  aspect-ratio: 16 / 7;
+  max-width: 900px;
+  box-shadow: var(--bs-shadow-lg);
+}
+
+[data-bs-layout='trust'] .bs-badges {
+  justify-content: center;
+}
+
+/* ---- Hero shared elements (all variants) --------------------------------- */
+.bs-hero-eyebrow {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--bs-primary);
+  background-color: var(--bs-primary-10);
+  border-radius: 999px;
+  padding: 0.3em 0.9em;
+  margin-bottom: 1rem;
+}
+
+[data-bs-layout='bold'] .bs-hero-eyebrow {
+  background-color: color-mix(in srgb, var(--bs-on-primary) 20%, transparent);
+  color: var(--bs-on-primary);
+}
+
+.bs-hero-headline {
+  font-family: var(--bs-font-heading);
+  font-weight: 800;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.1;
+  color: var(--bs-text);
+  margin: 0 0 1rem;
+}
+
+.bs-hero-highlight {
+  color: var(--bs-primary);
+}
+
+[data-bs-layout='bold'] .bs-hero-highlight {
+  color: var(--bs-accent);
+}
+
+.bs-hero-subhead {
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  color: var(--bs-muted);
+  margin: 0 0 2rem;
+  max-width: 52ch;
+}
+
+.bs-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+[data-bs-layout='bold'] .bs-hero-actions,
+[data-bs-layout='trust'] .bs-hero-actions {
+  justify-content: center;
+}
+
+.bs-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.bs-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.4em 0.9em;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: var(--bs-surface);
+  color: var(--bs-text);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+/* ---- Hero gradient placeholder (no image) -------------------------------- */
+.bs-hero-image-placeholder {
+  border-radius: var(--bs-radius-card);
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bs-primary) 20%, var(--bs-bg)),
+    color-mix(in srgb, var(--bs-accent) 15%, var(--bs-bg))
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-primary);
+  opacity: 0.7;
+}

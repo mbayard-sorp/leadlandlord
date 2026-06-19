@@ -44,6 +44,8 @@ export default function proxy(req: NextRequest) {
       path.startsWith('/_next') ||
       path.startsWith('/api/revalidate') ||
       path.startsWith('/leadslandlord') ||
+      path.startsWith('/preview') ||
+      path.startsWith('/buildsell') ||
       path === '/favicon.ico' ||
       path === '/sitemap.xml' ||
       path === '/robots.txt' ||
