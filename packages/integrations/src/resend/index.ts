@@ -20,6 +20,11 @@ export interface SendEmailArgs {
   bcc?: string[];
   /** Optional metadata tags surfaced in the Resend dashboard. */
   tags?: Array<{ name: string; value: string }>;
+  /**
+   * Optional file attachments. `content` is a Buffer (binary, e.g. a PDF) or a
+   * base64/utf-8 string. Used by the Build & Sell invoice email.
+   */
+  attachments?: Array<{ filename: string; content: Buffer | string }>;
 }
 
 /**
@@ -46,6 +51,11 @@ export async function sendEmail(args: SendEmailArgs): Promise<{ messageId: strin
     cc: args.cc,
     bcc: args.bcc,
     tags: args.tags,
+    // Resend expects attachment content base64-encoded in the JSON API.
+    attachments: args.attachments?.map((a) => ({
+      filename: a.filename,
+      content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
+    })),
   };
   const res = await fetch(`${RESEND_BASE}/emails`, {
     method: 'POST',
