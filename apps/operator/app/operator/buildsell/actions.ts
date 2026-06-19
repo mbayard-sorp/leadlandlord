@@ -317,7 +317,8 @@ export async function markPaid(formData: FormData): Promise<MarkPaidResult> {
     slug: existing.slug,
   };
 }
-
-// Re-export the result type so client components can type the response.
-export type { BuildSellLeadResult };
-export type { BuildsellSite };
+// NOTE: do NOT re-export types from this 'use server' file. Turbopack's
+// server-action transform registers every export as a server reference; an
+// `export type { ... }` of an erased identifier becomes `registerServer
+// reference(undefined-identifier)` and throws "X is not defined" at module
+// eval. Client components import these types from their real source modules.
