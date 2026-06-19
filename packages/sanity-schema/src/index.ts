@@ -10,7 +10,7 @@ export {
   review,
 } from './types/index';
 // Build & Sell schema types + presets (all bs-prefixed).
-export { buildsellSchemaTypes, buildsellSite, buildsellTheme, bsReview, BUILDSELL_PRESETS } from './types/buildsell';
+export { buildsellSchemaTypes, buildsellSite, buildsellTheme, bsReview, BUILDSELL_PRESETS, BUILDSELL_PRESET_NAMES, presetByName } from './types/buildsell';
 export type { BuildsellPreset } from './types/buildsell';
 export {
   siteDocId,

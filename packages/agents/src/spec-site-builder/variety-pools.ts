@@ -1,3 +1,5 @@
+import { BUILDSELL_PRESET_NAMES } from '@leadlandlord/sanity-schema/presets';
+
 /**
  * variety-pools.ts
  *
@@ -102,23 +104,15 @@ export const LAYOUT_VARIANTS = ['split', 'bold', 'trust'] as const;
 export type LayoutVariant = (typeof LAYOUT_VARIANTS)[number];
 
 /**
- * Theme preset pool. Ordered so adjacent (trade, city) builds rotate through
- * visually distinct palettes. Do NOT reorder — rotation relies on index stability.
+ * Theme preset pool — the canonical BUILDSELL_PRESETS names, in table order, so
+ * adjacent (trade, city) builds rotate through visually distinct palettes.
+ *
+ * MUST stay aligned with BUILDSELL_PRESETS: the rotation-assigned name is what
+ * site-host resolves colors against at render time. A name not in the table
+ * falls back to the doc's stored hex (legacy path), so drift here silently
+ * disables preset-authoritative coloring for new builds.
  */
-export const PRESET_ROTATION = [
-  'Aqua Slate',
-  'Forest Green',
-  'Midnight Bold',
-  'Warm Amber',
-  'Sky Blue',
-  'Deep Navy',
-  'Slate Gray',
-  'Rustic Red',
-  'Cool Teal',
-  'Charcoal Pro',
-  'Sage Modern',
-  'Cobalt Trust',
-] as const;
+export const PRESET_ROTATION = BUILDSELL_PRESET_NAMES;
 
 /** Font heading pool — all loaded via next/font in site-host. */
 export const FONT_HEADING_POOL = [
