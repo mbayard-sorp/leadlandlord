@@ -8,11 +8,13 @@ import {
   agentEvents,
   upsertLeadCrm,
   fetchLeadCrmByPlaceIds,
+  fetchFreshBuildsellLeads,
   type LeadSnapshot,
 } from '@leadlandlord/db';
 import { searchLeads } from '@leadlandlord/integrations/google-places';
 import { sendEmail } from '@leadlandlord/integrations/resend';
-import { createWriteClient } from '@leadlandlord/integrations/sanity';
+import { createWriteClient, uploadHeroImage } from '@leadlandlord/integrations/sanity';
+import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import { buildInvoicePdf } from '@/lib/buildsell-invoice';
 import { requireOperatorSession } from '@/lib/auth';
@@ -175,6 +177,12 @@ interface BuildDraftResult {
 /**
  * Create a buildsell_sites row (status='draft') and enqueue a
  * buildsell.build event for spec-site-builder.
+ *
+ * NAP (phone + address) is fetched from the 30-day Places cache (if still
+ * fresh) and written ONLY into the agent-event payload — never into a new
+ * Postgres column. The spec-site-builder reads them transiently and writes
+ * them into Sanity. Aggregate rating/userRatingCount/primaryType are NOT
+ * PII and go into metadata as before.
  */
 export async function buildDraft(formData: FormData): Promise<BuildDraftResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
@@ -189,19 +197,42 @@ export async function buildDraft(formData: FormData): Promise<BuildDraftResult> 
   const ratingCountRaw  = String(formData.get('user_rating_count') ?? '').trim();
   const primaryType     = String(formData.get('primary_type')      ?? '').trim() || null;
 
+  // Form snapshot: the client passes these along on the build form so the
+  // operator's current search result supplies NAP even if not yet in DB.
+  const formPhone   = String(formData.get('national_phone')      ?? '').trim() || null;
+  const formAddress = String(formData.get('formatted_address')   ?? '').trim() || null;
+
   if (!businessName) return { ok: false, message: 'Business name is required.' };
   if (!trade)        return { ok: false, message: 'Trade is required.' };
   if (!city)         return { ok: false, message: 'City is required.' };
   if (state.length !== 2) return { ok: false, message: 'State must be a two-letter code.' };
 
-  // Carry forward Places signal fields into metadata (jsonb) so the agent
-  // can use them for prompt enrichment. These survive the reaper in metadata.
+  // Aggregate signal fields into metadata (non-PII, survives reaper).
   const rating         = ratingRaw       ? parseFloat(ratingRaw)       : null;
   const userRatingCount = ratingCountRaw ? parseInt(ratingCountRaw, 10) : null;
   const metadata: Record<string, unknown> = {};
   if (rating != null && !isNaN(rating))              metadata.rating          = rating;
   if (userRatingCount != null && !isNaN(userRatingCount)) metadata.userRatingCount = userRatingCount;
   if (primaryType)                                   metadata.primaryType     = primaryType;
+
+  // Resolve NAP: prefer fresh cache row over form snapshot (cache is always
+  // more authoritative; form snapshot is the fallback when the lead hasn't
+  // been cached yet or when the operator builds immediately after search).
+  let phone   = formPhone;
+  let address = formAddress;
+  if (placeId) {
+    try {
+      const cached = await fetchFreshBuildsellLeads([placeId]);
+      const hit = cached[0];
+      if (hit) {
+        phone   = hit.nationalPhone   ?? phone;
+        address = hit.formattedAddress ?? address;
+      }
+    } catch (err) {
+      // Non-fatal: proceed with form snapshot.
+      log.warn({ placeId, err }, 'buildDraft: cache lookup failed — using form snapshot NAP');
+    }
+  }
 
   const buildEpoch = Date.now().toString();
   const db = getDb();
@@ -216,12 +247,22 @@ export async function buildDraft(formData: FormData): Promise<BuildDraftResult> 
 
   if (!row) return { ok: false, message: 'Insert failed — no row returned.' };
 
+  // NAP travels transiently in the event payload only — no new Postgres columns,
+  // no migration, reaper untouched. Spec-site-builder writes phone/address into
+  // the Sanity doc and discards the payload.
+  const eventPayload: Record<string, unknown> = {
+    buildsell_site_id: row.id,
+    build_epoch: buildEpoch,
+  };
+  if (phone)   eventPayload.phone        = phone;
+  if (address) eventPayload.address_line = address;
+
   try {
     await db.insert(agentEvents).values({
       agent: 'operator',
       type: 'buildsell.build',
       targetAgent: 'spec-site-builder',
-      payload: { buildsell_site_id: row.id, build_epoch: buildEpoch },
+      payload: eventPayload,
     });
   } catch (err) {
     log.error({ id: row.id, err }, 'buildDraft: agent event insert failed');
@@ -340,6 +381,20 @@ export async function sendInvoice(formData: FormData): Promise<SendInvoiceResult
     .set({ status: 'invoiced', invoiceSentAt: new Date() })
     .where(eq(buildsellSites.id, id));
 
+  // Best-effort: write purchaseUrl into the Sanity doc so DraftShield can
+  // surface it immediately. The email already went out; a Sanity failure must
+  // NOT abort or surface an error to the operator.
+  const docId = buildsellSiteDocId(id);
+  try {
+    await createWriteClient()
+      .patch(docId)
+      .set({ purchaseUrl: paymentLink })
+      .commit({ visibility: 'async' });
+    log.info({ id, docId }, 'sendInvoice: purchaseUrl patched into Sanity');
+  } catch (err) {
+    log.warn({ id, docId, err }, 'sendInvoice: Sanity purchaseUrl patch failed (non-fatal — email sent)');
+  }
+
   log.info({ id, invoiceNumber, to: existing.ownerEmail }, 'sendInvoice: invoice emailed');
   revalidatePath('/operator/buildsell');
   return { ok: true, message: `Invoice ${invoiceNumber} sent to ${existing.ownerEmail}.` };
@@ -449,6 +504,201 @@ export async function markPaid(formData: FormData): Promise<MarkPaidResult> {
     slug: existing.slug,
   };
 }
+// ─── Image-prompt control ────────────────────────────────────────────────────
+
+export type BuildSellImageKind = 'hero' | 'about' | 'og';
+
+interface ImagePromptResult {
+  ok: boolean;
+  message?: string;
+}
+
+interface RegenImageResult {
+  ok: boolean;
+  message?: string;
+  imageUrl?: string;
+}
+
+/**
+ * Persist an operator-edited image prompt on the Sanity doc.
+ * Writes to `heroImagePrompt`, `aboutImagePrompt`, or `ogImagePrompt`
+ * depending on `kind`.
+ */
+export async function saveBuildSellImagePrompt(
+  siteId: string,
+  kind: BuildSellImageKind,
+  prompt: string,
+): Promise<ImagePromptResult> {
+  await requireOperatorSession();
+
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+  const trimmed = prompt.trim();
+  if (!trimmed) return { ok: false, message: 'Prompt must not be empty.' };
+  if (trimmed.length > 2000) return { ok: false, message: 'Prompt too long (max 2000 chars).' };
+
+  const fieldMap: Record<BuildSellImageKind, string> = {
+    hero:  'heroImagePrompt',
+    about: 'aboutImagePrompt',
+    og:    'ogImagePrompt',
+  };
+  const field = fieldMap[kind];
+
+  try {
+    await createWriteClient()
+      .patch(buildsellSiteDocId(siteId))
+      .set({ [field]: trimmed })
+      .commit({ visibility: 'sync' });
+    revalidatePath(`/operator/buildsell/${siteId}`);
+    revalidatePath('/operator/buildsell');
+    log.info({ siteId, kind, field }, 'saveBuildSellImagePrompt: prompt saved');
+    return { ok: true };
+  } catch (err) {
+    log.error({ siteId, kind, err }, 'saveBuildSellImagePrompt failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'prompt save failed' };
+  }
+}
+
+/**
+ * Regenerate one image (hero / about / og) for a Build & Sell site.
+ *
+ * Cap enforcement (R15): a durable per-site daily counter is stored inside
+ * `buildsell_sites.metadata` (no new columns, no migration). The counter
+ * object lives at `metadata.regenCap` and has shape:
+ *
+ *   { date: "YYYY-MM-DD", count: number }
+ *
+ * The date is today in UTC. On each call we:
+ *   1. Read the current metadata row from Postgres (read-before-spend).
+ *   2. If the date has rolled over, reset count = 0.
+ *   3. If count >= cap (BUILDSELL_REGEN_CAP_PER_DAY, default 5), refuse.
+ *   4. Otherwise proceed with image generation, then increment the counter
+ *      in metadata (no dedicated column — stored in existing jsonb).
+ *
+ * Per-kind Imagen aspect ratios: hero=16:9 / about=4:3 / og=1:1.
+ * Sanity patch targets: hero -> sections[_key=="hero"].image,
+ *                       about -> sections[_key=="about"].image,
+ *                       og -> seo.ogImage.
+ */
+export async function regenerateBuildSellImage(
+  siteId: string,
+  kind: BuildSellImageKind,
+): Promise<RegenImageResult> {
+  await requireOperatorSession();
+
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+
+  // 1. Read-before-spend: fetch the Postgres row for cap check.
+  const [row] = await db
+    .select({ metadata: buildsellSites.metadata })
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+
+  if (!row) return { ok: false, message: 'Site not found.' };
+
+  const capPerDay = Number(process.env.BUILDSELL_REGEN_CAP_PER_DAY ?? '5');
+  const todayUtc  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  const meta    = (row.metadata ?? {}) as Record<string, unknown>;
+  const capData = (meta.regenCap ?? {}) as { date?: string; count?: number };
+  const prevDate  = capData.date  ?? '';
+  const prevCount = capData.count ?? 0;
+  const todayCount = prevDate === todayUtc ? prevCount : 0;
+
+  if (todayCount >= capPerDay) {
+    log.warn({ siteId, kind, todayCount, capPerDay }, 'regenerateBuildSellImage: daily cap reached — spending $0');
+    return {
+      ok: false,
+      message: `Daily regeneration cap (${capPerDay}/day) reached for this site. Try again tomorrow.`,
+    };
+  }
+
+  // 2. Fetch the prompt from Sanity.
+  const client = createWriteClient();
+  const promptFieldMap: Record<BuildSellImageKind, string> = {
+    hero:  'heroImagePrompt',
+    about: 'aboutImagePrompt',
+    og:    'ogImagePrompt',
+  };
+  const promptField = promptFieldMap[kind];
+
+  const promptDoc = await client.fetch<Record<string, string | null>>(
+    `*[_id==$id][0]{ ${promptField} }`,
+    { id: buildsellSiteDocId(siteId) },
+  );
+  const prompt = promptDoc?.[promptField];
+  if (!prompt) {
+    return { ok: false, message: `No ${promptField} on site doc — save a prompt first.` };
+  }
+
+  // 3. Generate image.
+  const aspectMap: Record<BuildSellImageKind, '16:9' | '4:3' | '1:1'> = {
+    hero:  '16:9',
+    about: '4:3',
+    og:    '1:1',
+  };
+  const aspect = aspectMap[kind];
+
+  let imageUrl: string;
+  try {
+    const img = await generateHeroImageBuffer(prompt, { aspectRatio: aspect });
+    if (!img) {
+      return { ok: false, message: 'No image provider configured (set GOOGLE_API_KEY or AI_GATEWAY_API_KEY).' };
+    }
+
+    // 4. Upload to Sanity assets.
+    const uploaded = await uploadHeroImage(`bs-${siteId}-${kind}`, img.buffer);
+
+    // 5. Patch the Sanity doc.
+    const imageRef = { _type: 'image', asset: { _type: 'reference', _ref: uploaded.assetId } };
+    if (kind === 'hero') {
+      await client
+        .patch(buildsellSiteDocId(siteId))
+        .set({ 'sections[_key=="hero"].image': imageRef })
+        .commit({ visibility: 'sync' });
+    } else if (kind === 'about') {
+      await client
+        .patch(buildsellSiteDocId(siteId))
+        .set({ 'sections[_key=="about"].image': imageRef })
+        .commit({ visibility: 'sync' });
+    } else {
+      // og
+      await client
+        .patch(buildsellSiteDocId(siteId))
+        .set({ 'seo.ogImage': imageRef })
+        .commit({ visibility: 'sync' });
+    }
+
+    imageUrl = uploaded.url;
+    log.info({ siteId, kind, imageUrl }, 'regenerateBuildSellImage: image uploaded + doc patched');
+  } catch (err) {
+    log.error({ siteId, kind, err }, 'regenerateBuildSellImage: generation/upload failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'image regen failed' };
+  }
+
+  // 6. Increment durable counter (metadata jsonb — no new column).
+  try {
+    const newMeta = {
+      ...meta,
+      regenCap: { date: todayUtc, count: todayCount + 1 },
+    };
+    await db
+      .update(buildsellSites)
+      .set({ metadata: newMeta })
+      .where(eq(buildsellSites.id, siteId));
+  } catch (err) {
+    // Non-fatal: the image was already generated. Cap may over-run by 1 in a
+    // concurrent race, but that's acceptable versus blocking on a counter write.
+    log.warn({ siteId, err }, 'regenerateBuildSellImage: counter update failed (non-fatal)');
+  }
+
+  revalidatePath(`/operator/buildsell/${siteId}`);
+  revalidatePath('/operator/buildsell');
+  return { ok: true, imageUrl };
+}
+
 // NOTE: do NOT re-export types from this 'use server' file. Turbopack's
 // server-action transform registers every export as a server reference; an
 // `export type { ... }` of an erased identifier becomes `registerServer

@@ -2,6 +2,19 @@ import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId, buildsellReviewDocId } from '@leadlandlord/sanity-schema/ids';
 import type { SpecSiteContent } from './schema';
 
+/**
+ * Operator-owned fields that survive a rebuild unchanged.
+ * Populated by the builder by fetching the existing doc before writing.
+ */
+export interface ExistingDocFields {
+  draftMode?: boolean | null;
+  robotsDisallow?: boolean | null;
+  purchaseUrl?: string | null;
+  ownerEmail?: string | null;
+  /** Preserved when incoming payload has no street (reaped-lead rebuild degrades cleanly). */
+  existingStreet?: string | null;
+}
+
 export interface WriteBuildSellArgs {
   buildsellSiteId: string;
   businessName: string;
@@ -9,13 +22,33 @@ export interface WriteBuildSellArgs {
   city: string;
   state: string;
   ownerEmail?: string | null;
-  /** Google Places place_id — stored verbatim; used to build a Maps link. Null when unavailable. */
+  /** Google Places place_id — stored verbatim. Null when unavailable. */
   placeId?: string | null;
   slug: string;
   content: SpecSiteContent;
   /** Sanity asset _id for the generated hero image, when one was produced. */
   heroImageAssetId?: string | null;
+  /** Sanity asset _id for the generated about image, when one was produced. */
+  aboutImageAssetId?: string | null;
+  /** Sanity asset _id for the generated OG image, when one was produced. */
+  ogImageAssetId?: string | null;
   generatedAt: string;
+  /** Full display-line address (e.g. "2240 S Archibald Ave, Ontario, CA"). No parsing. */
+  addressLine?: string | null;
+  /** Business phone from Places cache — written to doc-root phone field. */
+  phone?: string | null;
+  /** Aggregate rating from buildsell_sites.metadata.rating */
+  rating?: number | null;
+  /** Review count from buildsell_sites.metadata.userRatingCount */
+  reviewCount?: number | null;
+  /** Purchase URL sourced from buildsell_sites.payment_link (set on sendInvoice). */
+  purchaseUrl?: string | null;
+  /**
+   * Operator-owned fields read from the existing Sanity doc before write.
+   * When present, these take precedence over defaults so rebuilds don't clobber
+   * draftMode/robotsDisallow/purchaseUrl/ownerEmail (D4 read-merge policy).
+   */
+  existingDoc?: ExistingDocFields | null;
 }
 
 export interface WriteBuildSellResult {
@@ -26,13 +59,25 @@ export interface WriteBuildSellResult {
 }
 
 /**
+ * Wrap a hex string in a Sanity color object so @sanity/color-input + the GROQ
+ * `theme.*.hex` projection both work correctly. (B-COLOR fix — D1 in ADR 0025.)
+ */
+function colorWrap(hex: string): { _type: 'color'; hex: string } {
+  return { _type: 'color', hex };
+}
+
+/**
  * Persist a generated spec site to Sanity as a `buildsellSite` doc plus its
- * `bsReview` docs, in one transaction. Always written `draftMode: true,
- * robotsDisallow: true` — markPaid (Phase 5) flips both. Deterministic ids
- * (`bs-site-${id}`, `bs-review-${id}-N`) keep re-runs idempotent.
+ * `bsReview` docs, in one transaction.
  *
- * Modeled on writeSiteToSanity but fully B&S-namespaced — it NEVER touches an
- * R&R `site`/`page`/`theme` doc.
+ * D4 read-merge: operator-owned fields (draftMode, robotsDisallow, purchaseUrl,
+ * ownerEmail, existingStreet) are carried from `args.existingDoc` so rebuilds
+ * never silently de-index a live site or wipe the purchase URL.
+ *
+ * B-COLOR: all 8 theme colors are written as `{_type:'color',hex}` objects.
+ * B-HEADINGS: headings come from model output (args.content), never hardcoded.
+ *
+ * Deterministic ids: `bs-site-${id}`, `bs-review-${id}-N` — keep idempotent.
  */
 export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<WriteBuildSellResult> {
   const { content } = args;
@@ -40,22 +85,44 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
   const docId = buildsellSiteDocId(args.buildsellSiteId);
   const tx = client.transaction();
 
+  const ex = args.existingDoc ?? {};
+
   // Review docs first — referenced by the reviews section.
   const reviewDocIds: string[] = [];
-  content.reviews.forEach((r, i) => {
+  content.reviews.items.forEach((r, i) => {
     const id = buildsellReviewDocId(`${args.buildsellSiteId}-${i}`);
     reviewDocIds.push(id);
+    // Derive initials: prefer explicit field, else take first chars of author words.
+    const derivedInitials = r.author
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => (w[0] ?? ''))
+      .join('')
+      .toUpperCase();
+    const initials = r.initials ?? (derivedInitials.length > 0 ? derivedInitials : undefined);
     tx.createOrReplace({
       _id: id,
       _type: 'bsReview',
       buildsellSiteId: args.buildsellSiteId,
       author: r.author,
+      initials,
       rating: r.rating,
       text: r.text,
+      location: r.location ?? undefined,
+      /**
+       * ToS guard: source is ALWAYS 'manual' for model-generated content.
+       * Never 'google' on a generated testimonial (R6 / ADR 0025 D5).
+       */
+      source: 'manual',
+      date: new Date().toISOString().slice(0, 10),
       featured: i < 3,
       order: i,
     });
   });
+
+  // Resolve address: prefer incoming payload; fall back to existing doc's street
+  // so a reaped-lead rebuild doesn't blank the field.
+  const streetToWrite = args.addressLine ?? ex.existingStreet ?? undefined;
 
   const sections = [
     {
@@ -76,8 +143,17 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     {
       _key: 'services',
       _type: 'bsServicesSection',
-      heading: 'Our Services',
-      services: content.services.map((s, i) => ({ _key: `svc${i}`, _type: 'bsServiceCard', ...s })),
+      // B-HEADINGS fix: heading comes from model output, never hardcoded.
+      heading: content.services.heading,
+      subhead: content.services.subhead ?? undefined,
+      services: content.services.cards.map((s, i) => ({
+        _key: `svc${i}`,
+        _type: 'bsServiceCard',
+        icon: s.icon,
+        title: s.title,
+        description: s.description,
+        ...(s.link ? { link: s.link } : {}),
+      })),
     },
     {
       _key: 'about',
@@ -85,6 +161,9 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       heading: content.about.heading,
       body: content.about.body,
       stats: content.about.stats.map((s, i) => ({ _key: `st${i}`, _type: 'bsStatItem', ...s })),
+      ...(args.aboutImageAssetId
+        ? { image: { _type: 'image', asset: { _type: 'reference', _ref: args.aboutImageAssetId } } }
+        : {}),
     },
     {
       _key: 'process',
@@ -95,7 +174,8 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     {
       _key: 'reviews',
       _type: 'bsReviewsSection',
-      heading: 'What Customers Say',
+      // B-HEADINGS fix: heading comes from model output, never hardcoded.
+      heading: content.reviews.heading,
       showRating: true,
       reviews: reviewDocIds.map((id, i) => ({ _key: `rev${i}`, _type: 'reference', _ref: id })),
     },
@@ -104,8 +184,17 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       _type: 'bsContactSection',
       heading: content.contact.heading,
       subhead: content.contact.subhead,
+      ...(content.contact.formLabels
+        ? {
+            formLabels: {
+              _type: 'bsFormLabels',
+              ...content.contact.formLabels,
+            },
+          }
+        : {}),
       address: {
         _type: 'bsAddress',
+        street: streetToWrite,
         city: args.city,
         state: args.state,
         hours: content.contact.hours,
@@ -117,10 +206,32 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       _type: 'bsFooterSection',
       tagline: content.footer.tagline,
       legal: content.footer.legal,
-      columns: [],
-      social: [],
+      columns: (content.footer.columns ?? []).map((col, i) => ({
+        _key: `fcol${i}`,
+        _type: 'bsFooterColumn',
+        heading: col.heading,
+        links: col.links.map((l, j) => ({ _key: `fcl${i}_${j}`, _type: 'bsFooterLink', ...l })),
+      })),
+      social: (content.footer.social ?? []).map((s, i) => ({
+        _key: `soc${i}`,
+        _type: 'bsSocialLink',
+        platform: s.platform,
+        href: s.href,
+      })),
+      legalLinks: (content.footer.legalLinks ?? []).map((l, i) => ({
+        _key: `ll${i}`,
+        _type: 'bsLegalLink',
+        ...l,
+      })),
     },
   ];
+
+  // D4 read-merge: prefer existing operator-owned values; fall back to safe defaults.
+  const draftMode = ex.draftMode !== undefined && ex.draftMode !== null ? ex.draftMode : true;
+  const robotsDisallow = ex.robotsDisallow !== undefined && ex.robotsDisallow !== null ? ex.robotsDisallow : true;
+  const purchaseUrl = args.purchaseUrl ?? ex.purchaseUrl ?? undefined;
+  // ownerEmail: prefer incoming arg (operator may have updated via UI); fall back to existing.
+  const ownerEmail = args.ownerEmail ?? ex.ownerEmail ?? undefined;
 
   tx.createOrReplace({
     _id: docId,
@@ -130,14 +241,44 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     trade: args.trade,
     city: args.city,
     state: args.state,
-    ownerEmail: args.ownerEmail ?? undefined,
+    phone: args.phone ?? undefined,
+    ownerEmail: ownerEmail ?? undefined,
     placeId: args.placeId ?? undefined,
     slug: { _type: 'slug', current: args.slug },
     navigation: content.navigation.map((n, i) => ({ _key: `nav${i}`, _type: 'bsNavLink', ...n })),
-    theme: { _type: 'buildsellTheme', ...content.theme },
-    draftMode: true,
-    robotsDisallow: true,
-    seo: { _type: 'bsSeo', metaTitle: content.seo.metaTitle, metaDescription: content.seo.metaDescription },
+    // B-COLOR fix: all 8 colors wrapped as {_type:'color',hex} objects (D1 in ADR 0025).
+    theme: {
+      _type: 'buildsellTheme',
+      preset: content.theme.preset,
+      layoutVariant: content.theme.layoutVariant,
+      primary: colorWrap(content.theme.primary),
+      primaryDark: colorWrap(content.theme.primaryDark),
+      accent: colorWrap(content.theme.accent),
+      onPrimary: colorWrap(content.theme.onPrimary),
+      bg: colorWrap(content.theme.bg),
+      surface: colorWrap(content.theme.surface),
+      text: colorWrap(content.theme.text),
+      muted: colorWrap(content.theme.muted),
+      fontHeading: content.theme.fontHeading,
+      fontBody: content.theme.fontBody,
+    },
+    draftMode,
+    robotsDisallow,
+    // Doc-root fields from Phase 1 schema additions:
+    rating: args.rating ?? undefined,
+    reviewCount: args.reviewCount ?? undefined,
+    purchaseUrl: purchaseUrl ?? undefined,
+    heroImagePrompt: content.hero.imagePrompt,
+    aboutImagePrompt: content.about.imagePrompt ?? undefined,
+    ogImagePrompt: content.seo.ogImagePrompt ?? undefined,
+    seo: {
+      _type: 'bsSeo',
+      metaTitle: content.seo.metaTitle,
+      metaDescription: content.seo.metaDescription,
+      ...(args.ogImageAssetId
+        ? { ogImage: { _type: 'image', asset: { _type: 'reference', _ref: args.ogImageAssetId } } }
+        : {}),
+    },
     sections,
     generatedAt: args.generatedAt,
   });

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { eq, and, count as drizzleCount } from 'drizzle-orm';
 import { getDb, buildsellSites } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
@@ -15,27 +15,162 @@ import {
   SpecSiteContent,
   type SpecSiteContent as SpecSiteContentType,
 } from './schema';
-import { writeBuildSellToSanity } from './persist-sanity';
+import { writeBuildSellToSanity, type ExistingDocFields } from './persist-sanity';
+import { createWriteClient } from '@leadlandlord/integrations/sanity';
+import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
+import {
+  pick,
+  rotationSeed,
+  LAYOUT_VARIANTS,
+  PRESET_ROTATION,
+  FONT_HEADING_POOL,
+  FONT_BODY_POOL,
+  SERVICES_HEADING_PATTERNS,
+  SERVICES_SUBHEAD_PATTERNS,
+  REVIEWS_HEADING_PATTERNS,
+  IMAGEN_HERO_OPENERS,
+} from './variety-pools';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PROMPT = readFileSync(resolve(__dirname, 'system.md'), 'utf-8');
 
 const SUBMIT_TOOL = 'submit_spec_site';
 
+/**
+ * Thrown when a rebuild is attempted on a paid/live site without forceRebuild.
+ * Phase 4 operator UI surfaces this and passes forceRebuild via a confirmation modal.
+ */
+export class RebuildProtectedError extends Error {
+  constructor(siteId: string, status: string) {
+    super(`Cannot rebuild site ${siteId}: status is '${status}'. Pass forceRebuild:true to override.`);
+    this.name = 'RebuildProtectedError';
+  }
+}
+
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 /**
+ * Deterministic banned-phrase lint for spec site content.
+ *
+ * Returns a list of violations (strings describing what was found).
+ * An empty array means the content passes.
+ *
+ * Enforced phrases / patterns:
+ *  - "Our Services" (hardcoded heading)
+ *  - "What Customers Say" (hardcoded heading)
+ *  - "since 1995" / "since 19XX" / "since 20XX" (fake founding year)
+ *  - "family owned since" (variation)
+ *  - "[TESTIMONIAL" / "[YEARS" / "[LICENSE" (placeholder strings in output)
+ *  - Literal phone numbers (bare US patterns)
+ *  - Literal email addresses in any field
+ *  - "verified google review" / "google review" (ToS risk label)
+ *  - "as seen on" (unverifiable claim)
+ *  - "bbb accredited" (unverifiable)
+ */
+const BANNED_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bour services\b/i, label: 'hardcoded heading "Our Services"' },
+  { pattern: /\bwhat customers say\b/i, label: 'hardcoded heading "What Customers Say"' },
+  { pattern: /\bsince\s+(?:19|20)\d{2}\b/i, label: 'invented founding year "since YYYY"' },
+  { pattern: /\bfamily[\s-]owned since\b/i, label: 'invented claim "family owned since"' },
+  { pattern: /\[TESTIMONIAL/i, label: 'unreplaced placeholder [TESTIMONIAL...]' },
+  { pattern: /\[YEARS[\s-]IN[\s-]BUSINESS\]/i, label: 'unreplaced placeholder [YEARS-IN-BUSINESS]' },
+  { pattern: /\[LICENSE\s*#\]/i, label: 'unreplaced placeholder [LICENSE #]' },
+  // Bare US phone patterns (operator data fills phone; model must not invent one)
+  { pattern: /(?<![\d])(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\d{3}[\s.-])\d{3}[\s.-]\d{4}(?![\d])/, label: 'invented phone number literal' },
+  // Email literals
+  { pattern: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/, label: 'invented email address literal' },
+  { pattern: /\bverified\s+google\s+review\b/i, label: 'ToS-risk label "verified google review"' },
+  { pattern: /\bsource[:\s]+google\b/i, label: 'ToS-risk source label "google"' },
+  { pattern: /\bas\s+seen\s+on\b/i, label: 'unverifiable claim "as seen on"' },
+  { pattern: /\bbbb\s+accredited\b/i, label: 'unverifiable claim "bbb accredited"' },
+  { pattern: /\blicense(?:\s+#|number|no\.?)?\s*:\s*[A-Z0-9\-]{4,}/i, label: 'invented license number' },
+];
+
+/**
+ * Serialize SpecSiteContent to a flat string for lint scanning.
+ * We JSON-stringify to catch values in nested objects/arrays.
+ */
+function flattenContent(content: SpecSiteContentType): string {
+  return JSON.stringify(content);
+}
+
+/**
+ * Run banned-phrase lint over the content.
+ * Returns array of human-readable violation strings; empty = pass.
+ */
+export function lintSpecSite(content: SpecSiteContentType): string[] {
+  const flat = flattenContent(content);
+  const violations: string[] = [];
+  for (const { pattern, label } of BANNED_PATTERNS) {
+    // Reset lastIndex for global regexes
+    pattern.lastIndex = 0;
+    if (pattern.test(flat)) {
+      violations.push(label);
+    }
+  }
+  return violations;
+}
+
+/**
+ * Post-process model output:
+ *  1. Trim trailing whitespace on all string fields.
+ *  2. Strip phone literals via regex (matches content-engine sanitizePhoneLiterals logic).
+ *  3. Backfill `© {year}` in footer.legal if missing.
+ *  4. Run banned-phrase lint and return violations.
+ */
+export function normalizeSpecSite(
+  content: SpecSiteContentType,
+  businessName: string,
+): { content: SpecSiteContentType; violations: string[] } {
+  // Deep-clone via JSON round-trip (content is a plain object from zod parse).
+  let c: SpecSiteContentType = JSON.parse(JSON.stringify(content));
+
+  // Backfill © year in footer.legal if missing.
+  if (!c.footer.legal.includes('©')) {
+    c = {
+      ...c,
+      footer: {
+        ...c.footer,
+        legal: `© ${new Date().getFullYear()} ${businessName}. All rights reserved.`,
+      },
+    };
+  }
+
+  // Strip phone literals from hero subhead, contact copy, about body.
+  const PHONE_RE = /(?<![\d])(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\d{3}[\s.-])\d{3}[\s.-]\d{4}(?![\d])/g;
+  function stripPhone(s: string): string {
+    return s.replace(PHONE_RE, '{{phone}}');
+  }
+
+  c = {
+    ...c,
+    hero: { ...c.hero, subhead: stripPhone(c.hero.subhead) },
+    about: { ...c.about, body: stripPhone(c.about.body) },
+    contact: { ...c.contact, subhead: stripPhone(c.contact.subhead) },
+  };
+
+  const violations = lintSpecSite(c);
+  return { content: c, violations };
+}
+
+/**
  * spec-site-builder — builds a watermarked draft spec site for Build & Sell.
  *
- * Cost discipline: BaseAgent only gates a per-DAY cap. This agent additionally
- * enforces a per-BUILD ceiling (BUILDSELL_PER_RUN_CAP_USD, default $0.50) by
- * tallying spend in `track()` and checking BEFORE the expensive Imagen call.
- * Imagen is the big lever and is non-fatal, so a cap-skip degrades to a
- * placeholder hero rather than failing the build.
+ * Cost discipline: BaseAgent gates a per-DAY cap. This agent additionally
+ * enforces a per-BUILD ceiling (BUILDSELL_PER_RUN_CAP_USD, default $0.50).
  *
- * Fully separate queue lane: dispatched on targetAgent:'spec-site-builder'.
+ * Spend order: retry call -> hero image -> about image -> og image.
+ * Each image checks the cap before spending; cap-skip drops og first, then
+ * about, then hero (least important dropped first).
+ *
+ * Status guard: rebuilding a paid/live site throws RebuildProtectedError
+ * unless forceRebuild is explicitly set (Phase 0 policy, ADR D4).
+ *
+ * Portfolio-aware rotation: layoutVariant + palette + font are seeded by the
+ * count of existing buildsell_sites in the same (trade, city) so adjacent
+ * market sites cycle through distinct variants (R5).
  */
 export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, typeof SpecSiteBuilderOutput> {
   private spentThisRun = 0;
@@ -54,21 +189,35 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
     return Number(process.env.BUILDSELL_PER_RUN_CAP_USD ?? '0.50');
   }
 
-  /** Record usage up to BaseAgent AND tally per-run spend for the mid-run cap. */
-  private track(ctx: AgentContext, usage: { model: string; input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number; cost_usd: number }): void {
+  private track(
+    ctx: AgentContext,
+    usage: {
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cost_usd: number;
+    },
+  ): void {
     ctx.recordUsage(usage);
     this.spentThisRun += usage.cost_usd;
   }
 
+  private underCap(): boolean {
+    return this.spentThisRun <= this.perRunCap;
+  }
+
   private assertUnderCap(): void {
-    if (this.spentThisRun > this.perRunCap) {
+    if (!this.underCap()) {
       throw new BudgetExceededError('spec-site-builder', this.perRunCap);
     }
   }
 
   protected async execute(
-    input: { buildsell_site_id: string; build_epoch: string },
+    input: { buildsell_site_id: string; build_epoch: string; phone?: string; address_line?: string },
     ctx: AgentContext,
+    options?: { forceRebuild?: boolean },
   ): Promise<SpecSiteBuilderOutput> {
     this.spentThisRun = 0;
     const db = getDb();
@@ -80,22 +229,116 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       .limit(1);
     if (!site) throw new Error(`buildsell_sites row not found: ${input.buildsell_site_id}`);
 
+    // D4 status guard: refuse to rebuild paid/live sites unless explicitly forced.
+    if ((site.status === 'paid' || site.status === 'live') && !options?.forceRebuild) {
+      throw new RebuildProtectedError(site.id, site.status);
+    }
+
     await db
       .update(buildsellSites)
       .set({ status: 'building', lastBuildError: null, updatedAt: new Date() })
       .where(eq(buildsellSites.id, site.id));
     ctx.progress({ label: `Generating spec site for ${site.businessName}` });
 
-    // ── Step 1 (cheap): Claude generates the structured site content ──
-    const content = await this.generateContent(site, ctx);
+    // D4 read-merge: fetch existing Sanity doc to preserve operator-owned fields.
+    let existingDoc: ExistingDocFields | null = null;
+    try {
+      const sanityClient = createWriteClient();
+      const docId = buildsellSiteDocId(site.id);
+      const existing = await sanityClient.getDocument(docId) as Record<string, unknown> | null | undefined;
+      if (existing) {
+        // Extract the bsContactSection street from the sections array.
+        const sections = Array.isArray(existing['sections']) ? existing['sections'] as Array<Record<string, unknown>> : [];
+        const contactSection = sections.find((s) => s['_type'] === 'bsContactSection');
+        const addr = contactSection?.['address'] as Record<string, unknown> | undefined;
+        existingDoc = {
+          draftMode: typeof existing['draftMode'] === 'boolean' ? existing['draftMode'] : null,
+          robotsDisallow: typeof existing['robotsDisallow'] === 'boolean' ? existing['robotsDisallow'] : null,
+          purchaseUrl: typeof existing['purchaseUrl'] === 'string' ? existing['purchaseUrl'] : null,
+          ownerEmail: typeof existing['ownerEmail'] === 'string' ? existing['ownerEmail'] : null,
+          existingStreet: typeof addr?.['street'] === 'string' ? addr['street'] : null,
+        };
+      }
+    } catch (err) {
+      ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'could not fetch existing Sanity doc for read-merge (non-fatal)');
+    }
+
+    // NAP from event payload (transient — never written to Postgres).
+    const phone = input.phone ?? undefined;
+    const addressLine = input.address_line ?? undefined;
+
+    // Extract enrichment signals from metadata.
+    const meta =
+      site.metadata != null && typeof site.metadata === 'object'
+        ? (site.metadata as Record<string, unknown>)
+        : null;
+    const rating = meta?.rating != null ? Number(meta.rating) : null;
+    const userRatingCount = meta?.userRatingCount != null ? Number(meta.userRatingCount) : null;
+    const primaryType = typeof meta?.primaryType === 'string' ? meta.primaryType : null;
+
+    // Portfolio-aware rotation: count existing buildsell_sites for same (trade, city).
+    const countRows = await db
+      .select({ value: drizzleCount() })
+      .from(buildsellSites)
+      .where(
+        and(
+          eq(buildsellSites.trade, site.trade),
+          eq(buildsellSites.city, site.city),
+        ),
+      );
+    // The current site is already counted; subtract 1 to get the index of THIS build.
+    const sameMarketCount = countRows[0]?.value ?? 0;
+    const seed = rotationSeed(Math.max(0, Number(sameMarketCount) - 1));
+
+    const rotation = {
+      layoutVariant: pick(LAYOUT_VARIANTS, seed),
+      preset: pick(PRESET_ROTATION, seed),
+      fontHeading: pick(FONT_HEADING_POOL, seed),
+      fontBody: pick(FONT_BODY_POOL, seed),
+      servicesHeading: pick(SERVICES_HEADING_PATTERNS, seed),
+      servicesSubhead: pick(SERVICES_SUBHEAD_PATTERNS, seed).replace('{trade}', site.trade),
+      reviewsHeading: pick(REVIEWS_HEADING_PATTERNS, seed),
+      imagenOpener: pick(IMAGEN_HERO_OPENERS, seed),
+    };
+
+    // ── Step 1: Claude generates the structured site content ──
+    const content = await this.generateContent(
+      { ...site, phone, addressLine, rating, userRatingCount, primaryType, rotation },
+      ctx,
+    );
+    // After first generation: assertUnderCap before proceeding to images.
     this.assertUnderCap();
 
-    // ── Step 2 (expensive, gated): Imagen hero — non-fatal ──
+    // Normalize + lint.
+    const { content: normalized, violations } = normalizeSpecSite(content, site.businessName);
+    let finalContent = normalized;
+
+    // One conditional retry on lint failure.
+    if (violations.length > 0) {
+      ctx.log.warn({ violations }, 'spec-site lint violations — retrying content generation once');
+      try {
+        const retried = await this.generateContent(
+          { ...site, phone, addressLine, rating, userRatingCount, primaryType, rotation, lintViolations: violations },
+          ctx,
+        );
+        const { content: retriedNormalized, violations: retriedViolations } = normalizeSpecSite(retried, site.businessName);
+        if (retriedViolations.length < violations.length) {
+          finalContent = retriedNormalized;
+          ctx.log.info({ before: violations.length, after: retriedViolations.length }, 'spec-site lint improved on retry');
+        } else {
+          ctx.log.warn({ violations: retriedViolations }, 'spec-site lint retry did not improve — using first pass');
+        }
+      } catch (err) {
+        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'spec-site lint retry failed — using first pass');
+      }
+    }
+
+    // ── Step 2a: Hero image (most important — skip last) ──
     let heroImageAssetId: string | null = null;
-    if (this.spentThisRun <= this.perRunCap) {
+    if (this.underCap()) {
       try {
         ctx.progress({ label: 'Generating hero image' });
-        const hero = await generateHeroImageBuffer(content.hero.imagePrompt, { aspectRatio: '16:9' });
+        const hero = await generateHeroImageBuffer(finalContent.hero.imagePrompt, { aspectRatio: '16:9' });
         if (hero) {
           if (hero.costUsd) this.spentThisRun += hero.costUsd;
           const uploaded = await uploadHeroImage(site.id, hero.buffer, `bs-hero-${site.id}.jpg`, hero.contentType);
@@ -106,6 +349,38 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       }
     } else {
       ctx.log.info({ spent: this.spentThisRun, cap: this.perRunCap }, 'skipping hero image — per-run cap reached');
+    }
+
+    // ── Step 2b: About image (skip if cap reached) ──
+    let aboutImageAssetId: string | null = null;
+    if (this.underCap() && finalContent.about.imagePrompt) {
+      try {
+        ctx.progress({ label: 'Generating about image' });
+        const about = await generateHeroImageBuffer(finalContent.about.imagePrompt, { aspectRatio: '4:3' });
+        if (about) {
+          if (about.costUsd) this.spentThisRun += about.costUsd;
+          const uploaded = await uploadHeroImage(site.id, about.buffer, `bs-about-${site.id}.jpg`, about.contentType);
+          aboutImageAssetId = uploaded.assetId;
+        }
+      } catch (err) {
+        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'spec-site about image failed (non-fatal)');
+      }
+    }
+
+    // ── Step 2c: OG image (dropped first if cap is tight) ──
+    let ogImageAssetId: string | null = null;
+    if (this.underCap() && finalContent.seo.ogImagePrompt) {
+      try {
+        ctx.progress({ label: 'Generating OG image' });
+        const og = await generateHeroImageBuffer(finalContent.seo.ogImagePrompt, { aspectRatio: '1:1' });
+        if (og) {
+          if (og.costUsd) this.spentThisRun += og.costUsd;
+          const uploaded = await uploadHeroImage(site.id, og.buffer, `bs-og-${site.id}.jpg`, og.contentType);
+          ogImageAssetId = uploaded.assetId;
+        }
+      } catch (err) {
+        ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'spec-site og image failed (non-fatal)');
+      }
     }
 
     // ── Step 3: persist watermarked draft to Sanity ──
@@ -121,15 +396,23 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       ownerEmail: site.ownerEmail,
       placeId: site.placeId,
       slug,
-      content,
+      content: finalContent,
       heroImageAssetId,
+      aboutImageAssetId,
+      ogImageAssetId,
+      addressLine,
+      phone,
+      rating,
+      reviewCount: userRatingCount,
+      purchaseUrl: site.paymentLink ?? undefined,
+      existingDoc,
       generatedAt,
     });
 
     // ── Step 4: finalize Postgres row ──
     await db
       .update(buildsellSites)
-      .set({ status: 'draft', slug, themePreset: content.theme.preset, updatedAt: new Date() })
+      .set({ status: 'draft', slug, themePreset: finalContent.theme.preset, updatedAt: new Date() })
       .where(eq(buildsellSites.id, site.id));
 
     ctx.log.info(
@@ -148,7 +431,28 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
   }
 
   private async generateContent(
-    site: { businessName: string; trade: string; city: string; state: string; metadata?: unknown },
+    site: {
+      businessName: string;
+      trade: string;
+      city: string;
+      state: string;
+      phone?: string;
+      addressLine?: string;
+      rating?: number | null;
+      userRatingCount?: number | null;
+      primaryType?: string | null;
+      rotation: {
+        layoutVariant: string;
+        preset: string;
+        fontHeading: string;
+        fontBody: string;
+        servicesHeading: string;
+        servicesSubhead: string;
+        reviewsHeading: string;
+        imagenOpener: string;
+      };
+      lintViolations?: string[];
+    },
     ctx: AgentContext,
   ): Promise<SpecSiteContentType> {
     if (process.env.MOCK_AI === 'true') {
@@ -158,33 +462,54 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
     const client = getAnthropicClient();
     const model = process.env.SPEC_SITE_BUILDER_MODEL ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
 
-    // Extract optional enrichment signals from metadata (jsonb).
-    const meta = site.metadata != null && typeof site.metadata === 'object' ? site.metadata as Record<string, unknown> : null;
-    const rating         = meta?.rating         != null ? Number(meta.rating)         : null;
-    const userRatingCount = meta?.userRatingCount != null ? Number(meta.userRatingCount) : null;
-    const primaryType    = typeof meta?.primaryType === 'string' ? meta.primaryType   : null;
-
     const promptLines = [
       `Business name: ${site.businessName}`,
       `Trade / category: ${site.trade}`,
       `City: ${site.city}`,
       `State: ${site.state}`,
     ];
-    if (rating != null && !isNaN(rating)) {
-      promptLines.push(`Aggregate Google rating: ${rating.toFixed(1)}${userRatingCount != null && !isNaN(userRatingCount) ? ` from ${userRatingCount} reviews` : ''}`);
+    if (site.rating != null && !isNaN(site.rating)) {
+      promptLines.push(
+        `Aggregate Google rating: ${site.rating.toFixed(1)}${
+          site.userRatingCount != null && !isNaN(site.userRatingCount)
+            ? ` from ${site.userRatingCount} reviews`
+            : ''
+        }`,
+      );
     }
-    if (primaryType) {
-      promptLines.push(`Google primary category: ${primaryType.replace(/_/g, ' ')}`);
+    if (site.primaryType) {
+      promptLines.push(`Google primary category: ${site.primaryType.replace(/_/g, ' ')}`);
     }
+
+    // Portfolio rotation hints — model must honour these exactly.
     promptLines.push('');
-    promptLines.push(`Call ${SUBMIT_TOOL} exactly once with the complete spec site. Remember: name + category + city only; reviews are original representative testimonials, never verbatim Google reviews.`);
+    promptLines.push('## Rotation directives (REQUIRED — use exactly as given)');
+    promptLines.push(`theme.layoutVariant: ${site.rotation.layoutVariant}`);
+    promptLines.push(`theme.preset: ${site.rotation.preset}`);
+    promptLines.push(`theme.fontHeading: ${site.rotation.fontHeading}`);
+    promptLines.push(`theme.fontBody: ${site.rotation.fontBody}`);
+    promptLines.push(`services.heading: ${site.rotation.servicesHeading}`);
+    promptLines.push(`services.subhead: ${site.rotation.servicesSubhead}`);
+    promptLines.push(`reviews.heading: ${site.rotation.reviewsHeading}`);
+    promptLines.push(`hero.imagePrompt opener: "${site.rotation.imagenOpener}"`);
+
+    if (site.lintViolations && site.lintViolations.length > 0) {
+      promptLines.push('');
+      promptLines.push('## Previous output failed lint — FIX THESE VIOLATIONS:');
+      site.lintViolations.forEach((v) => promptLines.push(`- ${v}`));
+    }
+
+    promptLines.push('');
+    promptLines.push(
+      `Call ${SUBMIT_TOOL} exactly once with the complete spec site. Remember: name + category + city only; reviews are original representative testimonials, never verbatim Google reviews.`,
+    );
 
     const userPrompt = promptLines.join('\n');
 
     const response = await client.messages.create({
       model,
       max_tokens: 8000,
-      temperature: 0.7,
+      temperature: 0.8,
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       tools: [
         {
@@ -213,14 +538,40 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
   }
 }
 
-/** Deterministic mock content for MOCK_AI/test paths — no network. */
-function mockContent(site: { businessName: string; trade: string; city: string; state: string }): SpecSiteContentType {
+// ── Mock content for MOCK_AI=true and test paths ────────────────────────────
+
+/** Deterministic mock content for MOCK_AI/test paths — no network, no banned phrases. */
+function mockContent(site: {
+  businessName: string;
+  trade: string;
+  city: string;
+  state: string;
+  rotation?: {
+    layoutVariant: string;
+    preset: string;
+    fontHeading: string;
+    fontBody: string;
+    servicesHeading: string;
+    servicesSubhead: string;
+    reviewsHeading: string;
+  };
+}): SpecSiteContentType {
   const cap = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
   const trade = cap(site.trade);
+  const layoutVariant = (site.rotation?.layoutVariant ?? 'split') as 'split' | 'bold' | 'trust';
+  const preset = site.rotation?.preset ?? 'Aqua Slate';
+  const fontHeading = site.rotation?.fontHeading ?? 'Poppins';
+  const fontBody = site.rotation?.fontBody ?? 'Inter';
+  const servicesHeading = site.rotation?.servicesHeading ?? 'What We Do';
+  const servicesSubhead = site.rotation?.servicesSubhead ?? `Trusted ${site.trade} services for every job.`;
+  const reviewsHeading = site.rotation?.reviewsHeading ?? 'What Our Customers Say';
+  const year = new Date().getFullYear();
+
   return {
     seo: {
       metaTitle: `${site.businessName} — ${trade} in ${site.city}, ${site.state}`,
       metaDescription: `${site.businessName} provides trusted ${site.trade} services in ${site.city}, ${site.state}. Free quotes, fast response, friendly local pros.`,
+      ogImagePrompt: `Professional ${site.trade} work in progress, natural light, clean workspace, ${site.city}`,
     },
     navigation: [
       { label: 'Services', href: '#services' },
@@ -230,8 +581,8 @@ function mockContent(site: { businessName: string; trade: string; city: string; 
       { label: 'Contact', href: '#contact' },
     ],
     theme: {
-      preset: 'Aqua Slate',
-      layoutVariant: 'split',
+      preset,
+      layoutVariant,
       primary: '#0e7490',
       primaryDark: '#155e75',
       accent: '#f59e0b',
@@ -240,59 +591,87 @@ function mockContent(site: { businessName: string; trade: string; city: string; 
       surface: '#ffffff',
       text: '#0f172a',
       muted: '#64748b',
-      fontHeading: 'Poppins',
-      fontBody: 'Inter',
+      fontHeading,
+      fontBody,
     },
     hero: {
-      eyebrow: `${site.city}'s trusted ${site.trade} pros`,
-      headline: `Reliable ${trade} You Can Count On`,
-      highlight: 'Count On',
-      subhead: `Fast, friendly, upfront ${site.trade} service for ${site.city} and the surrounding area.`,
+      eyebrow: `${site.city}'s trusted ${site.trade} team`,
+      headline: `Reliable ${trade} for ${site.city} Homeowners`,
+      highlight: `${site.city} Homeowners`,
+      subhead: `Fast, professional ${site.trade} service — upfront pricing, no surprises.`,
       badges: [
         { icon: 'shield-check', label: 'Licensed & Insured' },
-        { icon: 'star', label: 'Top Rated' },
+        { icon: 'star', label: 'Highly Rated' },
         { icon: 'clock', label: 'Fast Response' },
       ],
       primaryCta: { label: 'Get a Free Quote', href: '#contact', style: 'primary' },
-      secondaryCta: { label: 'Call Now', href: 'tel:', style: 'secondary' },
-      imagePrompt: `Professional ${site.trade} crew at work in ${site.city}, bright daylight, photographic, no text`,
+      secondaryCta: { label: 'Call Us Today', href: 'tel:', style: 'secondary' },
+      imagePrompt: `Skilled technician at work on a ${site.trade} job in ${site.city}, bright daylight, photographic, no text`,
     },
-    services: [
-      { icon: 'wrench', title: 'Repairs', description: `Fast, dependable ${site.trade} repairs done right the first time.` },
-      { icon: 'hammer', title: 'Installation', description: `Clean, code-compliant ${site.trade} installations.` },
-      { icon: 'clock', title: 'Maintenance', description: 'Routine maintenance to keep things running smoothly.' },
-      { icon: 'phone', title: 'Emergency Service', description: 'Available when you need us most.' },
-    ],
+    services: {
+      heading: servicesHeading,
+      subhead: servicesSubhead,
+      cards: [
+        { icon: 'wrench', title: 'Repairs', description: `Fast, dependable ${site.trade} repairs completed right the first time.` },
+        { icon: 'hammer', title: 'Installation', description: `Clean, code-compliant ${site.trade} installations.` },
+        { icon: 'clock', title: 'Maintenance', description: 'Routine maintenance to keep everything running smoothly.' },
+        { icon: 'phone', title: 'Emergency Service', description: 'Available when you need us most.' },
+      ],
+    },
     about: {
       heading: `Your Local ${trade} Experts`,
-      body: `${site.businessName} is a locally trusted ${site.trade} provider serving ${site.city}, ${site.state}. We pride ourselves on honest work, fair pricing, and treating every customer like a neighbor.`,
+      body: `${site.businessName} is a locally trusted ${site.trade} provider serving ${site.city}, ${site.state}. We focus on honest work, fair pricing, and treating every customer like a neighbor.`,
       stats: [
         { value: '10+', label: 'Years serving the area' },
         { value: '1,000+', label: 'Jobs completed' },
       ],
+      imagePrompt: `Professional ${site.trade} team in uniform, friendly, natural light, ${site.city}`,
     },
     process: {
       heading: 'How It Works',
       steps: [
-        { icon: 'phone', title: 'Get in Touch', description: 'Call or request a free quote online.' },
-        { icon: 'calendar', title: 'Schedule', description: 'We find a time that works for you.' },
-        { icon: 'check', title: 'Done Right', description: 'Quality work, guaranteed.' },
+        { icon: 'phone', title: 'Get in Touch', description: 'Call or fill out the quick quote form.' },
+        { icon: 'calendar', title: 'Schedule', description: 'We find a time that fits your schedule.' },
+        { icon: 'check', title: 'Done Right', description: 'Quality work, backed by our guarantee.' },
       ],
     },
-    reviews: [
-      { author: 'Maria G.', rating: 5, text: 'Showed up on time and did a fantastic job. Highly recommend!' },
-      { author: 'James T.', rating: 5, text: 'Fair pricing and great communication throughout. Will use again.' },
-      { author: 'Priya S.', rating: 4, text: 'Professional and friendly. Very happy with the work.' },
-    ],
+    reviews: {
+      heading: reviewsHeading,
+      items: [
+        { author: 'Maria G.', initials: 'MG', rating: 5, text: 'Showed up on time and completed the job cleanly. Highly recommend this team.', location: `${site.city}, ${site.state}` },
+        { author: 'James T.', initials: 'JT', rating: 5, text: 'Transparent pricing and great communication throughout the project. Will call again.', location: `${site.city}, ${site.state}` },
+        { author: 'Priya S.', initials: 'PS', rating: 4, text: 'Professional, friendly, and thorough. Very satisfied with the results.', location: `${site.city}, ${site.state}` },
+      ],
+    },
     contact: {
       heading: 'Get Your Free Quote',
-      subhead: `Reach out and we'll get back to you fast.`,
+      subhead: `Reach out and we'll respond quickly — no pressure, no obligation.`,
       hours: 'Mon–Sat 7am–6pm',
       serviceArea: `${site.city} and surrounding areas`,
+      formLabels: {
+        name: 'Your Name',
+        phone: 'Phone Number',
+        message: 'How can we help?',
+        submit: 'Send My Request',
+      },
     },
     footer: {
-      tagline: `${site.businessName} — quality ${site.trade} you can trust.`,
-      legal: `© ${new Date().getFullYear()} ${site.businessName}. All rights reserved.`,
+      tagline: `${site.businessName} — quality ${site.trade} you can count on.`,
+      legal: `© ${year} ${site.businessName}. All rights reserved.`,
+      columns: [
+        {
+          heading: 'Services',
+          links: [
+            { label: 'Repairs', href: '#services' },
+            { label: 'Installation', href: '#services' },
+            { label: 'Maintenance', href: '#services' },
+          ],
+        },
+      ],
+      social: [],
+      legalLinks: [
+        { label: 'Privacy Policy', href: '/privacy' },
+      ],
     },
   };
 }

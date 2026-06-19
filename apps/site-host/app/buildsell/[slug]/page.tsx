@@ -4,6 +4,7 @@ import { fetchBuildSellSiteBySlug } from '@/lib/sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
 import { BuildSellHome } from '@/components/buildsell/BuildSellHome';
 import { BuildSellLocalBusinessJsonLd } from '@/components/buildsell/BuildSellLocalBusinessJsonLd';
+import { ALL_BS_FONTS } from '@/lib/buildsell-fonts';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,10 +65,12 @@ export default async function BuildSellPage({
   const base = await currentRequestBaseUrl();
   const pageUrl = `${base}/buildsell/${slug}`;
 
+  const fontVars = ALL_BS_FONTS.map((f) => f.variable).join(' ');
+
   return (
-    <>
+    <div className={fontVars}>
       <BuildSellLocalBusinessJsonLd site={site} url={pageUrl} />
       <BuildSellHome site={site} draft={false} />
-    </>
+    </div>
   );
 }

@@ -191,7 +191,9 @@
 }
 
 .bs-section-dark {
-  background-color: var(--bs-primary);
+  /* Use the dark brand token (not --bs-primary) so white --bs-on-primary text
+     clears WCAG AA on every preset — verified 5.47:1–14.63:1 across all 12. */
+  background-color: var(--bs-primary-dark);
   color: var(--bs-on-primary);
 }
 
@@ -713,4 +715,959 @@
   justify-content: center;
   color: var(--bs-primary);
   opacity: 0.7;
+}
+
+/* ====================================================================
+   SCROLL-REVEAL MOTION
+   .bs-reveal elements fade+slide in when .is-revealed is added by
+   BuildSellMotion. Reduced-motion: skip animation, show content instantly.
+   ====================================================================== */
+
+.bs-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.bs-reveal.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-reveal,
+  .bs-reveal.is-revealed {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ---- Sticky nav scrolled state ------------------------------------------ */
+.bs-nav.is-scrolled {
+  box-shadow: var(--bs-shadow-md);
+  background-color: color-mix(in srgb, var(--bs-surface) 96%, transparent);
+}
+
+/* ====================================================================
+   DARK-PALETTE SHADOW CORRECTION
+   Replace hardcoded rgba(8,40,55,…) values with color-mix against
+   --bs-text so dark palettes (e.g. Midnight Bold) render correct shadows.
+   ====================================================================== */
+
+.bs-root {
+  --bs-shadow-sm: 0 1px 3px color-mix(in srgb, var(--bs-text) 8%, transparent),
+                  0 1px 2px color-mix(in srgb, var(--bs-text) 5%, transparent);
+  --bs-shadow-md: 0 4px 16px color-mix(in srgb, var(--bs-text) 10%, transparent);
+  --bs-shadow-lg: 0 8px 32px color-mix(in srgb, var(--bs-text) 12%, transparent);
+}
+
+/* ====================================================================
+   TASTE PASS — per-variant token ramps (values only; all via tokens).
+   split = crisp/editorial (tight radii, subtle elevation, restrained lift)
+   bold  = architectural/dramatic (sharper radii, heavy elevation, big lift+scale)
+   trust = warm/calm (generous radii, soft diffuse elevation, gentle lift)
+   Shadows use color-mix against --bs-text so dark palettes stay correct.
+   ====================================================================== */
+[data-bs-layout='split'] {
+  --bs-radius-card: 0.75rem;
+  --bs-radius-btn: 0.5rem;
+  --bs-shadow-sm: 0 1px 2px color-mix(in srgb, var(--bs-text) 6%, transparent),
+                  0 1px 1px color-mix(in srgb, var(--bs-text) 4%, transparent);
+  --bs-shadow-md: 0 6px 20px color-mix(in srgb, var(--bs-text) 9%, transparent);
+  --bs-shadow-lg: 0 14px 40px color-mix(in srgb, var(--bs-text) 11%, transparent);
+  --bs-hover-lift: -2px;
+  --bs-hover-scale: 1;
+  --bs-hover-ease: 0.2s ease;
+}
+
+[data-bs-layout='bold'] {
+  --bs-radius-card: 0.5rem;
+  --bs-radius-btn: 0.375rem;
+  --bs-shadow-sm: 0 2px 4px color-mix(in srgb, var(--bs-text) 12%, transparent),
+                  0 1px 2px color-mix(in srgb, var(--bs-text) 8%, transparent);
+  --bs-shadow-md: 0 8px 24px color-mix(in srgb, var(--bs-text) 18%, transparent);
+  --bs-shadow-lg: 0 18px 50px color-mix(in srgb, var(--bs-text) 28%, transparent);
+  --bs-hover-lift: -4px;
+  --bs-hover-scale: 1.01;
+  --bs-hover-ease: 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-bs-layout='trust'] {
+  --bs-radius-card: 1.25rem;
+  --bs-radius-btn: 0.75rem;
+  --bs-shadow-sm: 0 2px 8px color-mix(in srgb, var(--bs-text) 6%, transparent);
+  --bs-shadow-md: 0 8px 28px color-mix(in srgb, var(--bs-text) 9%, transparent);
+  --bs-shadow-lg: 0 16px 48px color-mix(in srgb, var(--bs-text) 12%, transparent);
+  --bs-hover-lift: -2px;
+  --bs-hover-scale: 1;
+  --bs-hover-ease: 0.25s ease;
+}
+
+/* Hover intensity wired through the per-variant tokens above.
+   Reduced-motion users get no transform. */
+.bs-card {
+  transition: box-shadow var(--bs-hover-ease, 0.2s ease),
+              transform var(--bs-hover-ease, 0.2s ease);
+}
+.bs-card:hover {
+  transform: translateY(var(--bs-hover-lift, -2px)) scale(var(--bs-hover-scale, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-card,
+  .bs-card:hover {
+    transform: none;
+    transition: box-shadow 0.2s ease;
+  }
+}
+
+/* ====================================================================
+   MOBILE CALL BAR
+   Sticky bottom bar — visible only on mobile (< 768px).
+   A spacer div in MobileCallBar reserves the height so content is
+   not clipped by the bar. CLS = 0 because the spacer is server-rendered.
+   ====================================================================== */
+
+.bs-mobile-call-bar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .bs-mobile-call-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background-color: var(--bs-primary);
+    padding: 0.75rem 1rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 12px color-mix(in srgb, var(--bs-text) 15%, transparent);
+  }
+
+  .bs-mobile-call-bar-btn {
+    width: 100%;
+    justify-content: center;
+    font-size: 1rem;
+    padding: 0.7em 1.25em;
+    background-color: transparent;
+    color: var(--bs-on-primary);
+    border-color: color-mix(in srgb, var(--bs-on-primary) 40%, transparent);
+  }
+
+  .bs-mobile-call-bar-btn:hover {
+    background-color: color-mix(in srgb, var(--bs-on-primary) 12%, transparent);
+  }
+
+  .bs-mobile-call-bar-spacer {
+    /* Reserve bar height so content above is not clipped */
+    height: calc(56px + env(safe-area-inset-bottom));
+    display: block;
+  }
+}
+
+@media (min-width: 768px) {
+  .bs-mobile-call-bar-spacer {
+    display: none;
+  }
+}
+
+/* ====================================================================
+   HERO BLOCK — per-variant elements
+   ====================================================================== */
+
+/* -- Shared: hero rating badge -- */
+.bs-hero-rating {
+  margin-top: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* -- SPLIT: floating credibility cards on the image -- */
+.bs-hero-float-card {
+  position: absolute;
+  background-color: var(--bs-surface);
+  border-radius: calc(var(--bs-radius-card) * 0.75);
+  box-shadow: var(--bs-shadow-md);
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-width: 200px;
+  z-index: 2;
+}
+
+.bs-hero-float-card--top {
+  top: -1rem;
+  right: -1rem;
+}
+
+.bs-hero-float-card--bottom {
+  bottom: -1rem;
+  left: -1rem;
+}
+
+/* -- BOLD: background layer -- */
+.bs-hero-bold-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.bs-hero-bold-bg-gradient {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bs-primary-dark) 80%, #000),
+    color-mix(in srgb, var(--bs-accent) 30%, var(--bs-primary))
+  );
+  opacity: 0.35;
+}
+
+/* Overlapping trust strip on bold hero */
+.bs-hero-bold-trust-strip {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 3rem;
+  justify-content: center;
+}
+
+.bs-hero-bold-trust-card {
+  background-color: color-mix(in srgb, var(--bs-on-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bs-on-primary) 20%, transparent);
+  border-radius: calc(var(--bs-radius-card) * 0.6);
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--bs-on-primary);
+}
+
+/* -- TRUST: 3-image strip -- */
+.bs-hero-trust-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+  border-radius: var(--bs-radius-card);
+  overflow: hidden;
+  /* Reserve height to prevent CLS */
+  height: clamp(160px, 22vw, 280px);
+}
+
+.bs-hero-trust-tile {
+  position: relative;
+  overflow: hidden;
+}
+
+.bs-hero-trust-tile--gradient-a {
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--bs-primary) 30%, var(--bs-bg)),
+    color-mix(in srgb, var(--bs-accent) 20%, var(--bs-bg))
+  );
+}
+
+.bs-hero-trust-tile--gradient-b {
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--bs-accent) 25%, var(--bs-bg)),
+    color-mix(in srgb, var(--bs-primary) 15%, var(--bs-bg))
+  );
+}
+
+.bs-hero-trust-tile--gradient-c {
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--bs-primary) 15%, var(--bs-surface)),
+    color-mix(in srgb, var(--bs-primary-dark) 20%, var(--bs-bg))
+  );
+}
+
+@media (max-width: 599px) {
+  .bs-hero-trust-strip {
+    grid-template-columns: 1fr;
+    height: clamp(120px, 40vw, 200px);
+  }
+
+  .bs-hero-trust-tile:not(:first-child) {
+    display: none;
+  }
+}
+
+/* ====================================================================
+   SERVICES BLOCK — per-variant layouts
+   ====================================================================== */
+
+/* -- trust: compact list -- */
+.bs-services-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 680px;
+  margin-inline: auto;
+}
+
+.bs-services-compact-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem 1.25rem;
+  background-color: var(--bs-surface);
+  border-radius: calc(var(--bs-radius-card) * 0.75);
+  box-shadow: var(--bs-shadow-sm);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.bs-services-compact-row:hover {
+  box-shadow: var(--bs-shadow-md);
+  transform: translateY(-1px);
+}
+
+.bs-services-compact-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+  color: var(--bs-text);
+}
+
+.bs-services-compact-desc {
+  font-size: 0.9rem;
+  color: var(--bs-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* -- bold: 2-col big cards -- */
+.bs-services-bold {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.75rem;
+}
+
+.bs-services-bold-card {
+  padding: 2rem;
+}
+
+.bs-services-bold-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem;
+  color: var(--bs-text);
+}
+
+.bs-services-bold-desc {
+  font-size: 1rem;
+  color: var(--bs-muted);
+  margin: 0;
+  line-height: 1.7;
+}
+
+/* -- split: standard card titles -- */
+.bs-services-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+  color: var(--bs-text);
+}
+
+.bs-services-desc {
+  color: var(--bs-muted);
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Icon box sizes */
+.bs-icon-box--sm {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background-color: var(--bs-primary-10);
+  color: var(--bs-primary);
+}
+
+.bs-icon-box--lg {
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background-color: var(--bs-primary-10);
+  color: var(--bs-primary);
+  margin-bottom: 1.25rem;
+}
+
+/* Link in service cards */
+.bs-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.bs-link:hover {
+  color: var(--bs-primary);
+}
+
+/* ====================================================================
+   ABOUT BLOCK — per-variant layouts
+   ====================================================================== */
+
+.bs-about-grid {
+  display: grid;
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+}
+
+.bs-about-grid--split {
+  grid-template-columns: 1fr 1fr;
+}
+
+.bs-about-grid--bold {
+  /* text left, image right — same columns, reversed order */
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 767px) {
+  .bs-about-grid--split,
+  .bs-about-grid--bold {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* trust: narrow centered, no image */
+.bs-about-trust {
+  max-width: 680px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.bs-about-trust .bs-stats-row {
+  justify-content: center;
+}
+
+.bs-about-body {
+  color: var(--bs-muted);
+  line-height: 1.7;
+  margin-bottom: 2rem;
+  max-width: 62ch;
+}
+
+/* Image wrapper — sized container for next/image fill */
+.bs-about-image-wrap {
+  border-radius: var(--bs-radius-card);
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  position: relative;
+  box-shadow: var(--bs-shadow-lg);
+}
+
+/* Designed empty-state: gradient + person silhouette */
+.bs-about-image-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bs-primary) 18%, var(--bs-bg)),
+    color-mix(in srgb, var(--bs-accent) 12%, var(--bs-surface))
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-primary);
+}
+
+/* Stats row */
+.bs-stats-row {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* ====================================================================
+   PROCESS BLOCK — per-variant layouts
+   ====================================================================== */
+
+/* -- split: horizontal 4-up -- */
+.bs-process-horizontal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.bs-process-horizontal-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* -- bold: vertical timeline -- */
+.bs-process-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+.bs-process-timeline-item {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.bs-process-timeline-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0;
+}
+
+.bs-process-timeline-connector {
+  width: 2px;
+  flex: 1;
+  min-height: 2rem;
+  background-color: color-mix(in srgb, var(--bs-primary) 30%, transparent);
+  margin: 0.25rem 0;
+}
+
+.bs-process-timeline-content {
+  padding-bottom: 2rem;
+  flex: 1;
+}
+
+/* -- trust: centered cards -- */
+.bs-process-centered {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+.bs-process-centered-card {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+/* Shared step content typography */
+.bs-process-step-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 0 0 0.35rem;
+  color: var(--bs-text);
+}
+
+.bs-process-step-desc {
+  color: var(--bs-muted);
+  margin: 0;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+/* ====================================================================
+   REVIEWS BLOCK — per-variant layouts
+   ====================================================================== */
+
+.bs-reviews-aggregate {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+/* Review card shared */
+.bs-review-text {
+  color: var(--bs-text);
+  line-height: 1.65;
+  margin: 0.75rem 0 1rem;
+  font-size: 0.95rem;
+}
+
+.bs-review-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: auto;
+}
+
+.bs-review-avatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: var(--bs-primary-10);
+  color: var(--bs-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+}
+
+.bs-review-author {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin: 0;
+  color: var(--bs-text);
+}
+
+.bs-review-location,
+.bs-review-date {
+  font-size: 0.8rem;
+  color: var(--bs-muted);
+  margin: 0.1rem 0 0;
+}
+
+/* -- bold: featured + 2 -- */
+.bs-reviews-bold {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .bs-reviews-bold {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bs-review-card--featured {
+  font-size: 1.05rem;
+  padding: 2rem;
+  border-left: 4px solid var(--bs-primary);
+}
+
+.bs-review-card--featured .bs-review-text {
+  font-size: 1.05rem;
+}
+
+.bs-reviews-bold-supporting {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* -- trust: masonry -- */
+.bs-reviews-masonry {
+  columns: 3;
+  column-gap: 1.5rem;
+}
+
+.bs-reviews-masonry .bs-review-card {
+  break-inside: avoid;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 767px) {
+  .bs-reviews-masonry {
+    columns: 1;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .bs-reviews-masonry {
+    columns: 2;
+  }
+}
+
+/* ====================================================================
+   CONTACT BLOCK — per-variant layouts
+   ====================================================================== */
+
+.bs-contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+/* bold: columns are already reordered in JSX (form first) */
+.bs-contact-grid--bold {
+  /* same structure, visual swap handled in JSX */
+}
+
+/* trust: extra dark panel treatment on info side */
+.bs-contact-info--dark {
+  background-color: color-mix(in srgb, var(--bs-primary-dark) 80%, #000);
+  border-radius: var(--bs-radius-card);
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  color: var(--bs-on-primary);
+}
+
+@media (max-width: 767px) {
+  .bs-contact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bs-contact-phone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-bottom: 1.5rem;
+  background-color: transparent;
+  border: 2px solid color-mix(in srgb, var(--bs-on-primary) 50%, transparent);
+  color: var(--bs-on-primary);
+  padding: 0.65em 1.4em;
+  border-radius: var(--bs-radius-btn);
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+
+.bs-contact-phone-btn:hover {
+  background-color: color-mix(in srgb, var(--bs-on-primary) 12%, transparent);
+}
+
+/* When contact is inside bs-section-dark, the info panel heading/phone inherit
+   on-primary color via cascade. The form panel sits on the surface. */
+.bs-contact-form-panel {
+  background-color: var(--bs-surface);
+  border-radius: var(--bs-radius-card);
+  padding: clamp(1.25rem, 4vw, 2rem);
+  box-shadow: var(--bs-shadow-lg);
+}
+
+.bs-contact-address {
+  font-style: normal;
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
+.bs-contact-hours {
+  margin-top: 0.5rem;
+}
+
+.bs-contact-service-area {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.bs-contact-success {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.bs-contact-success-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--bs-primary);
+}
+
+.bs-contact-success-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--bs-text);
+  margin: 0 0 0.5rem;
+}
+
+.bs-contact-success-sub {
+  color: var(--bs-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.bs-form-error {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.bs-form-submit {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ====================================================================
+   FOOTER — additional styles for new elements
+   ====================================================================== */
+
+.bs-footer-brand {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: color-mix(in srgb, var(--bs-bg) 90%, transparent);
+  margin: 0 0 0.5rem;
+}
+
+.bs-footer-tagline {
+  font-size: 0.875rem;
+  color: color-mix(in srgb, var(--bs-bg) 55%, transparent);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.bs-footer-minimal {
+  margin-bottom: 2rem;
+}
+
+.bs-footer-maps-link {
+  color: color-mix(in srgb, var(--bs-bg) 70%, transparent);
+  text-decoration: underline;
+  font-size: 0.8rem;
+}
+
+.bs-footer-legal-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.bs-footer-legal-links a {
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--bs-bg) 55%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+
+.bs-footer-legal-links a:hover {
+  color: color-mix(in srgb, var(--bs-bg) 85%, transparent);
+}
+
+/* ====================================================================
+   LAYOUT VARIANT OVERRIDES — per-block adjustments
+   ====================================================================== */
+
+/* ---- split ---- */
+
+[data-bs-layout='split'] .bs-section-title {
+  /* No centering on split — left-aligned */
+  text-align: left;
+}
+
+[data-bs-layout='split'] .bs-section:nth-child(odd) {
+  background-color: var(--bs-bg);
+}
+
+[data-bs-layout='split'] .bs-section:nth-child(even) {
+  background-color: var(--bs-surface);
+}
+
+/* ---- bold ---- */
+
+[data-bs-layout='bold'] .bs-section-title {
+  text-align: left;
+}
+
+[data-bs-layout='bold'] .bs-section:nth-child(even) {
+  background-color: var(--bs-surface);
+}
+
+/* Bold step numbers use accent color */
+[data-bs-layout='bold'] .bs-step-num {
+  background-color: var(--bs-accent);
+  color: var(--bs-text);
+}
+
+/* Bold review featured card accent border */
+[data-bs-layout='bold'] .bs-review-card--featured {
+  border-left-color: var(--bs-accent);
+}
+
+/* ---- trust ---- */
+
+[data-bs-layout='trust'] .bs-section-title {
+  text-align: center;
+}
+
+[data-bs-layout='trust'] .bs-section-intro {
+  margin-inline: auto;
+  text-align: center;
+}
+
+[data-bs-layout='trust'] .bs-stat {
+  text-align: center;
+}
+
+/* Trust about section: wider centered layout */
+[data-bs-layout='trust'] #about .bs-container {
+  max-width: 760px;
+}
+
+/* Trust process connector emphasizes trust */
+[data-bs-layout='trust'] .bs-step-num {
+  background-color: color-mix(in srgb, var(--bs-primary) 15%, var(--bs-surface));
+  color: var(--bs-primary);
+  border: 2px solid var(--bs-primary);
+}
+
+/* Trust reviews masonry */
+[data-bs-layout='trust'] .bs-reviews-masonry .bs-review-card {
+  border-top: 3px solid var(--bs-primary-10);
+}
+
+/* ====================================================================
+   TYPE SCALE — variant-specific heading size adjustments
+   (expressed via tokens so all 12 palettes stay correct)
+   ====================================================================== */
+
+[data-bs-layout='bold'] .bs-hero-headline {
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  letter-spacing: -0.02em;
+}
+
+[data-bs-layout='trust'] .bs-hero-headline {
+  font-size: clamp(2rem, 5vw, 3.75rem);
+}
+
+[data-bs-layout='bold'] .bs-section-title {
+  font-size: clamp(1.875rem, 4vw, 3rem);
+}
+
+/* ====================================================================
+   SHADOW / RADIUS / HOVER RAMP — variant tokens
+   ====================================================================== */
+
+[data-bs-layout='split'] .bs-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--bs-shadow-md);
+}
+
+[data-bs-layout='bold'] .bs-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--bs-shadow-lg);
+}
+
+[data-bs-layout='trust'] .bs-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--bs-primary) 12%, transparent);
+}
+
+/* Bold variant uses slightly larger border radius for a bolder feel */
+[data-bs-layout='bold'] {
+  --bs-radius-card: 1.25rem;
+  --bs-radius-btn: 0.625rem;
+}
+
+/* Trust variant uses a tighter radius for a more professional/austere look */
+[data-bs-layout='trust'] {
+  --bs-radius-card: 0.75rem;
+  --bs-radius-btn: 0.375rem;
 }

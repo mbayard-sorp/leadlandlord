@@ -15,6 +15,61 @@ import { log } from '@leadlandlord/shared/log';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// ---------------------------------------------------------------------------
+// Per-IP + per-site sliding-window rate limiter
+// ---------------------------------------------------------------------------
+/** Max requests per IP within RATE_WINDOW_MS. */
+const IP_RATE_LIMIT = 10;
+/** Max requests per buildsell_site_id within RATE_WINDOW_MS. */
+const SITE_RATE_LIMIT = 20;
+/** Sliding window length in milliseconds. */
+const RATE_WINDOW_MS = 60_000;
+
+/**
+ * In-memory store: key -> array of request timestamps (ms) within the window.
+ * Module-level so it persists across requests on the same Node.js instance.
+ * On Vercel, each serverless instance is isolated, which is acceptable — the
+ * limits guard against burst on a single instance, not distributed flood.
+ */
+const _rateBuckets = new Map<string, number[]>();
+
+/**
+ * Returns true if the request should be rate-limited (bucket exceeded).
+ * Mutates the bucket on allow.
+ */
+function checkRateLimit(key: string, limit: number): boolean {
+  const now = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
+  const bucket = _rateBuckets.get(key) ?? [];
+  // Prune timestamps outside the current window.
+  const trimmed = bucket.filter((t) => t > cutoff);
+  if (trimmed.length >= limit) {
+    // Do not record this request — just reject.
+    _rateBuckets.set(key, trimmed);
+    return true; // rate-limited
+  }
+  trimmed.push(now);
+  _rateBuckets.set(key, trimmed);
+  return false;
+}
+
+/**
+ * Safely extract the client IP from the forwarded header Vercel sets.
+ * Takes only the first address in the comma-separated list; strips port.
+ * Never returns an empty string — falls back to "unknown".
+ */
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0];
+    if (first) {
+      // Strip IPv6 brackets and optional port.
+      return first.trim().replace(/^\[/, '').replace(/\]:\d+$/, '').replace(/:\d+$/, '') || 'unknown';
+    }
+  }
+  return 'unknown';
+}
+
 /**
  * Build & Sell draft contact-form endpoint.
  *
@@ -55,6 +110,21 @@ export async function POST(req: Request) {
   // Honeypot tripped — silently succeed without writing anything.
   if (payload.website && payload.website.trim().length > 0) {
     return corsResponse(NextResponse.json({ ok: true }));
+  }
+
+  // Rate limiting: per-IP and per-site burst protection.
+  const clientIp = getClientIp(req);
+  if (checkRateLimit(`ip:${clientIp}`, IP_RATE_LIMIT)) {
+    log.warn({ siteId: payload.buildsell_site_id }, 'bs/lead: rate limited (ip)');
+    return corsResponse(
+      NextResponse.json({ ok: false, error: 'rate_limited' }, { status: 429 }),
+    );
+  }
+  if (checkRateLimit(`site:${payload.buildsell_site_id}`, SITE_RATE_LIMIT)) {
+    log.warn({ siteId: payload.buildsell_site_id }, 'bs/lead: rate limited (site)');
+    return corsResponse(
+      NextResponse.json({ ok: false, error: 'rate_limited' }, { status: 429 }),
+    );
   }
 
   const db = getDb();

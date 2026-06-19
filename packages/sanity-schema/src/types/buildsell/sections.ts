@@ -104,6 +104,7 @@ export const bsFooterSection = defineType({
     defineField({ name: 'columns', title: 'Columns', type: 'array', of: [{ type: 'bsFooterColumn' }] }),
     defineField({ name: 'social', title: 'Social Links', type: 'array', of: [{ type: 'bsSocialLink' }] }),
     defineField({ name: 'legal', title: 'Legal Row', type: 'string' }),
+    defineField({ name: 'legalLinks', title: 'Legal Links', type: 'array', of: [{ type: 'bsNavLink' }], description: 'Footer legal nav: Privacy Policy, Terms of Service, etc.' }),
   ],
   preview: { prepare: () => ({ title: 'Footer' }) },
 });

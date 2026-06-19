@@ -1,48 +1,60 @@
 import type { BuildSellSection } from '@/lib/sanity';
+import { Icon } from '../Icon';
 import { googleMapsUrl } from '@/lib/google-maps-url';
 
 interface FooterBlockProps {
   section: BuildSellSection;
   businessName: string;
   placeId?: string | null;
+  layoutVariant: 'split' | 'bold' | 'trust';
 }
 
-export function FooterBlock({ section, businessName, placeId }: FooterBlockProps) {
+/**
+ * Map social platform names to lucide icon names.
+ * Falls back to 'external-link' for unknown platforms.
+ */
+const SOCIAL_ICON_MAP: Record<string, string> = {
+  facebook:   'facebook',
+  instagram:  'instagram',
+  twitter:    'twitter',
+  x:          'twitter',
+  linkedin:   'linkedin',
+  youtube:    'youtube',
+  tiktok:     'music-2',
+  pinterest:  'pinterest',
+  nextdoor:   'map-pin',
+  yelp:       'star',
+};
+
+function socialIconName(platform: string | null | undefined): string {
+  if (!platform) return 'external-link';
+  return SOCIAL_ICON_MAP[platform.toLowerCase()] ?? 'external-link';
+}
+
+/**
+ * Footer block — same structure across all variants.
+ * layoutVariant is accepted for future variant-specific tweaks but the footer
+ * is largely identical in content; variant differences are handled via CSS.
+ * Social links use lucide icons (server-rendered via Icon.tsx — no CDN call).
+ * legalLinks are rendered inline next to the copyright line.
+ */
+export function FooterBlock({ section, businessName, placeId, layoutVariant: _layoutVariant }: FooterBlockProps) {
   const year = new Date().getFullYear();
   const mapsUrl = googleMapsUrl(businessName, placeId);
 
   return (
-    <footer className="bs-footer">
+    <footer className="bs-footer bs-reveal">
       <div className="bs-container">
         {(section.columns && section.columns.length > 0) ? (
           <div className="bs-footer-grid">
             {/* Brand column */}
             <div>
-              <p
-                style={{
-                  fontFamily: 'var(--bs-font-heading)',
-                  fontWeight: 700,
-                  fontSize: '1.1rem',
-                  color: 'var(--bs-bg)',
-                  margin: '0 0 0.5rem',
-                }}
-              >
-                {businessName}
-              </p>
+              <p className="bs-footer-brand">{businessName}</p>
               {section.tagline && (
-                <p
-                  style={{
-                    fontSize: '0.875rem',
-                    color: 'color-mix(in srgb, var(--bs-bg) 55%, transparent)',
-                    margin: 0,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {section.tagline}
-                </p>
+                <p className="bs-footer-tagline">{section.tagline}</p>
               )}
               {section.social && section.social.length > 0 && (
-                <div className="bs-social-links">
+                <div className="bs-social-links" aria-label="Social media links">
                   {section.social.map((link, i) => (
                     <a
                       key={i}
@@ -51,9 +63,7 @@ export function FooterBlock({ section, businessName, placeId }: FooterBlockProps
                       rel="noopener noreferrer"
                       target="_blank"
                     >
-                      <span aria-hidden="true" style={{ fontSize: '0.85rem' }}>
-                        {link.platform?.charAt(0).toUpperCase() ?? '→'}
-                      </span>
+                      <Icon name={socialIconName(link.platform)} size={16} />
                     </a>
                   ))}
                 </div>
@@ -79,47 +89,50 @@ export function FooterBlock({ section, businessName, placeId }: FooterBlockProps
           </div>
         ) : (
           /* Minimal footer when no columns configured */
-          <div style={{ marginBottom: '2rem' }}>
-            <p
-              style={{
-                fontFamily: 'var(--bs-font-heading)',
-                fontWeight: 700,
-                fontSize: '1.1rem',
-                color: 'var(--bs-bg)',
-                margin: '0 0 0.5rem',
-              }}
-            >
-              {businessName}
-            </p>
+          <div className="bs-footer-minimal">
+            <p className="bs-footer-brand">{businessName}</p>
             {section.tagline && (
-              <p
-                style={{
-                  fontSize: '0.875rem',
-                  color: 'color-mix(in srgb, var(--bs-bg) 55%, transparent)',
-                  margin: 0,
-                }}
-              >
-                {section.tagline}
-              </p>
+              <p className="bs-footer-tagline">{section.tagline}</p>
+            )}
+            {section.social && section.social.length > 0 && (
+              <div className="bs-social-links" aria-label="Social media links">
+                {section.social.map((link, i) => (
+                  <a
+                    key={i}
+                    href={link.href ?? '#'}
+                    aria-label={link.platform ?? 'Social link'}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    <Icon name={socialIconName(link.platform)} size={16} />
+                  </a>
+                ))}
+              </div>
             )}
           </div>
         )}
 
         <div className="bs-footer-legal">
-          {section.legal ? (
-            <p style={{ margin: 0 }}>{section.legal}</p>
-          ) : (
-            <p style={{ margin: 0 }}>
-              &copy; {year} {businessName}. All rights reserved.
-            </p>
+          <p style={{ margin: 0 }}>
+            {section.legal ?? `© ${year} ${businessName}. All rights reserved.`}
+          </p>
+
+          {/* Legal links (privacy, terms, etc.) */}
+          {section.legalLinks && section.legalLinks.length > 0 && (
+            <nav className="bs-footer-legal-links" aria-label="Legal links">
+              {section.legalLinks.map((link, i) => (
+                <a key={i} href={link.href ?? '#'}>{link.label}</a>
+              ))}
+            </nav>
           )}
+
           {mapsUrl && (
             <p style={{ margin: '0.5rem 0 0' }}>
               <a
                 href={mapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: 'color-mix(in srgb, var(--bs-bg) 70%, transparent)', textDecoration: 'underline', fontSize: '0.8rem' }}
+                className="bs-footer-maps-link"
               >
                 View on Google Maps
               </a>

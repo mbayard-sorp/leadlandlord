@@ -267,7 +267,15 @@ const BUILDSELL_PROJECTION = `{
     "fontHeading": theme.fontHeading,
     "fontBody": theme.fontBody
   },
-  seo{ metaTitle, metaDescription },
+  rating,
+  reviewCount,
+  purchaseUrl,
+  email,
+  heroImagePrompt,
+  aboutImagePrompt,
+  ogImagePrompt,
+  "logo": logo{ "asset": asset->{ url } },
+  seo{ metaTitle, metaDescription, "ogImageUrl": ogImage.asset->url },
   "sections": sections[]{
     _type,
     _key,
@@ -278,7 +286,12 @@ const BUILDSELL_PROJECTION = `{
       rating,
       text,
       featured,
-      order
+      order,
+      initials,
+      location,
+      source,
+      date,
+      "avatar": avatar{ "asset": asset->{ url } }
     }
   }
 }`;
@@ -312,6 +325,12 @@ export interface BuildSellReview {
   text: string;
   featured?: boolean | null;
   order?: number | null;
+  initials?: string | null;
+  location?: string | null;
+  /** Presentation label only. Never 'google' on a generated testimonial (ToS guard). */
+  source?: 'manual' | 'google' | 'facebook' | null;
+  date?: string | null;
+  avatar?: { asset?: { url?: string | null } | null } | null;
 }
 
 export interface BuildSellSection {
@@ -329,7 +348,7 @@ export interface BuildSellSection {
   secondaryCta?: { label?: string | null; href?: string | null } | null;
   // bsServicesSection
   heading?: string | null;
-  services?: Array<{ icon?: string | null; title?: string | null; description?: string | null }> | null;
+  services?: Array<{ icon?: string | null; title?: string | null; description?: string | null; link?: string | null }> | null;
   // bsAboutSection
   body?: string | null;
   stats?: Array<{ value?: string | null; label?: string | null }> | null;
@@ -354,6 +373,7 @@ export interface BuildSellSection {
   }> | null;
   social?: Array<{ platform?: string | null; href?: string | null }> | null;
   legal?: string | null;
+  legalLinks?: Array<{ label?: string | null; href?: string | null }> | null;
 }
 
 export interface BuildSellSite {
@@ -371,8 +391,16 @@ export interface BuildSellSite {
   generatedAt?: string | null;
   navigation?: BuildSellNavLink[] | null;
   theme: BuildSellTheme;
-  seo?: { metaTitle?: string | null; metaDescription?: string | null } | null;
+  seo?: { metaTitle?: string | null; metaDescription?: string | null; ogImageUrl?: string | null } | null;
   sections?: BuildSellSection[] | null;
+  rating?: number | null;
+  reviewCount?: number | null;
+  purchaseUrl?: string | null;
+  email?: string | null;
+  heroImagePrompt?: string | null;
+  aboutImagePrompt?: string | null;
+  ogImagePrompt?: string | null;
+  logo?: { asset?: { url?: string | null } | null } | null;
 }
 
 export async function fetchBuildSellSiteById(id: string): Promise<BuildSellSite | null> {
