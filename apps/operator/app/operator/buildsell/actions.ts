@@ -275,6 +275,23 @@ export async function buildDraft(formData: FormData): Promise<BuildDraftResult> 
   }
 
   log.info({ id: row.id, businessName, trade, city }, 'buildDraft: site row + build event created');
+
+  // Drain immediately so spec-site-builder starts now instead of waiting up to
+  // a tick for the cron. Same pattern as requestDomainSearch in
+  // sites/[id]/domain-actions.ts: runOperatorTick claims the event and dispatches
+  // the agent in a background waitUntil, so it returns quickly. Lazy import to
+  // avoid pulling the agent registry at module init. Non-fatal — the cron is the
+  // fallback if the inline drain fails.
+  try {
+    const { runOperatorTick } = await import('@/lib/operator-tick');
+    await runOperatorTick();
+  } catch (err) {
+    log.warn(
+      { id: row.id, err: err instanceof Error ? err.message : err },
+      'buildDraft: inline operator-tick failed — cron will pick up the build event',
+    );
+  }
+
   revalidatePath('/operator/buildsell');
   return { ok: true, buildsellSiteId: row.id };
 }
