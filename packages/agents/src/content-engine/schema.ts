@@ -43,8 +43,8 @@ export const ContentEngineInput = z.object({
    */
   keyword_clusters: z.array(KeywordClusterInput).default([]),
   /**
-   * Controls page volume. 'thin' = 6-12 pages total (home + 4-6 services +
-   * 3-5 FAQ blog posts, no service-area or info pages). 'content_rich' keeps
+   * Controls page volume. 'thin' = ~8-10 pages total (home + 3-4 services +
+   * 2-3 FAQ blog posts, no service-area or info pages). 'content_rich' keeps
    * the existing ~28-page full-site output. Defaults to 'thin'.
    */
   site_mode: z.enum(['thin', 'content_rich']).default('thin'),

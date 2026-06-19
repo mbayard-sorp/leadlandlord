@@ -872,7 +872,7 @@ export function buildUserPrompt(input: ContentEngineInput, pools: HygienePools):
     : '';
 
   const siteModeSection = input.site_mode === 'thin'
-    ? `\nSITE MODE: thin. Generate ONLY: 1 home page (1,500-2,200 words), 1 services index, 4-6 service pages, 1 contact page, 3-5 FAQ blog posts. NO service-area pages. NO info pages. About page omitted unless business_name strongly suggests a specific identity.`
+    ? `\nSITE MODE: thin. Generate ONLY: 1 home page (1,500-2,200 words), 1 services index, 3-4 service pages, 1 contact page, 2-3 FAQ blog posts. NO service-area pages. NO info pages. About page omitted unless business_name strongly suggests a specific identity.`
     : `\nSITE MODE: content_rich. Generate the full ~28-page bundle as specified in the system prompt.`;
 
   const hygiene = `\n\n## Chosen for this site (use these; do not substitute your own)
