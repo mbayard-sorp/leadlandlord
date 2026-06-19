@@ -51,14 +51,19 @@ export default async function BuildSellDetailPage({ params }: Params) {
   // preview URL — the page still works, Save just won't authorize.
   // NOTE: BS_PREVIEW_HMAC_SECRET must also be set in the site-host Vercel
   // project (same value) — the verifier there mirrors this exact signing call.
+  // Path uses the human-readable slug once the build has populated it; falls
+  // back to the UUID for sites mid-build. The HMAC token stays keyed on the
+  // UUID (site.id) — the theme-save endpoint and verifier are UUID-based and
+  // are unaffected by which form the path takes.
+  const previewPath = site.slug ?? site.id;
   const hmacSecret = process.env.BS_PREVIEW_HMAC_SECRET;
   let previewUrl: string;
   if (hmacSecret) {
     const token = createHmac('sha256', hmacSecret).update(`bs-theme:${site.id}`).digest('hex');
-    previewUrl = `https://${siteHost}/preview/${site.id}?t=${token}`;
+    previewUrl = `https://${siteHost}/preview/${previewPath}?t=${token}`;
   } else {
     console.warn('[buildsell] BS_PREVIEW_HMAC_SECRET is not set — preview link is unsigned; buyer Save will not authorize');
-    previewUrl = `https://${siteHost}/preview/${site.id}`;
+    previewUrl = `https://${siteHost}/preview/${previewPath}`;
   }
 
   // Fetch theme-lock status from the Sanity doc. Non-fatal — if the doc doesn't

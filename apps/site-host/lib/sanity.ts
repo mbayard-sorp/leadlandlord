@@ -303,6 +303,8 @@ const BUILDSELL_PROJECTION = `{
 
 const BUILDSELL_BY_ID_QUERY = `*[_type=="buildsellSite" && buildsellSiteId==$id][0]${BUILDSELL_PROJECTION}`;
 const BUILDSELL_BY_SLUG_QUERY = `*[_type=="buildsellSite" && slug.current==$slug && draftMode==false][0]${BUILDSELL_PROJECTION}`;
+// Preview resolves drafts too, so no draftMode filter here (see fetchBuildSellSitePreview).
+const BUILDSELL_PREVIEW_BY_SLUG_QUERY = `*[_type=="buildsellSite" && slug.current==$slug][0]${BUILDSELL_PROJECTION}`;
 
 export interface BuildSellTheme {
   layoutVariant: 'split' | 'bold' | 'trust';
@@ -428,6 +430,27 @@ export interface BuildSellSite {
 
 export async function fetchBuildSellSiteById(id: string): Promise<BuildSellSite | null> {
   const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_ID_QUERY, { id });
+  return result ?? null;
+}
+
+/** Postgres UUID shape — distinguishes legacy /preview/<uuid> links from /preview/<slug>. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a buildsell site for the preview route by EITHER its Postgres UUID
+ * (legacy /preview/<uuid> links stay valid) or its human-readable slug
+ * (/preview/<slug>). Unlike fetchBuildSellSiteBySlug, this does NOT filter on
+ * draftMode==false — the preview route always renders draft=true regardless of
+ * the doc's live state, so a draft must resolve by slug here.
+ */
+export async function fetchBuildSellSitePreview(idOrSlug: string): Promise<BuildSellSite | null> {
+  if (UUID_RE.test(idOrSlug)) {
+    return fetchBuildSellSiteById(idOrSlug);
+  }
+  const result = await sanity.fetch<BuildSellSite | null>(
+    BUILDSELL_PREVIEW_BY_SLUG_QUERY,
+    { slug: idOrSlug },
+  );
   return result ?? null;
 }
 

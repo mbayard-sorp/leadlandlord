@@ -118,7 +118,7 @@ export default async function BuildSellPage() {
                     <td className="px-2 py-2">
                       <div className="flex flex-col gap-1">
                         <a
-                          href={`https://${siteHost}/preview/${site.id}`}
+                          href={`https://${siteHost}/preview/${site.slug ?? site.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-sky-400 hover:text-sky-300 underline"

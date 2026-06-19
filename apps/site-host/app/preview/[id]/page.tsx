@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { fetchBuildSellSiteById } from '@/lib/sanity';
+import { fetchBuildSellSitePreview } from '@/lib/sanity';
 import { BuildSellHome } from '@/components/buildsell/BuildSellHome';
 import { ALL_BS_FONTS } from '@/lib/buildsell-fonts';
 
@@ -30,6 +30,8 @@ export default async function PreviewPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ t?: string; layout?: string; preset?: string; fh?: string; fb?: string }>;
 }) {
+  // `id` is the path segment — either a Postgres UUID (legacy links) or the
+  // human-readable slug. fetchBuildSellSitePreview resolves either form.
   const { id } = await params;
   const { t: saveToken, layout, preset, fh, fb } = await searchParams;
 
@@ -41,7 +43,7 @@ export default async function PreviewPage({
 
   let site;
   try {
-    site = await fetchBuildSellSiteById(id);
+    site = await fetchBuildSellSitePreview(id);
   } catch {
     // Fetch error — still render noindex, fail closed
     return (
