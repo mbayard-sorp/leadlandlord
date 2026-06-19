@@ -551,9 +551,15 @@
 }
 
 [data-bs-layout='split'] .bs-hero-image {
+  position: relative;
+  aspect-ratio: 4 / 3;
+}
+
+[data-bs-layout='split'] .bs-hero-image-frame {
+  position: absolute;
+  inset: 0;
   border-radius: var(--bs-radius-card);
   overflow: hidden;
-  aspect-ratio: 4 / 3;
   box-shadow: var(--bs-shadow-lg);
 }
 
@@ -561,8 +567,16 @@
   [data-bs-layout='split'] .bs-hero-inner {
     grid-template-columns: 1fr;
   }
+  /* Stack the image below the text. Inset the float cards so their negative
+     offsets don't overhang the viewport edge on narrow screens. */
   [data-bs-layout='split'] .bs-hero-image {
-    display: none;
+    margin-inline: 1rem;
+  }
+  [data-bs-layout='split'] .bs-hero-float-card--top {
+    right: 0;
+  }
+  [data-bs-layout='split'] .bs-hero-float-card--bottom {
+    left: 0;
   }
 }
 
@@ -616,7 +630,7 @@
   color: color-mix(in srgb, var(--bs-on-primary) 80%, transparent);
 }
 
-[data-bs-layout='bold'] .bs-section:nth-child(even) {
+[data-bs-layout='bold'] .bs-section:nth-child(even):not(.bs-section-dark) {
   background-color: var(--bs-surface);
 }
 
@@ -1590,11 +1604,11 @@
   text-align: left;
 }
 
-[data-bs-layout='split'] .bs-section:nth-child(odd) {
+[data-bs-layout='split'] .bs-section:nth-child(odd):not(.bs-section-dark) {
   background-color: var(--bs-bg);
 }
 
-[data-bs-layout='split'] .bs-section:nth-child(even) {
+[data-bs-layout='split'] .bs-section:nth-child(even):not(.bs-section-dark) {
   background-color: var(--bs-surface);
 }
 
@@ -1604,7 +1618,7 @@
   text-align: left;
 }
 
-[data-bs-layout='bold'] .bs-section:nth-child(even) {
+[data-bs-layout='bold'] .bs-section:nth-child(even):not(.bs-section-dark) {
   background-color: var(--bs-surface);
 }
 

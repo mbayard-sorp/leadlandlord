@@ -220,15 +220,19 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
           {/* Floating image card column */}
           <div className="bs-hero-image">
             {section.imageUrl ? (
-              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                <Image
-                  src={section.imageUrl}
-                  alt={`${headline} hero image`}
-                  fill
-                  priority
-                  sizes="(max-width: 767px) 100vw, 50vw"
-                  style={{ objectFit: 'cover' }}
-                />
+              <>
+                {/* Clipped frame: rounds the image corners without clipping
+                    the float cards, which intentionally overhang the edges. */}
+                <div className="bs-hero-image-frame">
+                  <Image
+                    src={section.imageUrl}
+                    alt={`${headline} hero image`}
+                    fill
+                    priority
+                    sizes="(max-width: 767px) 100vw, 50vw"
+                    style={{ objectFit: 'cover' }}
+                  />
+                </div>
                 {/* Floating credibility cards overlaid on the image */}
                 {section.showRating && (
                   <div className="bs-hero-float-card bs-hero-float-card--top" aria-hidden="true">
@@ -245,7 +249,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
                     </span>
                   </div>
                 )}
-              </div>
+              </>
             ) : (
               <ImagePlaceholder style={{ height: '100%' }} />
             )}
