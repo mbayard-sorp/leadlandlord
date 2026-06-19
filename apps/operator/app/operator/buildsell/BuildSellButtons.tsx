@@ -2,7 +2,7 @@
 
 import { useTransition, useState } from 'react';
 import { sendInvoice, markPaid } from './actions';
-import type { BuildsellSite } from './actions';
+import type { BuildsellSite } from '@leadlandlord/db';
 
 interface Props {
   site: BuildsellSite;

@@ -1,7 +1,8 @@
 'use client';
 
 import { useTransition, useState } from 'react';
-import { runBuildSellSearch, buildDraft, type BuildSellLeadResult } from './actions';
+import { runBuildSellSearch, buildDraft } from './actions';
+import type { BuildSellLeadResult } from '@leadlandlord/integrations/google-places';
 
 export function SearchPanel() {
   const [searching, startSearch] = useTransition();
