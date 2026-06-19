@@ -19,6 +19,8 @@ import { searchLeads } from '@leadlandlord/integrations/google-places';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import { createWriteClient, uploadHeroImage } from '@leadlandlord/integrations/sanity';
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
+import { generateAndUploadFavicon } from '@leadlandlord/integrations/favicon';
+import { presetByName } from '@leadlandlord/sanity-schema/presets';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import { buildInvoicePdf } from '@/lib/buildsell-invoice';
 import { requireOperatorSession } from '@/lib/auth';
@@ -679,6 +681,33 @@ export async function regenerateBuildSellImage(
         .patch(buildsellSiteDocId(siteId))
         .set({ 'sections[_key=="hero"].image': imageRef })
         .commit({ visibility: 'sync' });
+
+      // Trust layout renders a 3-tile hero strip. One "Regenerate hero" fills
+      // all three: tiles 2 & 3 are variations of the same prompt. Best-effort —
+      // a failed variation just leaves a gradient tile, never blocks tile 1.
+      const layoutDoc = await client.fetch<{ layout?: string | null }>(
+        `*[_id==$id][0]{ "layout": theme.layoutVariant }`,
+        { id: buildsellSiteDocId(siteId) },
+      );
+      if (layoutDoc?.layout === 'trust') {
+        const strip: Array<['imageB' | 'imageC', string]> = [
+          ['imageB', `${prompt}. Alternate angle, different composition.`],
+          ['imageC', `${prompt}. Close-up detail shot.`],
+        ];
+        for (const [field, variantPrompt] of strip) {
+          try {
+            const variant = await generateHeroImageBuffer(variantPrompt, { aspectRatio: '4:3' });
+            if (!variant) continue;
+            const up = await uploadHeroImage(`bs-${siteId}-${field}`, variant.buffer);
+            await client
+              .patch(buildsellSiteDocId(siteId))
+              .set({ [`sections[_key=="hero"].${field}`]: { _type: 'image', asset: { _type: 'reference', _ref: up.assetId } } })
+              .commit({ visibility: 'sync' });
+          } catch (err) {
+            log.warn({ siteId, field, err }, 'regenerateBuildSellImage: trust strip tile failed (non-fatal)');
+          }
+        }
+      }
     } else if (kind === 'about') {
       await client
         .patch(buildsellSiteDocId(siteId))
@@ -718,6 +747,42 @@ export async function regenerateBuildSellImage(
   revalidatePath(`/operator/buildsell/${siteId}`);
   revalidatePath('/operator/buildsell');
   return { ok: true, imageUrl };
+}
+
+/**
+ * Regenerate the favicon as an initials monogram on the site's preset primary
+ * color. No Imagen spend (it's a generated SVG), so it's exempt from the daily
+ * image cap. Reads businessName + theme.preset from the Sanity doc.
+ */
+export async function regenerateBuildSellFavicon(siteId: string): Promise<RegenImageResult> {
+  await requireOperatorSession();
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+
+  const client = createWriteClient();
+  const doc = await client.fetch<{ businessName?: string | null; preset?: string | null }>(
+    `*[_id==$id][0]{ businessName, "preset": theme.preset }`,
+    { id: buildsellSiteDocId(siteId) },
+  );
+  if (!doc?.businessName) return { ok: false, message: 'Site has no business name — build the draft first.' };
+
+  try {
+    const preset = presetByName(doc.preset);
+    const fav = await generateAndUploadFavicon(siteId, doc.businessName, {
+      bgHex: preset?.primary ?? '#0f172a',
+      fgHex: preset?.onPrimary ?? '#ffffff',
+    });
+    await client
+      .patch(buildsellSiteDocId(siteId))
+      .set({ favicon: { _type: 'image', asset: { _type: 'reference', _ref: fav.assetId } } })
+      .commit({ visibility: 'sync' });
+    revalidatePath(`/operator/buildsell/${siteId}`);
+    revalidatePath('/operator/buildsell');
+    log.info({ siteId }, 'regenerateBuildSellFavicon: favicon regenerated');
+    return { ok: true, imageUrl: fav.url };
+  } catch (err) {
+    log.error({ siteId, err }, 'regenerateBuildSellFavicon failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'favicon regen failed' };
+  }
 }
 
 // ─── Content migration (crawl existing site → review queue → apply) ───────────

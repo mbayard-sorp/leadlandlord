@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import {
   saveBuildSellImagePrompt,
   regenerateBuildSellImage,
+  regenerateBuildSellFavicon,
   type BuildSellImageKind,
 } from './actions';
 
@@ -96,7 +97,66 @@ export function BuildSellImagePanel({ siteId, initialPrompts }: Props) {
           onUpdate={(patch) => updateState(cfg.kind, patch)}
         />
       ))}
+
+      <p className="text-xs text-slate-500">
+        On a <span className="font-medium text-slate-400">Trust</span> layout, regenerating the hero
+        also fills the 3-tile strip with prompt variations (one click fills all three).
+      </p>
+
+      <FaviconRow siteId={siteId} />
     </section>
+  );
+}
+
+function FaviconRow({ siteId }: { siteId: string }) {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+
+  function handleRegen() {
+    setMsg(null);
+    start(async () => {
+      const r = await regenerateBuildSellFavicon(siteId);
+      if (r.ok) {
+        setMsg('Favicon regenerated.');
+        setUrl(r.imageUrl ?? null);
+      } else {
+        setMsg(r.message ?? 'favicon regen failed');
+      }
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-medium text-slate-200">Favicon</h3>
+        <span className="text-xs text-slate-600 font-mono">initials monogram</span>
+      </div>
+      <p className="text-xs text-slate-500">
+        Generated from the business initials on the preset color (no AI spend, not rate-limited).
+        Prefers the logo when one was migrated.
+      </p>
+      {url && (
+        <img
+          src={url}
+          alt="Regenerated favicon"
+          className="rounded border border-slate-700 h-12 w-12 object-cover"
+        />
+      )}
+      <button
+        type="button"
+        onClick={handleRegen}
+        disabled={pending}
+        className="px-3 py-1.5 rounded border border-slate-700 bg-slate-900/60 text-slate-200 text-xs hover:bg-slate-800 disabled:opacity-50"
+      >
+        {pending ? 'Generating…' : 'Regenerate favicon'}
+      </button>
+      {msg && (
+        <p className={`text-xs ${msg.includes('failed') ? 'text-red-300' : 'text-emerald-300'} break-all`}>
+          {msg}
+        </p>
+      )}
+    </div>
   );
 }
 

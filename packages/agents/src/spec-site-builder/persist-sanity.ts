@@ -72,6 +72,11 @@ export interface WriteBuildSellArgs {
   content: SpecSiteContent;
   /** Sanity asset _id for the generated hero image, when one was produced. */
   heroImageAssetId?: string | null;
+  /** Trust-layout hero strip tiles 2 & 3, when produced (variations of the hero). */
+  heroImageBAssetId?: string | null;
+  heroImageCAssetId?: string | null;
+  /** Sanity asset _id for the favicon (logo-derived or generated monogram). */
+  faviconAssetId?: string | null;
   /** Sanity asset _id for the generated about image, when one was produced. */
   aboutImageAssetId?: string | null;
   /** Sanity asset _id for the generated OG image, when one was produced. */
@@ -100,14 +105,6 @@ export interface WriteBuildSellResult {
   reviewDocIds: string[];
   transactionId: string;
   sectionCount: number;
-}
-
-/**
- * Wrap a hex string in a Sanity color object so @sanity/color-input + the GROQ
- * `theme.*.hex` projection both work correctly. (B-COLOR fix — D1 in ADR 0025.)
- */
-function colorWrap(hex: string): { _type: 'color'; hex: string } {
-  return { _type: 'color', hex };
 }
 
 /**
@@ -179,6 +176,8 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
   const heroHighlight = m?.headline ? undefined : content.hero.highlight;
   const aboutBody = m?.aboutBody?.trim() || content.about.body;
   const heroImageAssetId = m?.heroImageAssetId ?? args.heroImageAssetId ?? null;
+  const heroImageBAssetId = args.heroImageBAssetId ?? null;
+  const heroImageCAssetId = args.heroImageCAssetId ?? null;
   const aboutImageAssetId = m?.aboutImageAssetId ?? args.aboutImageAssetId ?? null;
   const serviceCards =
     m?.services && m.services.length > 0
@@ -201,6 +200,12 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       secondaryCta: { _type: 'bsCtaButton', ...content.hero.secondaryCta },
       ...(heroImageAssetId
         ? { image: { _type: 'image', asset: { _type: 'reference', _ref: heroImageAssetId } } }
+        : {}),
+      ...(heroImageBAssetId
+        ? { imageB: { _type: 'image', asset: { _type: 'reference', _ref: heroImageBAssetId } } }
+        : {}),
+      ...(heroImageCAssetId
+        ? { imageC: { _type: 'image', asset: { _type: 'reference', _ref: heroImageCAssetId } } }
         : {}),
     },
     {
@@ -332,19 +337,12 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     placeId: args.placeId ?? undefined,
     slug: { _type: 'slug', current: args.slug },
     navigation: content.navigation.map((n, i) => ({ _key: `nav${i}`, _type: 'bsNavLink', ...n })),
-    // B-COLOR fix: all 8 colors wrapped as {_type:'color',hex} objects (D1 in ADR 0025).
+    // Colors are 100% preset-driven at render time (per-doc hex fields removed
+    // 2026-06-19). Only the preset name, layout, and fonts are persisted.
     theme: {
       _type: 'buildsellTheme',
       preset: content.theme.preset,
       layoutVariant: content.theme.layoutVariant,
-      primary: colorWrap(content.theme.primary),
-      primaryDark: colorWrap(content.theme.primaryDark),
-      accent: colorWrap(content.theme.accent),
-      onPrimary: colorWrap(content.theme.onPrimary),
-      bg: colorWrap(content.theme.bg),
-      surface: colorWrap(content.theme.surface),
-      text: colorWrap(content.theme.text),
-      muted: colorWrap(content.theme.muted),
       fontHeading: content.theme.fontHeading,
       fontBody: content.theme.fontBody,
     },
@@ -372,6 +370,9 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     // drop it on rebuild — it lives only here, not in generated content).
     ...(m?.logoAssetId
       ? { logo: { _type: 'image', asset: { _type: 'reference', _ref: m.logoAssetId } } }
+      : {}),
+    ...(args.faviconAssetId
+      ? { favicon: { _type: 'image', asset: { _type: 'reference', _ref: args.faviconAssetId } } }
       : {}),
     // Re-emit the migration overlay so it survives the next createOrReplace.
     ...(m
