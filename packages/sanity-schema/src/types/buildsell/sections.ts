@@ -11,7 +11,7 @@ export const bsHeroSection = defineType({
   type: 'object',
   fields: [
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
-    defineField({ name: 'headline', title: 'Headline', type: 'string' }),
+    defineField({ name: 'headline', title: 'Headline', type: 'string', validation: (r) => r.required() }),
     defineField({ name: 'highlight', title: 'Highlight', type: 'string', description: 'Emphasised fragment of the headline.' }),
     defineField({ name: 'subhead', title: 'Subhead', type: 'text', rows: 2 }),
     defineField({
@@ -48,7 +48,8 @@ export const bsServicesSection = defineType({
   title: 'Services',
   type: 'object',
   fields: [
-    defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
     defineField({ name: 'subhead', title: 'Subhead', type: 'text', rows: 2 }),
     defineField({ name: 'services', title: 'Services', type: 'array', of: [{ type: 'bsServiceCard' }] }),
   ],
@@ -60,10 +61,12 @@ export const bsAboutSection = defineType({
   title: 'About',
   type: 'object',
   fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string' }),
     defineField({ name: 'body', title: 'Body', type: 'text', rows: 5 }),
     defineField({ name: 'image', title: 'Image', type: 'image', options: { hotspot: true } }),
     defineField({ name: 'stats', title: 'Stats', type: 'array', of: [{ type: 'bsStatItem' }] }),
+    defineField({ name: 'cta', title: 'CTA', type: 'bsCtaButton', description: 'Optional call-to-action at the end of the about copy.' }),
   ],
   preview: { prepare: () => ({ title: 'About' }) },
 });
@@ -73,7 +76,8 @@ export const bsProcessSection = defineType({
   title: 'How It Works',
   type: 'object',
   fields: [
-    defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
     defineField({ name: 'steps', title: 'Steps', type: 'array', of: [{ type: 'bsProcessStep' }] }),
   ],
   preview: { prepare: () => ({ title: 'How It Works' }) },
@@ -84,7 +88,9 @@ export const bsReviewsSection = defineType({
   title: 'Reviews',
   type: 'object',
   fields: [
-    defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    // `showRating` is the spec's `showSummary` (rating + count chip).
     defineField({ name: 'showRating', title: 'Show Aggregate Rating', type: 'boolean', initialValue: true }),
     defineField({
       name: 'reviews',
@@ -103,8 +109,19 @@ export const bsContactSection = defineType({
   type: 'object',
   fields: [
     defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    // `subhead` carries the spec's `intro` reassurance line.
     defineField({ name: 'subhead', title: 'Subhead', type: 'text', rows: 2 }),
     defineField({ name: 'address', title: 'Contact Panel', type: 'bsAddress' }),
+    defineField({ name: 'formLabels', title: 'Form Labels', type: 'bsFormLabels', description: 'Override the lead-form field/button labels. Defaults applied when empty.' }),
+    defineField({
+      name: 'formEndpoint',
+      title: 'Form Endpoint',
+      type: 'string',
+      initialValue: '/api/bs/lead',
+      description: 'Where the lead form POSTs. Defaults to the operator lead endpoint.',
+    }),
+    defineField({ name: 'showDetails', title: 'Show Contact Details Panel', type: 'boolean', initialValue: true, description: 'Render the phone/address/hours/service-area panel.' }),
+    defineField({ name: 'showMap', title: 'Show Service-Area Map', type: 'boolean', initialValue: false, description: 'Render a styled service-area map block (Bold/Trust layouts).' }),
   ],
   preview: { prepare: () => ({ title: 'Contact' }) },
 });

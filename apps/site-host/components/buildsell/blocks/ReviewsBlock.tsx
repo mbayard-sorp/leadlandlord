@@ -1,20 +1,11 @@
 import type { BuildSellSection, BuildSellReview } from '@/lib/sanity';
+import { Stars } from '../bs-svg';
 
 interface ReviewsBlockProps {
   section: BuildSellSection;
   layoutVariant: 'split' | 'bold' | 'trust';
-}
-
-function Stars({ rating }: { rating: number }) {
-  return (
-    <span className="bs-rating" aria-label={`${rating} out of 5 stars`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <span key={i} aria-hidden="true" style={{ color: i < rating ? 'var(--bs-accent)' : 'var(--bs-muted)' }}>
-          ★
-        </span>
-      ))}
-    </span>
-  );
+  rating?: number | null;
+  reviewCount?: number | null;
 }
 
 function ReviewCard({ review, className }: { review: BuildSellReview; className?: string }) {
@@ -47,7 +38,7 @@ function ReviewCard({ review, className }: { review: BuildSellReview; className?
  * - bold:   featured review (large) + 2 supporting reviews side by side
  * - trust:  masonry-style staggered grid (CSS column-count)
  */
-export function ReviewsBlock({ section, layoutVariant }: ReviewsBlockProps) {
+export function ReviewsBlock({ section, layoutVariant, rating, reviewCount }: ReviewsBlockProps) {
   const reviews = section.reviews ?? [];
   const isBold = layoutVariant === 'bold';
   const isTrust = layoutVariant === 'trust';
@@ -55,17 +46,32 @@ export function ReviewsBlock({ section, layoutVariant }: ReviewsBlockProps) {
   const featured = reviews.find((r) => r.featured) ?? reviews[0];
   const supporting = reviews.filter((r) => r !== featured).slice(0, 2);
 
+  // Real aggregate from the doc root; falls back to the review set when absent.
+  const avgRating =
+    rating ??
+    (reviews.length
+      ? reviews.reduce((sum, r) => sum + (r.rating ?? 5), 0) / reviews.length
+      : null);
+  const countLabel = reviewCount ? `${reviewCount.toLocaleString()} reviews` : null;
+
   return (
     <section className="bs-section bs-reveal" id="reviews">
       <div className="bs-container">
-        {section.heading && (
-          <h2 className="bs-section-title">{section.heading}</h2>
-        )}
+        <div className="bs-section-head">
+          {section.eyebrow && (
+            <p className="bs-section-eyebrow">{section.eyebrow}</p>
+          )}
+          {section.heading && (
+            <h2 className="bs-section-title">{section.heading}</h2>
+          )}
+        </div>
 
-        {section.showRating && (
+        {section.showRating && avgRating != null && (
           <div className="bs-reviews-aggregate">
-            <Stars rating={5} />
-            <span className="bs-rating-label">5.0 average</span>
+            <Stars rating={Number(avgRating.toFixed(1))} size={18} />
+            <span className="bs-rating-label">
+              {avgRating.toFixed(1)} / 5{countLabel ? ` · ${countLabel}` : ''}
+            </span>
           </div>
         )}
 

@@ -94,6 +94,13 @@ below is required unless marked optional.
 3–6 anchor links. Standard: `#services`, `#about`, `#how-it-works`, `#reviews`,
 `#contact`.
 
+### `navCta` & `navShowPhone`
+- `navCta`: the nav-bar call-to-action button. Label from the primary CTA pool
+  (e.g. "Get a Free Quote"), href `#contact`, style `primary`.
+- `navShowPhone`: set `true` so the nav shows the click-to-call phone button (the
+  renderer injects the real number). Default to `true` unless the trade clearly
+  has no phone-forward angle.
+
 ### `theme`
 Use the exact values from the rotation directives for `layoutVariant`, `preset`,
 `fontHeading`, `fontBody`. Supply all 8 hex colors using the palette name as a guide:
@@ -120,6 +127,9 @@ Use the exact values from the rotation directives for `layoutVariant`, `preset`,
   **No text, logos, or signage in the image.**
 
 ### `services`
+- `eyebrow`: a short kicker (2–4 words) that renders uppercase above the heading
+  (e.g. "What We Offer", "Full-Service Care"). Title-case is fine — the renderer
+  styles it uppercase. Distinct from the heading.
 - `heading`: use the exact string from the rotation directives.
 - `subhead` *(optional)*: use the exact string from the rotation directives if provided.
 - `cards`: 4–6 cards. Each card: a lucide icon name, a short title (2–4 words), and a
@@ -127,21 +137,33 @@ Use the exact values from the rotation directives for `layoutVariant`, `preset`,
   trade-specific, not generic filler. Optional `link` href (usually `#contact`).
 
 ### `about`
+- `eyebrow`: a short kicker (2–4 words) that renders uppercase above the heading
+  (e.g. "Who We Are", "Local & Trusted"). Distinct from the heading.
 - `heading`: local expert angle (e.g. "Your {City} {Trade} Specialists").
 - `body`: 2–3 sentences. Reference the city. No invented founding years, employee
   counts, or license numbers. Trade-typical credibility ("fast response", "upfront
   pricing", "quality materials").
 - `stats`: 2–4 items. Values phrased as ranges ("10+", "500+", "Same-day") — never
   invented exact numbers. Labels concise ("Years in the area", "Jobs completed").
+  **When `theme.layoutVariant` is `bold`, produce exactly 4 stats** (e.g. years in
+  the area, jobs/pools serviced, rating, satisfaction) — the bold variant renders a
+  dedicated full-width dark stats band that wants four figures.
+- `cta` *(optional)*: a closing call-to-action at the end of the about column. Label
+  from the primary CTA pool (e.g. "Get a Free Quote"), href `#contact`, style
+  `primary`. Optional — include it especially for the bold variant.
 - `imagePrompt` *(optional)*: a 4:3 scene for the about section. Team, tools, or
   finished work. No text in image.
 
 ### `process`
+- `eyebrow`: a short kicker (2–4 words) that renders uppercase above the heading
+  (e.g. "Simple Steps", "How We Work"). Distinct from the heading.
 - `heading`: clear action label (e.g. "How It Works", "Our Simple Process").
 - `steps`: 3–4 steps. Each: lucide icon, title, 1-sentence description. Concrete and
   reassuring — tell the customer exactly what to expect.
 
 ### `reviews`
+- `eyebrow`: a short kicker (2–4 words) that renders uppercase above the heading
+  (e.g. "Customer Love", "Real Reviews"). Distinct from the heading.
 - `heading`: use the exact string from the rotation directives.
 - `items`: 3–6 original representative testimonials. Each:
   - `author`: first name + last initial (e.g. "Maria G."). Varied names across items.
@@ -163,6 +185,11 @@ become `featured` in the renderer.
 - `serviceArea`: city + surrounding areas (e.g. "Austin and surrounding Travis County").
 - `formLabels` *(optional)*: override the default form field labels if the trade warrants
   different copy (e.g. plumber might use "Describe the issue" for the message field).
+- `formEndpoint` *(optional)*: leave unset — it defaults to `/api/bs/lead`. Only set it
+  if a non-standard lead endpoint is explicitly required.
+- `showDetails` *(optional)*: whether to render the contact info panel (address / phone /
+  hours). Default `true`.
+- `showMap` *(optional)*: whether to render a service-area map block. Default `false`.
 
 ### `footer`
 - `tagline`: 8–12 words. Brand name + trade + one benefit. No invented facts.

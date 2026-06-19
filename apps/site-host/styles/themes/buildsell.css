@@ -1787,3 +1787,397 @@ a.bs-ugc-card:hover {
     transform: none;
   }
 }
+
+/* ==========================================================================
+ * PREMIUM DESIGN-FIDELITY LAYER (2026-06-19)
+ * Reconciles the live templates to the claude.ai/design "Pool Spec Site"
+ * reference across all 3 variants. Appended so cascade order lets these win.
+ * ======================================================================== */
+
+/* ---- Tokens: a primary-tinted glow for the "expensive" CTA feel ---------- */
+.bs-root {
+  --bs-glow: 0 12px 26px -10px var(--bs-primary);
+  --bs-glow-strong: 0 18px 34px -12px var(--bs-primary);
+  --bs-hairline: 1px solid color-mix(in srgb, var(--bs-text) 8%, transparent);
+}
+
+/* Themed text selection */
+.bs-root ::selection {
+  background: color-mix(in srgb, var(--bs-primary) 22%, transparent);
+  color: var(--bs-text);
+}
+
+/* ---- Typography: tight display tracking + correct weights ---------------- */
+.bs-root .bs-hero-headline { font-weight: 700; letter-spacing: -0.03em; }
+.bs-root .bs-section-title { letter-spacing: -0.02em; }
+
+/* ---- Section eyebrow kicker (services/about/process/reviews) ------------- */
+.bs-section-head { margin-bottom: 2rem; }
+.bs-section-head .bs-section-title { margin-bottom: 0.5rem; }
+.bs-section-head .bs-section-intro { margin-bottom: 0; }
+.bs-section-eyebrow {
+  font-family: var(--bs-font-heading);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bs-primary);
+  margin: 0 0 0.625rem;
+}
+
+/* ---- Accent star ratings (lucide-style filled SVG) ---------------------- */
+.bs-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--bs-accent);
+  line-height: 0;
+}
+.bs-stars svg { display: block; }
+
+/* ---- CTA glow + trailing arrow ----------------------------------------- */
+.bs-root .bs-btn-primary { box-shadow: var(--bs-glow); }
+.bs-root .bs-btn-primary:hover { box-shadow: var(--bs-glow-strong); transform: translateY(-2px); }
+.bs-cta-arrow { transition: transform 0.2s ease; }
+.bs-btn:hover .bs-cta-arrow { transform: translateX(3px); }
+
+/* ---- Cards: hairline + primary-tint hover ------------------------------- */
+.bs-root .bs-card { border: var(--bs-hairline); }
+.bs-root .bs-card:hover { border-color: color-mix(in srgb, var(--bs-primary) 35%, transparent); }
+.bs-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-top: 0.85rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--bs-primary);
+  text-decoration: none;
+}
+.bs-card-link:hover { gap: 0.6em; }
+
+/* ---- bsFloat hero accent animation ------------------------------------- */
+@keyframes bsFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.bs-hero-float-card--top { animation: bsFloat 5s ease-in-out infinite; }
+
+/* ---- Hero rating ordering + trust "rating IS the hero" pill ------------- */
+.bs-hero-rating { margin-top: 0; margin-bottom: 1.25rem; }
+.bs-hero-rating--pill {
+  align-self: center;
+  margin: 0 auto 1.25rem;
+  background: var(--bs-surface);
+  border: 1px solid color-mix(in srgb, var(--bs-text) 9%, transparent);
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  box-shadow: 0 10px 26px -16px color-mix(in srgb, var(--bs-text) 60%, transparent);
+  font-weight: 600;
+}
+
+/* ---- Nav: logo mark, per-variant treatment, trust inline rating -------- */
+.bs-nav-brand { display: inline-flex; align-items: center; gap: 0.6rem; }
+.bs-nav-brand-mark,
+.bs-footer-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.65rem;
+  background: var(--bs-primary);
+  color: var(--bs-on-primary);
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  box-shadow: 0 6px 16px -6px var(--bs-primary);
+  flex: none;
+}
+.bs-footer-brand { display: inline-flex; align-items: center; gap: 0.55rem; }
+.bs-footer-brand-mark { width: 2rem; height: 2rem; font-size: 0.95rem; }
+.bs-nav-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--bs-text);
+}
+.bs-nav-rating .bs-stars { color: var(--bs-accent); }
+/* Bold: transparent nav floating over the dark hero until scrolled */
+.bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) {
+  background: transparent;
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+.bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-brand,
+.bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-links a {
+  color: var(--bs-on-primary);
+}
+
+/* ---- Bold: overlapping trust strip (elevated icon-tile cards) ----------- */
+.bs-bold-trust-strip {
+  position: relative;
+  z-index: 5;
+  margin-top: -2.75rem;
+  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+}
+.bs-bold-trust-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bs-surface);
+  border: var(--bs-hairline);
+  border-radius: 0.9rem;
+  padding: 0.9rem 1.1rem;
+  box-shadow: 0 16px 36px -20px color-mix(in srgb, var(--bs-text) 60%, transparent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--bs-text);
+}
+.bs-bold-trust-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: none;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--bs-primary) 12%, var(--bs-surface));
+  color: var(--bs-primary);
+}
+
+/* ---- Bold: dedicated full-width dark stats band ------------------------- */
+.bs-stats-band {
+  background: var(--bs-text);
+  color: var(--bs-bg);
+  padding-block: clamp(2rem, 4vw, 3rem);
+}
+.bs-stats-band-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+  text-align: center;
+}
+.bs-stats-band-value {
+  color: var(--bs-primary);
+  font-size: clamp(2.25rem, 4.5vw, 3rem);
+}
+.bs-stats-band-label {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  color: color-mix(in srgb, var(--bs-bg) 75%, transparent);
+}
+
+/* ---- Trust: credential pills (about) ----------------------------------- */
+.bs-credential-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+.bs-credential-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-primary) 10%, var(--bs-surface));
+  border: 1px solid color-mix(in srgb, var(--bs-primary) 20%, transparent);
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--bs-text);
+}
+.bs-credential-pill strong { color: var(--bs-primary); font-family: var(--bs-font-heading); }
+.bs-about-cta { margin-top: 1.5rem; }
+
+/* ---- Trust: services compact -> 3-col card grid ------------------------- */
+.bs-root .bs-services-compact {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  max-width: none;
+  gap: 1rem;
+}
+.bs-services-compact-row {
+  align-items: center;
+  background: var(--bs-surface);
+  border: var(--bs-hairline);
+  border-radius: 0.9rem;
+  padding: 1rem 1.1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.bs-services-compact-row:hover {
+  border-color: color-mix(in srgb, var(--bs-primary) 35%, transparent);
+  box-shadow: var(--bs-shadow-sm);
+}
+@media (max-width: 860px) { .bs-root .bs-services-compact { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .bs-root .bs-services-compact { grid-template-columns: 1fr; } }
+
+/* ---- Process connectors (split solid-dash, trust dotted) --------------- */
+.bs-process-horizontal { position: relative; }
+.bs-process-horizontal::before {
+  content: '';
+  position: absolute;
+  top: 1.6rem;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--bs-primary) 40%, transparent) 0 9px, transparent 9px 17px);
+  z-index: 0;
+}
+.bs-process-horizontal .bs-step-num { position: relative; z-index: 1; }
+
+.bs-process-trust {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  text-align: center;
+}
+.bs-process-trust::before {
+  content: '';
+  position: absolute;
+  top: 2.9rem;
+  left: 13%;
+  right: 13%;
+  height: 0;
+  border-top: 2px dashed color-mix(in srgb, var(--bs-primary) 35%, transparent);
+  z-index: 0;
+}
+.bs-process-trust-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+.bs-process-trust-card .bs-step-num { margin: 0 auto; }
+@media (max-width: 720px) {
+  .bs-process-horizontal::before,
+  .bs-process-trust::before { display: none; }
+}
+
+/* ---- Contact: styled info panel + icon-tile detail rows + map ---------- */
+.bs-contact-info {
+  border-radius: var(--bs-radius-card);
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  background: color-mix(in srgb, var(--bs-text) 4%, var(--bs-surface));
+  border: var(--bs-hairline);
+}
+.bs-contact-details { display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem; }
+.bs-contact-detail { display: flex; align-items: flex-start; gap: 0.85rem; }
+.bs-contact-detail-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  flex: none;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--bs-primary) 12%, var(--bs-surface));
+  color: var(--bs-primary);
+}
+.bs-contact-detail-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--bs-muted);
+  margin-bottom: 0.15rem;
+}
+.bs-contact-detail-value { font-size: 0.95rem; line-height: 1.45; }
+.bs-contact-detail-link { color: inherit; font-weight: 600; text-decoration: none; }
+.bs-contact-detail-link:hover { color: var(--bs-primary); }
+.bs-contact-map {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 140px;
+  border-radius: 0.9rem;
+  color: var(--bs-primary);
+  background:
+    repeating-linear-gradient(45deg, color-mix(in srgb, var(--bs-primary) 7%, transparent) 0 12px, transparent 12px 26px),
+    color-mix(in srgb, var(--bs-primary) 6%, var(--bs-surface));
+  border: 1px dashed color-mix(in srgb, var(--bs-primary) 30%, transparent);
+}
+.bs-contact-map-label { font-weight: 600; font-size: 0.9rem; color: var(--bs-text); }
+/* Dark info panel (trust): re-tint the tiles + labels for contrast */
+.bs-contact-info--dark { background-color: color-mix(in srgb, var(--bs-primary-dark) 80%, #000); border-color: transparent; }
+.bs-contact-info--dark .bs-section-title,
+.bs-contact-info--dark .bs-contact-detail-value { color: var(--bs-on-primary); }
+.bs-contact-info--dark .bs-section-intro,
+.bs-contact-info--dark .bs-contact-detail-label { color: color-mix(in srgb, var(--bs-on-primary) 70%, transparent); }
+.bs-contact-info--dark .bs-contact-detail-icon {
+  background: color-mix(in srgb, var(--bs-on-primary) 14%, transparent);
+  color: var(--bs-on-primary);
+}
+.bs-contact-info--dark .bs-contact-detail-link { color: var(--bs-on-primary); }
+
+/* ---- Reviews: real aggregate as a centered pill chip ------------------- */
+.bs-reviews-aggregate {
+  width: fit-content;
+  margin: 0 auto 2rem;
+  background: var(--bs-surface);
+  border: var(--bs-hairline);
+  border-radius: 999px;
+  padding: 0.5rem 1.15rem;
+  box-shadow: var(--bs-shadow-sm);
+}
+.bs-reviews-aggregate .bs-rating-label { font-weight: 700; color: var(--bs-text); }
+
+/* ---- Form inputs: recess against the panel + stronger focus ring ------- */
+.bs-form-field input,
+.bs-form-field textarea { background-color: var(--bs-bg); }
+.bs-form-field input:focus,
+.bs-form-field textarea:focus {
+  outline: none;
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bs-primary) 18%, transparent);
+}
+
+/* ---- Gradient depth on image placeholders (layered highlight + sheen) --- */
+.bs-hero-image-placeholder,
+.bs-hero-bold-bg-gradient,
+.bs-hero-trust-tile--gradient-a,
+.bs-hero-trust-tile--gradient-b,
+.bs-hero-trust-tile--gradient-c {
+  background-image:
+    radial-gradient(120% 120% at 80% 0%, rgba(255, 255, 255, 0.5), transparent 45%),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.07) 0 12px, transparent 12px 30px),
+    linear-gradient(135deg, color-mix(in srgb, var(--bs-primary) 22%, var(--bs-surface)), color-mix(in srgb, var(--bs-primary-dark) 28%, var(--bs-surface)));
+}
+
+/* ---- Footer: light surface footer with social tiles ------------------- */
+.bs-root .bs-footer {
+  background-color: var(--bs-surface);
+  color: var(--bs-muted);
+  border-top: var(--bs-hairline);
+}
+.bs-root .bs-footer-brand,
+.bs-root .bs-footer-heading { color: var(--bs-text); }
+.bs-root .bs-footer-links a,
+.bs-root .bs-footer-tagline { color: var(--bs-muted); }
+.bs-root .bs-footer-links a:hover { color: var(--bs-primary); }
+.bs-root .bs-social-links a {
+  border-radius: 0.7rem;
+  background: var(--bs-bg);
+  color: var(--bs-muted);
+  border: var(--bs-hairline);
+}
+.bs-root .bs-social-links a:hover { color: var(--bs-primary); border-color: color-mix(in srgb, var(--bs-primary) 35%, transparent); }
+.bs-root .bs-footer-legal { border-top: var(--bs-hairline); color: var(--bs-muted); }
+
+/* ---- Respect reduced motion for the new motion --------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .bs-hero-float-card--top { animation: none; }
+  .bs-root .bs-btn-primary:hover { transform: none; }
+  .bs-cta-arrow, .bs-btn:hover .bs-cta-arrow { transition: none; transform: none; }
+}

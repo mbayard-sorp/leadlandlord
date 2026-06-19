@@ -51,10 +51,10 @@ function animateCounter(el: HTMLElement, num: number, suffix: string, duration: 
 export function BuildSellMotion() {
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cleanups: Array<() => void> = [];
 
-    // --- 1. Scroll-reveal --------------------------------------------------
+    // --- 1. Scroll-reveal (the only motion gated on reduced-motion) -------
     const revealEls = Array.from(document.querySelectorAll<HTMLElement>('.bs-reveal'));
-
     if (prefersReduced) {
       // Paint immediately — content must be visible without motion
       revealEls.forEach((el) => el.classList.add('is-revealed'));
@@ -71,31 +71,22 @@ export function BuildSellMotion() {
         { threshold: 0.12, rootMargin: '0px 0px -48px 0px' },
       );
       revealEls.forEach((el) => revealObserver.observe(el));
-
-      return () => {
-        revealObserver.disconnect();
-      };
+      cleanups.push(() => revealObserver.disconnect());
     }
 
-    // --- 2. Sticky-nav scrolled state ------------------------------------
+    // --- 2. Sticky-nav scrolled state (always on) ------------------------
     const nav = document.querySelector<HTMLElement>('[data-nav]');
     function handleScroll() {
       if (!nav) return;
-      if (window.scrollY > 20) {
-        nav.classList.add('is-scrolled');
-      } else {
-        nav.classList.remove('is-scrolled');
-      }
+      nav.classList.toggle('is-scrolled', window.scrollY > 20);
     }
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll(); // set correct initial state
+    cleanups.push(() => window.removeEventListener('scroll', handleScroll));
 
-    // --- 3. Stat counters ------------------------------------------------
+    // --- 3. Stat counters (always on; reduced-motion paints final value) -
     const statEls = Array.from(document.querySelectorAll<HTMLElement>('.bs-stat-value'));
-
-    if (prefersReduced) {
-      // No-op: server-rendered final value is already visible
-    } else {
+    if (!prefersReduced) {
       const counterObserver = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
@@ -110,7 +101,6 @@ export function BuildSellMotion() {
         },
         { threshold: 0.5 },
       );
-
       statEls.forEach((el) => {
         // Stash the final value before we animate so a re-observe never double-runs
         if (!el.dataset.bsStatFinal) {
@@ -118,16 +108,11 @@ export function BuildSellMotion() {
         }
         counterObserver.observe(el);
       });
-
-      return () => {
-        window.removeEventListener('scroll', handleScroll);
-        counterObserver.disconnect();
-      };
+      cleanups.push(() => counterObserver.disconnect());
     }
+    // reduced-motion: server-rendered final stat value is already visible (no-op)
 
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => cleanups.forEach((fn) => fn());
   }, []);
 
   return null;

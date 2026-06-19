@@ -156,6 +156,25 @@ export const bsSeo = defineType({
 });
 
 /**
+ * Editable labels for the contact lead form. Authored by the spec-site-builder
+ * and rendered by ContactBlock (falls back to sensible defaults when absent).
+ * Declared so the writer's `_type: 'bsFormLabels'` resolves in Studio.
+ */
+export const bsFormLabels = defineType({
+  name: 'bsFormLabels',
+  title: 'Form Labels',
+  type: 'object',
+  fields: [
+    defineField({ name: 'name', title: 'Name Field', type: 'string' }),
+    defineField({ name: 'phone', title: 'Phone Field', type: 'string' }),
+    defineField({ name: 'email', title: 'Email Field', type: 'string' }),
+    defineField({ name: 'message', title: 'Message Field', type: 'string' }),
+    defineField({ name: 'submit', title: 'Submit Button', type: 'string' }),
+  ],
+  preview: { select: { title: 'submit' } },
+});
+
+/**
  * One curated social / UGC post shown in the bsUgcSection gallery.
  *
  * `thumbnail` is the displayed image (a post screenshot captured during the
@@ -244,6 +263,7 @@ export const buildsellObjectTypes = [
   bsSocialLink,
   bsAddress,
   bsSeo,
+  bsFormLabels,
   bsUgcItem,
   bsMigrated,
   bsMigratedUgcItem,

@@ -1,4 +1,5 @@
 import { Icon } from '../Icon';
+import { ArrowRightIcon } from '../bs-svg';
 import type { BuildSellSection } from '@/lib/sanity';
 
 interface ServicesBlockProps {
@@ -20,12 +21,17 @@ export function ServicesBlock({ section, layoutVariant }: ServicesBlockProps) {
   return (
     <section className="bs-section bs-section-alt bs-reveal" id="services">
       <div className="bs-container">
-        {section.heading && (
-          <h2 className="bs-section-title">{section.heading}</h2>
-        )}
-        {section.subhead && (
-          <p className="bs-section-intro">{section.subhead}</p>
-        )}
+        <div className="bs-section-head">
+          {section.eyebrow && (
+            <p className="bs-section-eyebrow">{section.eyebrow}</p>
+          )}
+          {section.heading && (
+            <h2 className="bs-section-title">{section.heading}</h2>
+          )}
+          {section.subhead && (
+            <p className="bs-section-intro">{section.subhead}</p>
+          )}
+        </div>
 
         {/* trust: compact list */}
         {isTrust && (
@@ -92,6 +98,12 @@ export function ServicesBlock({ section, layoutVariant }: ServicesBlockProps) {
                 </h3>
                 {svc.description && (
                   <p className="bs-services-desc">{svc.description}</p>
+                )}
+                {svc.link && (
+                  <a href={svc.link} className="bs-card-link">
+                    Learn more
+                    <ArrowRightIcon size={15} />
+                  </a>
                 )}
               </div>
             ))}

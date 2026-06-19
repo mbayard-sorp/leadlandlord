@@ -1,5 +1,7 @@
 import Image from 'next/image';
 import type { BuildSellSection } from '@/lib/sanity';
+import { Icon } from '../Icon';
+import { Stars, ArrowRightIcon } from '../bs-svg';
 
 interface HeroBlockProps {
   section: BuildSellSection;
@@ -40,7 +42,6 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
 
   const ratingDisplay = rating ?? 5;
   const reviewLabel = reviewCount ? `${reviewCount.toLocaleString()} reviews` : 'Top-rated local service';
-  const stars = '★★★★★';
 
   function HeadlineNode() {
     return (
@@ -64,10 +65,12 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
         {phone ? (
           <a href={`tel:${phone}`} className="bs-btn bs-btn-primary bs-btn-lg">
             Call {phone}
+            <ArrowRightIcon />
           </a>
         ) : (
           <a href="#contact" className="bs-btn bs-btn-primary bs-btn-lg">
             {section.primaryCta?.label ?? 'Get a Free Quote'}
+            <ArrowRightIcon />
           </a>
         )}
         {section.secondaryCta?.href && (
@@ -79,11 +82,11 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
     );
   }
 
-  function RatingBadge() {
+  function RatingBadge({ pill }: { pill?: boolean }) {
     if (!section.showRating) return null;
     return (
-      <div className="bs-rating bs-hero-rating">
-        <span aria-hidden="true" style={{ color: 'var(--bs-accent)' }}>{stars}</span>
+      <div className={`bs-rating bs-hero-rating${pill ? ' bs-hero-rating--pill' : ''}`}>
+        <Stars rating={ratingDisplay} size={pill ? 18 : 16} />
         <span className="bs-rating-label">
           {ratingDisplay.toFixed(1)} · {reviewLabel}
         </span>
@@ -96,67 +99,83 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
     return (
       <div className="bs-badges">
         {section.badges.map((badge, i) => (
-          <span key={i} className="bs-badge">{badge.label}</span>
+          <span key={i} className="bs-badge">
+            {badge.icon && <Icon name={badge.icon} size={15} />}
+            {badge.label}
+          </span>
         ))}
       </div>
     );
   }
 
-  // ---- BOLD variant: full-width dark hero, image as low-opacity background ----
+  // ---- BOLD variant: full-width dark hero + overlapping trust strip ----
   if (isBold) {
+    const trustBadges = (section.badges ?? []).slice(0, 4);
     return (
-      <section className="bs-hero bs-reveal" id="home">
-        {/* Background image (next/image fill) or gradient empty-state */}
-        <div className="bs-hero-bold-bg" aria-hidden="true">
-          {section.imageUrl ? (
-            <Image
-              src={section.imageUrl}
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              style={{ objectFit: 'cover', opacity: 0.45 }}
-            />
-          ) : (
-            <div className="bs-hero-bold-bg-gradient" />
-          )}
-        </div>
-
-        <div className="bs-container">
-          <div className="bs-hero-inner">
-            {section.eyebrow && (
-              <span className="bs-hero-eyebrow">{section.eyebrow}</span>
-            )}
-            <HeadlineNode />
-            {section.subhead && (
-              <p className="bs-hero-subhead">{section.subhead}</p>
-            )}
-            <ActionRow />
-            <RatingBadge />
-            <BadgeRow />
-
-            {/* Overlapping trust strip: 3 stat cards that overlap the section below */}
-            {section.badges && section.badges.length > 0 && (
-              <div className="bs-hero-bold-trust-strip" aria-hidden="true">
-                {section.badges.slice(0, 3).map((badge, i) => (
-                  <div key={i} className="bs-hero-bold-trust-card">
-                    <span>{badge.label}</span>
-                  </div>
-                ))}
-              </div>
+      <>
+        <section className="bs-hero bs-reveal" id="home">
+          {/* Background image (next/image fill) or gradient empty-state */}
+          <div className="bs-hero-bold-bg" aria-hidden="true">
+            {section.imageUrl ? (
+              <Image
+                src={section.imageUrl}
+                alt=""
+                fill
+                priority
+                sizes="100vw"
+                style={{ objectFit: 'cover', opacity: 0.45 }}
+              />
+            ) : (
+              <div className="bs-hero-bold-bg-gradient" />
             )}
           </div>
-        </div>
-      </section>
+
+          <div className="bs-container">
+            <div className="bs-hero-inner">
+              {section.eyebrow && (
+                <span className="bs-hero-eyebrow">{section.eyebrow}</span>
+              )}
+              <HeadlineNode />
+              {section.subhead && (
+                <p className="bs-hero-subhead">{section.subhead}</p>
+              )}
+              <RatingBadge />
+              <ActionRow />
+              <BadgeRow />
+            </div>
+          </div>
+        </section>
+
+        {/* Overlapping trust strip: elevated surface cards pulled up over the
+            next section's top edge (designed -42px overlap). */}
+        {trustBadges.length > 0 && (
+          <div className="bs-container">
+            <div className="bs-bold-trust-strip">
+              {trustBadges.map((badge, i) => (
+                <div key={i} className="bs-bold-trust-card">
+                  {badge.icon && (
+                    <span className="bs-bold-trust-icon" aria-hidden="true">
+                      <Icon name={badge.icon} size={20} />
+                    </span>
+                  )}
+                  <span className="bs-bold-trust-label">{badge.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
-  // ---- TRUST variant: narrow centered, then a wide 3-image strip ----
+  // ---- TRUST variant: rating leads, centered, then a wide 3-image strip ----
   if (isTrust) {
     return (
       <section className="bs-hero bs-reveal" id="home">
         <div className="bs-container">
           <div className="bs-hero-inner">
+            {/* Rating IS the hero — prominent pill on top. */}
+            <RatingBadge pill />
             {section.eyebrow && (
               <span className="bs-hero-eyebrow">{section.eyebrow}</span>
             )}
@@ -164,9 +183,8 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
             {section.subhead && (
               <p className="bs-hero-subhead">{section.subhead}</p>
             )}
-            <ActionRow />
-            <RatingBadge />
             <BadgeRow />
+            <ActionRow />
           </div>
 
           {/* 3-image strip — each tile uses its own image when present (auto-filled
@@ -212,8 +230,8 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
             {section.subhead && (
               <p className="bs-hero-subhead">{section.subhead}</p>
             )}
-            <ActionRow />
             <RatingBadge />
+            <ActionRow />
             <BadgeRow />
           </div>
 
@@ -236,7 +254,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
                 {/* Floating credibility cards overlaid on the image */}
                 {section.showRating && (
                   <div className="bs-hero-float-card bs-hero-float-card--top" aria-hidden="true">
-                    <span style={{ color: 'var(--bs-accent)', fontSize: '0.85rem' }}>★★★★★</span>
+                    <Stars rating={ratingDisplay} size={14} />
                     <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--bs-text)' }}>
                       {ratingDisplay.toFixed(1)} · {reviewLabel}
                     </span>
@@ -244,6 +262,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
                 )}
                 {section.badges && section.badges[0] && (
                   <div className="bs-hero-float-card bs-hero-float-card--bottom" aria-hidden="true">
+                    {section.badges[0].icon && <Icon name={section.badges[0].icon} size={16} />}
                     <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--bs-text)' }}>
                       {section.badges[0].label}
                     </span>

@@ -20,9 +20,14 @@ export function ProcessBlock({ section, layoutVariant }: ProcessBlockProps) {
   return (
     <section className="bs-section bs-section-alt bs-reveal" id="how-it-works">
       <div className="bs-container">
-        {section.heading && (
-          <h2 className="bs-section-title">{section.heading}</h2>
-        )}
+        <div className="bs-section-head">
+          {section.eyebrow && (
+            <p className="bs-section-eyebrow">{section.eyebrow}</p>
+          )}
+          {section.heading && (
+            <h2 className="bs-section-title">{section.heading}</h2>
+          )}
+        </div>
 
         {/* bold: vertical timeline */}
         {isBold && (
@@ -46,20 +51,18 @@ export function ProcessBlock({ section, layoutVariant }: ProcessBlockProps) {
           </div>
         )}
 
-        {/* trust: centered card column */}
+        {/* trust: horizontal card row with a dotted connector behind the numbers */}
         {isTrust && (
-          <div className="bs-process-centered">
+          <div className="bs-process-trust" data-steps={steps.length}>
             {steps.map((step, i) => (
-              <div key={i} className="bs-card bs-process-centered-card">
+              <div key={i} className="bs-card bs-process-trust-card">
                 <div className="bs-step-num" aria-hidden="true">
                   {step.icon ? <Icon name={step.icon} size={18} /> : String(i + 1)}
                 </div>
-                <div>
-                  <h3 className="bs-process-step-title">{step.title}</h3>
-                  {step.description && (
-                    <p className="bs-process-step-desc">{step.description}</p>
-                  )}
-                </div>
+                <h3 className="bs-process-step-title">{step.title}</h3>
+                {step.description && (
+                  <p className="bs-process-step-desc">{step.description}</p>
+                )}
               </div>
             ))}
           </div>
