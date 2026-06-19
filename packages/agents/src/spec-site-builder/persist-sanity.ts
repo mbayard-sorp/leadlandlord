@@ -211,6 +211,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     {
       _key: 'services',
       _type: 'bsServicesSection',
+      ...(content.services.eyebrow ? { eyebrow: content.services.eyebrow } : {}),
       // B-HEADINGS fix: heading comes from model output, never hardcoded.
       heading: content.services.heading,
       subhead: content.services.subhead ?? undefined,
@@ -226,9 +227,11 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     {
       _key: 'about',
       _type: 'bsAboutSection',
+      ...(content.about.eyebrow ? { eyebrow: content.about.eyebrow } : {}),
       heading: content.about.heading,
       body: aboutBody,
       stats: content.about.stats.map((s, i) => ({ _key: `st${i}`, _type: 'bsStatItem', ...s })),
+      ...(content.about.cta ? { cta: { _type: 'bsCtaButton', ...content.about.cta } } : {}),
       ...(aboutImageAssetId
         ? { image: { _type: 'image', asset: { _type: 'reference', _ref: aboutImageAssetId } } }
         : {}),
@@ -236,12 +239,14 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     {
       _key: 'process',
       _type: 'bsProcessSection',
+      ...(content.process.eyebrow ? { eyebrow: content.process.eyebrow } : {}),
       heading: content.process.heading,
       steps: content.process.steps.map((s, i) => ({ _key: `ps${i}`, _type: 'bsProcessStep', ...s })),
     },
     {
       _key: 'reviews',
       _type: 'bsReviewsSection',
+      ...(content.reviews.eyebrow ? { eyebrow: content.reviews.eyebrow } : {}),
       // B-HEADINGS fix: heading comes from model output, never hardcoded.
       heading: content.reviews.heading,
       showRating: true,
@@ -252,6 +257,11 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       _type: 'bsContactSection',
       heading: content.contact.heading,
       subhead: content.contact.subhead,
+      // Lead form POST target — default the standard endpoint when the model omits it.
+      formEndpoint: content.contact.formEndpoint ?? '/api/bs/lead',
+      // Render controls — default showDetails on, showMap off (per design).
+      showDetails: content.contact.showDetails ?? true,
+      showMap: content.contact.showMap ?? false,
       ...(content.contact.formLabels
         ? {
             formLabels: {
@@ -300,7 +310,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
         _key: `fcol${i}`,
         _type: 'bsFooterColumn',
         heading: col.heading,
-        links: col.links.map((l, j) => ({ _key: `fcl${i}_${j}`, _type: 'bsFooterLink', ...l })),
+        links: col.links.map((l, j) => ({ _key: `fcl${i}_${j}`, _type: 'bsNavLink', ...l })),
       })),
       social: footerSocial.map((s, i) => ({
         _key: `soc${i}`,
@@ -310,7 +320,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       })),
       legalLinks: (content.footer.legalLinks ?? []).map((l, i) => ({
         _key: `ll${i}`,
-        _type: 'bsLegalLink',
+        _type: 'bsNavLink',
         ...l,
       })),
     },
@@ -337,6 +347,13 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     placeId: args.placeId ?? undefined,
     slug: { _type: 'slug', current: args.slug },
     navigation: content.navigation.map((n, i) => ({ _key: `nav${i}`, _type: 'bsNavLink', ...n })),
+    // Nav-level CTA + phone toggle (doc-root; already in the GROQ projection).
+    // navShowPhone defaults true at the renderer when omitted.
+    ...(content.navCta ? { navCta: { _type: 'bsCtaButton', ...content.navCta } } : {}),
+    ...(content.navShowPhone !== undefined ? { navShowPhone: content.navShowPhone } : {}),
+    // NOTE: doc-root `email`, `socials`, and `address` are intentionally left
+    // unpopulated — no renderer reads them (footer socials/address come from the
+    // footer/contact section blocks). Schema fields are retained, not written.
     // Colors are 100% preset-driven at render time (per-doc hex fields removed
     // 2026-06-19). Only the preset name, layout, and fonts are persisted.
     theme: {

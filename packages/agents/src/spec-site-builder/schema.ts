@@ -81,6 +81,14 @@ export const SpecSiteContent = z.object({
     ogImagePrompt: z.string().optional().describe('Scene description for the OG share image (1:1, no text).'),
   }),
   navigation: z.array(NavLink).min(3).max(6),
+  /**
+   * Nav-level CTA + phone toggle. Persisted onto the buildsellSite doc-root as
+   * `navCta` (bsCtaButton) + `navShowPhone` (boolean) so the renderer's sticky
+   * nav can be content-driven instead of hardcoding "Get a Free Quote" / the
+   * phone button. Optional — renderer falls back to its current defaults.
+   */
+  navCta: Cta.optional(),
+  navShowPhone: z.boolean().optional(),
   theme: z.object({
     preset: z.string(),
     layoutVariant: z.enum(['split', 'bold', 'trust']),
@@ -111,17 +119,21 @@ export const SpecSiteContent = z.object({
    * ..., spread picks them up without a projection change.
    */
   services: z.object({
+    eyebrow: z.string().optional().describe('Short uppercase-style kicker above the heading (e.g. "What We Offer").'),
     heading: z.string().describe('Section heading (e.g. "What We Do"). REQUIRED — no hardcoded fallback.'),
     subhead: z.string().optional(),
     cards: z.array(ServiceCard).min(4).max(6),
   }),
   about: z.object({
+    eyebrow: z.string().optional().describe('Short uppercase-style kicker above the heading (e.g. "Who We Are").'),
     heading: z.string(),
     body: z.string(),
     stats: z.array(z.object({ value: z.string(), label: z.string() })).min(2).max(4),
+    cta: Cta.optional().describe('Optional CTA at the end of the about column (e.g. "Get a Free Quote").'),
     imagePrompt: z.string().optional().describe('Scene description for the about/team image (4:3, no text).'),
   }),
   process: z.object({
+    eyebrow: z.string().optional().describe('Short uppercase-style kicker above the heading (e.g. "Simple Steps").'),
     heading: z.string(),
     steps: z.array(z.object({ icon: z.string(), title: z.string(), description: z.string() })).min(3).max(4),
   }),
@@ -130,6 +142,7 @@ export const SpecSiteContent = z.object({
    * bsReviewsSection.heading so the GROQ ..., spread picks it up.
    */
   reviews: z.object({
+    eyebrow: z.string().optional().describe('Short uppercase-style kicker above the heading (e.g. "Customer Love").'),
     heading: z.string().describe('Section heading (e.g. "What Our Customers Say"). REQUIRED — no hardcoded fallback.'),
     items: z
       .array(
@@ -151,6 +164,12 @@ export const SpecSiteContent = z.object({
     hours: z.string(),
     serviceArea: z.string(),
     formLabels: FormLabels.optional(),
+    /** Lead form POST target. Persist defaults to '/api/bs/lead' when omitted. */
+    formEndpoint: z.string().optional(),
+    /** Show the contact info panel (address/phone/hours). Persist defaults true. */
+    showDetails: z.boolean().optional(),
+    /** Show a service-area map block. Persist defaults false per design. */
+    showMap: z.boolean().optional(),
   }),
   footer: z.object({
     tagline: z.string(),
