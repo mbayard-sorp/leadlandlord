@@ -130,6 +130,12 @@ export default async function BuildSellPage() {
                             Live
                           </a>
                         )}
+                        <a
+                          href={`/operator/buildsell/${site.id}`}
+                          className="text-xs text-slate-400 hover:text-slate-200 underline"
+                        >
+                          Detail
+                        </a>
                       </div>
                     </td>
                     <td className="px-2 py-2">
