@@ -14,6 +14,7 @@ import { ReviewsBlock } from './blocks/ReviewsBlock';
 import { ContactBlock } from './blocks/ContactBlock';
 import { FooterBlock } from './blocks/FooterBlock';
 import { UgcBlock } from './blocks/UgcBlock';
+import { Stars } from './bs-svg';
 
 // Import the base B&S stylesheet
 import '@/styles/themes/buildsell.css';
@@ -70,10 +71,15 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
       {/* Client island: scroll-reveal, sticky-nav, stat counters */}
       <BuildSellMotion />
 
-      {/* Sticky top nav — data-nav lets BuildSellMotion toggle .is-scrolled */}
+      {/* Sticky top nav — data-nav lets BuildSellMotion toggle .is-scrolled.
+          Per-variant nav treatment (bold transparent-over-hero, trust inline
+          rating) is handled in CSS via the .bs-root[data-bs-layout] attribute. */}
       <nav className="bs-nav" data-nav aria-label="Site navigation">
         <div className="bs-container bs-nav-inner">
           <a href="#home" className="bs-nav-brand">
+            <span className="bs-nav-brand-mark" aria-hidden="true">
+              {site.businessName.charAt(0)}
+            </span>
             {site.businessName}
           </a>
 
@@ -95,7 +101,14 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
           </ul>
 
           <div className="bs-nav-cta-group">
-            {site.phone && (
+            {/* Trust variant surfaces the rating inline in the nav */}
+            {layoutVariant === 'trust' && site.rating != null && (
+              <span className="bs-nav-rating" aria-label={`Rated ${site.rating} out of 5`}>
+                <Stars rating={site.rating} count={1} size={15} />
+                {site.rating.toFixed(1)}
+              </span>
+            )}
+            {(site.navShowPhone ?? true) && site.phone && (
               <a
                 href={`tel:${site.phone}`}
                 className="bs-btn bs-btn-outline"
@@ -104,8 +117,11 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 {site.phone}
               </a>
             )}
-            <a href="#contact" className="bs-btn bs-btn-primary">
-              Get a Free Quote
+            <a
+              href={site.navCta?.href ?? '#contact'}
+              className="bs-btn bs-btn-primary"
+            >
+              {site.navCta?.label ?? 'Get a Free Quote'}
             </a>
           </div>
         </div>
@@ -155,6 +171,8 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 key={section._key}
                 section={section}
                 layoutVariant={layoutVariant}
+                rating={site.rating}
+                reviewCount={site.reviewCount}
               />
             );
           case 'bsUgcSection':

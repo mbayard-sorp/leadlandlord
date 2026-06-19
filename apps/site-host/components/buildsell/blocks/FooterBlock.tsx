@@ -49,7 +49,10 @@ export function FooterBlock({ section, businessName, placeId, layoutVariant: _la
           <div className="bs-footer-grid">
             {/* Brand column */}
             <div>
-              <p className="bs-footer-brand">{businessName}</p>
+              <p className="bs-footer-brand">
+              <span className="bs-footer-brand-mark" aria-hidden="true">{businessName.charAt(0)}</span>
+              {businessName}
+            </p>
               {section.tagline && (
                 <p className="bs-footer-tagline">{section.tagline}</p>
               )}
@@ -90,7 +93,10 @@ export function FooterBlock({ section, businessName, placeId, layoutVariant: _la
         ) : (
           /* Minimal footer when no columns configured */
           <div className="bs-footer-minimal">
-            <p className="bs-footer-brand">{businessName}</p>
+            <p className="bs-footer-brand">
+              <span className="bs-footer-brand-mark" aria-hidden="true">{businessName.charAt(0)}</span>
+              {businessName}
+            </p>
             {section.tagline && (
               <p className="bs-footer-tagline">{section.tagline}</p>
             )}

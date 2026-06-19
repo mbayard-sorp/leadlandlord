@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { BuildSellSection } from '@/lib/sanity';
+import { Icon } from '../Icon';
+import { SendIcon } from '../bs-svg';
 
 interface ContactBlockProps {
   section: BuildSellSection;
@@ -25,6 +27,15 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
   const isTrust = layoutVariant === 'trust';
   const isBold = layoutVariant === 'bold';
 
+  const showDetails = section.showDetails ?? true;
+  const showMap = section.showMap ?? false;
+  const labels = section.formLabels ?? {};
+
+  // Resolve the lead endpoint: a relative path is prefixed with the operator URL.
+  const operatorBase = process.env.NEXT_PUBLIC_OPERATOR_URL ?? 'https://app.leadslandlord.com';
+  const endpoint = section.formEndpoint?.trim() || '/api/bs/lead';
+  const postUrl = endpoint.startsWith('http') ? endpoint : `${operatorBase}${endpoint}`;
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setStatus('submitting');
@@ -37,70 +48,78 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
     }
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_OPERATOR_URL ?? 'https://app.leadslandlord.com'}/api/bs/lead`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            buildsell_site_id: buildsellSiteId,
-            name: fd.get('name'),
-            phone: fd.get('phone'),
-            email: fd.get('email'),
-            message: fd.get('message'),
-            website: fd.get('website'),
-          }),
-        },
-      );
+      const res = await fetch(postUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buildsell_site_id: buildsellSiteId,
+          name: fd.get('name'),
+          phone: fd.get('phone'),
+          email: fd.get('email'),
+          message: fd.get('message'),
+          website: fd.get('website'),
+        }),
+      });
       setStatus(res.ok ? 'done' : 'error');
     } catch {
       setStatus('error');
     }
   }
 
+  function DetailRow({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
+    return (
+      <div className="bs-contact-detail">
+        <span className="bs-contact-detail-icon" aria-hidden="true">
+          <Icon name={icon} size={18} />
+        </span>
+        <div className="bs-contact-detail-body">
+          <span className="bs-contact-detail-label">{label}</span>
+          <div className="bs-contact-detail-value">{children}</div>
+        </div>
+      </div>
+    );
+  }
+
   function InfoPanel() {
+    const cityLine = addr && (addr.city || addr.state || addr.zip)
+      ? [addr.city, addr.state, addr.zip].filter(Boolean).join(', ')
+      : null;
     return (
       <div className={`bs-contact-info${isTrust ? ' bs-contact-info--dark' : ''}`}>
-        <h2
-          className="bs-section-title"
-          style={{ color: isTrust ? 'var(--bs-on-primary)' : undefined }}
-        >
-          {section.heading ?? 'Get in Touch'}
-        </h2>
+        <h2 className="bs-section-title">{section.heading ?? 'Get in Touch'}</h2>
         {section.subhead && (
-          <p
-            className="bs-section-intro"
-            style={{
-              color: isTrust
-                ? 'color-mix(in srgb, var(--bs-on-primary) 75%, transparent)'
-                : undefined,
-            }}
-          >
-            {section.subhead}
-          </p>
+          <p className="bs-section-intro">{section.subhead}</p>
         )}
-        {phone && (
-          <a
-            href={`tel:${phone}`}
-            className="bs-btn bs-btn-lg bs-contact-phone-btn"
-            style={isTrust
-              ? { color: 'var(--bs-on-primary)', borderColor: 'color-mix(in srgb, var(--bs-on-primary) 50%, transparent)' }
-              : undefined}
-          >
-            {phone}
-          </a>
+
+        {showDetails && (
+          <div className="bs-contact-details">
+            {phone && (
+              <DetailRow icon="phone" label="Call us">
+                <a href={`tel:${phone}`} className="bs-contact-detail-link">{phone}</a>
+              </DetailRow>
+            )}
+            {(addr?.street || cityLine) && (
+              <DetailRow icon="map-pin" label="Visit">
+                {addr?.street && <div>{addr.street}</div>}
+                {cityLine && <div>{cityLine}</div>}
+              </DetailRow>
+            )}
+            {addr?.hours && (
+              <DetailRow icon="clock" label="Hours">{addr.hours}</DetailRow>
+            )}
+            {addr?.serviceArea && (
+              <DetailRow icon="map" label="Service area">{addr.serviceArea}</DetailRow>
+            )}
+          </div>
         )}
-        {addr && (
-          <address className="bs-contact-address" style={isTrust ? { color: 'color-mix(in srgb, var(--bs-on-primary) 80%, transparent)' } : undefined}>
-            {addr.street && <div>{addr.street}</div>}
-            {(addr.city || addr.state || addr.zip) && (
-              <div>{[addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}</div>
-            )}
-            {addr.hours && <div className="bs-contact-hours">{addr.hours}</div>}
-            {addr.serviceArea && (
-              <div className="bs-contact-service-area">Serving: {addr.serviceArea}</div>
-            )}
-          </address>
+
+        {showMap && (
+          <div className="bs-contact-map" aria-hidden="true">
+            <Icon name="map-pinned" size={26} />
+            <span className="bs-contact-map-label">
+              {addr?.serviceArea ? `Serving ${addr.serviceArea}` : 'Our service area'}
+            </span>
+          </div>
         )}
       </div>
     );
@@ -125,22 +144,22 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
 
             <div className="bs-form-row">
               <div className="bs-form-field">
-                <label htmlFor="bs-name">Name</label>
+                <label htmlFor="bs-name">{labels.name ?? 'Name'}</label>
                 <input id="bs-name" name="name" type="text" autoComplete="name" placeholder="Jane Smith" />
               </div>
               <div className="bs-form-field">
-                <label htmlFor="bs-phone">Phone *</label>
+                <label htmlFor="bs-phone">{labels.phone ?? 'Phone *'}</label>
                 <input id="bs-phone" name="phone" type="tel" required autoComplete="tel" placeholder="(555) 000-0000" />
               </div>
             </div>
 
             <div className="bs-form-field">
-              <label htmlFor="bs-email">Email</label>
+              <label htmlFor="bs-email">{labels.email ?? 'Email'}</label>
               <input id="bs-email" name="email" type="email" autoComplete="email" placeholder="jane@example.com" />
             </div>
 
             <div className="bs-form-field">
-              <label htmlFor="bs-message">Message</label>
+              <label htmlFor="bs-message">{labels.message ?? 'Message'}</label>
               <textarea id="bs-message" name="message" placeholder="Describe your project..." />
             </div>
 
@@ -155,7 +174,8 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
               disabled={status === 'submitting'}
               className="bs-btn bs-btn-primary bs-btn-lg bs-form-submit"
             >
-              {status === 'submitting' ? 'Sending...' : 'Get a Free Quote'}
+              {status === 'submitting' ? 'Sending...' : (labels.submit ?? 'Get a Free Quote')}
+              {status !== 'submitting' && <SendIcon />}
             </button>
           </form>
         )}
