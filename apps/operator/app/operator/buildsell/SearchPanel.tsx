@@ -1,12 +1,12 @@
 'use client';
 
 import { useTransition, useState } from 'react';
-import { runBuildSellSearch, buildDraft } from './actions';
-import type { BuildSellLeadResult } from '@leadlandlord/integrations/google-places';
+import { runBuildSellSearch, buildDraft, markCalled, saveLeadNote, setFollowUp } from './actions';
+import type { SearchLead } from './types';
 
 export function SearchPanel() {
   const [searching, startSearch] = useTransition();
-  const [leads, setLeads] = useState<BuildSellLeadResult[] | null>(null);
+  const [leads, setLeads] = useState<SearchLead[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   async function handleSearch(e: React.FormEvent<HTMLFormElement>) {
@@ -22,6 +22,14 @@ export function SearchPanel() {
         setLeads(null);
       }
     });
+  }
+
+  function updateLead(placeId: string, patch: Partial<SearchLead>) {
+    setLeads((prev) =>
+      prev
+        ? prev.map((l) => (l.placeId === placeId ? { ...l, ...patch } : l))
+        : prev,
+    );
   }
 
   return (
@@ -86,12 +94,12 @@ export function SearchPanel() {
         <div>
           <p className="text-xs text-slate-500 mb-3">
             {leads.length === 0
-              ? 'No qualifying leads found (no-website + rating + review filters applied).'
-              : `${leads.length} lead${leads.length === 1 ? '' : 's'} found — no website, strong reviews.`}
+              ? 'No leads found.'
+              : `${leads.length} lead${leads.length === 1 ? '' : 's'} found — no-website leads are prime prospects.`}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {leads.map((lead) => (
-              <LeadCard key={lead.placeId} lead={lead} />
+              <LeadCard key={lead.placeId} lead={lead} onUpdate={updateLead} />
             ))}
           </div>
         </div>
@@ -109,13 +117,56 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+// ─── Snapshot helper ─────────────────────────────────────────────────────────
+
+/**
+ * Appends the Places snapshot hidden fields to a FormData so the server action
+ * can lazy-persist the lead's display data on the first CRM interaction.
+ */
+function appendSnapshot(fd: FormData, lead: SearchLead) {
+  const s: Array<[string, string | number | null | undefined]> = [
+    ['place_id', lead.placeId],
+    ['display_name', lead.displayName],
+    ['formatted_address', lead.formattedAddress],
+    ['national_phone', lead.nationalPhone],
+    ['primary_type', lead.primaryType],
+    ['rating', lead.rating],
+    ['user_rating_count', lead.userRatingCount],
+    ['website_uri', lead.websiteUri],
+    ['lat', lead.lat],
+    ['lng', lead.lng],
+    ['trade', lead.trade],
+    ['city', lead.city],
+    ['state', lead.state],
+  ];
+  for (const [k, v] of s) {
+    fd.set(k, v == null ? '' : String(v));
+  }
+}
+
 // ─── Lead card ───────────────────────────────────────────────────────────────
 
-function LeadCard({ lead }: { lead: BuildSellLeadResult }) {
+function LeadCard({
+  lead,
+  onUpdate,
+}: {
+  lead: SearchLead;
+  onUpdate: (placeId: string, patch: Partial<SearchLead>) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [building, startBuild] = useTransition();
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
   const [buildOk, setBuildOk] = useState<boolean | null>(null);
+
+  // CRM local state (seeded from initial lead data, kept in sync via onUpdate)
+  const [callingPending, startCalling] = useTransition();
+  const [notePending, startNote] = useTransition();
+  const [followUpPending, startFollowUp] = useTransition();
+  const [noteText, setNoteText] = useState(lead.note ?? '');
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [followUpInput, setFollowUpInput] = useState(lead.followUpAt ?? '');
+  const [followUpSaved, setFollowUpSaved] = useState(false);
+  const [crmError, setCrmError] = useState<string | null>(null);
 
   async function handleBuild(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -132,9 +183,90 @@ function LeadCard({ lead }: { lead: BuildSellLeadResult }) {
     });
   }
 
+  function handleCalledToggle() {
+    const newCalled = !lead.called;
+    const fd = new FormData();
+    fd.set('called', String(newCalled));
+    appendSnapshot(fd, lead);
+    setCrmError(null);
+    startCalling(async () => {
+      const result = await markCalled(fd);
+      if (result.ok) {
+        onUpdate(lead.placeId, {
+          called: result.called ?? newCalled,
+          calledAt: result.calledAt ?? null,
+        });
+      } else {
+        setCrmError(result.message ?? 'Failed to update called status.');
+      }
+    });
+  }
+
+  function handleSaveNote() {
+    const fd = new FormData();
+    fd.set('note', noteText);
+    appendSnapshot(fd, lead);
+    setNoteSaved(false);
+    setCrmError(null);
+    startNote(async () => {
+      const result = await saveLeadNote(fd);
+      if (result.ok) {
+        onUpdate(lead.placeId, { note: result.note ?? null });
+        setNoteSaved(true);
+      } else {
+        setCrmError(result.message ?? 'Failed to save note.');
+      }
+    });
+  }
+
+  function handleSetFollowUp(clear = false) {
+    const fd = new FormData();
+    fd.set('follow_up_at', clear ? '' : followUpInput);
+    appendSnapshot(fd, lead);
+    setFollowUpSaved(false);
+    setCrmError(null);
+    startFollowUp(async () => {
+      const result = await setFollowUp(fd);
+      if (result.ok) {
+        const newDate = result.followUpAt ?? null;
+        onUpdate(lead.placeId, { followUpAt: newDate });
+        setFollowUpInput(newDate ?? '');
+        setFollowUpSaved(true);
+      } else {
+        setCrmError(result.message ?? 'Failed to set follow-up.');
+      }
+    });
+  }
+
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3 space-y-2">
-      <div className="font-medium text-slate-200 text-sm">{lead.displayName ?? '(unnamed)'}</div>
+      {/* Name + website badge */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-medium text-slate-200 text-sm">{lead.displayName ?? '(unnamed)'}</div>
+        {lead.hasWebsite ? (
+          <span className="shrink-0 inline-block rounded px-1.5 py-0.5 text-xs font-medium bg-amber-900/50 text-amber-300">
+            Has site
+          </span>
+        ) : (
+          <span className="shrink-0 inline-block rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-900/60 text-emerald-300">
+            No website
+          </span>
+        )}
+      </div>
+
+      {/* Website link when present */}
+      {lead.hasWebsite && lead.websiteUri && (
+        <div className="text-xs truncate">
+          <a
+            href={lead.websiteUri}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sky-400 hover:text-sky-300 underline"
+          >
+            {lead.websiteUri}
+          </a>
+        </div>
+      )}
 
       {lead.rating != null && (
         <div className="text-xs text-slate-400">
@@ -151,6 +283,84 @@ function LeadCard({ lead }: { lead: BuildSellLeadResult }) {
         <div className="text-xs text-slate-600 italic">{lead.primaryType.replace(/_/g, ' ')}</div>
       )}
 
+      {/* CRM error */}
+      {crmError && <p className="text-xs text-red-400">{crmError}</p>}
+
+      {/* Called checkbox */}
+      <div className="border-t border-slate-800/60 pt-2 space-y-2">
+        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={lead.called}
+            disabled={callingPending}
+            onChange={handleCalledToggle}
+            className="accent-emerald-500"
+          />
+          <span>Called</span>
+          {lead.called && lead.calledAt && (
+            <span className="text-slate-500 font-normal">
+              — {new Date(lead.calledAt).toLocaleDateString()}
+            </span>
+          )}
+          {callingPending && <span className="text-slate-600">…</span>}
+        </label>
+
+        {/* Note */}
+        <div className="space-y-1">
+          <textarea
+            value={noteText}
+            onChange={(e) => { setNoteText(e.target.value); setNoteSaved(false); }}
+            placeholder="Add a note…"
+            rows={2}
+            className="input w-full resize-none text-xs"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={notePending}
+              onClick={handleSaveNote}
+              className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 px-2 py-0.5 text-xs font-medium text-slate-100"
+            >
+              {notePending ? '…' : 'Save note'}
+            </button>
+            {noteSaved && <span className="text-xs text-emerald-400">Saved</span>}
+          </div>
+        </div>
+
+        {/* Follow-up date */}
+        <div className="space-y-1">
+          <label className="text-xs text-slate-400">Follow-up date</label>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="date"
+              value={followUpInput}
+              onChange={(e) => { setFollowUpInput(e.target.value); setFollowUpSaved(false); }}
+              className="input text-xs py-0.5"
+            />
+            <button
+              type="button"
+              disabled={followUpPending || !followUpInput}
+              onClick={() => handleSetFollowUp(false)}
+              className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 px-2 py-0.5 text-xs font-medium text-slate-100"
+            >
+              {followUpPending ? '…' : 'Set'}
+            </button>
+            {lead.followUpAt && (
+              <button
+                type="button"
+                disabled={followUpPending}
+                onClick={() => handleSetFollowUp(true)}
+                className="rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-2 py-0.5 text-xs text-slate-400"
+              >
+                Clear
+              </button>
+            )}
+            {followUpSaved && <span className="text-xs text-emerald-400">Set</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Build draft */}
       {buildMessage && (
         <p className={`text-xs ${buildOk ? 'text-emerald-400' : 'text-red-400'}`}>
           {buildMessage}

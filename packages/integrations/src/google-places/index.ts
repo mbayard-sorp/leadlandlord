@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
-import { upsertBuildsellLeads, type NewBuildsellLead } from '@leadlandlord/db';
 import { withDataForSeoCache, stableKey } from '../dataforseo/cache';
 
 const PLACES_BASE = 'https://places.googleapis.com/v1';
@@ -271,12 +270,8 @@ export interface SearchLeadsArgs {
   trade: string;
   city: string;
   state: string;
-  /** How many qualified leads to return. Default 20. */
+  /** How many businesses to return. Default 20. */
   count?: number;
-  /** Minimum Google rating to qualify. Default 4.0. */
-  ratingMin?: number;
-  /** Minimum review count to qualify. Default 10. */
-  reviewsMin?: number;
 }
 
 export interface BuildSellLeadResult {
@@ -288,6 +283,10 @@ export interface BuildSellLeadResult {
   types: string[];
   rating?: number;
   userRatingCount?: number;
+  /** The business's existing website, if any. null/undefined = no website. */
+  websiteUri?: string;
+  /** Convenience flag for the UI: true when the business already has a site. */
+  hasWebsite: boolean;
   lat?: number;
   lng?: number;
   trade: string;
@@ -296,50 +295,53 @@ export interface BuildSellLeadResult {
 }
 
 /**
- * Pure qualification filter for B&S leads: keep only no-website businesses
- * with a strong-enough rating and review count. Exported for unit testing.
+ * Sort businesses for the lead finder: **no-website first** (the prime
+ * prospects), then the rest — a business with a bad existing site is still a
+ * potential client. Within each group, stronger social proof (more reviews,
+ * then higher rating) ranks higher. Pure + exported for unit testing.
+ *
+ * NOTE: this no longer FILTERS anything out — every business is returned,
+ * just ordered.
  */
-export function qualifyLeadPlaces(
-  places: Place[],
-  opts: { ratingMin?: number; reviewsMin?: number } = {},
-): Place[] {
-  const ratingMin = opts.ratingMin ?? 4.0;
-  const reviewsMin = opts.reviewsMin ?? 10;
-  return places.filter(
-    (p) =>
-      p.websiteUri == null &&
-      (p.rating ?? 0) >= ratingMin &&
-      (p.userRatingCount ?? 0) >= reviewsMin,
-  );
+export function sortLeadPlaces(places: Place[]): Place[] {
+  return [...places].sort((a, b) => {
+    const aHas = a.websiteUri != null ? 1 : 0;
+    const bHas = b.websiteUri != null ? 1 : 0;
+    if (aHas !== bHas) return aHas - bHas; // no-website (0) first
+    const reviews = (b.userRatingCount ?? 0) - (a.userRatingCount ?? 0);
+    if (reviews !== 0) return reviews;
+    return (b.rating ?? 0) - (a.rating ?? 0);
+  });
 }
 
 /**
- * Build & Sell lead search: find strong-review businesses with NO website.
+ * Build & Sell lead search: return local businesses for the operator to work,
+ * **no-website businesses first** (prime prospects), then the rest (a business
+ * with a weak existing site is still a potential client).
  *
- * Pipeline: searchN(query) → filter (no website && rating >= ratingMin &&
- * reviews >= reviewsMin) → upsert survivors into `buildsell_leads` with
- * `cached_until = now()+30d` (the table doubles as the 30-day cache) → return
- * the filtered list transiently to the caller. The persisted row holds the
- * ToS-mandated place_id indefinitely; the reaper nulls PII at 30 days.
+ * Pipeline: searchN(query) → sortLeadPlaces (no-website-first) → take `count` →
+ * map. READ-ONLY: writes NOTHING to Postgres. Results are returned transiently;
+ * only leads the operator acts on get persisted (mark Called / note / follow-up
+ * → buildsell_leads; Build draft → buildsell_sites). Keeps repeated searches off
+ * Neon and never auto-builds a browsable stored lead DB (ToS posture).
  *
- * MOCK_AI bypass: returns deterministic mock leads (still upserted) so the
- * operator search UI and tests never hit the network.
+ * MOCK_AI bypass: returns a deterministic mix of website / no-website businesses
+ * so the sort + UI are testable without the network.
  */
 export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadResult[]> {
   const { trade, city, state } = args;
-  const ratingMin = args.ratingMin ?? 4.0;
-  const reviewsMin = args.reviewsMin ?? 10;
   const count = args.count ?? 20;
 
   let places: Place[];
   if (process.env.MOCK_AI === 'true') {
+    // Mix: every 3rd business has a website, so the no-website-first sort is visible.
     places = Array.from({ length: count }, (_, i) => ({
       id: `mock-place-${city}-${i}`.toLowerCase().replace(/\s+/g, '-'),
       displayName: { text: `${trade} pro ${i + 1}` },
       formattedAddress: `${100 + i} Main St, ${city}, ${state}`,
       types: [trade.replace(/\s+/g, '_')],
       primaryType: trade.replace(/\s+/g, '_'),
-      // No websiteUri → qualifies as a no-website lead.
+      websiteUri: i % 3 === 0 ? `https://example-${i}.com` : undefined,
       nationalPhoneNumber: `(555) 010-${String(1000 + i).slice(-4)}`,
       rating: 4.6,
       userRatingCount: 42 + i,
@@ -347,18 +349,17 @@ export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadR
       location: { latitude: 33.4 + i * 0.01, longitude: -111.9 - i * 0.01 },
     }));
   } else {
-    // Over-fetch: many results have websites and get filtered out.
-    // Over-fetch (most businesses HAVE a website and get filtered out) but cap
-    // pages so a sparse area can't stack sequential round-trips into a 15s+ wait.
-    places = await searchN(`${trade} in ${city}, ${state}`, count * 3, {
+    // Light over-fetch so the no-website businesses can be surfaced to the top,
+    // capped to keep latency bounded on sparse areas.
+    places = await searchN(`${trade} in ${city}, ${state}`, count * 2, {
       excludeClosed: true,
       maxPages: 3,
     });
   }
 
-  const qualified = qualifyLeadPlaces(places, { ratingMin, reviewsMin });
+  const sorted = sortLeadPlaces(places);
 
-  const results: BuildSellLeadResult[] = qualified.slice(0, count).map((p) => ({
+  const results: BuildSellLeadResult[] = sorted.slice(0, count).map((p) => ({
     placeId: p.id,
     displayName: p.displayName?.text,
     formattedAddress: p.formattedAddress,
@@ -367,6 +368,8 @@ export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadR
     types: p.types,
     rating: p.rating,
     userRatingCount: p.userRatingCount,
+    websiteUri: p.websiteUri,
+    hasWebsite: p.websiteUri != null,
     lat: p.location?.latitude,
     lng: p.location?.longitude,
     trade,
@@ -374,30 +377,16 @@ export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadR
     state,
   }));
 
-  // Persist as the 30-day cache + indefinite place_id store (ToS).
-  const cachedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  const rows: NewBuildsellLead[] = results.map((r) => ({
-    placeId: r.placeId,
-    displayName: r.displayName ?? null,
-    formattedAddress: r.formattedAddress ?? null,
-    nationalPhone: r.nationalPhone ?? null,
-    primaryType: r.primaryType ?? null,
-    types: r.types,
-    rating: r.rating != null ? r.rating.toFixed(1) : null,
-    userRatingCount: r.userRatingCount ?? null,
-    websiteUri: null,
-    lat: r.lat != null ? r.lat.toFixed(7) : null,
-    lng: r.lng != null ? r.lng.toFixed(7) : null,
-    trade,
-    city,
-    state,
-    cachedUntil,
-  }));
-  await upsertBuildsellLeads(rows);
-
   log.info(
-    { trade, city, state, scanned: places.length, qualified: results.length },
-    'google-places searchLeads',
+    {
+      trade,
+      city,
+      state,
+      scanned: places.length,
+      returned: results.length,
+      noWebsite: results.filter((r) => !r.hasWebsite).length,
+    },
+    'google-places searchLeads (read-only)',
   );
   return results;
 }

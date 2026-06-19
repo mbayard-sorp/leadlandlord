@@ -1,6 +1,6 @@
 {
-  "id": "7e154b56-ec6f-4035-b90d-fe35c7f8e3b4",
-  "prevId": "a1b2c3d4-e5f6-7890-ab12-cd34ef560049",
+  "id": "8607735b-27a2-4031-85b3-96ab5f2a5bee",
+  "prevId": "7e154b56-ec6f-4035-b90d-fe35c7f8e3b4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1509,6 +1509,31 @@
           "primaryKey": false,
           "notNull": false
         },
+        "called": {
+          "name": "called",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "called_at": {
+          "name": "called_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "follow_up_at": {
+          "name": "follow_up_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "cached_until": {
           "name": "cached_until",
           "type": "timestamp with time zone",
@@ -1536,6 +1561,21 @@
           "columns": [
             {
               "expression": "cached_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "buildsell_leads_follow_up_idx": {
+          "name": "buildsell_leads_follow_up_idx",
+          "columns": [
+            {
+              "expression": "follow_up_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
