@@ -1,13 +1,42 @@
 'use client';
 
-import { useTransition, useState } from 'react';
+import { useTransition, useState, useEffect } from 'react';
 import { runBuildSellSearch, buildDraft, markCalled, saveLeadNote, setFollowUp } from './actions';
 import type { SearchLead } from './types';
+
+const STORAGE_KEY = 'buildsell:lastSearch';
 
 export function SearchPanel() {
   const [searching, startSearch] = useTransition();
   const [leads, setLeads] = useState<SearchLead[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Restore the last search results on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as SearchLead[];
+        if (Array.isArray(parsed)) setLeads(parsed);
+      }
+    } catch {
+      // Ignore malformed/inaccessible storage.
+    }
+    setHydrated(true);
+  }, []);
+
+  // Persist results until manually cleared.
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (leads !== null) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
+      }
+    } catch {
+      // Ignore storage write failures (quota, private mode, etc.).
+    }
+  }, [leads, hydrated]);
 
   async function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,6 +51,16 @@ export function SearchPanel() {
         setLeads(null);
       }
     });
+  }
+
+  function handleClear() {
+    setLeads(null);
+    setSearchError(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage removal failures.
+    }
   }
 
   function updateLead(placeId: string, patch: Partial<SearchLead>) {
@@ -92,11 +131,20 @@ export function SearchPanel() {
 
       {leads !== null && (
         <div>
-          <p className="text-xs text-slate-500 mb-3">
-            {leads.length === 0
-              ? 'No leads found.'
-              : `${leads.length} lead${leads.length === 1 ? '' : 's'} found — no-website leads are prime prospects.`}
-          </p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-xs text-slate-500">
+              {leads.length === 0
+                ? 'No leads found.'
+                : `${leads.length} lead${leads.length === 1 ? '' : 's'} found — no-website leads are prime prospects.`}
+            </p>
+            <button
+              type="button"
+              onClick={handleClear}
+              className="shrink-0 rounded bg-slate-800 hover:bg-slate-700 px-3 py-1 text-xs font-medium text-slate-300"
+            >
+              Clear results
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {leads.map((lead) => (
               <LeadCard key={lead.placeId} lead={lead} onUpdate={updateLead} />
