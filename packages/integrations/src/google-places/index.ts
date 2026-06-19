@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
-import { upsertBuildsellLeads, type NewBuildsellLead } from '@leadlandlord/db';
 import { withDataForSeoCache, stableKey } from '../dataforseo/cache';
 
 const PLACES_BASE = 'https://places.googleapis.com/v1';
@@ -374,30 +373,14 @@ export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadR
     state,
   }));
 
-  // Persist as the 30-day cache + indefinite place_id store (ToS).
-  const cachedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  const rows: NewBuildsellLead[] = results.map((r) => ({
-    placeId: r.placeId,
-    displayName: r.displayName ?? null,
-    formattedAddress: r.formattedAddress ?? null,
-    nationalPhone: r.nationalPhone ?? null,
-    primaryType: r.primaryType ?? null,
-    types: r.types,
-    rating: r.rating != null ? r.rating.toFixed(1) : null,
-    userRatingCount: r.userRatingCount ?? null,
-    websiteUri: null,
-    lat: r.lat != null ? r.lat.toFixed(7) : null,
-    lng: r.lng != null ? r.lng.toFixed(7) : null,
-    trade,
-    city,
-    state,
-    cachedUntil,
-  }));
-  await upsertBuildsellLeads(rows);
-
+  // READ-ONLY: searchLeads writes NOTHING to Postgres. Results are returned
+  // transiently for the operator to review in the ephemeral search UI; only the
+  // leads they explicitly act on get persisted (buildDraft -> buildsell_sites,
+  // which carries the place_id). This keeps repeated searches off Neon entirely
+  // and means we never auto-build a browsable stored lead DB (ToS posture).
   log.info(
     { trade, city, state, scanned: places.length, qualified: results.length },
-    'google-places searchLeads',
+    'google-places searchLeads (read-only)',
   );
   return results;
 }
