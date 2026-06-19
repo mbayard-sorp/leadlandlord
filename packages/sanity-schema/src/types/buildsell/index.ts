@@ -1,13 +1,14 @@
 import { buildsellObjectTypes } from './objects';
 import { buildsellSectionTypes } from './sections';
-import { buildsellTheme, BUILDSELL_PRESETS } from './theme';
+import { buildsellTheme } from './theme';
 import { bsReview } from './review';
 import { buildsellSite } from './buildsell-site';
 
 export * from './objects';
 export * from './sections';
-export { buildsellTheme, BUILDSELL_PRESETS } from './theme';
-export type { BuildsellPreset } from './theme';
+export { buildsellTheme } from './theme';
+export { BUILDSELL_PRESETS, BUILDSELL_PRESET_NAMES, presetByName } from './presets';
+export type { BuildsellPreset } from './presets';
 export { bsReview } from './review';
 export { buildsellSite } from './buildsell-site';
 

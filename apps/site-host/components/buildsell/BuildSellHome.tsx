@@ -1,4 +1,5 @@
 import type { BuildSellSite } from '@/lib/sanity';
+import { resolveBuildSellTheme } from '@/lib/buildsell-theme';
 import { resolveBsFont } from '@/lib/buildsell-fonts';
 import { googleMapsUrl } from '@/lib/google-maps-url';
 import { DraftShield } from './DraftShield';
@@ -21,12 +22,13 @@ interface BuildSellHomeProps {
 }
 
 /**
- * Map 8 Sanity color hex fields + 2 font strings to CSS custom properties.
- * Font strings are resolved to var(--font-bs-*) references so next/font
- * variables (applied on the parent wrapper by the route page) actually load.
+ * Map the resolved theme (preset-authoritative colors + per-doc fonts) to CSS
+ * custom properties. Font strings are resolved to var(--font-bs-*) references
+ * so next/font variables (applied on the parent wrapper by the route page)
+ * actually load. See lib/buildsell-theme.ts for the resolution rules.
  */
 function themeVars(site: BuildSellSite): React.CSSProperties {
-  const t = site.theme;
+  const t = resolveBuildSellTheme(site.theme);
   return {
     '--bs-primary': t.primary ?? undefined,
     '--bs-primary-dark': t.primaryDark ?? undefined,
@@ -43,7 +45,7 @@ function themeVars(site: BuildSellSite): React.CSSProperties {
 
 export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
   const sections = site.sections ?? [];
-  const layoutVariant = site.theme.layoutVariant ?? 'split';
+  const layoutVariant = resolveBuildSellTheme(site.theme).layoutVariant;
 
   return (
     <div
