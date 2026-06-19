@@ -1,6 +1,9 @@
 import type { BuildSellSite } from '@/lib/sanity';
+import { resolveBsFont } from '@/lib/buildsell-fonts';
 import { googleMapsUrl } from '@/lib/google-maps-url';
 import { DraftShield } from './DraftShield';
+import { BuildSellMotion } from './BuildSellMotion';
+import { MobileCallBar } from './MobileCallBar';
 import { HeroBlock } from './blocks/HeroBlock';
 import { ServicesBlock } from './blocks/ServicesBlock';
 import { AboutBlock } from './blocks/AboutBlock';
@@ -17,7 +20,11 @@ interface BuildSellHomeProps {
   draft: boolean;
 }
 
-/** Map 8 Sanity color hex fields + 2 font strings to CSS custom properties. */
+/**
+ * Map 8 Sanity color hex fields + 2 font strings to CSS custom properties.
+ * Font strings are resolved to var(--font-bs-*) references so next/font
+ * variables (applied on the parent wrapper by the route page) actually load.
+ */
 function themeVars(site: BuildSellSite): React.CSSProperties {
   const t = site.theme;
   return {
@@ -29,8 +36,8 @@ function themeVars(site: BuildSellSite): React.CSSProperties {
     '--bs-surface': t.surface ?? undefined,
     '--bs-text': t.text ?? undefined,
     '--bs-muted': t.muted ?? undefined,
-    '--bs-font-heading': t.fontHeading ?? undefined,
-    '--bs-font-body': t.fontBody ?? undefined,
+    '--bs-font-heading': resolveBsFont(t.fontHeading),
+    '--bs-font-body': resolveBsFont(t.fontBody),
   } as React.CSSProperties;
 }
 
@@ -45,10 +52,13 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
       data-draft={draft ? 'true' : undefined}
       style={themeVars(site)}
     >
-      {draft && <DraftShield />}
+      {draft && <DraftShield purchaseUrl={site.purchaseUrl} />}
 
-      {/* Sticky top nav */}
-      <nav className="bs-nav" aria-label="Site navigation">
+      {/* Client island: scroll-reveal, sticky-nav, stat counters */}
+      <BuildSellMotion />
+
+      {/* Sticky top nav — data-nav lets BuildSellMotion toggle .is-scrolled */}
+      <nav className="bs-nav" data-nav aria-label="Site navigation">
         <div className="bs-container bs-nav-inner">
           <a href="#home" className="bs-nav-brand">
             {site.businessName}
@@ -98,16 +108,42 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
                 section={section}
                 phone={site.phone}
                 layoutVariant={layoutVariant}
+                reviewCount={site.reviewCount}
+                rating={site.rating}
               />
             );
           case 'bsServicesSection':
-            return <ServicesBlock key={section._key} section={section} />;
+            return (
+              <ServicesBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
           case 'bsAboutSection':
-            return <AboutBlock key={section._key} section={section} />;
+            return (
+              <AboutBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
           case 'bsProcessSection':
-            return <ProcessBlock key={section._key} section={section} />;
+            return (
+              <ProcessBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
           case 'bsReviewsSection':
-            return <ReviewsBlock key={section._key} section={section} />;
+            return (
+              <ReviewsBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
           case 'bsContactSection':
             return (
               <ContactBlock
@@ -115,6 +151,7 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
                 section={section}
                 buildsellSiteId={site.buildsellSiteId}
                 phone={site.phone}
+                layoutVariant={layoutVariant}
               />
             );
           case 'bsFooterSection':
@@ -124,6 +161,7 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
                 section={section}
                 businessName={site.businessName}
                 placeId={site.placeId}
+                layoutVariant={layoutVariant}
               />
             );
           default:
@@ -181,6 +219,9 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
           </div>
         </footer>
       )}
+
+      {/* Sticky mobile call bar — shown only on small screens, no-op when phone absent */}
+      <MobileCallBar phone={site.phone} />
     </div>
   );
 }

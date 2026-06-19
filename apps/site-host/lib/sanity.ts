@@ -348,7 +348,7 @@ export interface BuildSellSection {
   secondaryCta?: { label?: string | null; href?: string | null } | null;
   // bsServicesSection
   heading?: string | null;
-  services?: Array<{ icon?: string | null; title?: string | null; description?: string | null }> | null;
+  services?: Array<{ icon?: string | null; title?: string | null; description?: string | null; link?: string | null }> | null;
   // bsAboutSection
   body?: string | null;
   stats?: Array<{ value?: string | null; label?: string | null }> | null;

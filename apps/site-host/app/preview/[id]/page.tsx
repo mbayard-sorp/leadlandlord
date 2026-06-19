@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchBuildSellSiteById } from '@/lib/sanity';
 import { BuildSellHome } from '@/components/buildsell/BuildSellHome';
+import { ALL_BS_FONTS } from '@/lib/buildsell-fonts';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,11 +53,13 @@ export default async function PreviewPage({
     notFound();
   }
 
+  const fontVars = ALL_BS_FONTS.map((f) => f.variable).join(' ');
+
   return (
-    <>
+    <div className={fontVars}>
       {/* Defense layer 2: explicit meta in rendered JSX output */}
       {noindexMeta}
       <BuildSellHome site={site} draft={true} />
-    </>
+    </div>
   );
 }
