@@ -229,29 +229,39 @@ export async function getContractorCount(args: ContractorCountArgs): Promise<num
 
 /**
  * Search up to N places by paginating Text Search. Stops when the requested
- * count is reached or no more pages are available.
+ * count is reached, no more pages are available, or `maxPages` is hit.
+ *
+ * No artificial inter-page delay: the **New** Places API (v1, `places:searchText`)
+ * returns a `nextPageToken` that is valid immediately — unlike the legacy Places
+ * API, it does NOT need a settle delay before the next page. `searchText` already
+ * applies the module-level min-interval throttle, so pages are still spaced
+ * politely. `maxPages` bounds worst-case latency on sparse areas (thin pages),
+ * where the old 1.5s/page sleep could stack to 10s+.
  */
 export async function searchN(
   query: string,
   count: number,
-  opts: Omit<SearchTextArgs, 'query' | 'pageToken' | 'pageSize'> = {},
+  opts: Omit<SearchTextArgs, 'query' | 'pageToken' | 'pageSize'> & { maxPages?: number } = {},
 ): Promise<Place[]> {
+  // Default: unbounded pages (preserves prior behavior for existing callers
+  // like tenant-prospector — they just lose the obsolete 1.5s/page sleep).
+  // Callers that want a latency ceiling (searchLeads) pass an explicit maxPages.
+  const { maxPages = Infinity, ...searchOpts } = opts;
   const out: Place[] = [];
   let pageToken: string | undefined;
-  while (out.length < count) {
+  let pages = 0;
+  while (out.length < count && pages < maxPages) {
     const remaining = count - out.length;
     const { places, nextPageToken } = await searchText({
       query,
       pageToken,
       pageSize: Math.min(20, remaining),
-      ...opts,
+      ...searchOpts,
     });
     out.push(...places);
+    pages += 1;
     if (!nextPageToken) break;
     pageToken = nextPageToken;
-    // Google's API requires a small delay between pageToken fetches —
-    // results aren't immediately ready after the previous response.
-    await new Promise((r) => setTimeout(r, 1500));
   }
   return out.slice(0, count);
 }
@@ -338,7 +348,12 @@ export async function searchLeads(args: SearchLeadsArgs): Promise<BuildSellLeadR
     }));
   } else {
     // Over-fetch: many results have websites and get filtered out.
-    places = await searchN(`${trade} in ${city}, ${state}`, count * 3, { excludeClosed: true });
+    // Over-fetch (most businesses HAVE a website and get filtered out) but cap
+    // pages so a sparse area can't stack sequential round-trips into a 15s+ wait.
+    places = await searchN(`${trade} in ${city}, ${state}`, count * 3, {
+      excludeClosed: true,
+      maxPages: 3,
+    });
   }
 
   const qualified = qualifyLeadPlaces(places, { ratingMin, reviewsMin });
