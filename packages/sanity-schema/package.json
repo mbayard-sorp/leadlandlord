@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./ids": "./src/ids.ts",
     "./client": "./src/client.ts",
-    "./types": "./src/types/index.ts"
+    "./types": "./src/types/index.ts",
+    "./presets": "./src/types/buildsell/presets.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

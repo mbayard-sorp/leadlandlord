@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { getDb, buildsellSites } from '@leadlandlord/db';
 import { BuildSellImagePanel } from '../BuildSellImagePanel';
 import { MigrationReviewPanel } from '../MigrationReviewPanel';
+import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
 import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
@@ -26,9 +27,14 @@ export default async function BuildSellDetailPage({ params }: Params) {
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
 
-  // Pending content-migration suggestions (staged by the content-migrator agent).
   const meta = (site.metadata ?? {}) as Record<string, unknown>;
+  // Pending content-migration suggestions (staged by the content-migrator agent).
   const pendingMigration = (meta[PENDING_MIGRATION_KEY] as PendingMigration | undefined) ?? null;
+  // Last clarification (if any) for the revise panel — stored in metadata jsonb.
+  const lastClarifyingPrompt =
+    meta.lastClarifyingPrompt && typeof meta.lastClarifyingPrompt === 'object'
+      ? (meta.lastClarifyingPrompt as { prompt: string; revisedAt: string })
+      : null;
 
   // Preview/Live links resolve to the site-host Vercel project, not operator.
   // A relative `/preview/...` would 404 against the operator domain.
@@ -108,6 +114,11 @@ export default async function BuildSellDetailPage({ params }: Params) {
         pending={pendingMigration}
         canCrawl={!isPaidOrLive}
       />
+
+      {/* Copy revision — hidden on sold/indexed sites */}
+      {!isPaidOrLive && (
+        <BuildSellRevisePanel siteId={site.id} lastPrompt={lastClarifyingPrompt} />
+      )}
 
       {/* Image prompt control panel */}
       <BuildSellImagePanel siteId={site.id} />

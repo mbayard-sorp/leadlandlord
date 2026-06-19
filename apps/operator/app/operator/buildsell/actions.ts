@@ -279,6 +279,23 @@ export async function buildDraft(formData: FormData): Promise<BuildDraftResult> 
   }
 
   log.info({ id: row.id, businessName, trade, city }, 'buildDraft: site row + build event created');
+
+  // Drain immediately so spec-site-builder starts now instead of waiting up to
+  // a tick for the cron. Same pattern as requestDomainSearch in
+  // sites/[id]/domain-actions.ts: runOperatorTick claims the event and dispatches
+  // the agent in a background waitUntil, so it returns quickly. Lazy import to
+  // avoid pulling the agent registry at module init. Non-fatal — the cron is the
+  // fallback if the inline drain fails.
+  try {
+    const { runOperatorTick } = await import('@/lib/operator-tick');
+    await runOperatorTick();
+  } catch (err) {
+    log.warn(
+      { id: row.id, err: err instanceof Error ? err.message : err },
+      'buildDraft: inline operator-tick failed — cron will pick up the build event',
+    );
+  }
+
   revalidatePath('/operator/buildsell');
   return { ok: true, buildsellSiteId: row.id };
 }
@@ -963,6 +980,101 @@ export async function rejectMigration(siteId: string): Promise<ApplyMigrationRes
   }
   revalidatePath(`/operator/buildsell/${siteId}`);
   return { ok: true, message: 'Suggestions discarded.' };
+}
+
+// ─── Revise copy ───────────────────────────────────────────────────────────
+
+/**
+ * Regenerate a Build & Sell site's COPY with an operator clarifying prompt,
+ * keeping the existing design (preserve_theme). Use when the generated copy
+ * misreads the business (e.g. an auto PAINT STORE written up as a body shop).
+ *
+ * - Blocked on paid/live sites (re-indexing a sold site); the spec-site-builder
+ *   RebuildProtectedError is the backstop. Invoiced sites are allowed and the
+ *   builder keeps them 'invoiced'.
+ * - Durable daily cap in `metadata.reviseCap` (separate lane from regenCap),
+ *   read-before-spend — mirrors regenerateBuildSellImage. Default 5/day.
+ * - Stamps a fresh build_epoch so the dedupe key differs from the prior build,
+ *   and records the prompt at `metadata.lastClarifyingPrompt`.
+ */
+export async function reviseBuildSellCopy(
+  siteId: string,
+  clarifyingPrompt: string,
+): Promise<{ ok: boolean; message?: string }> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+  const prompt = (clarifyingPrompt ?? '').trim();
+  if (!prompt) return { ok: false, message: 'Enter a clarification describing the business.' };
+  if (prompt.length > 500) return { ok: false, message: 'Clarification must be 500 characters or fewer.' };
+
+  const db = getDb();
+
+  // Read-before-spend: status guard + cap check off the Postgres row.
+  const [row] = await db
+    .select({ status: buildsellSites.status, metadata: buildsellSites.metadata })
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+  if (!row) return { ok: false, message: 'Site not found.' };
+
+  if (row.status === 'paid' || row.status === 'live') {
+    return { ok: false, message: `Cannot revise a ${row.status} site — it is sold and indexed.` };
+  }
+
+  const capPerDay = Number(process.env.BUILDSELL_REVISE_CAP_PER_DAY ?? '5');
+  const todayUtc  = new Date().toISOString().slice(0, 10);
+  const meta      = (row.metadata ?? {}) as Record<string, unknown>;
+  const capData   = (meta.reviseCap ?? {}) as { date?: string; count?: number };
+  const todayCount = (capData.date === todayUtc ? (capData.count ?? 0) : 0);
+
+  if (todayCount >= capPerDay) {
+    log.warn({ siteId, todayCount, capPerDay }, 'reviseBuildSellCopy: daily cap reached');
+    return { ok: false, message: `Daily revision cap (${capPerDay}/day) reached for this site. Try again tomorrow.` };
+  }
+
+  const buildEpoch = Date.now().toString();
+
+  // Persist cap + last prompt + fresh epoch BEFORE enqueue (audit trail + dedupe).
+  try {
+    await db
+      .update(buildsellSites)
+      .set({
+        buildEpoch,
+        metadata: {
+          ...meta,
+          reviseCap: { date: todayUtc, count: todayCount + 1 },
+          lastClarifyingPrompt: { prompt, revisedAt: new Date().toISOString() },
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(buildsellSites.id, siteId));
+  } catch (err) {
+    log.error({ siteId, err }, 'reviseBuildSellCopy: row update failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'failed to record revision' };
+  }
+
+  try {
+    await db.insert(agentEvents).values({
+      agent: 'operator',
+      type: 'buildsell.revise',
+      targetAgent: 'spec-site-builder',
+      payload: {
+        buildsell_site_id: siteId,
+        build_epoch: buildEpoch,
+        clarifying_prompt: prompt,
+        preserve_theme: true,
+      },
+    });
+  } catch (err) {
+    log.error({ siteId, err }, 'reviseBuildSellCopy: agent event insert failed');
+    return { ok: false, message: `Revision recorded but failed to enqueue: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  log.info({ siteId, len: prompt.length }, 'reviseBuildSellCopy: revise event enqueued');
+  revalidatePath(`/operator/buildsell/${siteId}`);
+  revalidatePath('/operator/buildsell');
+  return { ok: true };
 }
 
 // NOTE: do NOT re-export types from this 'use server' file. Turbopack's

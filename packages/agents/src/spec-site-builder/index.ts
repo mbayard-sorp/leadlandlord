@@ -18,6 +18,7 @@ import {
 import { writeBuildSellToSanity, type ExistingDocFields, type MigratedOverlay } from './persist-sanity';
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
+import { presetByName } from '@leadlandlord/sanity-schema/presets';
 import {
   pick,
   rotationSeed,
@@ -214,6 +215,102 @@ export function normalizeSpecSite(
  * count of existing buildsell_sites in the same (trade, city) so adjacent
  * market sites cycle through distinct variants (R5).
  */
+/** Existing theme pulled off a Sanity buildsellSite doc, hex unpacked. */
+interface ExistingTheme {
+  preset?: string;
+  layoutVariant?: 'split' | 'bold' | 'trust';
+  fontHeading?: string;
+  fontBody?: string;
+  primary?: string;
+  primaryDark?: string;
+  accent?: string;
+  onPrimary?: string;
+  bg?: string;
+  surface?: string;
+  text?: string;
+  muted?: string;
+}
+
+const LAYOUT_SET = new Set(['split', 'bold', 'trust']);
+
+/** Unpack a Sanity `{_type:'color',hex}` object (or a plain string) to a hex string. */
+function hexOf(c: unknown): string | undefined {
+  if (typeof c === 'string') return c;
+  if (c && typeof c === 'object' && typeof (c as Record<string, unknown>)['hex'] === 'string') {
+    return (c as Record<string, string>)['hex'];
+  }
+  return undefined;
+}
+
+/** Extract a theme object off a fetched doc, unpacking color objects → hex strings. */
+function extractExistingTheme(raw: unknown): ExistingTheme | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  const lvRaw = t['layoutVariant'];
+  const layoutVariant =
+    typeof lvRaw === 'string' && LAYOUT_SET.has(lvRaw) ? (lvRaw as 'split' | 'bold' | 'trust') : undefined;
+  return {
+    preset: typeof t['preset'] === 'string' ? t['preset'] : undefined,
+    layoutVariant,
+    fontHeading: typeof t['fontHeading'] === 'string' ? t['fontHeading'] : undefined,
+    fontBody: typeof t['fontBody'] === 'string' ? t['fontBody'] : undefined,
+    primary: hexOf(t['primary']),
+    primaryDark: hexOf(t['primaryDark']),
+    accent: hexOf(t['accent']),
+    onPrimary: hexOf(t['onPrimary']),
+    bg: hexOf(t['bg']),
+    surface: hexOf(t['surface']),
+    text: hexOf(t['text']),
+    muted: hexOf(t['muted']),
+  };
+}
+
+/**
+ * Final theme written to Sanity. Colors are PRESET-AUTHORITATIVE: a build pins
+ * them to the canonical BUILDSELL_PRESETS palette for the rotation-assigned
+ * preset name, so the stored hex always matches the named preset and switching
+ * the preset in Studio recolors the site (site-host resolves colors from the
+ * name). Fonts/layout come from rotation. A preserve_theme revision keeps the
+ * existing design verbatim instead of re-deriving it.
+ */
+function resolveBuildTheme(
+  modelTheme: SpecSiteContentType['theme'],
+  rotation: { preset: string; layoutVariant: string; fontHeading: string; fontBody: string },
+  preserve: ExistingTheme | null,
+): SpecSiteContentType['theme'] {
+  if (preserve) {
+    return {
+      preset: preserve.preset ?? modelTheme.preset,
+      layoutVariant: (preserve.layoutVariant ?? modelTheme.layoutVariant),
+      fontHeading: preserve.fontHeading ?? modelTheme.fontHeading,
+      fontBody: preserve.fontBody ?? modelTheme.fontBody,
+      primary: preserve.primary ?? modelTheme.primary,
+      primaryDark: preserve.primaryDark ?? modelTheme.primaryDark,
+      accent: preserve.accent ?? modelTheme.accent,
+      onPrimary: preserve.onPrimary ?? modelTheme.onPrimary,
+      bg: preserve.bg ?? modelTheme.bg,
+      surface: preserve.surface ?? modelTheme.surface,
+      text: preserve.text ?? modelTheme.text,
+      muted: preserve.muted ?? modelTheme.muted,
+    };
+  }
+  const canon = presetByName(rotation.preset);
+  return {
+    preset: rotation.preset,
+    layoutVariant: rotation.layoutVariant as 'split' | 'bold' | 'trust',
+    fontHeading: rotation.fontHeading,
+    fontBody: rotation.fontBody,
+    primary: canon?.primary ?? modelTheme.primary,
+    primaryDark: canon?.primaryDark ?? modelTheme.primaryDark,
+    accent: canon?.accent ?? modelTheme.accent,
+    onPrimary: canon?.onPrimary ?? modelTheme.onPrimary,
+    bg: canon?.bg ?? modelTheme.bg,
+    surface: canon?.surface ?? modelTheme.surface,
+    text: canon?.text ?? modelTheme.text,
+    muted: canon?.muted ?? modelTheme.muted,
+  };
+}
+
 export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, typeof SpecSiteBuilderOutput> {
   private spentThisRun = 0;
 
@@ -257,12 +354,13 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
   }
 
   protected async execute(
-    input: { buildsell_site_id: string; build_epoch: string; phone?: string; address_line?: string },
+    input: SpecSiteBuilderInput,
     ctx: AgentContext,
-    options?: { forceRebuild?: boolean },
   ): Promise<SpecSiteBuilderOutput> {
     this.spentThisRun = 0;
     const db = getDb();
+    const preserveTheme = input.preserve_theme === true;
+    const clarifyingPrompt = input.clarifying_prompt?.trim() || undefined;
 
     const [site] = await db
       .select()
@@ -271,8 +369,14 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       .limit(1);
     if (!site) throw new Error(`buildsell_sites row not found: ${input.buildsell_site_id}`);
 
+    // Captured before we flip to 'building': a revise/rebuild of an invoiced
+    // site must land back on 'invoiced', not silently downgrade to 'draft'.
+    const priorStatus = site.status;
+
     // D4 status guard: refuse to rebuild paid/live sites unless explicitly forced.
-    if ((site.status === 'paid' || site.status === 'live') && !options?.forceRebuild) {
+    // (Reachable now that force_rebuild travels via the input schema, not a dead
+    // options arg — a plain rebuild OR a revise of a sold site is blocked.)
+    if ((site.status === 'paid' || site.status === 'live') && input.force_rebuild !== true) {
       throw new RebuildProtectedError(site.id, site.status);
     }
 
@@ -284,6 +388,8 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
 
     // D4 read-merge: fetch existing Sanity doc to preserve operator-owned fields.
     let existingDoc: ExistingDocFields | null = null;
+    // Existing theme (hex unpacked) — used to keep the design on a preserve_theme revision.
+    let existingTheme: ExistingTheme | null = null;
     try {
       const sanityClient = createWriteClient();
       const docId = buildsellSiteDocId(site.id);
@@ -299,8 +405,12 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
           purchaseUrl: typeof existing['purchaseUrl'] === 'string' ? existing['purchaseUrl'] : null,
           ownerEmail: typeof existing['ownerEmail'] === 'string' ? existing['ownerEmail'] : null,
           existingStreet: typeof addr?.['street'] === 'string' ? addr['street'] : null,
+          // Preserve NAP phone on rebuild/revise when the payload carries none,
+          // so createOrReplace doesn't blank a previously-set number.
+          existingPhone: typeof existing['phone'] === 'string' ? existing['phone'] : null,
           migrated: parseMigrated(existing['migrated']),
         };
+        existingTheme = extractExistingTheme(existing['theme']);
       }
     } catch (err) {
       ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'could not fetch existing Sanity doc for read-merge (non-fatal)');
@@ -334,19 +444,29 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
     const seed = rotationSeed(Math.max(0, Number(sameMarketCount) - 1));
 
     const rotation = {
-      layoutVariant: pick(LAYOUT_VARIANTS, seed),
+      layoutVariant: pick(LAYOUT_VARIANTS, seed) as string,
       preset: pick(PRESET_ROTATION, seed),
-      fontHeading: pick(FONT_HEADING_POOL, seed),
-      fontBody: pick(FONT_BODY_POOL, seed),
+      fontHeading: pick(FONT_HEADING_POOL, seed) as string,
+      fontBody: pick(FONT_BODY_POOL, seed) as string,
       servicesHeading: pick(SERVICES_HEADING_PATTERNS, seed),
       servicesSubhead: pick(SERVICES_SUBHEAD_PATTERNS, seed).replace('{trade}', site.trade),
       reviewsHeading: pick(REVIEWS_HEADING_PATTERNS, seed),
       imagenOpener: pick(IMAGEN_HERO_OPENERS, seed),
     };
 
+    // Copy-only revision: keep the existing design — feed the existing theme
+    // bits as the prompt directives so the model doesn't fight the rotation.
+    // (Colors/fonts/layout are also hard-overwritten post-generation below.)
+    if (preserveTheme && existingTheme) {
+      if (existingTheme.preset) rotation.preset = existingTheme.preset;
+      if (existingTheme.layoutVariant) rotation.layoutVariant = existingTheme.layoutVariant;
+      if (existingTheme.fontHeading) rotation.fontHeading = existingTheme.fontHeading;
+      if (existingTheme.fontBody) rotation.fontBody = existingTheme.fontBody;
+    }
+
     // ── Step 1: Claude generates the structured site content ──
     const content = await this.generateContent(
-      { ...site, phone, addressLine, rating, userRatingCount, primaryType, rotation },
+      { ...site, phone, addressLine, rating, userRatingCount, primaryType, rotation, clarifyingPrompt },
       ctx,
     );
     // After first generation: assertUnderCap before proceeding to images.
@@ -361,7 +481,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       ctx.log.warn({ violations }, 'spec-site lint violations — retrying content generation once');
       try {
         const retried = await this.generateContent(
-          { ...site, phone, addressLine, rating, userRatingCount, primaryType, rotation, lintViolations: violations },
+          { ...site, phone, addressLine, rating, userRatingCount, primaryType, rotation, clarifyingPrompt, lintViolations: violations },
           ctx,
         );
         const { content: retriedNormalized, violations: retriedViolations } = normalizeSpecSite(retried, site.businessName);
@@ -375,6 +495,13 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
         ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'spec-site lint retry failed — using first pass');
       }
     }
+
+    // Pin the theme: canonical preset colors for a build, or the existing
+    // design for a preserve_theme revision. (Replaces any model color drift.)
+    finalContent = {
+      ...finalContent,
+      theme: resolveBuildTheme(finalContent.theme, rotation, preserveTheme ? existingTheme : null),
+    };
 
     // Migration overlay: when the operator approved a real hero/about photo,
     // use it verbatim and SKIP image generation (saves cost + preserves it).
@@ -459,9 +586,11 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
     });
 
     // ── Step 4: finalize Postgres row ──
+    // Preserve 'invoiced' across a revise/rebuild; everything else lands 'draft'.
+    const finalStatus = priorStatus === 'invoiced' ? 'invoiced' : 'draft';
     await db
       .update(buildsellSites)
-      .set({ status: 'draft', slug, themePreset: finalContent.theme.preset, updatedAt: new Date() })
+      .set({ status: finalStatus, slug, themePreset: finalContent.theme.preset, updatedAt: new Date() })
       .where(eq(buildsellSites.id, site.id));
 
     ctx.log.info(
@@ -500,6 +629,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
         reviewsHeading: string;
         imagenOpener: string;
       };
+      clarifyingPrompt?: string;
       lintViolations?: string[];
     },
     ctx: AgentContext,
@@ -541,6 +671,19 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
     promptLines.push(`services.subhead: ${site.rotation.servicesSubhead}`);
     promptLines.push(`reviews.heading: ${site.rotation.reviewsHeading}`);
     promptLines.push(`hero.imagePrompt opener: "${site.rotation.imagenOpener}"`);
+
+    // Operator refinement — subordinate to every system.md rule. A correction
+    // hint that clarifies what the business actually is/does; it can refine
+    // wording and emphasis but NEVER licenses invented facts, fake reviews,
+    // phone numbers, awards, or anything the hard rules forbid.
+    if (site.clarifyingPrompt) {
+      promptLines.push('');
+      promptLines.push('## Operator refinement hint (subordinate to all system rules)');
+      promptLines.push(
+        'Apply this clarification to the copy. It cannot override the hard rules above (no invented facts, licenses, phone numbers, verbatim or fabricated reviews, award claims):',
+      );
+      promptLines.push(site.clarifyingPrompt);
+    }
 
     if (site.lintViolations && site.lintViolations.length > 0) {
       promptLines.push('');
