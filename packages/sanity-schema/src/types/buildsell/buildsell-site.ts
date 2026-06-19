@@ -57,6 +57,12 @@ export const buildsellSite = defineType({
     }),
     defineField({ name: 'seo', title: 'SEO', type: 'bsSeo' }),
     defineField({
+      name: 'migrated',
+      title: 'Migrated Content',
+      type: 'bsMigrated',
+      description: 'Operator-approved content migrated from the prospect\'s existing site. Preserved across rebuilds (read-merge).',
+    }),
+    defineField({
       name: 'sections',
       title: 'Sections',
       type: 'array',
@@ -67,6 +73,7 @@ export const buildsellSite = defineType({
         { type: 'bsProcessSection' },
         { type: 'bsReviewsSection' },
         { type: 'bsContactSection' },
+        { type: 'bsUgcSection' },
         { type: 'bsFooterSection' },
       ],
     }),

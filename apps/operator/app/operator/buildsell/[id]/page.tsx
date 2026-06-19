@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { getDb, buildsellSites } from '@leadlandlord/db';
 import { BuildSellImagePanel } from '../BuildSellImagePanel';
+import { MigrationReviewPanel } from '../MigrationReviewPanel';
 import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
+import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,8 +27,10 @@ export default async function BuildSellDetailPage({ params }: Params) {
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
 
-  // Last clarification (if any) for the revise panel — stored in metadata jsonb.
   const meta = (site.metadata ?? {}) as Record<string, unknown>;
+  // Pending content-migration suggestions (staged by the content-migrator agent).
+  const pendingMigration = (meta[PENDING_MIGRATION_KEY] as PendingMigration | undefined) ?? null;
+  // Last clarification (if any) for the revise panel — stored in metadata jsonb.
   const lastClarifyingPrompt =
     meta.lastClarifyingPrompt && typeof meta.lastClarifyingPrompt === 'object'
       ? (meta.lastClarifyingPrompt as { prompt: string; revisedAt: string })
@@ -103,6 +107,13 @@ export default async function BuildSellDetailPage({ params }: Params) {
           </a>
         )}
       </section>
+
+      {/* Content migration review queue */}
+      <MigrationReviewPanel
+        siteId={site.id}
+        pending={pendingMigration}
+        canCrawl={!isPaidOrLive}
+      />
 
       {/* Copy revision — hidden on sold/indexed sites */}
       {!isPaidOrLive && (

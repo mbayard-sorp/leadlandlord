@@ -91,6 +91,35 @@ export async function reapExpiredBuildSellPii(db: Db = getDb()): Promise<number>
   return result.length;
 }
 
+/**
+ * Retention sweep for raw content-migration suggestions.
+ *
+ * The content-migrator stages a `metadata.pendingMigration` blob (crawled copy
+ * + uploaded-image refs) for operator review. APPROVED content is copied into
+ * the Sanity doc by applyMigrationSelections (durable there), so the blob is
+ * disposable. This drops any pendingMigration blob older than `ttlDays`
+ * regardless of status — honoring the "discard raw crawl output" guarantee.
+ *
+ * Uses the jsonb `-` operator to strip just that key, preserving the rest of
+ * metadata (rating, regenCap, etc.). Idempotent. Returns the number of rows
+ * swept. Called every operator tick (no separate cron).
+ */
+export async function sweepStalePendingMigrations(
+  ttlDays = Number(process.env.MIGRATION_PENDING_TTL_DAYS ?? '14'),
+  db: Db = getDb(),
+): Promise<number> {
+  const result = await db.execute(sql`
+    UPDATE buildsell_sites
+    SET metadata = metadata - 'pendingMigration', updated_at = now()
+    WHERE metadata ? 'pendingMigration'
+      AND (metadata->'pendingMigration'->>'createdAt') IS NOT NULL
+      AND (metadata->'pendingMigration'->>'createdAt')::timestamptz
+            < now() - make_interval(days => ${ttlDays})
+  `);
+  // drizzle's execute returns a result whose rowCount reflects affected rows.
+  return (result as unknown as { rowCount?: number }).rowCount ?? 0;
+}
+
 // ────────────────────────────────────────────────────────────
 // Lead CRM (call tracking). Persisted LAZILY: a lead only lands in
 // buildsell_leads the moment the operator first acts on it (mark Called /

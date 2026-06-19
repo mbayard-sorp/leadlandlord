@@ -11,6 +11,10 @@ import {
   fetchFreshBuildsellLeads,
   type LeadSnapshot,
 } from '@leadlandlord/db';
+import {
+  PENDING_MIGRATION_KEY,
+  type MigrationSelections,
+} from '@leadlandlord/agents/content-migrator/types';
 import { searchLeads } from '@leadlandlord/integrations/google-places';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import { createWriteClient, uploadHeroImage } from '@leadlandlord/integrations/sanity';
@@ -714,6 +718,268 @@ export async function regenerateBuildSellImage(
   revalidatePath(`/operator/buildsell/${siteId}`);
   revalidatePath('/operator/buildsell');
   return { ok: true, imageUrl };
+}
+
+// ─── Content migration (crawl existing site → review queue → apply) ───────────
+
+interface CrawlResult {
+  ok: boolean;
+  message?: string;
+}
+
+/**
+ * Enqueue a content-migrator run for a draft site. Resolves the prospect's
+ * website from the fresh Places cache (by place_id) and dispatches a
+ * `buildsell.migrate` event. The agent stages suggestions on
+ * metadata.pendingMigration — it never touches the live Sanity doc.
+ *
+ * Disabled at the UI level when no website is on file; this re-checks server-side.
+ */
+export async function crawlExistingSite(siteId: string): Promise<CrawlResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+  const [site] = await db
+    .select()
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+  if (!site) return { ok: false, message: 'Site not found.' };
+  if (site.status === 'paid' || site.status === 'live') {
+    return { ok: false, message: `Cannot crawl a ${site.status} site.` };
+  }
+
+  // Resolve the website URI from the fresh Places cache (by place_id). It is
+  // never stored on buildsell_sites; the reaper may have nulled it after 30d.
+  let websiteUri: string | null = null;
+  if (site.placeId) {
+    try {
+      const cached = await fetchFreshBuildsellLeads([site.placeId]);
+      websiteUri = cached[0]?.websiteUri ?? null;
+    } catch (err) {
+      log.warn({ siteId, err }, 'crawlExistingSite: cache lookup failed');
+    }
+  }
+  if (!websiteUri) {
+    return { ok: false, message: 'No website on file for this lead (not cached, or the lead has no site).' };
+  }
+
+  try {
+    await db.insert(agentEvents).values({
+      agent: 'operator',
+      type: 'buildsell.migrate',
+      targetAgent: 'content-migrator',
+      payload: {
+        buildsell_site_id: siteId,
+        website_uri: websiteUri,
+        crawl_epoch: Date.now().toString(),
+      },
+    });
+  } catch (err) {
+    log.error({ siteId, err }, 'crawlExistingSite: event insert failed');
+    return { ok: false, message: `Failed to enqueue crawl: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  log.info({ siteId, websiteUri }, 'crawlExistingSite: migration crawl enqueued');
+  revalidatePath(`/operator/buildsell/${siteId}`);
+  return { ok: true, message: 'Crawl queued. Suggestions appear here once it finishes (~1 min).' };
+}
+
+interface ApplyMigrationResult {
+  ok: boolean;
+  message?: string;
+}
+
+function imageRef(assetId: string) {
+  return { _type: 'image', asset: { _type: 'reference', _ref: assetId } };
+}
+
+/**
+ * Apply operator-approved migration selections to the live Sanity doc AND
+ * record them in the durable `migrated` overlay (so a future rebuild re-applies
+ * them via the read-merge in persist-sanity.ts). Clears the pending blob.
+ *
+ * Patches the visible doc immediately (no rebuild needed for preview): the
+ * sections array is mutated in place — hero headline/image, about body/image,
+ * services, footer socials — plus a bsUgcSection is inserted before the footer.
+ */
+export async function applyMigrationSelections(
+  siteId: string,
+  selections: MigrationSelections,
+): Promise<ApplyMigrationResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+  const [site] = await db
+    .select({ metadata: buildsellSites.metadata })
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+  if (!site) return { ok: false, message: 'Site not found.' };
+
+  const meta = (site.metadata ?? {}) as Record<string, unknown>;
+  const pending = (meta[PENDING_MIGRATION_KEY] ?? {}) as { source?: string };
+  const source = typeof pending.source === 'string' ? pending.source : undefined;
+
+  const client = createWriteClient();
+  const docId = buildsellSiteDocId(siteId);
+
+  // Fetch the current doc so we can mutate its sections array in place.
+  const doc = (await client.getDocument(docId)) as Record<string, unknown> | null | undefined;
+  if (!doc) {
+    return { ok: false, message: 'Site has not been built yet — build the draft before applying migration.' };
+  }
+  const sections = Array.isArray(doc['sections'])
+    ? (doc['sections'] as Array<Record<string, unknown>>).map((s) => ({ ...s }))
+    : [];
+
+  const find = (type: string) => sections.find((s) => s['_type'] === type);
+
+  // Hero: headline (drop highlight — fragment no longer matches) + image.
+  if (selections.headline || selections.heroImage) {
+    const hero = find('bsHeroSection');
+    if (hero) {
+      if (selections.headline) {
+        hero['headline'] = selections.headline;
+        delete hero['highlight'];
+      }
+      if (selections.heroImage) hero['image'] = imageRef(selections.heroImage.assetId);
+    }
+  }
+
+  // About: body + image.
+  if (selections.aboutBody || selections.aboutImage) {
+    const about = find('bsAboutSection');
+    if (about) {
+      if (selections.aboutBody) about['body'] = selections.aboutBody;
+      if (selections.aboutImage) about['image'] = imageRef(selections.aboutImage.assetId);
+    }
+  }
+
+  // Services.
+  if (selections.services && selections.services.length > 0) {
+    const svc = find('bsServicesSection');
+    if (svc) {
+      svc['services'] = selections.services.map((s, i) => ({
+        _key: `svc${i}`,
+        _type: 'bsServiceCard',
+        icon: s.icon,
+        title: s.title,
+        description: s.description,
+      }));
+    }
+  }
+
+  // Footer socials.
+  if (selections.socials && selections.socials.length > 0) {
+    const footer = find('bsFooterSection');
+    if (footer) {
+      footer['social'] = selections.socials.map((s, i) => ({
+        _key: `soc${i}`,
+        _type: 'bsSocialLink',
+        platform: s.platform,
+        href: s.href,
+      }));
+    }
+  }
+
+  // UGC: rebuild a bsUgcSection and place it before the footer (or append).
+  if (selections.ugc && selections.ugc.length > 0) {
+    const ugcSection = {
+      _key: 'ugc',
+      _type: 'bsUgcSection',
+      heading: 'From Our Community',
+      items: selections.ugc.map((u, i) => ({
+        _key: `ugc${i}`,
+        _type: 'bsUgcItem',
+        platform: u.platform,
+        ...(u.postUrl ? { postUrl: u.postUrl } : {}),
+        ...(u.caption ? { caption: u.caption } : {}),
+        order: i,
+        ...(u.asset ? { thumbnail: imageRef(u.asset.assetId) } : {}),
+      })),
+    };
+    const withoutUgc = sections.filter((s) => s['_type'] !== 'bsUgcSection');
+    const footerIdx = withoutUgc.findIndex((s) => s['_type'] === 'bsFooterSection');
+    if (footerIdx >= 0) withoutUgc.splice(footerIdx, 0, ugcSection);
+    else withoutUgc.push(ugcSection);
+    sections.length = 0;
+    sections.push(...withoutUgc);
+  }
+
+  // Durable overlay (bsMigrated) — re-applied on every rebuild.
+  const migrated: Record<string, unknown> = { _type: 'bsMigrated', migratedAt: new Date().toISOString() };
+  if (source) migrated.source = source;
+  if (selections.headline) migrated.headline = selections.headline;
+  if (selections.aboutBody) migrated.aboutBody = selections.aboutBody;
+  if (selections.services?.length) {
+    migrated.services = selections.services.map((s, i) => ({ _key: `msvc${i}`, _type: 'bsServiceCard', icon: s.icon, title: s.title, description: s.description }));
+  }
+  if (selections.socials?.length) {
+    migrated.socials = selections.socials.map((s, i) => ({ _key: `msoc${i}`, _type: 'bsSocialLink', platform: s.platform, href: s.href }));
+  }
+  if (selections.logo) migrated.logoAssetId = selections.logo.assetId;
+  if (selections.heroImage) migrated.heroImageAssetId = selections.heroImage.assetId;
+  if (selections.aboutImage) migrated.aboutImageAssetId = selections.aboutImage.assetId;
+  if (selections.ugc?.length) {
+    migrated.ugc = selections.ugc.map((u, i) => ({
+      _key: `mugc${i}`,
+      _type: 'bsMigratedUgcItem',
+      platform: u.platform,
+      ...(u.postUrl ? { postUrl: u.postUrl } : {}),
+      ...(u.caption ? { caption: u.caption } : {}),
+      ...(u.asset ? { thumbnailAssetId: u.asset.assetId } : {}),
+    }));
+  }
+
+  const patchSet: Record<string, unknown> = { sections, migrated };
+  if (selections.logo) patchSet.logo = imageRef(selections.logo.assetId);
+
+  try {
+    await client.patch(docId).set(patchSet).commit({ visibility: 'sync' });
+  } catch (err) {
+    log.error({ siteId, err }, 'applyMigrationSelections: Sanity patch failed');
+    return { ok: false, message: `Apply failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  // Mark the pending blob applied (clears it from the review queue).
+  try {
+    const newMeta = { ...meta, [PENDING_MIGRATION_KEY]: { ...(meta[PENDING_MIGRATION_KEY] as object ?? {}), status: 'applied' } };
+    await db.update(buildsellSites).set({ metadata: newMeta }).where(eq(buildsellSites.id, siteId));
+  } catch (err) {
+    log.warn({ siteId, err }, 'applyMigrationSelections: pending status update failed (non-fatal)');
+  }
+
+  log.info({ siteId }, 'applyMigrationSelections: migration applied to live doc + overlay');
+  revalidatePath(`/operator/buildsell/${siteId}`);
+  revalidatePath('/operator/buildsell');
+  return { ok: true, message: 'Migration applied. Preview to review.' };
+}
+
+/** Discard the pending migration suggestions without applying anything. */
+export async function rejectMigration(siteId: string): Promise<ApplyMigrationResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+  const [site] = await db
+    .select({ metadata: buildsellSites.metadata })
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+  if (!site) return { ok: false, message: 'Site not found.' };
+
+  const meta = (site.metadata ?? {}) as Record<string, unknown>;
+  const newMeta = { ...meta, [PENDING_MIGRATION_KEY]: { ...(meta[PENDING_MIGRATION_KEY] as object ?? {}), status: 'rejected' } };
+  try {
+    await db.update(buildsellSites).set({ metadata: newMeta }).where(eq(buildsellSites.id, siteId));
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'reject failed' };
+  }
+  revalidatePath(`/operator/buildsell/${siteId}`);
+  return { ok: true, message: 'Suggestions discarded.' };
 }
 
 // ─── Revise copy ───────────────────────────────────────────────────────────
