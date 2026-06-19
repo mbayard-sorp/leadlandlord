@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { BUILDSELL_PRESETS } from '@leadlandlord/sanity-schema/presets';
 import { BUILDSELL_FONT_VAR_MAP } from '@/lib/buildsell-fonts';
 import { presetByName } from '@leadlandlord/sanity-schema/presets';
@@ -61,6 +62,10 @@ export function BuildSellThemeBar({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [locked, setLocked] = useState(initialLocked);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Ref to the .bs-root element so we can mutate CSS vars without a re-render.
   const getRootEl = useCallback((): HTMLElement | null => {
@@ -108,8 +113,23 @@ export function BuildSellThemeBar({
 
   const handleLayoutChange = (v: LayoutVariant) => {
     setLayout(v);
+    // Instant CSS-level feedback (nav treatment, grid alignment) while the
+    // server round-trip below swaps the per-variant block structure.
     const el = getRootEl();
     if (el) el.setAttribute('data-bs-layout', v);
+
+    // The hero/contact/etc. structure is server-rendered from the layoutVariant
+    // prop, so a client attribute flip alone can't change it. Push the selection
+    // (plus the in-progress preset/fonts and the save token) to the URL and let
+    // the force-dynamic preview route re-render with the new variant.
+    const params = new URLSearchParams();
+    const token = searchParams.get('t');
+    if (token) params.set('t', token);
+    params.set('layout', v);
+    params.set('preset', preset);
+    params.set('fh', fontHeading);
+    params.set('fb', fontBody);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const handleFontHeadingChange = (name: string) => {
