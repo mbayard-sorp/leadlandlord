@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../lib/site-context';
 import { sanityToBundle } from '../lib/theme-bundle';
-import { fetchCorporatePageList } from '../lib/sanity';
+import { fetchCorporatePageList, fetchBuildSellSitemapEntries } from '../lib/sanity';
 import type { Page } from '../lib/content';
 import { pageHref } from '../lib/content';
 
@@ -32,8 +32,12 @@ function canonical(base: string, path: string): string {
 }
 
 async function corporateSitemap(base: string): Promise<MetadataRoute.Sitemap> {
-  const pages = await fetchCorporatePageList();
-  return pages
+  const [pages, bsEntries] = await Promise.all([
+    fetchCorporatePageList(),
+    fetchBuildSellSitemapEntries(),
+  ]);
+
+  const corporateEntries: MetadataRoute.Sitemap = pages
     .map((p) => {
       const meta = CORPORATE_KIND_META[p.kind];
       if (!meta) return null;
@@ -47,6 +51,15 @@ async function corporateSitemap(base: string): Promise<MetadataRoute.Sitemap> {
     })
     .filter((e): e is NonNullable<typeof e> => e !== null)
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+  const buildsellEntries: MetadataRoute.Sitemap = bsEntries.map((entry) => ({
+    url: canonical(base, `/buildsell/${entry.slug}`),
+    lastModified: entry.updatedAt ? new Date(entry.updatedAt) : new Date(),
+    changeFrequency: 'monthly' as const,
+    priority: 0.6,
+  }));
+
+  return [...corporateEntries, ...buildsellEntries];
 }
 
 // Cache the rendered sitemap for an hour. Without this, every Googlebot

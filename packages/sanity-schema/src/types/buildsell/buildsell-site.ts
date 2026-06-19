@@ -15,6 +15,7 @@ export const buildsellSite = defineType({
   type: 'document',
   fields: [
     defineField({ name: 'buildsellSiteId', title: 'Build & Sell Site ID', type: 'string', description: 'Postgres buildsell_sites.id (uuid).', validation: (r) => r.required() }),
+    defineField({ name: 'placeId', title: 'Google Place ID', type: 'string', description: 'Google Places place_id. Powers the "View on Google Maps" link and LocalBusiness sameAs.' }),
     defineField({ name: 'businessName', title: 'Business Name', type: 'string', validation: (r) => r.required() }),
     defineField({ name: 'trade', title: 'Trade', type: 'string' }),
     defineField({ name: 'city', title: 'City', type: 'string' }),

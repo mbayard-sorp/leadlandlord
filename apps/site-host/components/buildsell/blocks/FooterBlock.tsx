@@ -1,12 +1,15 @@
 import type { BuildSellSection } from '@/lib/sanity';
+import { googleMapsUrl } from '@/lib/google-maps-url';
 
 interface FooterBlockProps {
   section: BuildSellSection;
   businessName: string;
+  placeId?: string | null;
 }
 
-export function FooterBlock({ section, businessName }: FooterBlockProps) {
+export function FooterBlock({ section, businessName, placeId }: FooterBlockProps) {
   const year = new Date().getFullYear();
+  const mapsUrl = googleMapsUrl(businessName, placeId);
 
   return (
     <footer className="bs-footer">
@@ -108,6 +111,18 @@ export function FooterBlock({ section, businessName }: FooterBlockProps) {
           ) : (
             <p style={{ margin: 0 }}>
               &copy; {year} {businessName}. All rights reserved.
+            </p>
+          )}
+          {mapsUrl && (
+            <p style={{ margin: '0.5rem 0 0' }}>
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'color-mix(in srgb, var(--bs-bg) 70%, transparent)', textDecoration: 'underline', fontSize: '0.8rem' }}
+              >
+                View on Google Maps
+              </a>
             </p>
           )}
         </div>

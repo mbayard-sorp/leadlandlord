@@ -119,6 +119,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       city: site.city,
       state: site.state,
       ownerEmail: site.ownerEmail,
+      placeId: site.placeId,
       slug,
       content,
       heroImageAssetId,
@@ -147,7 +148,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
   }
 
   private async generateContent(
-    site: { businessName: string; trade: string; city: string; state: string },
+    site: { businessName: string; trade: string; city: string; state: string; metadata?: unknown },
     ctx: AgentContext,
   ): Promise<SpecSiteContentType> {
     if (process.env.MOCK_AI === 'true') {
@@ -156,14 +157,29 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
 
     const client = getAnthropicClient();
     const model = process.env.SPEC_SITE_BUILDER_MODEL ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
-    const userPrompt = [
+
+    // Extract optional enrichment signals from metadata (jsonb).
+    const meta = site.metadata != null && typeof site.metadata === 'object' ? site.metadata as Record<string, unknown> : null;
+    const rating         = meta?.rating         != null ? Number(meta.rating)         : null;
+    const userRatingCount = meta?.userRatingCount != null ? Number(meta.userRatingCount) : null;
+    const primaryType    = typeof meta?.primaryType === 'string' ? meta.primaryType   : null;
+
+    const promptLines = [
       `Business name: ${site.businessName}`,
       `Trade / category: ${site.trade}`,
       `City: ${site.city}`,
       `State: ${site.state}`,
-      '',
-      `Call ${SUBMIT_TOOL} exactly once with the complete spec site. Remember: name + category + city only; reviews are original representative testimonials, never verbatim Google reviews.`,
-    ].join('\n');
+    ];
+    if (rating != null && !isNaN(rating)) {
+      promptLines.push(`Aggregate Google rating: ${rating.toFixed(1)}${userRatingCount != null && !isNaN(userRatingCount) ? ` from ${userRatingCount} reviews` : ''}`);
+    }
+    if (primaryType) {
+      promptLines.push(`Google primary category: ${primaryType.replace(/_/g, ' ')}`);
+    }
+    promptLines.push('');
+    promptLines.push(`Call ${SUBMIT_TOOL} exactly once with the complete spec site. Remember: name + category + city only; reviews are original representative testimonials, never verbatim Google reviews.`);
+
+    const userPrompt = promptLines.join('\n');
 
     const response = await client.messages.create({
       model,

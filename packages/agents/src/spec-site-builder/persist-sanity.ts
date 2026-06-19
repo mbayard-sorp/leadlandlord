@@ -9,6 +9,8 @@ export interface WriteBuildSellArgs {
   city: string;
   state: string;
   ownerEmail?: string | null;
+  /** Google Places place_id — stored verbatim; used to build a Maps link. Null when unavailable. */
+  placeId?: string | null;
   slug: string;
   content: SpecSiteContent;
   /** Sanity asset _id for the generated hero image, when one was produced. */
@@ -129,6 +131,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     city: args.city,
     state: args.state,
     ownerEmail: args.ownerEmail ?? undefined,
+    placeId: args.placeId ?? undefined,
     slug: { _type: 'slug', current: args.slug },
     navigation: content.navigation.map((n, i) => ({ _key: `nav${i}`, _type: 'bsNavLink', ...n })),
     theme: { _type: 'buildsellTheme', ...content.theme },

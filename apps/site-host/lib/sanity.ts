@@ -247,6 +247,7 @@ const BUILDSELL_PROJECTION = `{
   city,
   state,
   phone,
+  placeId,
   "slug": slug.current,
   draftMode,
   robotsDisallow,
@@ -363,6 +364,7 @@ export interface BuildSellSite {
   city: string;
   state: string;
   phone?: string | null;
+  placeId?: string | null;
   slug: string;
   draftMode?: boolean | null;
   robotsDisallow?: boolean | null;
@@ -381,4 +383,24 @@ export async function fetchBuildSellSiteById(id: string): Promise<BuildSellSite 
 export async function fetchBuildSellSiteBySlug(slug: string): Promise<BuildSellSite | null> {
   const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_SLUG_QUERY, { slug });
   return result ?? null;
+}
+
+/** Minimal stub returned by fetchBuildSellSitemapEntries. */
+export interface BuildSellSitemapStub {
+  slug: string;
+  updatedAt: string;
+}
+
+const BUILDSELL_SITEMAP_QUERY = `*[_type=="buildsellSite" && draftMode==false && robotsDisallow==false && defined(slug.current)]{
+  "slug": slug.current,
+  "updatedAt": _updatedAt
+}`;
+
+/**
+ * Fetch slugs + timestamps for all live (paid, indexable) buildsell spec sites.
+ * Used by sitemap.ts to emit /buildsell/{slug} entries.
+ */
+export async function fetchBuildSellSitemapEntries(): Promise<BuildSellSitemapStub[]> {
+  const result = await sanity.fetch<BuildSellSitemapStub[] | null>(BUILDSELL_SITEMAP_QUERY, {});
+  return result ?? [];
 }
