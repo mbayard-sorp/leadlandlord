@@ -8,6 +8,7 @@ import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import { BuildSellImagePanel } from '../BuildSellImagePanel';
 import { MigrationReviewPanel } from '../MigrationReviewPanel';
 import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
+import { BuildSellRegeneratePanel } from '../BuildSellRegeneratePanel';
 import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
@@ -195,9 +196,24 @@ export default async function BuildSellDetailPage({ params }: Params) {
         canCrawl={!isPaidOrLive}
       />
 
+      {/* Last build error — shown when the most recent build attempt failed */}
+      {site.lastBuildError && (
+        <div className="rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-300 space-y-1">
+          <p className="font-semibold">Last build error</p>
+          <pre className="text-xs text-red-400/80 whitespace-pre-wrap break-words font-mono">
+            {site.lastBuildError}
+          </pre>
+        </div>
+      )}
+
       {/* Copy revision — hidden on sold/indexed sites */}
       {!isPaidOrLive && (
         <BuildSellRevisePanel siteId={site.id} lastPrompt={lastClarifyingPrompt} />
+      )}
+
+      {/* Full site regeneration — hidden on sold/indexed sites */}
+      {!isPaidOrLive && (
+        <BuildSellRegeneratePanel siteId={site.id} />
       )}
 
       {/* Image prompt control panel */}

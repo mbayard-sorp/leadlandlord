@@ -1047,6 +1047,131 @@ export async function rejectMigration(siteId: string): Promise<ApplyMigrationRes
   return { ok: true, message: 'Suggestions discarded.' };
 }
 
+// ─── Regenerate all content for an existing site ─────────────────────────────
+
+interface RegenerateSiteResult {
+  ok: boolean;
+  message?: string;
+}
+
+/**
+ * Trigger a full rebuild of an existing Build & Sell site (copy + optional
+ * theme rotation). Enqueues a `buildsell.build` event for spec-site-builder.
+ *
+ * - Blocked on paid/live sites (clobber protection; consistent with
+ *   reviseBuildSellCopy and the existing banner on the detail page).
+ * - Per-site daily cap in `metadata.rebuildCap` (separate lane from
+ *   regenCap/reviseCap), read-before-spend — mirrors reviseBuildSellCopy.
+ *   Default cap: BUILDSELL_REBUILD_CAP_PER_DAY env (default 3, intentionally
+ *   low — full rebuilds are the most expensive Imagen spend lane).
+ * - rotateTheme:true => full regen (preserve_theme OMITTED), theme re-rolled.
+ * - rotateTheme:false => copy only, same design (preserve_theme:true).
+ * - Stamps a fresh buildEpoch so the agent's dedupe key (bs:{id}:{epoch})
+ *   is distinct from the prior build.
+ */
+export async function regenerateBuildSellSite(
+  siteId: string,
+  { rotateTheme = true }: { rotateTheme?: boolean } = {},
+): Promise<RegenerateSiteResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  if (!siteId) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+
+  // Read-before-spend: status guard + cap check off the Postgres row.
+  const [row] = await db
+    .select({ status: buildsellSites.status, metadata: buildsellSites.metadata })
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+
+  if (!row) return { ok: false, message: 'Site not found.' };
+
+  if (row.status === 'paid' || row.status === 'live') {
+    return {
+      ok: false,
+      message: `Cannot regenerate a ${row.status} site — it is sold and indexed. The clobber-protection banner explains why.`,
+    };
+  }
+
+  const capPerDay   = Number(process.env.BUILDSELL_REBUILD_CAP_PER_DAY ?? '3');
+  const todayUtc    = new Date().toISOString().slice(0, 10);
+  const meta        = (row.metadata ?? {}) as Record<string, unknown>;
+  const capData     = (meta.rebuildCap ?? {}) as { date?: string; count?: number };
+  const todayCount  = capData.date === todayUtc ? (capData.count ?? 0) : 0;
+
+  if (todayCount >= capPerDay) {
+    log.warn({ siteId, todayCount, capPerDay }, 'regenerateBuildSellSite: daily cap reached');
+    return {
+      ok: false,
+      message: `Daily rebuild cap (${capPerDay}/day) reached for this site. Try again tomorrow.`,
+    };
+  }
+
+  const buildEpoch = Date.now().toString();
+
+  // Stamp fresh epoch + increment cap BEFORE enqueue (audit trail + dedupe).
+  try {
+    await db
+      .update(buildsellSites)
+      .set({
+        buildEpoch,
+        metadata: {
+          ...meta,
+          rebuildCap: { date: todayUtc, count: todayCount + 1 },
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(buildsellSites.id, siteId));
+  } catch (err) {
+    log.error({ siteId, err }, 'regenerateBuildSellSite: row update failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'failed to stamp rebuild epoch' };
+  }
+
+  // Payload: omit preserve_theme for a full regen (theme re-rolls);
+  // set preserve_theme:true when the operator wants copy-only on the same design.
+  const eventPayload: Record<string, unknown> = {
+    buildsell_site_id: siteId,
+    build_epoch: buildEpoch,
+  };
+  if (!rotateTheme) {
+    eventPayload.preserve_theme = true;
+  }
+
+  try {
+    await db.insert(agentEvents).values({
+      agent: 'operator',
+      type: 'buildsell.build',
+      targetAgent: 'spec-site-builder',
+      payload: eventPayload,
+    });
+  } catch (err) {
+    log.error({ siteId, err }, 'regenerateBuildSellSite: agent event insert failed');
+    return {
+      ok: false,
+      message: `Epoch stamped but build event failed to enqueue: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  log.info({ siteId, rotateTheme, buildEpoch }, 'regenerateBuildSellSite: rebuild event enqueued');
+
+  // Drain immediately so spec-site-builder starts now (same pattern as buildDraft).
+  try {
+    const { runOperatorTick } = await import('@/lib/operator-tick');
+    await runOperatorTick();
+  } catch (err) {
+    log.warn(
+      { siteId, err: err instanceof Error ? err.message : err },
+      'regenerateBuildSellSite: inline operator-tick failed — cron will pick up the event',
+    );
+  }
+
+  revalidatePath(`/operator/buildsell/${siteId}`);
+  revalidatePath('/operator/buildsell');
+  return { ok: true };
+}
+
 // ─── Revise copy ───────────────────────────────────────────────────────────
 
 /**

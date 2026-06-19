@@ -1,7 +1,7 @@
 'use client';
 
 import { useTransition, useState } from 'react';
-import { sendInvoice, markPaid } from './actions';
+import { sendInvoice, markPaid, regenerateBuildSellSite } from './actions';
 import type { BuildsellSite } from '@leadlandlord/db';
 
 interface Props {
@@ -55,11 +55,39 @@ export function BuildSellButtons({ site }: Props) {
     );
   }
 
-  if (site.status === 'building' || site.status === 'failed') {
+  if (site.status === 'building') {
     return (
-      <span className="text-xs text-slate-500">
-        {site.status === 'building' ? 'Building…' : 'Build failed'}
-      </span>
+      <span className="text-xs text-slate-500">Building…</span>
+    );
+  }
+
+  if (site.status === 'failed') {
+    return (
+      <div className="space-y-1">
+        <span className="text-xs text-red-400">Build failed</span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            startTransition(async () => {
+              const result = await regenerateBuildSellSite(site.id, { rotateTheme: true });
+              setOk(result.ok);
+              setMessage(
+                result.message ??
+                  (result.ok
+                    ? 'Retry queued — rebuild starts in ~5-7 min.'
+                    : 'Retry failed.'),
+              );
+            });
+          }}
+          className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 px-3 py-1 text-xs font-medium text-slate-100"
+        >
+          {pending ? '…' : 'Retry build'}
+        </button>
+        {message && (
+          <p className={`text-xs ${ok ? 'text-emerald-400' : 'text-red-400'}`}>{message}</p>
+        )}
+      </div>
     );
   }
 
