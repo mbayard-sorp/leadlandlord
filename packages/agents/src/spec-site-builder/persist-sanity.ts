@@ -44,6 +44,19 @@ export interface ExistingDocFields {
   existingPhone?: string | null;
   /** Approved migrated content — re-applied on every rebuild. */
   migrated?: MigratedOverlay | null;
+  /** True when the buyer has confirmed their theme on the draft preview. */
+  themeLocked?: boolean | null;
+  /**
+   * Buyer-confirmed theme fields — preserved on rebuild when themeLocked is true.
+   * Only preset/layoutVariant/fontHeading/fontBody are locked; hex colors derive
+   * from the preset name at render time.
+   */
+  existingTheme?: {
+    preset?: string;
+    layoutVariant?: string;
+    fontHeading?: string;
+    fontBody?: string;
+  } | null;
 }
 
 export interface WriteBuildSellArgs {
@@ -337,6 +350,9 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     },
     draftMode,
     robotsDisallow,
+    // Preserve themeLocked: if the buyer confirmed their theme, keep the flag
+    // so future rebuilds still honour it (createOrReplace would otherwise erase it).
+    ...(ex.themeLocked === true ? { themeLocked: true } : {}),
     // Doc-root fields from Phase 1 schema additions:
     rating: args.rating ?? undefined,
     reviewCount: args.reviewCount ?? undefined,

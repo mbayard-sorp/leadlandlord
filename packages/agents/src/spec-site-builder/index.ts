@@ -359,7 +359,9 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
   ): Promise<SpecSiteBuilderOutput> {
     this.spentThisRun = 0;
     const db = getDb();
-    const preserveTheme = input.preserve_theme === true;
+    // preserve_theme is resolved after the Sanity doc fetch below; initialize
+    // from the event payload now and OR in the doc-root themeLocked flag later.
+    let preserveTheme = input.preserve_theme === true;
     const clarifyingPrompt = input.clarifying_prompt?.trim() || undefined;
 
     const [site] = await db
@@ -399,6 +401,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
         const sections = Array.isArray(existing['sections']) ? existing['sections'] as Array<Record<string, unknown>> : [];
         const contactSection = sections.find((s) => s['_type'] === 'bsContactSection');
         const addr = contactSection?.['address'] as Record<string, unknown> | undefined;
+        existingTheme = extractExistingTheme(existing['theme']);
         existingDoc = {
           draftMode: typeof existing['draftMode'] === 'boolean' ? existing['draftMode'] : null,
           robotsDisallow: typeof existing['robotsDisallow'] === 'boolean' ? existing['robotsDisallow'] : null,
@@ -409,11 +412,28 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
           // so createOrReplace doesn't blank a previously-set number.
           existingPhone: typeof existing['phone'] === 'string' ? existing['phone'] : null,
           migrated: parseMigrated(existing['migrated']),
+          // Preserve themeLocked + buyer-confirmed theme so rebuilds never reset the design.
+          themeLocked: typeof existing['themeLocked'] === 'boolean' ? existing['themeLocked'] : null,
+          existingTheme: existingTheme
+            ? {
+                preset: existingTheme.preset,
+                layoutVariant: existingTheme.layoutVariant,
+                fontHeading: existingTheme.fontHeading,
+                fontBody: existingTheme.fontBody,
+              }
+            : null,
         };
-        existingTheme = extractExistingTheme(existing['theme']);
       }
     } catch (err) {
       ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'could not fetch existing Sanity doc for read-merge (non-fatal)');
+    }
+
+    // Honor doc-root themeLocked as equivalent to preserve_theme:true in the event payload.
+    // A buyer confirming their theme in the preview sets this flag in Sanity;
+    // any subsequent rebuild (including automated ones) must respect it without
+    // needing the operator to set preserve_theme explicitly every time.
+    if (existingDoc?.themeLocked === true) {
+      preserveTheme = true;
     }
 
     // NAP from event payload (transient — never written to Postgres).

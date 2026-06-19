@@ -250,6 +250,7 @@ const BUILDSELL_PROJECTION = `{
   placeId,
   "slug": slug.current,
   draftMode,
+  themeLocked,
   robotsDisallow,
   generatedAt,
   navigation[]{ label, href },
@@ -402,6 +403,7 @@ export interface BuildSellSite {
   placeId?: string | null;
   slug: string;
   draftMode?: boolean | null;
+  themeLocked?: boolean | null;
   robotsDisallow?: boolean | null;
   generatedAt?: string | null;
   navigation?: BuildSellNavLink[] | null;

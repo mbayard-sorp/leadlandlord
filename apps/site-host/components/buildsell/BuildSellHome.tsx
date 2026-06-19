@@ -3,6 +3,7 @@ import { resolveBuildSellTheme } from '@/lib/buildsell-theme';
 import { resolveBsFont } from '@/lib/buildsell-fonts';
 import { googleMapsUrl } from '@/lib/google-maps-url';
 import { DraftShield } from './DraftShield';
+import { BuildSellThemeBar } from './BuildSellThemeBar';
 import { BuildSellMotion } from './BuildSellMotion';
 import { MobileCallBar } from './MobileCallBar';
 import { HeroBlock } from './blocks/HeroBlock';
@@ -20,6 +21,7 @@ import '@/styles/themes/buildsell.css';
 interface BuildSellHomeProps {
   site: BuildSellSite;
   draft: boolean;
+  saveToken?: string | null;
 }
 
 /**
@@ -44,7 +46,7 @@ function themeVars(site: BuildSellSite): React.CSSProperties {
   } as React.CSSProperties;
 }
 
-export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
+export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
   const sections = site.sections ?? [];
   const layoutVariant = resolveBuildSellTheme(site.theme).layoutVariant;
 
@@ -56,6 +58,14 @@ export function BuildSellHome({ site, draft }: BuildSellHomeProps) {
       style={themeVars(site)}
     >
       {draft && <DraftShield purchaseUrl={site.purchaseUrl} />}
+      {draft && (
+        <BuildSellThemeBar
+          siteId={site.buildsellSiteId}
+          initialTheme={site.theme}
+          saveToken={saveToken ?? null}
+          themeLocked={site.themeLocked ?? false}
+        />
+      )}
 
       {/* Client island: scroll-reveal, sticky-nav, stat counters */}
       <BuildSellMotion />
