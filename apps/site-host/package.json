@@ -23,7 +23,8 @@
     "lucide-react": "^0.468.0",
     "marked": "^18.0.3",
     "next": "^16.0.0",
-    "next-sanity": "^9.8.0",
+    "next-sanity": "^13.1.1",
+    "styled-components": "^6.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.0"
