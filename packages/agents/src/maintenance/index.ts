@@ -32,6 +32,7 @@ import {
   type Site,
 } from '@leadlandlord/db';
 import { BaseAgent, type AgentContext } from '../base';
+import { verifyCrossLinks } from './cross-link-verifier';
 
 // ────────────────────────────────────────────────────────────
 // Schema
@@ -47,6 +48,8 @@ export const MaintenanceOutput = z.object({
   sitesChecked: z.number().int().nonnegative(),
   findingsCount: z.number().int().nonnegative(),
   autoFixedCount: z.number().int().nonnegative(),
+  crossLinksChecked: z.number().int().nonnegative().optional(),
+  crossLinksReaped: z.number().int().nonnegative().optional(),
 });
 export type MaintenanceOutput = z.infer<typeof MaintenanceOutput>;
 
@@ -484,11 +487,28 @@ export class MaintenanceAgent extends BaseAgent<typeof MaintenanceInput, typeof 
       }
     }
 
+    // Network-wide cross-link verification + dead-link reaping. Only on the
+    // full-fleet pass (no specific siteId) so it runs once per daily sweep.
+    let crossLinksChecked = 0;
+    let crossLinksReaped = 0;
+    if (!input.siteId) {
+      try {
+        const res = await verifyCrossLinks();
+        crossLinksChecked = res.checked;
+        crossLinksReaped = res.reaped;
+        ctx.log.info(res, 'maintenance: cross-link verification complete');
+      } catch (err) {
+        ctx.log.warn({ err: String(err) }, 'maintenance: cross-link verification failed');
+      }
+    }
+
     return {
       siteId: input.siteId,
       sitesChecked: siteList.length,
       findingsCount,
       autoFixedCount,
+      crossLinksChecked,
+      crossLinksReaped,
     };
   }
 }

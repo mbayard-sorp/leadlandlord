@@ -1,6 +1,7 @@
-import { getDb, sql } from '@leadlandlord/db';
+import { getDb, sql, isCrossLinkPaused } from '@leadlandlord/db';
 import Link from 'next/link';
 import { Timestamp } from '../../../components/Timestamp';
+import { CrossLinkPauseToggle } from './CrossLinkPauseToggle';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,16 +67,25 @@ async function loadNetworks(): Promise<NetworkRow[]> {
 }
 
 export default async function NetworksPage() {
-  const rows = await loadNetworks();
+  const [rows, crossLinkPaused] = await Promise.all([loadNetworks(), isCrossLinkPaused()]);
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-xl md:text-2xl font-semibold">Networks</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Cross-link networks and their placement stats.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl md:text-2xl font-semibold">Networks</h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Cross-link networks and their placement stats.
+          </p>
+        </div>
+        <CrossLinkPauseToggle paused={crossLinkPaused} />
       </header>
+
+      {crossLinkPaused && (
+        <div className="rounded-lg border border-amber-700/50 bg-amber-900/30 px-4 py-3 text-sm text-amber-200">
+          Network cross-links are paused — no links are injected on live pages and the request seeder is idle.
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/20 p-6 text-sm text-slate-500">
@@ -117,12 +127,10 @@ export default async function NetworksPage() {
                   </Td>
                   <Td>
                     <Link
-                      href="#"
-                      title="Detail view coming Sprint 5"
-                      className="text-xs text-slate-500 cursor-not-allowed"
-                      aria-disabled
+                      href={`/operator/networks/${row.id}`}
+                      className="text-xs text-sky-400 hover:text-sky-300"
                     >
-                      View (Sprint 5)
+                      View &rarr;
                     </Link>
                   </Td>
                 </tr>
