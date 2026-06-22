@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { eq, and, gte, count } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
@@ -306,12 +307,22 @@ export class NetworkLinker extends BaseAgent<
         .filter((l) => l.targetSiteId === peer.siteId && l.sourcePageId === sourcePageId)
         .map((l) => l.anchorText);
 
+      // Aggregate inbound anchors for this target across the whole network — used
+      // to govern the target's anchor profile (keep exact-match a minority).
+      const inboundAnchorRows = await db
+        .select({ anchorText: crossSiteLinks.anchorText })
+        .from(crossSiteLinks)
+        .where(eq(crossSiteLinks.targetSiteId, peer.siteId));
+      const targetInboundAnchors = inboundAnchorRows.map((r) => r.anchorText);
+
       const anchorText = rotateAnchor({
         targetSiteId: peer.siteId,
         targetNiche: peer.niche,
         targetCity: peer.city,
         sourcePageId,
         history: recentAnchors,
+        targetBrand: peerDomain,
+        targetInboundAnchors,
       });
 
       // Count outbound links to this peer from source site.
@@ -326,6 +337,18 @@ export class NetworkLinker extends BaseAgent<
         );
       const peerOutboundCount = Number(peerOutboundRows[0]?.value ?? 0);
 
+      // All-time reciprocal links (peer → source) to enforce the reciprocity cap.
+      const reciprocalRows = await db
+        .select({ value: count() })
+        .from(crossSiteLinks)
+        .where(
+          and(
+            eq(crossSiteLinks.sourceSiteId, peer.siteId),
+            eq(crossSiteLinks.targetSiteId, requestingSiteId),
+          ),
+        );
+      const reciprocalTotalCount = Number(reciprocalRows[0]?.value ?? 0);
+
       const candidate = {
         sourcePageId,
         sourceSiteId: requestingSiteId,
@@ -338,6 +361,7 @@ export class NetworkLinker extends BaseAgent<
         existingLinks: recentLinks,
         peerOutboundCount,
         totalOutboundCount: existingCount,
+        reciprocalTotalCount,
       });
 
       if (!hygiene.ok) {
@@ -413,6 +437,14 @@ export class NetworkLinker extends BaseAgent<
           targetSiteId: peer.siteId,
           targetUrl,
           anchorText,
+          // Persist the LLM placement so site-host can inject the link at render
+          // time: match `matchContext` (verbatim source sentence) in the page MDX
+          // and replace it with `injectedMarkdown` (sentence + inline link).
+          matchContext: placement.beforeSentence,
+          injectedMarkdown: placement.afterSentence,
+          surroundingContextHash: createHash('sha256')
+            .update(placement.beforeSentence)
+            .digest('hex'),
           status: 'active',
         });
 

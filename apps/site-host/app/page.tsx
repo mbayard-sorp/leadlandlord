@@ -4,6 +4,7 @@ import { buildPageMetadata, currentRequestBaseUrl } from '../lib/seo-meta';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { getTrackingNumber } from '../lib/tracking';
 import { substituteBundlePhone } from '../lib/phone';
+import { withInjectedCrossLinks } from '../lib/cross-links';
 import { ClassicHome } from '../components/variants/Classic';
 import { ModernHome } from '../components/variants/Modern';
 import { PremiumHome } from '../components/variants/Premium';
@@ -20,6 +21,13 @@ export default async function Home() {
     currentRequestBaseUrl(),
   ]);
   const bundle = substituteBundlePhone(rawBundle, phone);
+  // Inject active network cross-links into the home long-form body at render time.
+  if (bundle.longform_body) {
+    bundle.longform_body = await withInjectedCrossLinks(
+      site.home?._id ?? '',
+      bundle.longform_body,
+    );
+  }
   const props = { bundle, phone, siteId: site.siteId, siteSlug: site.slug, pageUrl };
   switch (site.theme) {
     case 'modern':

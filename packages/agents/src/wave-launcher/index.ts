@@ -6,7 +6,7 @@
  *
  * State transitions are applied directly when the state machine's evidence
  * conditions are met (no approval gate).
- * Cross-site link counts come from crossSiteLinks (source IN wave.siteIds, status='live').
+ * Cross-site link counts come from crossSiteLinks (source IN wave.siteIds, status='active').
  * Indexation checks use checkIndexationStatus from google-search-console.
  */
 
@@ -311,7 +311,7 @@ export class WaveLauncher extends BaseAgent<
       }
     }
 
-    // linkPlacementsPerSite: count crossSiteLinks per source site where status='live'.
+    // linkPlacementsPerSite: count crossSiteLinks per source site where status='active'.
     const linkPlacementsPerSite: Record<string, number> = {};
     for (const siteId of siteIds) {
       linkPlacementsPerSite[siteId] = 0;
@@ -324,7 +324,7 @@ export class WaveLauncher extends BaseAgent<
         .where(
           and(
             inArray(crossSiteLinks.sourceSiteId, siteIds),
-            eq(crossSiteLinks.status, 'live'),
+            eq(crossSiteLinks.status, 'active'),
           ),
         )
         .groupBy(crossSiteLinks.sourceSiteId);

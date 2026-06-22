@@ -66,6 +66,28 @@ export async function setKillSwitch(args: SetKillSwitchArgs): Promise<SystemStat
   return row;
 }
 
+export async function isCrossLinkPaused(): Promise<boolean> {
+  const row = await ensureRow();
+  return row.crossLinkPaused;
+}
+
+/**
+ * Network cross-link kill switch. When paused, site-host injects no cross-links
+ * and the request seeder stops enqueuing. Render-time injection makes this
+ * instant and total — flipping it back on restores every active link.
+ */
+export async function setCrossLinkPaused(paused: boolean): Promise<SystemState> {
+  await ensureRow();
+  const db = getDb();
+  const [row] = await db
+    .update(systemState)
+    .set({ crossLinkPaused: paused, updatedAt: new Date() })
+    .where(eq(systemState.id, GLOBAL_ID))
+    .returning();
+  if (!row) throw new Error('system_state row missing after ensureRow');
+  return row;
+}
+
 export interface SetOperatorConfigArgs {
   operatorEnabled?: boolean;
   operatorMode?: 'manual' | 'supervised' | 'autonomous';

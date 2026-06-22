@@ -1121,6 +1121,12 @@ export const systemState = pgTable('system_state', {
   killSwitchReason: text('kill_switch_reason'),
   killSwitchActivatedAt: timestamp('kill_switch_activated_at', { withTimezone: true }),
   killSwitchActivatedBy: text('kill_switch_activated_by'),
+  /**
+   * Network cross-link kill switch. When true, site-host injects NO cross-links
+   * at render time (every placed link vanishes instantly) and the request seeder
+   * stops enqueuing. Independent of the portfolio-wide killSwitch.
+   */
+  crossLinkPaused: boolean('cross_link_paused').notNull().default(false),
   // ──────────────────────────────────────────────────────────
   // Operator orchestrator targets + autonomy mode (Phase F).
   // The operator agent reads these on every cron run to decide
@@ -1613,9 +1619,27 @@ export const crossSiteLinks = pgTable(
       .references(() => sites.id, { onDelete: 'cascade' }),
     targetUrl: text('target_url').notNull(),
     anchorText: text('anchor_text').notNull(),
-    /** SHA-256 of surrounding sentence context — used to detect link drift. */
+    /**
+     * Verbatim source sentence (the LLM's `beforeSentence`) that site-host
+     * string-matches against the rendered MDX to locate the injection point.
+     */
+    matchContext: text('match_context'),
+    /**
+     * The source sentence rewritten with the inline markdown link (the LLM's
+     * `afterSentence`). site-host replaces `matchContext` with this at render.
+     */
+    injectedMarkdown: text('injected_markdown'),
+    /** Target page kind (e.g. 'service', 'home'); null = homepage. */
+    targetPageKind: text('target_page_kind'),
+    /** Target page slug for deep-links; null = homepage. */
+    targetPageSlug: text('target_page_slug'),
+    /** SHA-256 of `matchContext` — used to detect link drift. */
     surroundingContextHash: text('surrounding_context_hash'),
     placedAt: timestamp('placed_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Last time the verifier confirmed the link renders in served HTML. */
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    /** Last time the verifier checked this link (regardless of outcome). */
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
     /** active | removed | broken */
     status: text('status').notNull().default('active'),
   },
