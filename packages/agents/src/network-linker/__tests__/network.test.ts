@@ -27,6 +27,8 @@ import {
   rotateAnchor,
   checkHygiene,
   classifyAnchorType,
+  internalLinkShare,
+  INTERNAL_LINK_SHARE_CAP,
   type Peer,
 } from '../network';
 
@@ -392,7 +394,80 @@ describe('checkHygiene reciprocal-pair cap', () => {
 });
 
 // ────────────────────────────────────────────────────────────
-// 7. getNetworkPeers — skipped (requires live DB)
+// 7. internalLinkShare + checkHygiene internal/external blend cap
+// ────────────────────────────────────────────────────────────
+
+describe('internalLinkShare', () => {
+  it('returns 0 when there are no links (divide-by-zero guard)', () => {
+    expect(internalLinkShare(0, 0)).toBe(0);
+  });
+
+  it('computes the internal share of the total profile', () => {
+    expect(internalLinkShare(1, 1)).toBe(0.5);
+    expect(internalLinkShare(2, 8)).toBe(0.2);
+    expect(internalLinkShare(3, 0)).toBe(1);
+  });
+
+  it('exposes a sane cap constant', () => {
+    expect(INTERNAL_LINK_SHARE_CAP).toBe(0.5);
+  });
+});
+
+describe('checkHygiene internal/external blend cap', () => {
+  const CANDIDATE = {
+    sourcePageId: 'page-1',
+    sourceSiteId: 'site-source',
+    targetSiteId: 'site-target',
+    targetUrl: 'https://example.com/services',
+    anchorText: 'learn more',
+  };
+
+  const BASE_OPTS = {
+    existingLinks: [],
+    peerOutboundCount: 0,
+    totalOutboundCount: 10,
+  };
+
+  it('rejects when one more internal link would push internal share over the cap', () => {
+    // 4 internal already, 3 external → prospective 5/8 = 62.5% > 50%.
+    const result = checkHygiene(CANDIDATE, {
+      ...BASE_OPTS,
+      internalInboundCount: 4,
+      externalInboundCount: 3,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/blend cap/i);
+  });
+
+  it('passes when the prospective internal share stays at or below the cap', () => {
+    // 4 internal, 10 external → prospective 5/15 ≈ 33% <= 50%.
+    const result = checkHygiene(CANDIDATE, {
+      ...BASE_OPTS,
+      internalInboundCount: 4,
+      externalInboundCount: 10,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('does NOT enforce the cap until the target has >= 3 external links', () => {
+    // 5 internal, only 2 external → would be 6/8 = 75% but external < 3 so allowed.
+    const result = checkHygiene(CANDIDATE, {
+      ...BASE_OPTS,
+      internalInboundCount: 5,
+      externalInboundCount: 2,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('is unchanged (cap not enforced) when blend opts are omitted', () => {
+    const result = checkHygiene(CANDIDATE, BASE_OPTS);
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 8. getNetworkPeers — skipped (requires live DB)
 //
 // Testing getNetworkPeers requires a real Drizzle + Neon connection.
 // It is covered by the manual acceptance test in the Phase 8 build plan.

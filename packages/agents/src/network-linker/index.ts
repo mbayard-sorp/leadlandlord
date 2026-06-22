@@ -11,6 +11,9 @@ import {
   siteNetworkMemberships,
   crossSiteLinks,
   linkRequests,
+  backlinks,
+  or,
+  isNotNull,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { createReadClient } from '@leadlandlord/integrations/sanity';
@@ -409,6 +412,19 @@ export class NetworkLinker extends BaseAgent<
         );
       const reciprocalTotalCount = Number(reciprocalRows[0]?.value ?? 0);
 
+      // External (off-network) inbound links the target already holds — used to
+      // keep internal cross-links a minority of the target's link profile.
+      const externalInboundRows = await db
+        .select({ value: count() })
+        .from(backlinks)
+        .where(
+          and(
+            eq(backlinks.siteId, peer.siteId),
+            or(isNotNull(backlinks.acquiredAt), isNotNull(backlinks.publishedAt)),
+          ),
+        );
+      const externalInboundCount = Number(externalInboundRows[0]?.value ?? 0);
+
       const candidate = {
         sourcePageId,
         sourceSiteId: requestingSiteId,
@@ -422,6 +438,8 @@ export class NetworkLinker extends BaseAgent<
         peerOutboundCount,
         totalOutboundCount: existingCount,
         reciprocalTotalCount,
+        internalInboundCount: targetInboundAnchors.length,
+        externalInboundCount,
       });
 
       if (!hygiene.ok) {

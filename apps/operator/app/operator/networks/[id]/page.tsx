@@ -15,6 +15,7 @@ import {
 import { Timestamp } from '../../../../components/Timestamp';
 import { CrossLinkPauseToggle } from '../CrossLinkPauseToggle';
 import { loadNetworkRoi } from '../../../../lib/cross-link-roi';
+import { scoreNetworkFootprint } from '@leadlandlord/agents';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,6 +138,7 @@ export default async function NetworkDetailPage({ params }: Params) {
 
   const crossLinkPaused = await isCrossLinkPaused();
   const roi = await loadNetworkRoi(memberIds);
+  const footprint = await scoreNetworkFootprint(id);
 
   // Stat helpers.
   const activeLinks = recentLinks.filter((l) => l.status === 'active');
@@ -212,6 +214,43 @@ export default async function NetworkDetailPage({ params }: Params) {
             tone="neutral"
           />
         </div>
+      </section>
+
+      {/* Footprint / detectability */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Footprint risk
+        </h2>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 flex flex-wrap items-center gap-6">
+          <div>
+            <div
+              className={`text-3xl font-semibold ${
+                footprint.rating === 'high'
+                  ? 'text-red-300'
+                  : footprint.rating === 'moderate'
+                  ? 'text-amber-300'
+                  : 'text-emerald-300'
+              }`}
+            >
+              {footprint.score}
+              <span className="text-base text-slate-500">/100</span>
+            </div>
+            <div className="text-xs text-slate-500 mt-1">detectability · {footprint.rating}</div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-xs text-slate-400">
+            <Signal label="Anchor repetition" value={footprint.signals.anchorRepetition} />
+            <Signal label="Reciprocity density" value={footprint.signals.reciprocityDensity} />
+            <Signal label="Temporal clustering" value={footprint.signals.temporalClustering} />
+            <Signal label="Homepage share" value={footprint.signals.homepageShare} />
+          </div>
+        </div>
+        {footprint.recommendations.length > 0 && (
+          <ul className="mt-3 space-y-1 text-xs text-amber-200/90 list-disc list-inside">
+            {footprint.recommendations.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* Members table */}
@@ -424,6 +463,15 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
       <div className="text-2xl font-semibold text-slate-100">{value}</div>
       <div className="text-xs text-slate-500 mt-1">{label}</div>
+    </div>
+  );
+}
+
+function Signal({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between gap-3 min-w-[9rem]">
+      <span>{label}</span>
+      <span className="font-mono text-slate-300">{Math.round(value * 100)}%</span>
     </div>
   );
 }

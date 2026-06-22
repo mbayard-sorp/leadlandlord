@@ -326,6 +326,30 @@ export function rotateAnchor(opts: {
 }
 
 // ────────────────────────────────────────────────────────────
+// 4b. Internal / external link blend
+// ────────────────────────────────────────────────────────────
+
+/**
+ * A site's inbound link profile should not be dominated by internal (network)
+ * cross-links once it has earned external links. Past this cap the profile
+ * reads as a self-referential network rather than an editorially-earned one.
+ */
+export const INTERNAL_LINK_SHARE_CAP = 0.5;
+
+/**
+ * Share of a site's total inbound link profile that is internal (network
+ * cross-links). Pure; guards total === 0 → 0.
+ */
+export function internalLinkShare(
+  internalCount: number,
+  externalCount: number,
+): number {
+  const total = internalCount + externalCount;
+  if (total <= 0) return 0;
+  return internalCount / total;
+}
+
+// ────────────────────────────────────────────────────────────
 // 5. checkHygiene
 // ────────────────────────────────────────────────────────────
 
@@ -355,6 +379,17 @@ interface HygieneOpts {
   reciprocalTotalCount?: number;
   /** Maximum all-time reciprocal links allowed between a source/target pair. */
   reciprocalPairCap?: number;
+  /**
+   * Current count of internal (network cross-link) inbound links to the TARGET
+   * site. Optional — when omitted (with externalInboundCount), the blend cap is
+   * not enforced and behaviour is unchanged.
+   */
+  internalInboundCount?: number;
+  /**
+   * Current count of EXTERNAL inbound links to the target site (from the
+   * `backlinks` table). Optional, paired with internalInboundCount.
+   */
+  externalInboundCount?: number;
 }
 
 export function checkHygiene(
@@ -368,6 +403,8 @@ export function checkHygiene(
     reciprocalWindowDays = 7,
     reciprocalTotalCount = 0,
     reciprocalPairCap = 1,
+    internalInboundCount,
+    externalInboundCount,
   } = opts;
 
   // 1. Dedup: same (sourcePageId, targetUrl, anchorText) must not already exist.
@@ -426,6 +463,32 @@ export function checkHygiene(
       ok: false,
       reason: 'anchor diversity: same url+anchor already used by another source page',
     };
+  }
+
+  // 5. Internal/external blend cap. Only enforced when BOTH inbound counts are
+  // supplied AND the target already has a few external links (>= 3): a brand-new
+  // site with no external links is allowed to bootstrap with internal links.
+  // Past that, placing one more internal link must not push the target's
+  // internal share above INTERNAL_LINK_SHARE_CAP. Placed last so prior reason
+  // strings are unaffected when these opts are omitted.
+  if (
+    typeof internalInboundCount === 'number' &&
+    typeof externalInboundCount === 'number' &&
+    externalInboundCount >= 3
+  ) {
+    const prospectiveShare = internalLinkShare(
+      internalInboundCount + 1,
+      externalInboundCount,
+    );
+    if (prospectiveShare > INTERNAL_LINK_SHARE_CAP) {
+      return {
+        ok: false,
+        reason:
+          `internal/external blend cap: prospective internal share ` +
+          `${(prospectiveShare * 100).toFixed(0)}% > ${(INTERNAL_LINK_SHARE_CAP * 100).toFixed(0)}% ` +
+          `(${internalInboundCount + 1} internal vs ${externalInboundCount} external)`,
+      };
+    }
   }
 
   return { ok: true };
