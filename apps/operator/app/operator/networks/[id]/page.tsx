@@ -14,6 +14,7 @@ import {
 } from '@leadlandlord/db';
 import { Timestamp } from '../../../../components/Timestamp';
 import { CrossLinkPauseToggle } from '../CrossLinkPauseToggle';
+import { loadNetworkRoi } from '../../../../lib/cross-link-roi';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,10 +136,14 @@ export default async function NetworkDetailPage({ params }: Params) {
   }
 
   const crossLinkPaused = await isCrossLinkPaused();
+  const roi = await loadNetworkRoi(memberIds);
 
   // Stat helpers.
   const activeLinks = recentLinks.filter((l) => l.status === 'active');
   const verifiedLinks = activeLinks.filter((l) => l.verifiedAt).length;
+
+  const callsDelta = roi.calls30d - roi.callsPrev30d;
+  const leadsDelta = roi.leads30d - roi.leadsPrev30d;
 
   return (
     <div className="space-y-8">
@@ -164,6 +169,50 @@ export default async function NetworkDetailPage({ params }: Params) {
         <StatCard label="Active links" value={activeLinks.length} />
         <StatCard label="Verified live" value={`${verifiedLinks}/${activeLinks.length}`} />
       </div>
+
+      {/* ROI attribution */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          ROI signal
+        </h2>
+        <p className="text-xs text-slate-500 mb-3">
+          Directional, correlational — not a controlled experiment.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <RoiCard
+            label="Linked pages rank"
+            value={
+              roi.posDelta === null
+                ? '—'
+                : `${roi.posDelta < 0 ? '▲' : roi.posDelta > 0 ? '▼' : ''} ${Math.abs(roi.posDelta).toFixed(1)}`
+            }
+            sub={
+              roi.posBefore !== null && roi.posAfter !== null
+                ? `${roi.posBefore.toFixed(1)} → ${roi.posAfter.toFixed(1)} avg pos`
+                : `${roi.linkedPages} linked target page(s) with GSC data`
+            }
+            tone={roi.posDelta === null ? 'neutral' : roi.posDelta < 0 ? 'good' : roi.posDelta > 0 ? 'bad' : 'neutral'}
+          />
+          <RoiCard
+            label="Calls (30d vs prior)"
+            value={`${roi.calls30d}`}
+            sub={`${callsDelta >= 0 ? '+' : ''}${callsDelta} vs ${roi.callsPrev30d}`}
+            tone={callsDelta > 0 ? 'good' : callsDelta < 0 ? 'bad' : 'neutral'}
+          />
+          <RoiCard
+            label="Leads (30d vs prior)"
+            value={`${roi.leads30d}`}
+            sub={`${leadsDelta >= 0 ? '+' : ''}${leadsDelta} vs ${roi.leadsPrev30d}`}
+            tone={leadsDelta > 0 ? 'good' : leadsDelta < 0 ? 'bad' : 'neutral'}
+          />
+          <RoiCard
+            label="Linked target pages"
+            value={`${roi.linkedPages}`}
+            sub="deep-linked pages w/ rank data"
+            tone="neutral"
+          />
+        </div>
+      </section>
 
       {/* Members table */}
       <section>
@@ -375,6 +424,28 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
       <div className="text-2xl font-semibold text-slate-100">{value}</div>
       <div className="text-xs text-slate-500 mt-1">{label}</div>
+    </div>
+  );
+}
+
+function RoiCard({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: 'good' | 'bad' | 'neutral';
+}) {
+  const valueTone =
+    tone === 'good' ? 'text-emerald-300' : tone === 'bad' ? 'text-red-300' : 'text-slate-100';
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+      <div className={`text-2xl font-semibold ${valueTone}`}>{value}</div>
+      <div className="text-xs text-slate-500 mt-1">{label}</div>
+      <div className="text-[11px] text-slate-600 mt-0.5">{sub}</div>
     </div>
   );
 }
