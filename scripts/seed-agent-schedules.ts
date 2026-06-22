@@ -47,6 +47,9 @@ const SEED: SeedRow[] = [
   { schedulerName: 'churn-recovery', targetAgent: 'churn-recovery', cadenceKind: 'cron', cronExpr: '30 17 * * *' },
   { schedulerName: 'portfolio-analyst', targetAgent: 'portfolio-analyst', cadenceKind: 'cron', cronExpr: '0 18 * * *' },
   { schedulerName: 'network-metrics-aggregator', targetAgent: 'network-metrics-aggregator', cadenceKind: 'cron', cronExpr: '0 4 * * *' },
+  // network-link-requests seeds network-linker runs (siteId-mode) on a daily
+  // off-peak slot; per-site weekly day-of-week staggering happens in-scheduler.
+  { schedulerName: 'network-link-requests', targetAgent: 'network-linker', cadenceKind: 'cron', cronExpr: '0 5 * * *' },
   { schedulerName: 'geo-aeo-auditor', targetAgent: 'geo-aeo-auditor', cadenceKind: 'cron', cronExpr: '0 6 * * 1' },
   { schedulerName: 'local-seo-optimizer', targetAgent: 'local-seo-optimizer', cadenceKind: 'cron', cronExpr: '0 6 * * 2' },
   // fleet-digest (orchestrator Phase 5): 0 13 * * * UTC ~= 6am MST. Avoids the
