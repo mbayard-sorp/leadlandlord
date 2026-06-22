@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { eq, and, gte, count } from 'drizzle-orm';
+import { eq, and, gte, count, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
 import {
   getDb,
@@ -52,6 +52,64 @@ const PlacementResponse = z.object({
   afterSentence: z.string(),
   rationale: z.string(),
 });
+
+// ────────────────────────────────────────────────────────────
+// Deep-link targeting
+// ────────────────────────────────────────────────────────────
+
+export interface DeepLinkTarget {
+  url: string;
+  slug: string;
+}
+
+/**
+ * Pick a peer page that is "stuck" on page two of Google (avg position 11–30
+ * over the last 28 days) to receive the cross-link, preferring the page with the
+ * most impressions (the biggest near-miss opportunity). A link into a money page
+ * that can actually move beats yet another homepage link — and homepage-only
+ * commercial links are a manipulation footprint. Returns null when the peer has
+ * no eligible stuck page, in which case the caller falls back to the homepage.
+ */
+export async function pickDeepLinkTarget(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  peerSiteId: string,
+  peerDomain: string,
+): Promise<DeepLinkTarget | null> {
+  const since = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const rows = (await db.execute(sql`
+    SELECT page, AVG(position) AS avg_pos, SUM(impressions) AS imps
+    FROM seo_metrics_daily
+    WHERE site_id = ${peerSiteId} AND date >= ${since}
+    GROUP BY page
+    HAVING AVG(position) BETWEEN 11 AND 30 AND SUM(impressions) > 0
+    ORDER BY SUM(impressions) DESC
+    LIMIT 5
+  `)) as unknown as
+    | { rows: Array<{ page: string; avg_pos: number; imps: number }> }
+    | Array<{ page: string; avg_pos: number; imps: number }>;
+  const list = Array.isArray(rows) ? rows : rows.rows;
+
+  const host = peerDomain.toLowerCase().replace(/^www\./, '');
+  for (const r of list) {
+    let parsed: URL;
+    try {
+      parsed = new URL(r.page);
+    } catch {
+      continue;
+    }
+    // Only deep-link to a page actually on the peer's domain, and skip the
+    // homepage (that's the fallback, not a "deep" link).
+    const rowHost = parsed.host.toLowerCase().replace(/^www\./, '');
+    if (rowHost !== host) continue;
+    const slug = parsed.pathname.replace(/^\/+|\/+$/g, '');
+    if (!slug) continue;
+    return { url: `https://${host}${parsed.pathname}`, slug };
+  }
+  return null;
+}
 
 // ────────────────────────────────────────────────────────────
 // Agent
@@ -298,9 +356,11 @@ export class NetworkLinker extends BaseAgent<
         continue;
       }
 
-      // Sprint 3: target is the peer homepage. Future iterations should rotate
-      // target page types (service, service-area, etc.) for more variety.
-      const targetUrl = `https://${peerDomain}/`;
+      // Prefer deep-linking to a peer page stuck on page two of Google (more
+      // natural than homepage-only links, and routes equity to a money page
+      // that can actually move). Fall back to the homepage when none qualifies.
+      const deepLink = await pickDeepLinkTarget(db, peer.siteId, peerDomain);
+      const targetUrl = deepLink?.url ?? `https://${peerDomain}/`;
 
       // Anchor rotation — pass recent anchors for this source page to this peer.
       const recentAnchors = recentLinks
@@ -445,6 +505,8 @@ export class NetworkLinker extends BaseAgent<
           surroundingContextHash: createHash('sha256')
             .update(placement.beforeSentence)
             .digest('hex'),
+          targetPageKind: deepLink ? 'deep' : 'home',
+          targetPageSlug: deepLink?.slug ?? null,
           status: 'active',
         });
 
