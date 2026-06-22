@@ -26,6 +26,9 @@ import {
   selectPeers,
   rotateAnchor,
   checkHygiene,
+  classifyAnchorType,
+  internalLinkShare,
+  INTERNAL_LINK_SHARE_CAP,
   type Peer,
 } from '../network';
 
@@ -298,7 +301,173 @@ describe('checkHygiene', () => {
 });
 
 // ────────────────────────────────────────────────────────────
-// 5. getNetworkPeers — skipped (requires live DB)
+// 5. classifyAnchorType + anchor-profile governance
+// ────────────────────────────────────────────────────────────
+
+describe('classifyAnchorType', () => {
+  it('classifies a bare niche+city money phrase as exact-match', () => {
+    expect(classifyAnchorType('Plumbing Austin', 'plumbing', 'Austin')).toBe('exact-match');
+    expect(classifyAnchorType('plumbing services in Austin', 'plumbing', 'Austin')).toBe(
+      'exact-match',
+    );
+  });
+
+  it('classifies generic anchors as generic', () => {
+    expect(classifyAnchorType('learn more', 'plumbing', 'Austin')).toBe('generic');
+    expect(classifyAnchorType('see details', 'plumbing', 'Austin')).toBe('generic');
+  });
+
+  it('classifies a branded anchor (contains the brand) as branded', () => {
+    expect(
+      classifyAnchorType('acmeplumbing.com', 'plumbing', 'Austin', 'acmeplumbing.com'),
+    ).toBe('branded');
+  });
+
+  it('classifies a question-style anchor as partial-match, not exact-match', () => {
+    expect(classifyAnchorType('need plumbing in Austin?', 'plumbing', 'Austin')).toBe(
+      'partial-match',
+    );
+  });
+});
+
+describe('rotateAnchor anchor-profile governance', () => {
+  const BASE = {
+    targetSiteId: 'target-site-abc',
+    targetNiche: 'plumbing',
+    targetCity: 'Austin',
+    sourcePageId: 'page-services',
+    history: [] as string[],
+    targetBrand: 'acmeplumbing.com',
+  };
+
+  it('avoids exact-match anchors when the target is already saturated with them', () => {
+    // Inbound profile is all exact-match → any further exact-match would exceed
+    // the 25% cap, so the chosen anchor must NOT be exact-match.
+    const inbound = ['Plumbing Austin', 'plumbing services in Austin', 'emergency plumbing in Austin'];
+    const anchor = rotateAnchor({ ...BASE, targetInboundAnchors: inbound });
+    expect(classifyAnchorType(anchor, 'plumbing', 'Austin', BASE.targetBrand)).not.toBe(
+      'exact-match',
+    );
+  });
+
+  it('still returns a deterministic anchor when no inbound history is supplied', () => {
+    const a = rotateAnchor(BASE);
+    const b = rotateAnchor(BASE);
+    expect(a).toBe(b);
+    expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 6. checkHygiene reciprocal-pair cap
+// ────────────────────────────────────────────────────────────
+
+describe('checkHygiene reciprocal-pair cap', () => {
+  const CANDIDATE = {
+    sourcePageId: 'page-1',
+    sourceSiteId: 'site-source',
+    targetSiteId: 'site-target',
+    targetUrl: 'https://example.com/services',
+    anchorText: 'learn more',
+  };
+
+  it('rejects when the all-time reciprocal-pair cap is reached', () => {
+    const result = checkHygiene(CANDIDATE, {
+      existingLinks: [],
+      peerOutboundCount: 0,
+      totalOutboundCount: 10,
+      reciprocalTotalCount: 1, // already one target→source link; default cap is 1.
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/reciprocal pair cap/i);
+  });
+
+  it('passes when reciprocal count is below the cap', () => {
+    const result = checkHygiene(CANDIDATE, {
+      existingLinks: [],
+      peerOutboundCount: 0,
+      totalOutboundCount: 10,
+      reciprocalTotalCount: 0,
+    });
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 7. internalLinkShare + checkHygiene internal/external blend cap
+// ────────────────────────────────────────────────────────────
+
+describe('internalLinkShare', () => {
+  it('returns 0 when there are no links (divide-by-zero guard)', () => {
+    expect(internalLinkShare(0, 0)).toBe(0);
+  });
+
+  it('computes the internal share of the total profile', () => {
+    expect(internalLinkShare(1, 1)).toBe(0.5);
+    expect(internalLinkShare(2, 8)).toBe(0.2);
+    expect(internalLinkShare(3, 0)).toBe(1);
+  });
+
+  it('exposes a sane cap constant', () => {
+    expect(INTERNAL_LINK_SHARE_CAP).toBe(0.5);
+  });
+});
+
+describe('checkHygiene internal/external blend cap', () => {
+  const CANDIDATE = {
+    sourcePageId: 'page-1',
+    sourceSiteId: 'site-source',
+    targetSiteId: 'site-target',
+    targetUrl: 'https://example.com/services',
+    anchorText: 'learn more',
+  };
+
+  const BASE_OPTS = {
+    existingLinks: [],
+    peerOutboundCount: 0,
+    totalOutboundCount: 10,
+  };
+
+  it('rejects when one more internal link would push internal share over the cap', () => {
+    // 4 internal already, 3 external → prospective 5/8 = 62.5% > 50%.
+    const result = checkHygiene(CANDIDATE, {
+      ...BASE_OPTS,
+      internalInboundCount: 4,
+      externalInboundCount: 3,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/blend cap/i);
+  });
+
+  it('passes when the prospective internal share stays at or below the cap', () => {
+    // 4 internal, 10 external → prospective 5/15 ≈ 33% <= 50%.
+    const result = checkHygiene(CANDIDATE, {
+      ...BASE_OPTS,
+      internalInboundCount: 4,
+      externalInboundCount: 10,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('does NOT enforce the cap until the target has >= 3 external links', () => {
+    // 5 internal, only 2 external → would be 6/8 = 75% but external < 3 so allowed.
+    const result = checkHygiene(CANDIDATE, {
+      ...BASE_OPTS,
+      internalInboundCount: 5,
+      externalInboundCount: 2,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('is unchanged (cap not enforced) when blend opts are omitted', () => {
+    const result = checkHygiene(CANDIDATE, BASE_OPTS);
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 8. getNetworkPeers — skipped (requires live DB)
 //
 // Testing getNetworkPeers requires a real Drizzle + Neon connection.
 // It is covered by the manual acceptance test in the Phase 8 build plan.

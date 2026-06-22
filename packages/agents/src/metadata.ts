@@ -110,7 +110,8 @@ export const agentMetadata: Record<string, AgentMeta> = {
     trigger: 'Event-driven (pitch accepted)',
   },
   'network-linker': {
-    description: 'Plans cross-site links across the network and queues them for approval.',
+    description:
+      'Places cross-site links across the network directly (no approval gate); site-host injects them into page MDX at render time.',
   },
   'wave-launcher': {
     description: 'Advances a launch wave through its 7-stage pipeline (gated by approvals).',

@@ -44,7 +44,7 @@ export function urlForImage(source: SanityImageSource) {
  * gives the whole render bundle. Slicing arrays at [0...50] guards against
  * pathological page counts blowing the GROQ projection size.
  */
-const PAGE_PROJECTION = `{ kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url, "articleImageUrl": articleImage.asset->url, "dateModified": dateModified }`;
+const PAGE_PROJECTION = `{ _id, kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url, "articleImageUrl": articleImage.asset->url, "dateModified": dateModified }`;
 
 const SITE_PROJECTION = `{
   _id, siteId, "slug": slug.current, businessName, niche, city, state, siteMode,
@@ -80,6 +80,8 @@ const SITE_BY_HOST_QUERY = `*[_type=="site" && $host in domains[].host][0]${SITE
 const SITE_BY_SLUG_QUERY = `*[_type=="site" && slug.current==$slug][0]${SITE_PROJECTION}`;
 
 export interface SanitySitePage {
+  /** Sanity doc id, e.g. `page-${siteId}-service-${index}`. Matches crossSiteLinks.sourcePageId. */
+  _id: string;
   kind: string;
   slug: string;
   title: string;

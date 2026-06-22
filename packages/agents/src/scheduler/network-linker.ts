@@ -6,7 +6,11 @@ import type { ScheduledEvent } from './types';
  * Network-linker drain scheduler. Pulls `link_requests` rows that are due
  * (status='pending' AND scheduled_for <= now()) and emits one event per
  * request. The agent processes one request per run and writes a single
- * cross-link approval to agent_approvals.
+ * `cross_site_links` row (status='active') directly — there is no approval
+ * gate. site-host injects the placed link into the page MDX at render time.
+ *
+ * Requests are seeded by the `network-link-requests` scheduler (auto cadence)
+ * and the operator "Request network links" action (manual).
  *
  * Per-site velocity is enforced in the agent itself via
  * site_network_memberships.link_budget_outbound (default 4) measured over a

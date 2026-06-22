@@ -8,6 +8,7 @@ import { telHref, pageH1 } from '../../lib/content';
 import { parseJsonLd } from '../../lib/jsonld';
 import { Markdown } from '../../components/shared/Markdown';
 import { Breadcrumbs } from '../../components/shared/Breadcrumbs';
+import { withInjectedCrossLinks } from '../../lib/cross-links';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -29,6 +30,13 @@ export default async function FlatServicePage({ params }: Params) {
   const bundle = substituteBundlePhone(sanityToBundle(site), phone);
   const page = bundle.services.find((p) => slugFromUrl(p.slug) === slug);
   if (!page) notFound();
+
+  // Inject any active network cross-links into this page's MDX at render time.
+  // Resolve the page's Sanity doc id (crossSiteLinks.sourcePageId) from the raw
+  // site projection, matching on slug.
+  const sourcePageId =
+    site.services?.find((p) => slugFromUrl(p.slug) === slug)?._id ?? '';
+  const mdx = await withInjectedCrossLinks(sourcePageId, page.mdx);
 
   const tel = telHref(phone);
   const base = await currentRequestBaseUrl();
@@ -94,7 +102,7 @@ export default async function FlatServicePage({ params }: Params) {
           {page.meta_description && (
             <p className="info-page-lede">{page.meta_description}</p>
           )}
-          <Markdown source={page.mdx} className="prose-site" phone={phone} />
+          <Markdown source={mdx} className="prose-site" phone={phone} />
 
           <aside className="info-page-cta">
             <h2>Get a free quote on {page.title.toLowerCase()}</h2>

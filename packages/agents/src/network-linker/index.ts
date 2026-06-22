@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { eq, and, gte, count } from 'drizzle-orm';
+import { eq, and, gte, count, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentContext } from '../base';
 import {
   getDb,
@@ -10,6 +11,9 @@ import {
   siteNetworkMemberships,
   crossSiteLinks,
   linkRequests,
+  backlinks,
+  or,
+  isNotNull,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import { createReadClient } from '@leadlandlord/integrations/sanity';
@@ -51,6 +55,64 @@ const PlacementResponse = z.object({
   afterSentence: z.string(),
   rationale: z.string(),
 });
+
+// ────────────────────────────────────────────────────────────
+// Deep-link targeting
+// ────────────────────────────────────────────────────────────
+
+export interface DeepLinkTarget {
+  url: string;
+  slug: string;
+}
+
+/**
+ * Pick a peer page that is "stuck" on page two of Google (avg position 11–30
+ * over the last 28 days) to receive the cross-link, preferring the page with the
+ * most impressions (the biggest near-miss opportunity). A link into a money page
+ * that can actually move beats yet another homepage link — and homepage-only
+ * commercial links are a manipulation footprint. Returns null when the peer has
+ * no eligible stuck page, in which case the caller falls back to the homepage.
+ */
+export async function pickDeepLinkTarget(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  peerSiteId: string,
+  peerDomain: string,
+): Promise<DeepLinkTarget | null> {
+  const since = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const rows = (await db.execute(sql`
+    SELECT page, AVG(position) AS avg_pos, SUM(impressions) AS imps
+    FROM seo_metrics_daily
+    WHERE site_id = ${peerSiteId} AND date >= ${since}
+    GROUP BY page
+    HAVING AVG(position) BETWEEN 11 AND 30 AND SUM(impressions) > 0
+    ORDER BY SUM(impressions) DESC
+    LIMIT 5
+  `)) as unknown as
+    | { rows: Array<{ page: string; avg_pos: number; imps: number }> }
+    | Array<{ page: string; avg_pos: number; imps: number }>;
+  const list = Array.isArray(rows) ? rows : rows.rows;
+
+  const host = peerDomain.toLowerCase().replace(/^www\./, '');
+  for (const r of list) {
+    let parsed: URL;
+    try {
+      parsed = new URL(r.page);
+    } catch {
+      continue;
+    }
+    // Only deep-link to a page actually on the peer's domain, and skip the
+    // homepage (that's the fallback, not a "deep" link).
+    const rowHost = parsed.host.toLowerCase().replace(/^www\./, '');
+    if (rowHost !== host) continue;
+    const slug = parsed.pathname.replace(/^\/+|\/+$/g, '');
+    if (!slug) continue;
+    return { url: `https://${host}${parsed.pathname}`, slug };
+  }
+  return null;
+}
 
 // ────────────────────────────────────────────────────────────
 // Agent
@@ -297,14 +359,24 @@ export class NetworkLinker extends BaseAgent<
         continue;
       }
 
-      // Sprint 3: target is the peer homepage. Future iterations should rotate
-      // target page types (service, service-area, etc.) for more variety.
-      const targetUrl = `https://${peerDomain}/`;
+      // Prefer deep-linking to a peer page stuck on page two of Google (more
+      // natural than homepage-only links, and routes equity to a money page
+      // that can actually move). Fall back to the homepage when none qualifies.
+      const deepLink = await pickDeepLinkTarget(db, peer.siteId, peerDomain);
+      const targetUrl = deepLink?.url ?? `https://${peerDomain}/`;
 
       // Anchor rotation — pass recent anchors for this source page to this peer.
       const recentAnchors = recentLinks
         .filter((l) => l.targetSiteId === peer.siteId && l.sourcePageId === sourcePageId)
         .map((l) => l.anchorText);
+
+      // Aggregate inbound anchors for this target across the whole network — used
+      // to govern the target's anchor profile (keep exact-match a minority).
+      const inboundAnchorRows = await db
+        .select({ anchorText: crossSiteLinks.anchorText })
+        .from(crossSiteLinks)
+        .where(eq(crossSiteLinks.targetSiteId, peer.siteId));
+      const targetInboundAnchors = inboundAnchorRows.map((r) => r.anchorText);
 
       const anchorText = rotateAnchor({
         targetSiteId: peer.siteId,
@@ -312,6 +384,8 @@ export class NetworkLinker extends BaseAgent<
         targetCity: peer.city,
         sourcePageId,
         history: recentAnchors,
+        targetBrand: peerDomain,
+        targetInboundAnchors,
       });
 
       // Count outbound links to this peer from source site.
@@ -326,6 +400,31 @@ export class NetworkLinker extends BaseAgent<
         );
       const peerOutboundCount = Number(peerOutboundRows[0]?.value ?? 0);
 
+      // All-time reciprocal links (peer → source) to enforce the reciprocity cap.
+      const reciprocalRows = await db
+        .select({ value: count() })
+        .from(crossSiteLinks)
+        .where(
+          and(
+            eq(crossSiteLinks.sourceSiteId, peer.siteId),
+            eq(crossSiteLinks.targetSiteId, requestingSiteId),
+          ),
+        );
+      const reciprocalTotalCount = Number(reciprocalRows[0]?.value ?? 0);
+
+      // External (off-network) inbound links the target already holds — used to
+      // keep internal cross-links a minority of the target's link profile.
+      const externalInboundRows = await db
+        .select({ value: count() })
+        .from(backlinks)
+        .where(
+          and(
+            eq(backlinks.siteId, peer.siteId),
+            or(isNotNull(backlinks.acquiredAt), isNotNull(backlinks.publishedAt)),
+          ),
+        );
+      const externalInboundCount = Number(externalInboundRows[0]?.value ?? 0);
+
       const candidate = {
         sourcePageId,
         sourceSiteId: requestingSiteId,
@@ -338,6 +437,9 @@ export class NetworkLinker extends BaseAgent<
         existingLinks: recentLinks,
         peerOutboundCount,
         totalOutboundCount: existingCount,
+        reciprocalTotalCount,
+        internalInboundCount: targetInboundAnchors.length,
+        externalInboundCount,
       });
 
       if (!hygiene.ok) {
@@ -413,6 +515,16 @@ export class NetworkLinker extends BaseAgent<
           targetSiteId: peer.siteId,
           targetUrl,
           anchorText,
+          // Persist the LLM placement so site-host can inject the link at render
+          // time: match `matchContext` (verbatim source sentence) in the page MDX
+          // and replace it with `injectedMarkdown` (sentence + inline link).
+          matchContext: placement.beforeSentence,
+          injectedMarkdown: placement.afterSentence,
+          surroundingContextHash: createHash('sha256')
+            .update(placement.beforeSentence)
+            .digest('hex'),
+          targetPageKind: deepLink ? 'deep' : 'home',
+          targetPageSlug: deepLink?.slug ?? null,
           status: 'active',
         });
 

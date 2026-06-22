@@ -9,8 +9,20 @@ import {
   eq,
   inArray,
   and,
+  sql,
+  isCrossLinkPaused,
 } from '@leadlandlord/db';
 import { Timestamp } from '../../../../../components/Timestamp';
+import { RequestLinksButton } from './RequestLinksButton';
+
+interface NetworkLinkerRunRow {
+  id: string;
+  status: string;
+  output: { linksPlaced?: number; candidatesEvaluated?: number; hygieneFailed?: number; llmSkipped?: number } | null;
+  error: string | null;
+  started_at: string | Date;
+  ended_at: string | Date | null;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +64,7 @@ export default async function SiteNetworkPage({ params }: Params) {
         targetUrl: crossSiteLinks.targetUrl,
         anchorText: crossSiteLinks.anchorText,
         placedAt: crossSiteLinks.placedAt,
+        verifiedAt: crossSiteLinks.verifiedAt,
         status: crossSiteLinks.status,
       })
       .from(crossSiteLinks)
@@ -78,6 +91,31 @@ export default async function SiteNetworkPage({ params }: Params) {
       .from(linkRequests)
       .where(and(eq(linkRequests.requestingSiteId, id), eq(linkRequests.status, 'pending'))),
   ]);
+
+  // Recent network-linker runs scoped to this site: either stamped with the
+  // site id, run in siteId-mode, or draining a link request for this site.
+  const runRowsRaw = (await db.execute(sql`
+    SELECT ar.id, ar.status, ar.output, ar.error, ar.started_at, ar.ended_at
+    FROM agent_runs ar
+    WHERE ar.agent = 'network-linker'
+      AND (
+        ar.site_id = ${id}
+        OR ar.input->>'siteId' = ${id}
+        OR EXISTS (
+          SELECT 1 FROM link_requests lr
+          WHERE lr.id::text = ar.input->>'linkRequestId'
+            AND lr.requesting_site_id = ${id}
+        )
+      )
+    ORDER BY ar.started_at DESC
+    LIMIT 10
+  `)) as unknown as { rows: NetworkLinkerRunRow[] } | NetworkLinkerRunRow[];
+  const recentRuns = Array.isArray(runRowsRaw) ? runRowsRaw : runRowsRaw.rows;
+
+  const crossLinkPaused = await isCrossLinkPaused();
+
+  const activeOutbound = outboundLinks.filter((l) => l.status === 'active');
+  const verifiedOutbound = activeOutbound.filter((l) => l.verifiedAt).length;
 
   // Resolve site names for outbound targets and inbound sources
   const outboundTargetIds = [...new Set(outboundLinks.map((l) => l.targetSiteId))];
@@ -107,17 +145,30 @@ export default async function SiteNetworkPage({ params }: Params) {
 
   return (
     <div className="space-y-8">
-      <header>
-        <p className="text-xs uppercase tracking-wide text-slate-500">Site / Network</p>
-        <h1 className="text-xl md:text-2xl font-semibold mt-1">{siteLabel}</h1>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Site / Network</p>
+          <h1 className="text-xl md:text-2xl font-semibold mt-1">{siteLabel}</h1>
+        </div>
+        <RequestLinksButton siteId={id} disabled={crossLinkPaused} />
       </header>
+
+      {crossLinkPaused && (
+        <div className="rounded-lg border border-amber-700/50 bg-amber-900/30 px-4 py-3 text-sm text-amber-200">
+          Network cross-links are paused. No links are injected on live pages and
+          the request seeder is idle.
+        </div>
+      )}
 
       {/* Counts */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard label="Outbound (30d)" value={outboundLast30} />
         <StatCard label="Inbound (30d)" value={inboundLast30} />
-        <StatCard label="Total outbound" value={outboundLinks.length} />
-        <StatCard label="Total inbound" value={inboundLinks.length} />
+        <StatCard label="Active outbound" value={activeOutbound.length} />
+        <StatCard
+          label="Verified live"
+          value={`${verifiedOutbound}/${activeOutbound.length}`}
+        />
       </div>
 
       {/* Network memberships */}
@@ -293,11 +344,57 @@ export default async function SiteNetworkPage({ params }: Params) {
           </div>
         )}
       </section>
+
+      {/* Network-linker activity */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Network-linker activity
+        </h2>
+        {recentRuns.length === 0 ? (
+          <Empty>No network-linker runs for this site yet.</Empty>
+        ) : (
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+                  <Th>Status</Th>
+                  <Th>Placed</Th>
+                  <Th>Evaluated</Th>
+                  <Th>Hygiene fail</Th>
+                  <Th>LLM skip</Th>
+                  <Th>Started</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRuns.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-800/60 last:border-0">
+                    <Td>
+                      <StatusPill status={r.status} />
+                      {r.error && (
+                        <div className="text-xs text-red-400 mt-1 max-w-xs truncate" title={r.error}>
+                          {r.error}
+                        </div>
+                      )}
+                    </Td>
+                    <Td className="text-slate-200 font-medium">{r.output?.linksPlaced ?? '—'}</Td>
+                    <Td className="text-slate-400">{r.output?.candidatesEvaluated ?? '—'}</Td>
+                    <Td className="text-slate-400">{r.output?.hygieneFailed ?? '—'}</Td>
+                    <Td className="text-slate-400">{r.output?.llmSkipped ?? '—'}</Td>
+                    <Td className="text-slate-400 whitespace-nowrap text-xs">
+                      <Timestamp value={r.started_at} />
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
       <div className="text-2xl font-semibold text-slate-100">{value}</div>

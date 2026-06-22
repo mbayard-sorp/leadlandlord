@@ -185,12 +185,75 @@ export function selectPeers(opts: {
 }
 
 // ────────────────────────────────────────────────────────────
-// 4. rotateAnchor
+// 4. Anchor profile governance
 // ────────────────────────────────────────────────────────────
 
 /**
+ * Anchor classes, ordered roughly from "looks natural / low risk" to
+ * "over-optimized / high risk". A natural backlink profile is dominated by
+ * branded + generic anchors, with exact/partial-match commercial anchors a
+ * clear minority. Over-using exact-match anchors is the single strongest
+ * manipulative-link footprint, so we govern the per-target aggregate share.
+ */
+export type AnchorType = 'branded' | 'generic' | 'partial-match' | 'exact-match';
+
+/** Maximum share of a target's inbound anchors that may be exact-match. */
+export const EXACT_MATCH_ANCHOR_CAP = 0.25;
+
+/**
+ * Classify an anchor relative to the target niche/city. Branded anchors lead
+ * with the brand/city; generic anchors carry no commercial keyword; exact-match
+ * anchors are bare "{niche} {city}"-style money phrases; everything else with a
+ * niche keyword is partial-match.
+ */
+export function classifyAnchorType(
+  anchor: string,
+  targetNiche: string,
+  targetCity: string,
+  targetBrand?: string,
+): AnchorType {
+  const a = anchor.trim().toLowerCase();
+  const n = targetNiche.trim().toLowerCase();
+  const c = targetCity.trim().toLowerCase();
+  const brand = targetBrand?.trim().toLowerCase();
+
+  const GENERIC = new Set([
+    'learn more',
+    'find out more',
+    'see details',
+    'read more',
+    'this guide',
+    'here',
+  ]);
+  if (GENERIC.has(a)) return 'generic';
+
+  if (brand && a.includes(brand)) return 'branded';
+
+  const hasNiche = a.includes(n);
+  const hasCity = c.length > 0 && a.includes(c);
+
+  // Exact-match: a short money phrase that is essentially just niche (+ city),
+  // no surrounding editorial words and no question framing.
+  if (hasNiche && !a.includes('?')) {
+    const stripped = a
+      .replace(n, ' ')
+      .replace(c, ' ')
+      .replace(/\b(in|the|a|an|services|service|pros|near|me)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (stripped.length === 0) return 'exact-match';
+  }
+
+  if (hasNiche || hasCity) return 'partial-match';
+  return 'generic';
+}
+
+/**
  * Build a pool of ~12 anchor-text variants for a given target niche/city,
- * then pick deterministically by hash, skipping any in `history` (last 3).
+ * then pick deterministically by hash. Selection is governed so the target's
+ * aggregate anchor profile stays natural: exact-match anchors are only chosen
+ * when the target is under {@link EXACT_MATCH_ANCHOR_CAP}; otherwise we prefer
+ * branded/generic/partial anchors. Anchors in `history` (last 3) are skipped.
  */
 export function rotateAnchor(opts: {
   targetSiteId: string;
@@ -198,8 +261,20 @@ export function rotateAnchor(opts: {
   targetCity: string;
   sourcePageId: string;
   history: string[];
+  /** Brand label of the target (e.g. domain), used to bias toward branded anchors. */
+  targetBrand?: string;
+  /** Existing inbound anchors for this target across the network (for profile governance). */
+  targetInboundAnchors?: string[];
 }): string {
-  const { targetSiteId, targetNiche, targetCity, sourcePageId, history } = opts;
+  const {
+    targetSiteId,
+    targetNiche,
+    targetCity,
+    sourcePageId,
+    history,
+    targetBrand,
+    targetInboundAnchors = [],
+  } = opts;
 
   const n = targetNiche.toLowerCase();
   const c = targetCity;
@@ -225,13 +300,53 @@ export function rotateAnchor(opts: {
 
   // Restrict to anchors not in the recent history (last 3).
   const recentSet = new Set(history.slice(-3));
-  const candidates = pool.filter((a) => !recentSet.has(a));
+  let candidates = pool.filter((a) => !recentSet.has(a));
+
+  // ── Anchor-profile governance ──────────────────────────────────────────────
+  // If placing an exact-match anchor would push this target's aggregate
+  // exact-match share over the cap, drop exact-match anchors from the pool.
+  const inboundExact = targetInboundAnchors.filter(
+    (a) => classifyAnchorType(a, targetNiche, targetCity, targetBrand) === 'exact-match',
+  ).length;
+  const prospectiveExactShare =
+    (inboundExact + 1) / (targetInboundAnchors.length + 1);
+
+  if (prospectiveExactShare > EXACT_MATCH_ANCHOR_CAP) {
+    const nonExact = candidates.filter(
+      (a) => classifyAnchorType(a, targetNiche, targetCity, targetBrand) !== 'exact-match',
+    );
+    if (nonExact.length > 0) candidates = nonExact;
+  }
 
   // Fall back to full pool if history covers everything (edge case for tiny pools).
   const available = candidates.length > 0 ? candidates : pool;
 
   const hash = fnv1a(targetSiteId + sourcePageId);
   return available[hash % available.length]!;
+}
+
+// ────────────────────────────────────────────────────────────
+// 4b. Internal / external link blend
+// ────────────────────────────────────────────────────────────
+
+/**
+ * A site's inbound link profile should not be dominated by internal (network)
+ * cross-links once it has earned external links. Past this cap the profile
+ * reads as a self-referential network rather than an editorially-earned one.
+ */
+export const INTERNAL_LINK_SHARE_CAP = 0.5;
+
+/**
+ * Share of a site's total inbound link profile that is internal (network
+ * cross-links). Pure; guards total === 0 → 0.
+ */
+export function internalLinkShare(
+  internalCount: number,
+  externalCount: number,
+): number {
+  const total = internalCount + externalCount;
+  if (total <= 0) return 0;
+  return internalCount / total;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -256,13 +371,41 @@ interface HygieneOpts {
   /** Total outbound cross-site links from source site. */
   totalOutboundCount: number;
   reciprocalWindowDays?: number;
+  /**
+   * All-time count of links pointing back from the target to the source
+   * (target→source). Dense reciprocal pairs are a strong network footprint, so
+   * we cap how many reciprocal links any pair may accumulate.
+   */
+  reciprocalTotalCount?: number;
+  /** Maximum all-time reciprocal links allowed between a source/target pair. */
+  reciprocalPairCap?: number;
+  /**
+   * Current count of internal (network cross-link) inbound links to the TARGET
+   * site. Optional — when omitted (with externalInboundCount), the blend cap is
+   * not enforced and behaviour is unchanged.
+   */
+  internalInboundCount?: number;
+  /**
+   * Current count of EXTERNAL inbound links to the target site (from the
+   * `backlinks` table). Optional, paired with internalInboundCount.
+   */
+  externalInboundCount?: number;
 }
 
 export function checkHygiene(
   candidate: HygieneCandidate,
   opts: HygieneOpts,
 ): { ok: boolean; reason?: string } {
-  const { existingLinks, peerOutboundCount, totalOutboundCount, reciprocalWindowDays = 7 } = opts;
+  const {
+    existingLinks,
+    peerOutboundCount,
+    totalOutboundCount,
+    reciprocalWindowDays = 7,
+    reciprocalTotalCount = 0,
+    reciprocalPairCap = 1,
+    internalInboundCount,
+    externalInboundCount,
+  } = opts;
 
   // 1. Dedup: same (sourcePageId, targetUrl, anchorText) must not already exist.
   const isDup = existingLinks.some(
@@ -289,6 +432,15 @@ export function checkHygiene(
     };
   }
 
+  // 2b. All-time reciprocal pair cap: keep reciprocal density low so the link
+  // graph does not read as a tightly reciprocal (network) topology.
+  if (reciprocalTotalCount >= reciprocalPairCap) {
+    return {
+      ok: false,
+      reason: `reciprocal pair cap reached: ${reciprocalTotalCount} >= ${reciprocalPairCap}`,
+    };
+  }
+
   // 3. Peer outbound cap: peer's share of total outbound <= 30%.
   const prospectivePeerCount = peerOutboundCount + 1;
   const prospectiveTotal = totalOutboundCount + 1;
@@ -311,6 +463,32 @@ export function checkHygiene(
       ok: false,
       reason: 'anchor diversity: same url+anchor already used by another source page',
     };
+  }
+
+  // 5. Internal/external blend cap. Only enforced when BOTH inbound counts are
+  // supplied AND the target already has a few external links (>= 3): a brand-new
+  // site with no external links is allowed to bootstrap with internal links.
+  // Past that, placing one more internal link must not push the target's
+  // internal share above INTERNAL_LINK_SHARE_CAP. Placed last so prior reason
+  // strings are unaffected when these opts are omitted.
+  if (
+    typeof internalInboundCount === 'number' &&
+    typeof externalInboundCount === 'number' &&
+    externalInboundCount >= 3
+  ) {
+    const prospectiveShare = internalLinkShare(
+      internalInboundCount + 1,
+      externalInboundCount,
+    );
+    if (prospectiveShare > INTERNAL_LINK_SHARE_CAP) {
+      return {
+        ok: false,
+        reason:
+          `internal/external blend cap: prospective internal share ` +
+          `${(prospectiveShare * 100).toFixed(0)}% > ${(INTERNAL_LINK_SHARE_CAP * 100).toFixed(0)}% ` +
+          `(${internalInboundCount + 1} internal vs ${externalInboundCount} external)`,
+      };
+    }
   }
 
   return { ok: true };

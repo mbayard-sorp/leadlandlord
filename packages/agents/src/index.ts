@@ -32,3 +32,10 @@ export { FleetDigest } from './fleet-digest/index';
 // deliberately NOT in the agent registry (see registry.ts / ADR 0019).
 export { Orchestrator } from './orchestrator/brain';
 export { Molly } from './molly/index';
+// Cross-link network footprint analyzer (read-only; surfaced in the operator UI).
+export {
+  analyzeCrossLinkFootprint,
+  scoreNetworkFootprint,
+  type FootprintScore,
+  type FootprintRating,
+} from './audit/cross-link-footprint';

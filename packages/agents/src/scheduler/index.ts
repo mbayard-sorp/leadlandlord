@@ -15,6 +15,7 @@ import { scheduleMollyDigest } from './molly-digest';
 import { scheduleMollyInbox } from './molly-inbox';
 import { scheduleMollyNudge } from './molly-nudge';
 import { scheduleNetworkLinker } from './network-linker';
+import { scheduleNetworkLinkRequests } from './network-link-requests';
 import { scheduleWaveProgression } from './wave-progression';
 import { scheduleLocalContentScout } from './local-content-scout';
 import { scheduleGeoAeoAuditor } from './geo-aeo-auditor';
@@ -47,6 +48,7 @@ export const schedulers: Record<string, Scheduler> = {
   'molly-inbox': scheduleMollyInbox,
   'molly-nudge': scheduleMollyNudge,
   'network-linker': scheduleNetworkLinker,
+  'network-link-requests': scheduleNetworkLinkRequests,
   'wave-progression': scheduleWaveProgression,
   'local-content-scout': scheduleLocalContentScout,
   'geo-aeo-auditor': scheduleGeoAeoAuditor,
