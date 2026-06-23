@@ -586,7 +586,14 @@
 [data-bs-layout='bold'] .bs-hero {
   background-color: var(--bs-primary);
   color: var(--bs-on-primary);
-  padding-block: clamp(80px, 12vw, 140px);
+  /* Pull the hero up behind the 64px sticky nav so the bold nav's transparent
+     treatment (white --bs-on-primary text, see .bs-nav:not(.is-scrolled) below)
+     actually floats over the dark hero. Without this the nav sits on the light
+     page background and its white text is unreadable. Extra top padding keeps
+     hero content clear of the overlapped nav. */
+  margin-top: -64px;
+  padding-top: calc(clamp(80px, 12vw, 140px) + 64px);
+  padding-bottom: clamp(80px, 12vw, 140px);
   position: relative;
   overflow: hidden;
   text-align: center;
@@ -720,6 +727,20 @@
 [data-bs-layout='bold'] .bs-hero-actions,
 [data-bs-layout='trust'] .bs-hero-actions {
   justify-content: center;
+}
+
+/* Secondary (outline) hero CTA sits on the dark bold hero, where the default
+   primary-colored outline reads as low-contrast. Recolor it to the light
+   on-primary treatment (white text + translucent white border) so it stays
+   legible against the hero photo/scrim. */
+[data-bs-layout='bold'] .bs-hero-actions .bs-btn-outline {
+  color: var(--bs-on-primary);
+  border-color: color-mix(in srgb, var(--bs-on-primary) 55%, transparent);
+  background-color: transparent;
+}
+[data-bs-layout='bold'] .bs-hero-actions .bs-btn-outline:hover {
+  border-color: var(--bs-on-primary);
+  background-color: color-mix(in srgb, var(--bs-on-primary) 15%, transparent);
 }
 
 .bs-badges {
