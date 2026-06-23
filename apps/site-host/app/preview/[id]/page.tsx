@@ -13,10 +13,21 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  // We intentionally do not surface the Sanity doc title here — noindex is
-  // the only thing that matters for this route, regardless of fetch outcome.
-  void params; // awaited in page body; generateMetadata keeps it simple
+  // Title the browser tab with the business name so drafts are identifiable
+  // (was falling back to the generic root "LeadLandlord" title). The title has
+  // no bearing on indexing — noindex below still applies unconditionally, and
+  // the fetch is best-effort: any failure falls back to a generic draft title
+  // and never throws (this route fails closed to noindex above all).
+  let title = 'Draft Preview';
+  try {
+    const { id } = await params;
+    const site = await fetchBuildSellSitePreview(id);
+    if (site?.businessName) title = site.businessName;
+  } catch {
+    // keep the generic fallback title
+  }
   return {
+    title,
     robots: { index: false, follow: false },
   };
 }
