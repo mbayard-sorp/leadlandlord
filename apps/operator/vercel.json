@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd ../.. && pnpm --filter @leadlandlord/operator vercel-build",
   "crons": [
     { "path": "/api/cron/tick", "schedule": "*/10 * * * *" },
 
