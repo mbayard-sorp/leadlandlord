@@ -1933,6 +1933,15 @@ a.bs-ugc-card:hover {
 .bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-links a {
   color: var(--bs-on-primary);
 }
+/* Outline phone button sits on the transparent bold hero nav; tint its text and
+   border white so it reads against the dark photo instead of green-on-green. */
+.bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-cta-group .bs-btn-outline {
+  color: var(--bs-on-primary);
+  border-color: var(--bs-on-primary);
+}
+.bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-cta-group .bs-btn-outline:hover {
+  background-color: color-mix(in srgb, var(--bs-on-primary) 15%, transparent);
+}
 
 /* ---- Bold: overlapping trust strip (elevated icon-tile cards) ----------- */
 .bs-bold-trust-strip {
