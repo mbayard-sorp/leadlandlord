@@ -417,21 +417,6 @@
   top: var(--bs-draft-banner-h);
 }
 
-/* Reviewer toggle (BuildSellThemeBar "Hide draft banner") — hide the banner for
-   a clean preview, reclaim its reserved space, and re-dock the nav to the very
-   top. The diagonal watermark stays as the anti-theft shield. */
-.bs-root[data-bs-draft-hidden='true'] .bs-draft-banner {
-  display: none;
-}
-
-.bs-root[data-draft='true'][data-bs-draft-hidden='true'] {
-  padding-top: 0;
-}
-
-.bs-root[data-draft='true'][data-bs-draft-hidden='true'] .bs-nav {
-  top: 0;
-}
-
 /* ---- Process steps ------------------------------------------------------- */
 .bs-steps {
   display: flex;
