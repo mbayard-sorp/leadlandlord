@@ -41,6 +41,13 @@ export async function loadNetworkRoi(memberIds: string[]): Promise<CrossLinkRoi>
   if (memberIds.length === 0) return EMPTY;
   const db = getDb();
 
+  // Drizzle (0.36 + neon-http) expands an interpolated JS array into a
+  // placeholder LIST — `ANY($1, $2)` — which Postgres reads as a record and
+  // rejects ("op ANY/ALL (array) requires array on right side"). Bind a single
+  // Postgres array-literal string instead and cast it. memberIds are trusted
+  // DB-sourced UUIDs, so a comma join is safe (UUIDs contain no delimiters).
+  const idArray = `{${memberIds.join(',')}}`;
+
   // ── Rank movement on linked target pages ──────────────────────────────────
   // Compare avg position in the 28 days before placement vs the 28 days after,
   // for seo rows whose page == the cross-link's target_url.
@@ -58,7 +65,7 @@ export async function loadNetworkRoi(memberIds: string[]): Promise<CrossLinkRoi>
     FROM cross_site_links csl
     JOIN seo_metrics_daily smd
       ON smd.site_id = csl.target_site_id AND smd.page = csl.target_url
-    WHERE csl.source_site_id = ANY(${memberIds}) AND csl.status = 'active'
+    WHERE csl.source_site_id = ANY(${idArray}::uuid[]) AND csl.status = 'active'
   `)) as unknown as { rows: RankRow[] } | RankRow[];
   const rankRow = (Array.isArray(rankRaw) ? rankRaw : rankRaw.rows)[0];
 
@@ -66,17 +73,17 @@ export async function loadNetworkRoi(memberIds: string[]): Promise<CrossLinkRoi>
   const liftRaw = (await db.execute(sql`
     SELECT
       (SELECT COUNT(*) FROM calls c
-        WHERE c.site_id = ANY(${memberIds})
+        WHERE c.site_id = ANY(${idArray}::uuid[])
           AND c.created_at >= NOW() - INTERVAL '30 days')::text AS calls_30d,
       (SELECT COUNT(*) FROM calls c
-        WHERE c.site_id = ANY(${memberIds})
+        WHERE c.site_id = ANY(${idArray}::uuid[])
           AND c.created_at >= NOW() - INTERVAL '60 days'
           AND c.created_at <  NOW() - INTERVAL '30 days')::text AS calls_prev_30d,
       (SELECT COUNT(*) FROM leads l
-        WHERE l.site_id = ANY(${memberIds})
+        WHERE l.site_id = ANY(${idArray}::uuid[])
           AND l.created_at >= NOW() - INTERVAL '30 days')::text AS leads_30d,
       (SELECT COUNT(*) FROM leads l
-        WHERE l.site_id = ANY(${memberIds})
+        WHERE l.site_id = ANY(${idArray}::uuid[])
           AND l.created_at >= NOW() - INTERVAL '60 days'
           AND l.created_at <  NOW() - INTERVAL '30 days')::text AS leads_prev_30d
   `)) as unknown as { rows: LiftRow[] } | LiftRow[];
