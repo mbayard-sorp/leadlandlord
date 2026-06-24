@@ -25,6 +25,7 @@ import { scheduleContentDataAuditor } from './content-data-auditor';
 import { scheduleFleetDigest } from './fleet-digest';
 import { scheduleCitationRunner } from './citation-runner';
 import { scheduleNicheKeywordRefresher } from './niche-keyword-refresher';
+import { scheduleBuildsellReviewRefresh } from './buildsell-review-refresh';
 
 /**
  * Map from cron-route name to a scheduler function. The cron route handler
@@ -58,6 +59,8 @@ export const schedulers: Record<string, Scheduler> = {
   'fleet-digest': scheduleFleetDigest,
   'citation-runner': scheduleCitationRunner,
   'niche-keyword-refresher': scheduleNicheKeywordRefresher,
+  // Build & Sell — monthly aggregate-rating refresh for non-draft sites.
+  'buildsell-review-refresh': scheduleBuildsellReviewRefresh,
 };
 
 export type { Scheduler, ScheduledEvent } from './types';

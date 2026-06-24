@@ -89,6 +89,8 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   // Build & Sell content migrator. FIRECRAWL_API_KEY is required — the crawl
   // hard-fails without it (Anthropic vision uses the fleet-wide ANTHROPIC_API_KEY).
   'content-migrator': [['FIRECRAWL_API_KEY']],
+  // Build & Sell monthly review refresh. Places Details fetch needs the key.
+  'buildsell-review-refresh': [['GOOGLE_PLACES_API_KEY']],
 };
 
 /**
