@@ -62,6 +62,7 @@ export function BuildSellThemeBar({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [locked, setLocked] = useState(initialLocked);
+  const [bannerHidden, setBannerHidden] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -105,6 +106,21 @@ export function BuildSellThemeBar({
     },
     [getRootEl],
   );
+
+  // Toggle the draft banner on/off so reviewers can see the site cleanly.
+  // Sets data-bs-draft-hidden on .bs-root; CSS hides the banner, reclaims its
+  // reserved space, and re-docks the sticky nav. The watermark is unaffected.
+  const handleToggleBanner = () => {
+    const el = getRootEl();
+    if (!el) return;
+    const next = !bannerHidden;
+    setBannerHidden(next);
+    if (next) {
+      el.setAttribute('data-bs-draft-hidden', 'true');
+    } else {
+      el.removeAttribute('data-bs-draft-hidden');
+    }
+  };
 
   const handlePresetChange = (name: string) => {
     setPreset(name);
@@ -206,6 +222,27 @@ export function BuildSellThemeBar({
       <div style={{ fontWeight: 700, marginBottom: '12px', fontSize: '14px' }}>
         Customize Theme
       </div>
+
+      {/* Draft banner toggle — minimize the "available for purchase" banner for
+          a distraction-free review, then bring it back. */}
+      <button
+        onClick={handleToggleBanner}
+        aria-pressed={bannerHidden}
+        style={{
+          width: '100%',
+          marginBottom: '12px',
+          padding: '7px',
+          borderRadius: '8px',
+          border: '1px solid #e2e8f0',
+          background: bannerHidden ? '#1e293b' : '#f8fafc',
+          color: bannerHidden ? '#f8fafc' : '#1a1a1a',
+          fontWeight: 600,
+          fontSize: '12.5px',
+          cursor: 'pointer',
+        }}
+      >
+        {bannerHidden ? 'Show draft banner' : 'Hide draft banner'}
+      </button>
 
       {/* Preset picker */}
       <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}>
