@@ -174,6 +174,88 @@ export async function searchText(args: SearchTextArgs): Promise<{
   return { places, nextPageToken: json.nextPageToken };
 }
 
+const PlaceDetailsSchema = z.object({
+  id: z.string().optional(),
+  rating: z.number().optional(),
+  userRatingCount: z.number().optional(),
+});
+
+export interface PlaceAggregateRating {
+  /** Aggregate star rating, rounded to 1 decimal. Undefined when the listing has none. */
+  rating?: number;
+  /** Total Google review count. Undefined when the listing has none. */
+  userRatingCount?: number;
+}
+
+/**
+ * Fetch a single place's **aggregate** rating + review count via Place Details
+ * (New Places API v1, `GET /v1/places/{placeId}`). Used by the monthly
+ * `buildsell-review-refresh` agent to keep the displayed Google star rating
+ * current after it was captured once at build time.
+ *
+ * ToS GUARD: we deliberately request ONLY `rating,userRatingCount` (aggregate,
+ * non-PII). We NEVER request `reviews` — verbatim Google review bodies are not
+ * fetched, stored, or displayed (ADR 0025 D5 / R6). Place Details field masks
+ * use **bare** field names (no `places.` prefix, unlike `searchText`).
+ *
+ * Pricing: rating + count keeps this in a low Place Details SKU tier
+ * (~$0.005–0.017/call). Spend is bounded by the shared `assertDailyCap` +
+ * `throttlePlaces` guards, same as every other call in this module.
+ *
+ * MOCK_AI bypass returns deterministic values so test/mock paths never hit the
+ * network (mirrors `getContractorCount` / `searchLeads`).
+ */
+export async function getPlaceDetails(placeId: string): Promise<PlaceAggregateRating> {
+  if (process.env.MOCK_AI === 'true') {
+    log.info({ placeId }, 'google-places getPlaceDetails: MOCK_AI bypass');
+    return { rating: 4.7, userRatingCount: 53 };
+  }
+
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    throw new IntegrationError('google-places', 'GOOGLE_PLACES_API_KEY is not set');
+  }
+
+  // Hard daily cap (real spend ceiling) + per-instance burst smoother.
+  assertDailyCap();
+  await throttlePlaces();
+
+  const timeoutMs = Number(process.env.GOOGLE_PLACES_TIMEOUT_MS ?? '10000');
+  let res: Response;
+  try {
+    res = await fetch(`${PLACES_BASE}/places/${encodeURIComponent(placeId)}`, {
+      method: 'GET',
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        // Place Details masks use bare field names (no `places.` prefix).
+        'X-Goog-FieldMask': 'id,rating,userRatingCount',
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new IntegrationError('google-places', `getPlaceDetails timed out after ${timeoutMs}ms`);
+    }
+    throw err instanceof IntegrationError
+      ? err
+      : new IntegrationError('google-places', `getPlaceDetails network error: ${String(err)}`);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new IntegrationError(
+      'google-places',
+      `getPlaceDetails failed: ${res.status} ${text}`,
+      res.status,
+      text,
+    );
+  }
+  const json = PlaceDetailsSchema.parse(await res.json());
+  // Round to 1 decimal to match buildsell_leads.rating numeric(2,1) + display.
+  const rating = json.rating != null ? Math.round(json.rating * 10) / 10 : undefined;
+  log.info({ placeId, rating, userRatingCount: json.userRatingCount }, 'google-places getPlaceDetails');
+  return { rating, userRatingCount: json.userRatingCount };
+}
+
 export interface ContractorCountArgs {
   niche: string;
   city: string;

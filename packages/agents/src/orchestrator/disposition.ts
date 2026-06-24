@@ -70,6 +70,7 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   'site-builder': ARMED(10), // fires only on niche.approved
   'spec-site-builder': ARMED(5), // Build & Sell; fires only on operator buildsell.build (~$0.50/build)
   'content-migrator': ARMED(2), // Build & Sell; fires only on operator buildsell.migrate (crawl + vision, ~$0.05/run)
+  'buildsell-review-refresh': ON(1), // Build & Sell; monthly Places aggregate-rating refresh for non-draft sites (~$0.01/site)
   'domain-procurer': ARMED(3),
   'tracking-setup': ARMED(3),
 
