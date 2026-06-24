@@ -116,18 +116,23 @@ export default async function NetworkDetailPage({ params }: Params) {
   // 5. Recent network-linker runs scoped to member sites.
   let recentRuns: NetworkLinkerRunRow[] = [];
   if (memberIds.length > 0) {
-    const memberIdsArray = memberIds;
+    // Drizzle (0.36 + neon-http) expands an interpolated JS array into a
+    // placeholder LIST — `ANY($1, $2)` — which Postgres rejects as a record
+    // ("op ANY/ALL (array) requires array on right side"). Bind one Postgres
+    // array-literal string and cast per column instead. memberIds are trusted
+    // DB-sourced UUIDs, so the comma join is injection-safe.
+    const idArray = `{${memberIds.join(',')}}`;
     const rawRuns = (await db.execute(sql`
       SELECT ar.id, ar.status, ar.output, ar.error, ar.started_at
       FROM agent_runs ar
       WHERE ar.agent = 'network-linker'
         AND (
-          ar.site_id = ANY(${memberIdsArray})
-          OR ar.input->>'siteId' = ANY(${memberIdsArray})
+          ar.site_id = ANY(${idArray}::uuid[])
+          OR ar.input->>'siteId' = ANY(${idArray}::text[])
           OR EXISTS (
             SELECT 1 FROM link_requests lr
             WHERE lr.id::text = ar.input->>'linkRequestId'
-              AND lr.requesting_site_id = ANY(${memberIdsArray})
+              AND lr.requesting_site_id = ANY(${idArray}::uuid[])
           )
         )
       ORDER BY ar.started_at DESC
