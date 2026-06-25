@@ -9,6 +9,8 @@ import { BuildSellImagePanel } from '../BuildSellImagePanel';
 import { MigrationReviewPanel } from '../MigrationReviewPanel';
 import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
 import { BuildSellRegeneratePanel } from '../BuildSellRegeneratePanel';
+import { CustomerAccessPanel } from './CustomerAccessPanel';
+import { listSiteAccess } from './customer-access-actions';
 import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +32,14 @@ export default async function BuildSellDetailPage({ params }: Params) {
   if (!site) notFound();
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
+
+  // Load current access rows for the CustomerAccessPanel (non-fatal).
+  let accessRows: Awaited<ReturnType<typeof listSiteAccess>> = [];
+  try {
+    accessRows = await listSiteAccess(site.id);
+  } catch {
+    // Non-fatal — panel renders with empty list if DB is transiently unavailable.
+  }
 
   const meta = (site.metadata ?? {}) as Record<string, unknown>;
   // Pending content-migration suggestions (staged by the content-migrator agent).
@@ -223,6 +233,11 @@ export default async function BuildSellDetailPage({ params }: Params) {
 
       {/* Image prompt control panel */}
       <BuildSellImagePanel siteId={site.id} />
+
+      {/* Customer portal access grants */}
+      <div className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-4">
+        <CustomerAccessPanel siteId={site.id} initialRows={accessRows} />
+      </div>
     </div>
   );
 }

@@ -2144,3 +2144,39 @@ export type BuildsellSite = typeof buildsellSites.$inferSelect;
 export type NewBuildsellSite = typeof buildsellSites.$inferInsert;
 export type BuildsellSiteLead = typeof buildsellSiteLeads.$inferSelect;
 export type NewBuildsellSiteLead = typeof buildsellSiteLeads.$inferInsert;
+
+/**
+ * Customer self-service portal access grants.
+ *
+ * Maps a Neon Auth user (stored as text — no FK into neon_auth schema) to a
+ * buildsell_sites row. A row with revoked_at IS NULL is an active grant.
+ * Soft-revoke (set revoked_at = now()) rather than delete so the audit trail
+ * is preserved. One unique grant per (auth_user_id, buildsell_site_id) pair;
+ * re-granting the same user/site requires clearing or the upsert path.
+ */
+export const bsCustomerSiteAccess = pgTable(
+  'bs_customer_site_access',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Neon Auth user id (UUID string). No FK into neon_auth schema. */
+    authUserId: text('auth_user_id').notNull(),
+    buildsellSiteId: uuid('buildsell_site_id')
+      .notNull()
+      .references(() => buildsellSites.id, { onDelete: 'cascade' }),
+    /** 'operator' | 'auto-markpaid' */
+    grantedBy: text('granted_by').notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    /** null = active; set to revoke without deleting. */
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => ({
+    authUserSiteUniq: uniqueIndex('bs_customer_site_access_user_site_uniq').on(
+      t.authUserId,
+      t.buildsellSiteId,
+    ),
+    authUserIdx: index('bs_customer_site_access_auth_user_idx').on(t.authUserId),
+  }),
+);
+
+export type BsCustomerSiteAccess = typeof bsCustomerSiteAccess.$inferSelect;
+export type NewBsCustomerSiteAccess = typeof bsCustomerSiteAccess.$inferInsert;

@@ -33,7 +33,8 @@
     "./brightlocal": "./src/brightlocal/index.ts",
     "./pagerduty": "./src/pagerduty/index.ts",
     "./firecrawl": "./src/firecrawl/index.ts",
-    "./semrush": "./src/semrush/index.ts"
+    "./semrush": "./src/semrush/index.ts",
+    "./neon-auth": "./src/neon-auth.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -45,6 +46,7 @@
     "@leadlandlord/sanity-schema": "workspace:*",
     "@leadlandlord/shared": "workspace:*",
     "@leadlandlord/us-cities": "workspace:*",
+    "@neondatabase/auth": "0.4.2-beta",
     "drizzle-orm": "^0.36.4",
     "google-auth-library": "^10.6.2",
     "stripe": "^22.1.0",
