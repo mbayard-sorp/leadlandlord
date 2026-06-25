@@ -519,6 +519,24 @@ export async function markPaid(formData: FormData): Promise<MarkPaidResult> {
     .where(eq(buildsellSites.id, id));
 
   log.info({ id, slug: existing.slug }, 'markPaid: site marked live');
+
+  // Non-fatal: provision customer portal access. A failure here MUST NOT
+  // change the return value or block go-live. The operator can manually grant
+  // access via the CustomerAccessPanel if this fails.
+  try {
+    if (existing.ownerEmail) {
+      const { provisionCustomerAccess } = await import('@leadlandlord/integrations/neon-auth');
+      await provisionCustomerAccess({
+        ownerEmail: existing.ownerEmail,
+        businessName: existing.businessName,
+        siteId: id,
+        grantedBy: 'auto-markpaid',
+      });
+    }
+  } catch (err) {
+    log.warn({ id, err }, 'markPaid: customer access provisioning failed (non-fatal)');
+  }
+
   revalidatePath('/operator/buildsell');
 
   return {
