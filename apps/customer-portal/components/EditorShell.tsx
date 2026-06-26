@@ -33,7 +33,8 @@ type EditorTab = 'content' | 'media';
 
 interface EditorShellProps {
   siteId: string;
-  sanityDocId: string;
+  /** site-host origin the preview iframe loads from (so its /_next assets resolve). */
+  siteHostOrigin: string;
   initialValues: Record<string, string>;
   sections: ClientSectionDef[];
   topLevelFields: ClientFieldDef[];
@@ -43,7 +44,7 @@ interface EditorShellProps {
 
 export default function EditorShell({
   siteId,
-  sanityDocId,
+  siteHostOrigin,
   initialValues,
   sections,
   topLevelFields,
@@ -124,7 +125,7 @@ export default function EditorShell({
 
       {/* Right: preview (hidden on mobile) */}
       <div className="hidden md:flex flex-col flex-1 overflow-hidden">
-        <LivePreview sanityDocId={sanityDocId} refreshKey={refreshKey} />
+        <LivePreview previewId={siteId} previewOrigin={siteHostOrigin} refreshKey={refreshKey} />
       </div>
     </div>
   );

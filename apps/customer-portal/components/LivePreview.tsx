@@ -3,52 +3,44 @@
 /**
  * LivePreview — iframe wrapper for the site-host draft preview.
  *
- * How draft mode is activated:
- *   1. The initial src is `/api/draft-mode/enable?redirect=/preview/<sanityDocId>`.
- *   2. This request is rewritten (via next.config.ts) to the site-host origin,
- *      which sets a draft-mode cookie and redirects to `/preview/<sanityDocId>`.
- *   3. The preview route mounts `SanityLive` + `VisualEditing` which stream
- *      updates from the Sanity CDN. After a successful save the parent
- *      increments `refreshKey` to reload the iframe as a fallback.
+ * The iframe loads `<site-host origin>/preview/<siteId>` directly (cross-origin),
+ * NOT a same-origin proxy path. That matters: the preview HTML references its
+ * CSS/JS at `/_next/static/*`, which only site-host serves — proxying just the
+ * HTML through the portal origin leaves those assets 404ing and the page
+ * unstyled. Loading from site-host's own origin resolves assets correctly, and
+ * the in-iframe theme panel's API calls stay same-origin too. The preview route
+ * resolves the site by UUID/slug and renders draft-preferred content
+ * unconditionally — no Next.js draft mode or `sanity-preview-secret` handshake.
  *
- * Both the portal domain and the proxied preview are same-origin (rewrite),
- * so cookies and `SanityLive` EventSource connections work without CORS.
+ * After a successful save the parent increments `refreshKey`; we append it as a
+ * cache-busting query param to force the iframe to reload the latest draft.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 interface LivePreviewProps {
-  /** The Sanity doc ID for this site (bs-site-<uuid>). */
-  sanityDocId: string;
+  /** The site identifier the preview route resolves — Postgres UUID or slug. */
+  previewId: string;
+  /** site-host origin (absolute) the preview is served from. */
+  previewOrigin: string;
   /** Increment to force an iframe reload (e.g. after a successful save). */
   refreshKey?: number;
 }
 
-export default function LivePreview({ sanityDocId, refreshKey = 0 }: LivePreviewProps) {
+export default function LivePreview({ previewId, previewOrigin, refreshKey = 0 }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
 
-  // The first load goes through the draft-mode enable endpoint so the
-  // site-host preview route gets the draft-mode cookie.
-  const enableUrl = `/api/draft-mode/enable?redirect=/preview/${sanityDocId}`;
-
-  // When refreshKey changes (after a save), reload the iframe.
-  // We use the src setter rather than location.reload() because the iframe
-  // may have navigated to a different URL after the redirect.
-  useEffect(() => {
-    if (refreshKey === 0) return; // Don't reload on mount.
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    // Re-navigate through the enable endpoint so draft mode stays active.
-    iframe.src = enableUrl;
-    setReady(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  // refreshKey rides along as a cache-buster so a re-render after save loads
+  // fresh draft content. The preview route ignores unknown query params.
+  const base = `${previewOrigin}/preview/${previewId}`;
+  const previewUrl = `${base}${refreshKey ? `?r=${refreshKey}` : ''}`;
 
   function handleManualRefresh() {
     const iframe = iframeRef.current;
     if (!iframe) return;
-    iframe.src = enableUrl;
+    // Force a reload even when the URL is unchanged.
+    iframe.src = `${base}?r=${refreshKey || Date.now()}`;
     setReady(false);
   }
 
@@ -91,21 +83,21 @@ export default function LivePreview({ sanityDocId, refreshKey = 0 }: LivePreview
         </button>
       </div>
 
-      {/* Loading overlay */}
-      {!ready && (
-        <div
-          className="absolute inset-0 flex items-center justify-center text-xs pointer-events-none"
-          style={{ color: 'var(--color-muted)', zIndex: 1 }}
-        >
-          Loading preview...
-        </div>
-      )}
-
       {/* iframe */}
       <div className="relative flex-1 overflow-hidden">
+        {/* Loading overlay */}
+        {!ready && (
+          <div
+            className="absolute inset-0 flex items-center justify-center text-xs pointer-events-none"
+            style={{ color: 'var(--color-muted)', zIndex: 1 }}
+          >
+            Loading preview...
+          </div>
+        )}
         <iframe
           ref={iframeRef}
-          src={enableUrl}
+          key={refreshKey}
+          src={previewUrl}
           title="Site preview"
           className="w-full h-full border-0"
           onLoad={() => setReady(true)}

@@ -9,10 +9,11 @@
  *   LEFT  (42%) — curated form, grouped by section, only present sections
  *   RIGHT (58%) — live preview iframe proxied to site-host
  *
- * The iframe points at `/api/draft-mode/enable?redirect=/preview/<docId>`,
- * rewritten (next.config.ts) to site-host, which sets the draft-mode cookie
- * and redirects to the preview route mounting SanityLive. After each
- * successful save, EditorShell increments a refreshKey to reload the iframe.
+ * The iframe points directly at `/preview/<siteId>`, rewritten (next.config.ts)
+ * to site-host. That route resolves the site by UUID/slug and renders
+ * draft-preferred content unconditionally (no draft-mode/secret handshake).
+ * After each successful save, EditorShell increments a refreshKey to reload
+ * the iframe with fresh draft content.
  */
 
 import { redirect } from 'next/navigation';
@@ -20,7 +21,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@leadlandlord/db/client';
 import { buildsellSites } from '@leadlandlord/db/schema';
 import { requireCustomerSiteAccess, UnauthorizedError } from '@/lib/auth-guard';
-import { getEditableDoc, buildsellSiteDocId } from '@/lib/sanity-write';
+import { getEditableDoc } from '@/lib/sanity-write';
 import {
   topLevelFields,
   sectionDefs,
@@ -79,7 +80,6 @@ export default async function EditPage({ params }: Props) {
 
   // 3. Load current editable doc from Sanity (draft preferred over published).
   const doc = await getEditableDoc(id);
-  const sanityDocId = buildsellSiteDocId(id); // bs-site-<uuid>
 
   // 4. Prefill form values from the doc.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -157,7 +157,7 @@ export default async function EditPage({ params }: Props) {
       {doc ? (
         <EditorShell
           siteId={id}
-          sanityDocId={sanityDocId}
+          siteHostOrigin={process.env.SITE_HOST_ORIGIN ?? 'http://localhost:3001'}
           initialValues={initialValues}
           sections={enrichedSections.map(toClientSection)}
           topLevelFields={topLevelFields.map(toClientField)}
