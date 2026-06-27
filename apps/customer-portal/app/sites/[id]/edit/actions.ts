@@ -20,8 +20,19 @@ import {
   requireCustomerSiteAccess,
   UnauthorizedError,
 } from '@/lib/auth-guard';
-import { getEditableDoc, saveFields, publishSite, discardDraft, uploadAndSetImage } from '@/lib/sanity-write';
-import { validateFormValues, buildPatchSet } from '@/lib/fields';
+import {
+  getEditableDoc,
+  saveFields,
+  publishSite,
+  discardDraft,
+  uploadAndSetImage,
+  writeSections,
+  genKey,
+  regenerateKeys,
+  type CustomerLayout,
+} from '@/lib/sanity-write';
+import { validateFormValues, buildPatchSet, isSafeKey } from '@/lib/fields';
+import { BS_SECTION_RULES, seedSection, type BsSectionType } from '@leadlandlord/shared';
 
 // ---------------------------------------------------------------------------
 // Save action
@@ -62,20 +73,33 @@ export async function saveAction(_prev: SaveResult, formData: FormData): Promise
     }
   }
 
-  // Validate against the allowlist zod schemas.
-  const validation = validateFormValues(raw);
-  if (!validation.ok) {
-    return { ok: false, errors: validation.errors };
-  }
-
-  // Read current doc to resolve sub-array _key values.
+  // Read current doc to resolve sub-array _key values and build the
+  // key-to-type map needed for precise schema validation of section fields.
   const doc = await getEditableDoc(siteId);
   if (!doc) {
     return { ok: false, message: 'Site content not found. It may still be building.' };
   }
 
+  // Build sectionKey -> _type map from the doc for schema resolution.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const keyTypeMap: Record<string, string> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (Array.isArray((doc as any).sections)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const s of (doc as any).sections as Array<{ _key?: string; _type?: string }>) {
+      if (s._key && s._type) keyTypeMap[s._key] = s._type;
+    }
+  }
+
+  // Validate against the allowlist zod schemas.
+  const validation = validateFormValues(raw, keyTypeMap);
+  if (!validation.ok) {
+    return { ok: false, errors: validation.errors };
+  }
+
   // Build granular Sanity patch paths.
-  const patchSet = buildPatchSet(doc, validation.values);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patchSet = buildPatchSet(doc as Record<string, any>, validation.values);
 
   if (Object.keys(patchSet).length === 0) {
     return { ok: true }; // Nothing to patch.
@@ -245,4 +269,286 @@ export async function uploadImageAction(
       error: err instanceof Error ? err.message : 'Upload failed. Please try again.',
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Structural action helpers
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyDoc = Record<string, any>;
+
+/**
+ * Reads the current sections array and customerLayout from the editable doc.
+ * Throws a descriptive error if the doc is unavailable.
+ */
+async function readCurrentSections(siteId: string): Promise<{
+  sections: Array<Record<string, unknown>>;
+  layout: CustomerLayout;
+}> {
+  const doc = await getEditableDoc(siteId) as AnyDoc | null;
+  if (!doc) throw new Error('Site content not found. It may still be building.');
+
+  const sections: Array<Record<string, unknown>> = Array.isArray(doc.sections)
+    ? (doc.sections as Array<Record<string, unknown>>)
+    : [];
+
+  const existing = doc.customerLayout as Partial<CustomerLayout> | undefined;
+  const layout: CustomerLayout = {
+    sectionOrder: existing?.sectionOrder ?? sections.map((s) => String(s._key ?? '')).filter(Boolean),
+    removedKeys: existing?.removedKeys ?? [],
+    customerOwnedKeys: existing?.customerOwnedKeys ?? [],
+    lockedAt: existing?.lockedAt,
+  };
+
+  return { sections, layout };
+}
+
+/**
+ * Refuses structural edits if the site has been handed off (lockedAt is set).
+ */
+function assertNotLocked(layout: CustomerLayout): void {
+  if (layout.lockedAt) {
+    throw new Error(
+      'This site has been handed off and its structure is locked. Text edits are still allowed.',
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// D2 — Structural server actions
+// ---------------------------------------------------------------------------
+
+export interface StructuralResult {
+  ok: boolean;
+  message?: string;
+  /** Returned by addSectionAction — the new section _key. */
+  newKey?: string;
+}
+
+/**
+ * Reorders sections by the provided key list (exact permutation of existing keys).
+ * Client sends only keys, never block content — blocks are re-ordered server-side
+ * from the freshly-read doc.
+ */
+export async function reorderSectionsAction(
+  siteId: string,
+  orderedKeys: string[],
+): Promise<StructuralResult> {
+  if (!siteId) return { ok: false, message: 'Missing site ID.' };
+
+  try {
+    await requireCustomerSiteAccess(siteId);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) redirect('/login');
+    return { ok: false, message: 'Access denied.' };
+  }
+
+  try {
+    const { sections, layout } = await readCurrentSections(siteId);
+    assertNotLocked(layout);
+
+    const existingKeys = sections.map((s) => String(s._key ?? ''));
+
+    // Validate: same length, same members, all keys safe.
+    if (orderedKeys.length !== existingKeys.length) {
+      return { ok: false, message: 'Key list length mismatch.' };
+    }
+    for (const k of orderedKeys) {
+      if (!isSafeKey(k)) return { ok: false, message: `Unsafe key: '${k}'.` };
+    }
+    const existingSet = new Set(existingKeys);
+    const orderedSet = new Set(orderedKeys);
+    if (existingSet.size !== orderedSet.size || ![...existingSet].every((k) => orderedSet.has(k))) {
+      return { ok: false, message: 'Ordered keys must be an exact permutation of existing section keys.' };
+    }
+
+    // Re-order blocks server-side (never trust client block content).
+    const sectionByKey = new Map(sections.map((s) => [String(s._key), s]));
+    const reordered = orderedKeys.map((k) => sectionByKey.get(k)!);
+
+    layout.sectionOrder = orderedKeys;
+
+    await writeSections(siteId, reordered, layout);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Reorder failed.' };
+  }
+}
+
+/**
+ * Adds a new section of the given type before the footer section.
+ * Returns the new section's _key on success.
+ */
+export async function addSectionAction(
+  siteId: string,
+  sectionType: string,
+): Promise<StructuralResult> {
+  if (!siteId) return { ok: false, message: 'Missing site ID.' };
+
+  try {
+    await requireCustomerSiteAccess(siteId);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) redirect('/login');
+    return { ok: false, message: 'Access denied.' };
+  }
+
+  // Validate the type is a known addable type.
+  const rule = BS_SECTION_RULES[sectionType as BsSectionType];
+  if (!rule) return { ok: false, message: `Unknown section type: '${sectionType}'.` };
+  if (!rule.addable) return { ok: false, message: `Section type '${rule.label}' cannot be added.` };
+
+  try {
+    const { sections, layout } = await readCurrentSections(siteId);
+    assertNotLocked(layout);
+
+    // Server-side singleton check: if addable is true, singleton is false per the rules,
+    // but double-check defensively.
+    if (rule.singleton) {
+      const alreadyPresent = sections.some((s) => s._type === sectionType);
+      if (alreadyPresent) {
+        return { ok: false, message: `Only one '${rule.label}' section is allowed.` };
+      }
+    }
+
+    // Seed the new section and assign a generated _key.
+    const seed = seedSection(sectionType as BsSectionType) as Record<string, unknown>;
+    const newKey = genKey(sectionTypePrefix(sectionType));
+    seed._key = newKey;
+
+    // Insert before the footer section (if present), else append.
+    const footerIndex = sections.findIndex((s) => s._type === 'bsFooterSection');
+    const newSections = [...sections];
+    if (footerIndex !== -1) {
+      newSections.splice(footerIndex, 0, seed);
+    } else {
+      newSections.push(seed);
+    }
+
+    // Update layout.
+    const newOrder = newSections.map((s) => String(s._key));
+    layout.sectionOrder = newOrder;
+    if (!layout.customerOwnedKeys.includes(newKey)) {
+      layout.customerOwnedKeys = [...layout.customerOwnedKeys, newKey];
+    }
+
+    await writeSections(siteId, newSections, layout);
+    return { ok: true, newKey };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Add section failed.' };
+  }
+}
+
+/**
+ * Removes a section by _key. Refuses to remove required singletons.
+ */
+export async function removeSectionAction(
+  siteId: string,
+  sectionKey: string,
+): Promise<StructuralResult> {
+  if (!siteId) return { ok: false, message: 'Missing site ID.' };
+  if (!isSafeKey(sectionKey)) return { ok: false, message: 'Invalid section key.' };
+
+  try {
+    await requireCustomerSiteAccess(siteId);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) redirect('/login');
+    return { ok: false, message: 'Access denied.' };
+  }
+
+  try {
+    const { sections, layout } = await readCurrentSections(siteId);
+    assertNotLocked(layout);
+
+    const target = sections.find((s) => String(s._key) === sectionKey);
+    if (!target) return { ok: false, message: 'Section not found.' };
+
+    const sectionType = String(target._type ?? '');
+    const rule = BS_SECTION_RULES[sectionType as BsSectionType];
+    if (!rule) return { ok: false, message: `Unknown section type '${sectionType}'.` };
+    if (!rule.removable) {
+      return { ok: false, message: `The '${rule.label}' section cannot be removed.` };
+    }
+
+    const newSections = sections.filter((s) => String(s._key) !== sectionKey);
+    const newOrder = newSections.map((s) => String(s._key));
+    layout.sectionOrder = newOrder;
+    layout.removedKeys = [...layout.removedKeys, sectionKey];
+    // Remove from customerOwnedKeys if present.
+    layout.customerOwnedKeys = layout.customerOwnedKeys.filter((k) => k !== sectionKey);
+
+    await writeSections(siteId, newSections, layout);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Remove section failed.' };
+  }
+}
+
+/**
+ * Duplicates a section by _key. Rejects singletons. Regenerates all nested keys.
+ * Inserts the clone immediately after the source.
+ */
+export async function duplicateSectionAction(
+  siteId: string,
+  sectionKey: string,
+): Promise<StructuralResult> {
+  if (!siteId) return { ok: false, message: 'Missing site ID.' };
+  if (!isSafeKey(sectionKey)) return { ok: false, message: 'Invalid section key.' };
+
+  try {
+    await requireCustomerSiteAccess(siteId);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) redirect('/login');
+    return { ok: false, message: 'Access denied.' };
+  }
+
+  try {
+    const { sections, layout } = await readCurrentSections(siteId);
+    assertNotLocked(layout);
+
+    const sourceIndex = sections.findIndex((s) => String(s._key) === sectionKey);
+    if (sourceIndex === -1) return { ok: false, message: 'Section not found.' };
+
+    const source = sections[sourceIndex]!;
+    const sectionType = String(source._type ?? '');
+    const rule = BS_SECTION_RULES[sectionType as BsSectionType];
+    if (!rule) return { ok: false, message: `Unknown section type '${sectionType}'.` };
+    if (rule.singleton) {
+      return { ok: false, message: `The '${rule.label}' section cannot be duplicated.` };
+    }
+
+    // Deep-clone and regenerate all _keys.
+    const clone = regenerateKeys(source);
+    const newKey = String(clone._key);
+
+    // Insert immediately after the source.
+    const newSections = [...sections];
+    newSections.splice(sourceIndex + 1, 0, clone);
+
+    const newOrder = newSections.map((s) => String(s._key));
+    layout.sectionOrder = newOrder;
+    if (!layout.customerOwnedKeys.includes(newKey)) {
+      layout.customerOwnedKeys = [...layout.customerOwnedKeys, newKey];
+    }
+
+    await writeSections(siteId, newSections, layout);
+    return { ok: true, newKey };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Duplicate section failed.' };
+  }
+}
+
+/** Maps a section _type to a short key prefix for genKey. */
+function sectionTypePrefix(type: string): string {
+  const map: Record<string, string> = {
+    bsHeroSection: 'hero',
+    bsServicesSection: 'svc',
+    bsAboutSection: 'abt',
+    bsProcessSection: 'prc',
+    bsReviewsSection: 'rev',
+    bsContactSection: 'cnt',
+    bsUgcSection: 'ugc',
+    bsFooterSection: 'ftr',
+  };
+  return map[type] ?? 'sec';
 }

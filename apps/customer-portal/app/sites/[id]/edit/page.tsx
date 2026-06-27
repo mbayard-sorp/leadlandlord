@@ -23,15 +23,10 @@ import { requireCustomerSiteAccess, UnauthorizedError } from '@/lib/auth-guard';
 import { getEditableDoc, buildsellSiteDocId } from '@/lib/sanity-write';
 import {
   topLevelFields,
-  sectionDefs,
+  buildSectionList,
   extractFormValues,
-  serviceCardFields,
-  aboutStatFields,
-  processStepFields,
-  footerColumnFields,
   toClientSection,
   toClientField,
-  type SectionDef,
 } from '@/lib/fields';
 import EditorShell from '@/components/EditorShell';
 import SiteNav from '@/components/SiteNav';
@@ -86,33 +81,13 @@ export default async function EditPage({ params }: Props) {
   const docAny = doc as Record<string, any> | null;
   const initialValues = docAny ? extractFormValues(docAny) : {};
 
-  // 5. Build the section list — static defs merged with dynamic sub-array
-  //    fields, filtered to only sections present in the doc.
-  const presentSectionKeys = new Set<string>();
-  if (docAny && Array.isArray(docAny.sections)) {
-    for (const s of docAny.sections as Array<{ _key?: string }>) {
-      if (s._key) presentSectionKeys.add(s._key);
-    }
-  }
+  // 5. Build the section list — one entry per section instance in doc array
+  //    order, with instance-scoped field keys. buildSectionList() handles all
+  //    section types (including optional ugc) and dynamic sub-item fields.
+  const enrichedSections = docAny ? buildSectionList(docAny) : [];
 
-  const enrichedSections: SectionDef[] = sectionDefs
-    // ugc is optional — only show if the section exists in the doc
-    .filter((s) => (s.sectionKey === 'ugc' ? presentSectionKeys.has('ugc') : true))
-    .map((s) => {
-      if (!docAny) return s;
-      switch (s.sectionKey) {
-        case 'services':
-          return { ...s, fields: [...s.fields, ...serviceCardFields(docAny)] };
-        case 'about':
-          return { ...s, fields: [...s.fields, ...aboutStatFields(docAny)] };
-        case 'process':
-          return { ...s, fields: [...s.fields, ...processStepFields(docAny)] };
-        case 'footer':
-          return { ...s, fields: [...s.fields, ...footerColumnFields(docAny)] };
-        default:
-          return s;
-      }
-    });
+  // 5b. Structural lock: true if customerLayout.lockedAt is set on the doc.
+  const isStructurallyLocked = Boolean(docAny?.customerLayout?.lockedAt);
 
   // 6. Derive initial image thumbnails from the doc (server-side only).
   //    Sanity CDN URL format:
@@ -162,6 +137,7 @@ export default async function EditPage({ params }: Props) {
           sections={enrichedSections.map(toClientSection)}
           topLevelFields={topLevelFields.map(toClientField)}
           initialThumbnails={initialThumbnails}
+          isStructurallyLocked={isStructurallyLocked}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center p-6">

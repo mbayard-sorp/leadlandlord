@@ -14,11 +14,19 @@
  *   contact.formEndpoint, seo.ogImage, navShowPhone, navigation[],
  *   hero.imageB/imageC. Images (logo/favicon/hero.image/about.image) are M4.
  *
- * Sub-array _key convention:
- *   Section _keys are stable literals (hero, services, about, process,
- *   reviews, contact, ugc, footer). Sub-item keys (svc0, st0, ps0, fcol0,
- *   fcl0_0…) are POSITIONAL — we ALWAYS read them from the current doc and
- *   never hardcode them.
+ * Identity model (D1 refactor):
+ *   _type  = the section TYPE (e.g. 'bsHeroSection').
+ *   _key   = an OPAQUE INSTANCE ID (e.g. 'hero', or a generated alphanumeric).
+ *   Multiple sections of the same _type can coexist and are addressed independently.
+ *
+ * Form field key scheme:
+ *   Top-level:  'navCta.label', 'seo.metaTitle', …
+ *   Section:    'sec.<sectionKey>.<relativePath>'   (e.g. 'sec.hero.eyebrow')
+ *   Sub-items:  'sec.<sectionKey>.card.<itemKey>.title'
+ *               'sec.<sectionKey>.stat.<itemKey>.value'
+ *               'sec.<sectionKey>.step.<itemKey>.title'
+ *               'sec.<sectionKey>.col.<colKey>.heading'
+ *               'sec.<sectionKey>.col.<colKey>.link.<linkKey>.label'
  */
 
 import { z } from 'zod';
@@ -67,7 +75,9 @@ export interface FieldDef {
 }
 
 export interface SectionDef {
-  /** Matches the section `_key` in Sanity (e.g. 'hero'). */
+  /** Sanity section `_type` (e.g. 'bsHeroSection'). */
+  sectionType: string;
+  /** The INSTANCE `_key` for this section in the doc. */
   sectionKey: string;
   label: string;
   fields: FieldDef[];
@@ -86,6 +96,9 @@ export interface SectionDef {
 export type ClientFieldDef = Omit<FieldDef, 'schema'>;
 
 export interface ClientSectionDef {
+  /** The section `_type`. */
+  sectionType: string;
+  /** The INSTANCE `_key`. */
   sectionKey: string;
   label: string;
   fields: ClientFieldDef[];
@@ -102,6 +115,7 @@ export function toClientField(field: FieldDef): ClientFieldDef {
 
 export function toClientSection(section: SectionDef): ClientSectionDef {
   return {
+    sectionType: section.sectionType,
     sectionKey: section.sectionKey,
     label: section.label,
     fields: section.fields.map(toClientField),
@@ -109,12 +123,9 @@ export function toClientSection(section: SectionDef): ClientSectionDef {
 }
 
 // ---------------------------------------------------------------------------
-// Registry
+// Top-level fields (not inside sections[])
 // ---------------------------------------------------------------------------
 
-/**
- * Top-level fields (not inside sections[]).
- */
 export const topLevelFields: FieldDef[] = [
   { key: 'navCta.label', label: 'Nav button label', control: 'input', schema: shortTextOpt },
   { key: 'navCta.href', label: 'Nav button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
@@ -122,111 +133,112 @@ export const topLevelFields: FieldDef[] = [
   { key: 'seo.metaDescription', label: 'Meta description (SEO)', control: 'textarea', schema: mediumTextOpt, placeholder: '150–160 characters recommended' },
 ];
 
-/**
- * Section field definitions. The order here is the display order in the form.
- * The `sectionKey` must match the Sanity `_key` written by persist-sanity.ts.
- */
-export const sectionDefs: SectionDef[] = [
-  {
-    sectionKey: 'hero',
+// ---------------------------------------------------------------------------
+// Per-_type field templates
+//
+// Keys are RELATIVE to the section instance, no leading section name.
+// e.g. 'eyebrow' not 'hero.eyebrow'. The full form key is assembled as:
+//   'sec.<sectionKey>.<relativeKey>'
+//
+// Sub-item fields (cards, stats, steps, columns) are generated dynamically
+// by buildSectionList() and are NOT listed here.
+// ---------------------------------------------------------------------------
+
+interface SectionTemplate {
+  label: string;
+  /** Static (scalar) relative field keys for this section type. */
+  fields: Array<Omit<FieldDef, 'key'> & { relKey: string }>;
+}
+
+const sectionTemplates: Record<string, SectionTemplate> = {
+  bsHeroSection: {
     label: 'Hero',
     fields: [
-      { key: 'hero.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'hero.headline', label: 'Headline', control: 'input', schema: shortText },
-      { key: 'hero.highlight', label: 'Highlighted word(s)', control: 'input', schema: shortTextOpt, placeholder: 'Words to emphasise in the headline' },
-      { key: 'hero.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
-      { key: 'hero.primaryCta.label', label: 'Primary button label', control: 'input', schema: shortTextOpt },
-      { key: 'hero.primaryCta.href', label: 'Primary button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
-      { key: 'hero.primaryCta.style', label: 'Primary button style', control: 'input', schema: ctaStyle, placeholder: 'primary | secondary | ghost' },
-      { key: 'hero.secondaryCta.label', label: 'Secondary button label', control: 'input', schema: shortTextOpt },
-      { key: 'hero.secondaryCta.href', label: 'Secondary button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
-      { key: 'hero.secondaryCta.style', label: 'Secondary button style', control: 'input', schema: ctaStyle, placeholder: 'primary | secondary | ghost' },
+      { relKey: 'eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
+      { relKey: 'headline', label: 'Headline', control: 'input', schema: shortText },
+      { relKey: 'highlight', label: 'Highlighted word(s)', control: 'input', schema: shortTextOpt, placeholder: 'Words to emphasise in the headline' },
+      { relKey: 'subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
+      { relKey: 'primaryCta.label', label: 'Primary button label', control: 'input', schema: shortTextOpt },
+      { relKey: 'primaryCta.href', label: 'Primary button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
+      { relKey: 'primaryCta.style', label: 'Primary button style', control: 'input', schema: ctaStyle, placeholder: 'primary | secondary | ghost' },
+      { relKey: 'secondaryCta.label', label: 'Secondary button label', control: 'input', schema: shortTextOpt },
+      { relKey: 'secondaryCta.href', label: 'Secondary button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
+      { relKey: 'secondaryCta.style', label: 'Secondary button style', control: 'input', schema: ctaStyle, placeholder: 'primary | secondary | ghost' },
     ],
   },
-  {
-    sectionKey: 'services',
+  bsServicesSection: {
     label: 'Services',
     fields: [
-      { key: 'services.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'services.heading', label: 'Heading', control: 'input', schema: shortText },
-      { key: 'services.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
-      // Per-card fields are generated dynamically in buildPatchSet / extractFormValues
-      // using keys read from the doc. They follow the pattern:
-      //   services.card.<_key>.title
-      //   services.card.<_key>.description
+      { relKey: 'eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
+      { relKey: 'heading', label: 'Heading', control: 'input', schema: shortText },
+      { relKey: 'subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
+      // Per-card fields are generated dynamically in buildSectionList().
     ],
   },
-  {
-    sectionKey: 'about',
+  bsAboutSection: {
     label: 'About',
     fields: [
-      { key: 'about.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'about.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      { key: 'about.body', label: 'Body text', control: 'textarea', schema: longTextOpt },
-      { key: 'about.cta.label', label: 'CTA label', control: 'input', schema: shortTextOpt },
-      { key: 'about.cta.href', label: 'CTA link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
-      // Per-stat fields: about.stat.<_key>.value / .label — generated dynamically
+      { relKey: 'eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
+      { relKey: 'heading', label: 'Heading', control: 'input', schema: shortTextOpt },
+      { relKey: 'body', label: 'Body text', control: 'textarea', schema: longTextOpt },
+      { relKey: 'cta.label', label: 'CTA label', control: 'input', schema: shortTextOpt },
+      { relKey: 'cta.href', label: 'CTA link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
+      // Per-stat fields are generated dynamically in buildSectionList().
     ],
   },
-  {
-    sectionKey: 'process',
+  bsProcessSection: {
     label: 'How It Works',
     fields: [
-      { key: 'process.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'process.heading', label: 'Heading', control: 'input', schema: shortText },
-      // Per-step fields: process.step.<_key>.title / .description — generated dynamically
+      { relKey: 'eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
+      { relKey: 'heading', label: 'Heading', control: 'input', schema: shortText },
+      // Per-step fields are generated dynamically in buildSectionList().
     ],
   },
-  {
-    sectionKey: 'reviews',
+  bsReviewsSection: {
     label: 'Reviews',
     fields: [
-      { key: 'reviews.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'reviews.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      // reviews[] references are BLOCKED — no per-review editing
+      { relKey: 'eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
+      { relKey: 'heading', label: 'Heading', control: 'input', schema: shortTextOpt },
+      // reviews[] references are BLOCKED — no per-review editing.
     ],
   },
-  {
-    sectionKey: 'contact',
+  bsContactSection: {
     label: 'Contact',
     fields: [
-      { key: 'contact.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      { key: 'contact.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
-      { key: 'contact.address.street', label: 'Street address', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.city', label: 'City', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.state', label: 'State', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.zip', label: 'ZIP code', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.hours', label: 'Business hours', control: 'input', schema: shortTextOpt, placeholder: 'e.g. Mon–Sat 7am–6pm' },
-      { key: 'contact.address.serviceArea', label: 'Service area', control: 'input', schema: shortTextOpt, placeholder: 'e.g. Greater Phoenix metro' },
-      { key: 'contact.formLabels.name', label: 'Form — Name label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.phone', label: 'Form — Phone label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.email', label: 'Form — Email label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.message', label: 'Form — Message label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.submit', label: 'Form — Submit button label', control: 'input', schema: shortTextOpt },
+      { relKey: 'heading', label: 'Heading', control: 'input', schema: shortTextOpt },
+      { relKey: 'subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
+      { relKey: 'address.street', label: 'Street address', control: 'input', schema: shortTextOpt },
+      { relKey: 'address.city', label: 'City', control: 'input', schema: shortTextOpt },
+      { relKey: 'address.state', label: 'State', control: 'input', schema: shortTextOpt },
+      { relKey: 'address.zip', label: 'ZIP code', control: 'input', schema: shortTextOpt },
+      { relKey: 'address.hours', label: 'Business hours', control: 'input', schema: shortTextOpt, placeholder: 'e.g. Mon–Sat 7am–6pm' },
+      { relKey: 'address.serviceArea', label: 'Service area', control: 'input', schema: shortTextOpt, placeholder: 'e.g. Greater Phoenix metro' },
+      { relKey: 'formLabels.name', label: 'Form — Name label', control: 'input', schema: shortTextOpt },
+      { relKey: 'formLabels.phone', label: 'Form — Phone label', control: 'input', schema: shortTextOpt },
+      { relKey: 'formLabels.email', label: 'Form — Email label', control: 'input', schema: shortTextOpt },
+      { relKey: 'formLabels.message', label: 'Form — Message label', control: 'input', schema: shortTextOpt },
+      { relKey: 'formLabels.submit', label: 'Form — Submit button label', control: 'input', schema: shortTextOpt },
     ],
   },
-  {
-    sectionKey: 'ugc',
+  bsUgcSection: {
     label: 'Social Gallery',
     fields: [
-      { key: 'ugc.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      { key: 'ugc.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
+      { relKey: 'heading', label: 'Heading', control: 'input', schema: shortTextOpt },
+      { relKey: 'subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
     ],
   },
-  {
-    sectionKey: 'footer',
+  bsFooterSection: {
     label: 'Footer',
     fields: [
-      { key: 'footer.tagline', label: 'Tagline', control: 'input', schema: shortTextOpt },
-      { key: 'footer.legal', label: 'Legal row text', control: 'input', schema: shortTextOpt },
-      // Per-column fields: footer.col.<_key>.heading — generated dynamically
-      // Per-link fields:   footer.col.<_key>.link.<_key2>.label / .href — generated dynamically
+      { relKey: 'tagline', label: 'Tagline', control: 'input', schema: shortTextOpt },
+      { relKey: 'legal', label: 'Legal row text', control: 'input', schema: shortTextOpt },
+      // Per-column/link fields are generated dynamically in buildSectionList().
     ],
   },
-];
+};
 
 // ---------------------------------------------------------------------------
-// Key safety guard (Fix 2 — defense-in-depth against path injection)
+// Key safety guard
 // ---------------------------------------------------------------------------
 
 /**
@@ -241,14 +253,109 @@ export function isSafeKey(k: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers for reading section data from the doc
+// buildSectionList — replaces the inline enrichedSections block in page.tsx
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findSection(doc: Record<string, any>, sectionKey: string): Record<string, any> | null {
-  const sections = doc?.sections;
-  if (!Array.isArray(sections)) return null;
-  return sections.find((s: { _key?: string }) => s._key === sectionKey) ?? null;
+type AnyDoc = Record<string, any>;
+
+/**
+ * Builds an ordered list of section descriptors from the live doc, one entry
+ * per section INSTANCE in `doc.sections` array order. Uses `_type` to look up
+ * the field template and `_key` as the stable instance id.
+ *
+ * This is the authoritative display list for the editor form. Sections not
+ * present in the doc are omitted. Multiple instances of the same _type each
+ * get their own entry with independent field keys.
+ */
+export function buildSectionList(doc: AnyDoc): SectionDef[] {
+  if (!Array.isArray(doc?.sections)) return [];
+
+  const result: SectionDef[] = [];
+
+  for (const section of doc.sections as Array<AnyDoc>) {
+    const sectionKey: string | undefined = section._key;
+    const sectionType: string | undefined = section._type;
+
+    if (!sectionKey || !sectionType) continue;
+
+    const template = sectionTemplates[sectionType];
+    if (!template) continue; // unknown type — skip silently
+
+    // Build static field defs with instance-scoped keys.
+    const staticFields: FieldDef[] = template.fields.map((f) => ({
+      key: `sec.${sectionKey}.${f.relKey}`,
+      label: f.label,
+      control: f.control,
+      schema: f.schema,
+      placeholder: f.placeholder,
+    }));
+
+    // Generate dynamic sub-item fields per section type.
+    const dynamicFields: FieldDef[] = [];
+
+    if (sectionType === 'bsServicesSection' && Array.isArray(section.services)) {
+      section.services.forEach((card: AnyDoc, i: number) => {
+        if (!card._key) return;
+        const k: string = card._key;
+        dynamicFields.push(
+          { key: `sec.${sectionKey}.card.${k}.title`, label: `Service ${i + 1} title`, control: 'input', schema: shortTextOpt },
+          { key: `sec.${sectionKey}.card.${k}.description`, label: `Service ${i + 1} description`, control: 'textarea', schema: mediumTextOpt },
+        );
+      });
+    }
+
+    if (sectionType === 'bsAboutSection' && Array.isArray(section.stats)) {
+      section.stats.forEach((stat: AnyDoc, i: number) => {
+        if (!stat._key) return;
+        const k: string = stat._key;
+        dynamicFields.push(
+          { key: `sec.${sectionKey}.stat.${k}.value`, label: `Stat ${i + 1} value`, control: 'input', schema: statValue, placeholder: 'e.g. 15+ or 2,400' },
+          { key: `sec.${sectionKey}.stat.${k}.label`, label: `Stat ${i + 1} label`, control: 'input', schema: shortTextOpt, placeholder: 'e.g. Years in business' },
+        );
+      });
+    }
+
+    if (sectionType === 'bsProcessSection' && Array.isArray(section.steps)) {
+      section.steps.forEach((step: AnyDoc, i: number) => {
+        if (!step._key) return;
+        const k: string = step._key;
+        dynamicFields.push(
+          { key: `sec.${sectionKey}.step.${k}.title`, label: `Step ${i + 1} title`, control: 'input', schema: shortTextOpt },
+          { key: `sec.${sectionKey}.step.${k}.description`, label: `Step ${i + 1} description`, control: 'textarea', schema: mediumTextOpt },
+        );
+      });
+    }
+
+    if (sectionType === 'bsFooterSection' && Array.isArray(section.columns)) {
+      section.columns.forEach((col: AnyDoc, ci: number) => {
+        if (!col._key) return;
+        const ck: string = col._key;
+        dynamicFields.push(
+          { key: `sec.${sectionKey}.col.${ck}.heading`, label: `Column ${ci + 1} heading`, control: 'input', schema: shortTextOpt },
+        );
+        if (Array.isArray(col.links)) {
+          col.links.forEach((link: AnyDoc, li: number) => {
+            if (!link._key) return;
+            const lk: string = link._key;
+            dynamicFields.push(
+              { key: `sec.${sectionKey}.col.${ck}.link.${lk}.label`, label: `Column ${ci + 1} link ${li + 1} label`, control: 'input', schema: shortTextOpt },
+              { key: `sec.${sectionKey}.col.${ck}.link.${lk}.href`, label: `Column ${ci + 1} link ${li + 1} URL`, control: 'input', schema: ctaHref, placeholder: '#anchor or https://...' },
+            );
+          });
+        }
+      });
+    }
+
+    result.push({
+      sectionType,
+      sectionKey,
+      label: template.label,
+      fields: [...staticFields, ...dynamicFields],
+    });
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,133 +367,140 @@ function findSection(doc: Record<string, any>, sectionKey: string): Record<strin
  * the form field name. Missing fields are absent from the map (not empty
  * strings) so controlled inputs show the live value.
  *
- * Dynamic sub-array fields (per-card, per-stat, per-step, per-col, per-link)
- * use keys read from the doc at prefill time.
+ * Form keys for section fields use the instance-scoped scheme:
+ *   'sec.<sectionKey>.<relPath>'
+ *   'sec.<sectionKey>.card.<itemKey>.title'  etc.
+ *
+ * The output aligns 1:1 with the field keys produced by buildSectionList().
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractFormValues(doc: Record<string, any>): Record<string, string> {
+export function extractFormValues(doc: AnyDoc): Record<string, string> {
   const out: Record<string, string> = {};
 
   function set(k: string, v: unknown) {
     if (v != null && v !== '') out[k] = String(v);
   }
 
-  // Top-level
+  // Top-level fields.
   set('navCta.label', doc?.navCta?.label);
   set('navCta.href', doc?.navCta?.href);
   set('seo.metaTitle', doc?.seo?.metaTitle);
   set('seo.metaDescription', doc?.seo?.metaDescription);
 
-  // Hero
-  const hero = findSection(doc, 'hero');
-  if (hero) {
-    set('hero.eyebrow', hero.eyebrow);
-    set('hero.headline', hero.headline);
-    set('hero.highlight', hero.highlight);
-    set('hero.subhead', hero.subhead);
-    set('hero.primaryCta.label', hero.primaryCta?.label);
-    set('hero.primaryCta.href', hero.primaryCta?.href);
-    set('hero.primaryCta.style', hero.primaryCta?.style);
-    set('hero.secondaryCta.label', hero.secondaryCta?.label);
-    set('hero.secondaryCta.href', hero.secondaryCta?.href);
-    set('hero.secondaryCta.style', hero.secondaryCta?.style);
-  }
+  // Iterate sections in doc array order.
+  if (!Array.isArray(doc?.sections)) return out;
 
-  // Services
-  const services = findSection(doc, 'services');
-  if (services) {
-    set('services.eyebrow', services.eyebrow);
-    set('services.heading', services.heading);
-    set('services.subhead', services.subhead);
-    if (Array.isArray(services.services)) {
-      for (const card of services.services) {
-        if (!card._key) continue;
-        set(`services.card.${card._key}.title`, card.title);
-        set(`services.card.${card._key}.description`, card.description);
-      }
-    }
-  }
+  for (const section of doc.sections as Array<AnyDoc>) {
+    const sectionKey: string | undefined = section._key;
+    const sectionType: string | undefined = section._type;
 
-  // About
-  const about = findSection(doc, 'about');
-  if (about) {
-    set('about.eyebrow', about.eyebrow);
-    set('about.heading', about.heading);
-    set('about.body', about.body);
-    set('about.cta.label', about.cta?.label);
-    set('about.cta.href', about.cta?.href);
-    if (Array.isArray(about.stats)) {
-      for (const stat of about.stats) {
-        if (!stat._key) continue;
-        set(`about.stat.${stat._key}.value`, stat.value);
-        set(`about.stat.${stat._key}.label`, stat.label);
-      }
-    }
-  }
+    if (!sectionKey || !sectionType) continue;
+    if (!sectionTemplates[sectionType]) continue;
 
-  // Process
-  const process = findSection(doc, 'process');
-  if (process) {
-    set('process.eyebrow', process.eyebrow);
-    set('process.heading', process.heading);
-    if (Array.isArray(process.steps)) {
-      for (const step of process.steps) {
-        if (!step._key) continue;
-        set(`process.step.${step._key}.title`, step.title);
-        set(`process.step.${step._key}.description`, step.description);
-      }
-    }
-  }
+    const sk = sectionKey; // alias for brevity
 
-  // Reviews (eyebrow + heading only — reviews[] blocked)
-  const reviews = findSection(doc, 'reviews');
-  if (reviews) {
-    set('reviews.eyebrow', reviews.eyebrow);
-    set('reviews.heading', reviews.heading);
-  }
+    switch (sectionType) {
+      case 'bsHeroSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.headline`, section.headline);
+        set(`sec.${sk}.highlight`, section.highlight);
+        set(`sec.${sk}.subhead`, section.subhead);
+        set(`sec.${sk}.primaryCta.label`, section.primaryCta?.label);
+        set(`sec.${sk}.primaryCta.href`, section.primaryCta?.href);
+        set(`sec.${sk}.primaryCta.style`, section.primaryCta?.style);
+        set(`sec.${sk}.secondaryCta.label`, section.secondaryCta?.label);
+        set(`sec.${sk}.secondaryCta.href`, section.secondaryCta?.href);
+        set(`sec.${sk}.secondaryCta.style`, section.secondaryCta?.style);
+        break;
 
-  // Contact
-  const contact = findSection(doc, 'contact');
-  if (contact) {
-    set('contact.heading', contact.heading);
-    set('contact.subhead', contact.subhead);
-    set('contact.address.street', contact.address?.street);
-    set('contact.address.city', contact.address?.city);
-    set('contact.address.state', contact.address?.state);
-    set('contact.address.zip', contact.address?.zip);
-    set('contact.address.hours', contact.address?.hours);
-    set('contact.address.serviceArea', contact.address?.serviceArea);
-    set('contact.formLabels.name', contact.formLabels?.name);
-    set('contact.formLabels.phone', contact.formLabels?.phone);
-    set('contact.formLabels.email', contact.formLabels?.email);
-    set('contact.formLabels.message', contact.formLabels?.message);
-    set('contact.formLabels.submit', contact.formLabels?.submit);
-  }
-
-  // UGC (optional section)
-  const ugc = findSection(doc, 'ugc');
-  if (ugc) {
-    set('ugc.heading', ugc.heading);
-    set('ugc.subhead', ugc.subhead);
-  }
-
-  // Footer
-  const footer = findSection(doc, 'footer');
-  if (footer) {
-    set('footer.tagline', footer.tagline);
-    set('footer.legal', footer.legal);
-    if (Array.isArray(footer.columns)) {
-      for (const col of footer.columns) {
-        if (!col._key) continue;
-        set(`footer.col.${col._key}.heading`, col.heading);
-        if (Array.isArray(col.links)) {
-          for (const link of col.links) {
-            if (!link._key) continue;
-            set(`footer.col.${col._key}.link.${link._key}.label`, link.label);
-            set(`footer.col.${col._key}.link.${link._key}.href`, link.href);
+      case 'bsServicesSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.heading`, section.heading);
+        set(`sec.${sk}.subhead`, section.subhead);
+        if (Array.isArray(section.services)) {
+          for (const card of section.services as Array<AnyDoc>) {
+            if (!card._key) continue;
+            const k: string = card._key;
+            set(`sec.${sk}.card.${k}.title`, card.title);
+            set(`sec.${sk}.card.${k}.description`, card.description);
           }
         }
-      }
+        break;
+
+      case 'bsAboutSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.heading`, section.heading);
+        set(`sec.${sk}.body`, section.body);
+        set(`sec.${sk}.cta.label`, section.cta?.label);
+        set(`sec.${sk}.cta.href`, section.cta?.href);
+        if (Array.isArray(section.stats)) {
+          for (const stat of section.stats as Array<AnyDoc>) {
+            if (!stat._key) continue;
+            const k: string = stat._key;
+            set(`sec.${sk}.stat.${k}.value`, stat.value);
+            set(`sec.${sk}.stat.${k}.label`, stat.label);
+          }
+        }
+        break;
+
+      case 'bsProcessSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.heading`, section.heading);
+        if (Array.isArray(section.steps)) {
+          for (const step of section.steps as Array<AnyDoc>) {
+            if (!step._key) continue;
+            const k: string = step._key;
+            set(`sec.${sk}.step.${k}.title`, step.title);
+            set(`sec.${sk}.step.${k}.description`, step.description);
+          }
+        }
+        break;
+
+      case 'bsReviewsSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.heading`, section.heading);
+        // reviews[] references are BLOCKED.
+        break;
+
+      case 'bsContactSection':
+        set(`sec.${sk}.heading`, section.heading);
+        set(`sec.${sk}.subhead`, section.subhead);
+        set(`sec.${sk}.address.street`, section.address?.street);
+        set(`sec.${sk}.address.city`, section.address?.city);
+        set(`sec.${sk}.address.state`, section.address?.state);
+        set(`sec.${sk}.address.zip`, section.address?.zip);
+        set(`sec.${sk}.address.hours`, section.address?.hours);
+        set(`sec.${sk}.address.serviceArea`, section.address?.serviceArea);
+        set(`sec.${sk}.formLabels.name`, section.formLabels?.name);
+        set(`sec.${sk}.formLabels.phone`, section.formLabels?.phone);
+        set(`sec.${sk}.formLabels.email`, section.formLabels?.email);
+        set(`sec.${sk}.formLabels.message`, section.formLabels?.message);
+        set(`sec.${sk}.formLabels.submit`, section.formLabels?.submit);
+        break;
+
+      case 'bsUgcSection':
+        set(`sec.${sk}.heading`, section.heading);
+        set(`sec.${sk}.subhead`, section.subhead);
+        break;
+
+      case 'bsFooterSection':
+        set(`sec.${sk}.tagline`, section.tagline);
+        set(`sec.${sk}.legal`, section.legal);
+        if (Array.isArray(section.columns)) {
+          for (const col of section.columns as Array<AnyDoc>) {
+            if (!col._key) continue;
+            const ck: string = col._key;
+            set(`sec.${sk}.col.${ck}.heading`, col.heading);
+            if (Array.isArray(col.links)) {
+              for (const link of col.links as Array<AnyDoc>) {
+                if (!link._key) continue;
+                const lk: string = link._key;
+                set(`sec.${sk}.col.${ck}.link.${lk}.label`, link.label);
+                set(`sec.${sk}.col.${ck}.link.${lk}.href`, link.href);
+              }
+            }
+          }
+        }
+        break;
     }
   }
 
@@ -394,67 +508,94 @@ export function extractFormValues(doc: Record<string, any>): Record<string, stri
 }
 
 // ---------------------------------------------------------------------------
-// Field-level zod schemas for dynamic sub-array items
+// Dynamic sub-item zod schemas (matched via wildcard patterns on relative paths)
 // ---------------------------------------------------------------------------
 
+/**
+ * Wildcard schemas keyed by relative path pattern (after the sec.<key>. prefix).
+ * '*' matches any single path segment (_key token).
+ */
 const dynamicFieldSchemas: Record<string, z.ZodTypeAny> = {
-  'services.card.*.title': shortTextOpt,
-  'services.card.*.description': mediumTextOpt,
-  'about.stat.*.value': statValue,
-  'about.stat.*.label': shortTextOpt,
-  'process.step.*.title': shortTextOpt,
-  'process.step.*.description': mediumTextOpt,
-  'footer.col.*.heading': shortTextOpt,
-  'footer.col.*.link.*.label': shortTextOpt,
-  'footer.col.*.link.*.href': ctaHref,
+  'card.*.title': shortTextOpt,
+  'card.*.description': mediumTextOpt,
+  'stat.*.value': statValue,
+  'stat.*.label': shortTextOpt,
+  'step.*.title': shortTextOpt,
+  'step.*.description': mediumTextOpt,
+  'col.*.heading': shortTextOpt,
+  'col.*.link.*.label': shortTextOpt,
+  'col.*.link.*.href': ctaHref,
 };
 
 /**
  * Returns the zod schema for a form field key.
- * Static fields look up from sectionDefs; dynamic sub-array fields match
- * the wildcard patterns in `dynamicFieldSchemas`.
+ *
+ * Top-level keys (no 'sec.' prefix) look up from topLevelFields.
+ * Section keys ('sec.<sectionKey>.<relPath>') strip the prefix, then match
+ * the static template fields for the section's _type, then fall through to
+ * wildcard dynamic patterns for sub-item fields.
+ *
+ * The _type is resolved via the supplied key-to-type map. If the map is
+ * absent or the type is unknown, falls through to wildcard matching only.
  */
-export function schemaForKey(key: string): z.ZodTypeAny {
-  // Look in top-level fields first.
+export function schemaForKey(key: string, keyTypeMap?: Record<string, string>): z.ZodTypeAny {
+  // Top-level fields.
   const topField = topLevelFields.find((f) => f.key === key);
   if (topField) return topField.schema;
 
-  // Look in section defs.
-  for (const section of sectionDefs) {
-    const field = section.fields.find((f) => f.key === key);
-    if (field) return field.schema;
+  // Section fields must start with 'sec.'.
+  if (!key.startsWith('sec.')) {
+    return z.never({ message: `Unrecognised field key: '${key}'` });
   }
 
-  // Match dynamic sub-array patterns.
-  // Pattern: replace actual _key tokens with '*' and look up.
-  //   services.card.svc0.title  ->  services.card.*.title
-  //   about.stat.st0.value      ->  about.stat.*.value
-  //   footer.col.fcol0.link.fcl0_0.href  ->  footer.col.*.link.*.href
-  const parts = key.split('.');
-  if (parts[0] === 'services' && parts[1] === 'card' && parts[3]) {
-    const pattern = `services.card.*.${parts[3]}`;
-    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern];
+  // Strip 'sec.' prefix, then extract the sectionKey and the relative path.
+  const withoutPrefix = key.slice('sec.'.length); // '<sectionKey>.<relPath>'
+  const firstDot = withoutPrefix.indexOf('.');
+  if (firstDot === -1) {
+    return z.never({ message: `Unrecognised field key: '${key}'` });
   }
-  if (parts[0] === 'about' && parts[1] === 'stat' && parts[3]) {
-    const pattern = `about.stat.*.${parts[3]}`;
-    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern];
-  }
-  if (parts[0] === 'process' && parts[1] === 'step' && parts[3]) {
-    const pattern = `process.step.*.${parts[3]}`;
-    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern];
-  }
-  if (parts[0] === 'footer' && parts[1] === 'col') {
-    if (parts[3] === 'heading') return dynamicFieldSchemas['footer.col.*.heading']!;
-    if (parts[3] === 'link' && parts[5]) {
-      const pattern = `footer.col.*.link.*.${parts[5]}`;
-      if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern];
+  const sectionKey = withoutPrefix.slice(0, firstDot);
+  const relPath = withoutPrefix.slice(firstDot + 1);
+
+  // Try to resolve the section's _type from the map.
+  const sectionType = keyTypeMap?.[sectionKey];
+  if (sectionType) {
+    const template = sectionTemplates[sectionType];
+    if (template) {
+      const tField = template.fields.find((f) => f.relKey === relPath);
+      if (tField) return tField.schema;
     }
   }
 
-  // Unknown key: hard-reject. Callers (validateFormValues) surface this as a
-  // validation error, not a silent pass-through.
-  // A z.ZodType that always fails is returned so the existing validation loop
-  // produces a proper { ok: false, errors } response without any special-casing.
+  // Match wildcard dynamic patterns on the relative path.
+  const parts = relPath.split('.');
+
+  // card.*.title / card.*.description
+  if (parts[0] === 'card' && parts.length === 3) {
+    const pattern = `card.*.${parts[2]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+  // stat.*.value / stat.*.label
+  if (parts[0] === 'stat' && parts.length === 3) {
+    const pattern = `stat.*.${parts[2]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+  // step.*.title / step.*.description
+  if (parts[0] === 'step' && parts.length === 3) {
+    const pattern = `step.*.${parts[2]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+  // col.*.heading
+  if (parts[0] === 'col' && parts.length === 3 && parts[2] === 'heading') {
+    return dynamicFieldSchemas['col.*.heading']!;
+  }
+  // col.*.link.*.label / col.*.link.*.href
+  if (parts[0] === 'col' && parts[2] === 'link' && parts.length === 5) {
+    const pattern = `col.*.link.*.${parts[4]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+
+  // Unknown key: hard-reject.
   return z.never({ message: `Unrecognised field key: '${key}'` });
 }
 
@@ -467,195 +608,122 @@ export function schemaForKey(key: string): z.ZodTypeAny {
  * (to resolve sub-array `_key`s), and returns a `patchSet` object whose
  * keys are Sanity dot-notation paths suitable for `.patch().set(patchSet)`.
  *
- * Only emits paths for values that are present AND for sections that actually
- * exist in the doc. Never emits hard-blocked paths.
+ * Form key `sec.<sectionKey>.<relPath>` resolves to:
+ *   `sections[_key=="<sectionKey>"].<relPath>`
  *
- * The sub-array key resolution strategy:
- *   - Form keys for dynamic items use the real Sanity `_key` extracted at
- *     prefill time (e.g. `services.card.svc0.title`).
- *   - We convert `services.card.svc0.title` to the Sanity filter path:
- *     `sections[_key=="services"].services[_key=="svc0"].title`
+ * Sub-item form key `sec.<sectionKey>.card.<itemKey>.title` resolves to:
+ *   `sections[_key=="<sectionKey>"].services[_key=="<itemKey>"].title`
+ *
+ * Security: only emits paths for sections ACTUALLY present in the doc,
+ * applies isSafeKey() to both sectionKey and all sub-item keys, and only
+ * produces paths that correspond to a template field or allowed wildcard.
  */
 export function buildPatchSet(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  doc: Record<string, any>,
+  doc: AnyDoc,
   formValues: Record<string, string>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Record<string, any> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const patch: Record<string, any> = {};
-
-  // Helper: only emit if the section exists in the doc.
-  const hasSection = (key: string) => findSection(doc, key) !== null;
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
 
   function emit(sanityPath: string, value: string | undefined) {
     if (value === undefined) return;
-    // Store empty string as undefined (omit) or the trimmed value.
-    const trimmed = value.trim();
-    // We still allow empty string to clear a field.
-    patch[sanityPath] = trimmed;
+    patch[sanityPath] = value.trim();
   }
 
-  // Top-level
+  // Top-level fields (same path as key, no section filter).
   for (const field of topLevelFields) {
     const value = formValues[field.key];
-    if (value === undefined) continue;
-    // Convert dot-notation key to Sanity path (top-level fields are the same).
-    emit(field.key, value);
+    if (value !== undefined) emit(field.key, value);
   }
 
-  // Hero
-  if (hasSection('hero')) {
-    const heroFields: Array<[string, string]> = [
-      ['hero.eyebrow', `sections[_key=="hero"].eyebrow`],
-      ['hero.headline', `sections[_key=="hero"].headline`],
-      ['hero.highlight', `sections[_key=="hero"].highlight`],
-      ['hero.subhead', `sections[_key=="hero"].subhead`],
-      ['hero.primaryCta.label', `sections[_key=="hero"].primaryCta.label`],
-      ['hero.primaryCta.href', `sections[_key=="hero"].primaryCta.href`],
-      ['hero.primaryCta.style', `sections[_key=="hero"].primaryCta.style`],
-      ['hero.secondaryCta.label', `sections[_key=="hero"].secondaryCta.label`],
-      ['hero.secondaryCta.href', `sections[_key=="hero"].secondaryCta.href`],
-      ['hero.secondaryCta.style', `sections[_key=="hero"].secondaryCta.style`],
-    ];
-    for (const [fk, sp] of heroFields) {
-      emit(sp, formValues[fk]);
+  // Build a lookup: sectionKey -> section object (for existence check + sub-array reads).
+  const sectionByKey = new Map<string, AnyDoc>();
+  if (Array.isArray(doc?.sections)) {
+    for (const s of doc.sections as Array<AnyDoc>) {
+      if (s._key) sectionByKey.set(String(s._key), s);
     }
   }
 
-  // Services
-  if (hasSection('services')) {
-    const servicesSection = findSection(doc, 'services');
-    emit(`sections[_key=="services"].eyebrow`, formValues['services.eyebrow']);
-    emit(`sections[_key=="services"].heading`, formValues['services.heading']);
-    emit(`sections[_key=="services"].subhead`, formValues['services.subhead']);
+  // Process section-scoped form values.
+  for (const [formKey, value] of Object.entries(formValues)) {
+    if (!formKey.startsWith('sec.')) continue;
 
-    if (servicesSection && Array.isArray(servicesSection.services)) {
-      for (const card of servicesSection.services) {
-        if (!card._key || !isSafeKey(card._key)) continue;
-        const k = card._key;
-        emit(
-          `sections[_key=="services"].services[_key=="${k}"].title`,
-          formValues[`services.card.${k}.title`],
-        );
-        emit(
-          `sections[_key=="services"].services[_key=="${k}"].description`,
-          formValues[`services.card.${k}.description`],
-        );
-      }
+    const withoutPrefix = formKey.slice('sec.'.length);
+    const firstDot = withoutPrefix.indexOf('.');
+    if (firstDot === -1) continue;
+
+    const sectionKey = withoutPrefix.slice(0, firstDot);
+    const relPath = withoutPrefix.slice(firstDot + 1);
+
+    // Security: validate the section key and confirm the section exists in doc.
+    if (!isSafeKey(sectionKey)) continue;
+    const section = sectionByKey.get(sectionKey);
+    if (!section) continue;
+
+    const sectionType: string | undefined = section._type;
+    if (!sectionType || !sectionTemplates[sectionType]) continue;
+
+    // Route by relative path structure.
+    const parts = relPath.split('.');
+
+    if (parts[0] === 'card' && parts.length === 3) {
+      // sec.<sk>.card.<itemKey>.<field>
+      // Length === 3 guarantees indices 1 and 2 exist.
+      const itemKey = parts[1] as string;
+      const fieldName = parts[2] as string;
+      if (!isSafeKey(itemKey)) continue;
+      // Map 'services section' card -> doc sub-array is 'services'
+      emit(
+        `sections[_key=="${sectionKey}"].services[_key=="${itemKey}"].${fieldName}`,
+        value,
+      );
+    } else if (parts[0] === 'stat' && parts.length === 3) {
+      // sec.<sk>.stat.<itemKey>.<field>
+      const itemKey = parts[1] as string;
+      const fieldName = parts[2] as string;
+      if (!isSafeKey(itemKey)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].stats[_key=="${itemKey}"].${fieldName}`,
+        value,
+      );
+    } else if (parts[0] === 'step' && parts.length === 3) {
+      // sec.<sk>.step.<itemKey>.<field>
+      const itemKey = parts[1] as string;
+      const fieldName = parts[2] as string;
+      if (!isSafeKey(itemKey)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].steps[_key=="${itemKey}"].${fieldName}`,
+        value,
+      );
+    } else if (parts[0] === 'col' && parts.length === 3 && parts[2] === 'heading') {
+      // sec.<sk>.col.<colKey>.heading
+      const colKey = parts[1] as string;
+      if (!isSafeKey(colKey)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].columns[_key=="${colKey}"].heading`,
+        value,
+      );
+    } else if (parts[0] === 'col' && parts[2] === 'link' && parts.length === 5) {
+      // sec.<sk>.col.<colKey>.link.<linkKey>.<field>
+      // Length === 5 guarantees indices 1, 3, 4 exist.
+      const colKey = parts[1] as string;
+      const linkKey = parts[3] as string;
+      const fieldName = parts[4] as string;
+      if (!isSafeKey(colKey) || !isSafeKey(linkKey)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].columns[_key=="${colKey}"].links[_key=="${linkKey}"].${fieldName}`,
+        value,
+      );
+    } else {
+      // Static scalar field — the relPath is directly a doc property path.
+      // Validate it exists in the template before emitting.
+      const template = sectionTemplates[sectionType];
+      const known = template.fields.some((f) => f.relKey === relPath);
+      if (!known) continue; // not in allowlist — silently skip (hard-block)
+      emit(`sections[_key=="${sectionKey}"].${relPath}`, value);
     }
   }
 
-  // About
-  if (hasSection('about')) {
-    const aboutSection = findSection(doc, 'about');
-    emit(`sections[_key=="about"].eyebrow`, formValues['about.eyebrow']);
-    emit(`sections[_key=="about"].heading`, formValues['about.heading']);
-    emit(`sections[_key=="about"].body`, formValues['about.body']);
-    emit(`sections[_key=="about"].cta.label`, formValues['about.cta.label']);
-    emit(`sections[_key=="about"].cta.href`, formValues['about.cta.href']);
-
-    if (aboutSection && Array.isArray(aboutSection.stats)) {
-      for (const stat of aboutSection.stats) {
-        if (!stat._key || !isSafeKey(stat._key)) continue;
-        const k = stat._key;
-        emit(
-          `sections[_key=="about"].stats[_key=="${k}"].value`,
-          formValues[`about.stat.${k}.value`],
-        );
-        emit(
-          `sections[_key=="about"].stats[_key=="${k}"].label`,
-          formValues[`about.stat.${k}.label`],
-        );
-      }
-    }
-  }
-
-  // Process
-  if (hasSection('process')) {
-    const processSection = findSection(doc, 'process');
-    emit(`sections[_key=="process"].eyebrow`, formValues['process.eyebrow']);
-    emit(`sections[_key=="process"].heading`, formValues['process.heading']);
-
-    if (processSection && Array.isArray(processSection.steps)) {
-      for (const step of processSection.steps) {
-        if (!step._key || !isSafeKey(step._key)) continue;
-        const k = step._key;
-        emit(
-          `sections[_key=="process"].steps[_key=="${k}"].title`,
-          formValues[`process.step.${k}.title`],
-        );
-        emit(
-          `sections[_key=="process"].steps[_key=="${k}"].description`,
-          formValues[`process.step.${k}.description`],
-        );
-      }
-    }
-  }
-
-  // Reviews (eyebrow + heading only)
-  if (hasSection('reviews')) {
-    emit(`sections[_key=="reviews"].eyebrow`, formValues['reviews.eyebrow']);
-    emit(`sections[_key=="reviews"].heading`, formValues['reviews.heading']);
-  }
-
-  // Contact
-  if (hasSection('contact')) {
-    emit(`sections[_key=="contact"].heading`, formValues['contact.heading']);
-    emit(`sections[_key=="contact"].subhead`, formValues['contact.subhead']);
-    emit(`sections[_key=="contact"].address.street`, formValues['contact.address.street']);
-    emit(`sections[_key=="contact"].address.city`, formValues['contact.address.city']);
-    emit(`sections[_key=="contact"].address.state`, formValues['contact.address.state']);
-    emit(`sections[_key=="contact"].address.zip`, formValues['contact.address.zip']);
-    emit(`sections[_key=="contact"].address.hours`, formValues['contact.address.hours']);
-    emit(`sections[_key=="contact"].address.serviceArea`, formValues['contact.address.serviceArea']);
-    emit(`sections[_key=="contact"].formLabels.name`, formValues['contact.formLabels.name']);
-    emit(`sections[_key=="contact"].formLabels.phone`, formValues['contact.formLabels.phone']);
-    emit(`sections[_key=="contact"].formLabels.email`, formValues['contact.formLabels.email']);
-    emit(`sections[_key=="contact"].formLabels.message`, formValues['contact.formLabels.message']);
-    emit(`sections[_key=="contact"].formLabels.submit`, formValues['contact.formLabels.submit']);
-  }
-
-  // UGC (optional section — only emit if present in doc)
-  if (hasSection('ugc')) {
-    emit(`sections[_key=="ugc"].heading`, formValues['ugc.heading']);
-    emit(`sections[_key=="ugc"].subhead`, formValues['ugc.subhead']);
-  }
-
-  // Footer
-  if (hasSection('footer')) {
-    const footerSection = findSection(doc, 'footer');
-    emit(`sections[_key=="footer"].tagline`, formValues['footer.tagline']);
-    emit(`sections[_key=="footer"].legal`, formValues['footer.legal']);
-
-    if (footerSection && Array.isArray(footerSection.columns)) {
-      for (const col of footerSection.columns) {
-        if (!col._key || !isSafeKey(col._key)) continue;
-        const ck = col._key;
-        emit(
-          `sections[_key=="footer"].columns[_key=="${ck}"].heading`,
-          formValues[`footer.col.${ck}.heading`],
-        );
-        if (Array.isArray(col.links)) {
-          for (const link of col.links) {
-            if (!link._key || !isSafeKey(link._key)) continue;
-            const lk = link._key;
-            emit(
-              `sections[_key=="footer"].columns[_key=="${ck}"].links[_key=="${lk}"].label`,
-              formValues[`footer.col.${ck}.link.${lk}.label`],
-            );
-            emit(
-              `sections[_key=="footer"].columns[_key=="${ck}"].links[_key=="${lk}"].href`,
-              formValues[`footer.col.${ck}.link.${lk}.href`],
-            );
-          }
-        }
-      }
-    }
-  }
-
-  // Remove undefined values from the patch (emit already handles this, but
-  // be explicit to avoid accidentally nulling fields the customer didn't submit).
+  // Remove any undefined values (emit guards this, but be explicit).
   for (const k of Object.keys(patch)) {
     if (patch[k] === undefined) delete patch[k];
   }
@@ -669,9 +737,17 @@ export function buildPatchSet(
 
 /**
  * Validates all keys in `raw` against their zod schema.
+ *
+ * Accepts an optional `keyTypeMap` (sectionKey -> _type) for more precise
+ * static-field schema resolution. When provided, section fields that match
+ * a template definition use that schema; otherwise wildcard patterns are used.
+ *
  * Returns `{ ok: true, values }` or `{ ok: false, errors }`.
  */
-export function validateFormValues(raw: Record<string, string>): {
+export function validateFormValues(
+  raw: Record<string, string>,
+  keyTypeMap?: Record<string, string>,
+): {
   ok: true;
   values: Record<string, string>;
 } | {
@@ -682,7 +758,7 @@ export function validateFormValues(raw: Record<string, string>): {
   const values: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(raw)) {
-    const schema = schemaForKey(key);
+    const schema = schemaForKey(key, keyTypeMap);
     const result = schema.safeParse(value);
     if (!result.success) {
       errors[key] = result.error.errors[0]?.message ?? 'Invalid value';
@@ -698,72 +774,83 @@ export function validateFormValues(raw: Record<string, string>): {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic field metadata for form rendering
+// Legacy per-item helpers (kept for any external callers; internally
+// buildSectionList() inlines the same logic with instance-scoped keys).
 // ---------------------------------------------------------------------------
 
 /**
- * Returns per-service-card field descriptors keyed from the doc.
- * The `key` is the form field name used by extractFormValues/buildPatchSet.
+ * Returns per-service-card field descriptors for the section identified by
+ * `sectionKey` in the doc.
+ * @deprecated Use buildSectionList() which inlines this logic.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function serviceCardFields(doc: Record<string, any>): FieldDef[] {
-  const services = findSection(doc, 'services');
-  if (!services || !Array.isArray(services.services)) return [];
-  return services.services.flatMap((card: { _key?: string }, i: number) => {
+export function serviceCardFields(doc: AnyDoc, sectionKey = 'services'): FieldDef[] {
+  if (!Array.isArray(doc?.sections)) return [];
+  const section = (doc.sections as Array<AnyDoc>).find((s) => s._key === sectionKey);
+  if (!section || !Array.isArray(section.services)) return [];
+  return section.services.flatMap((card: AnyDoc, i: number) => {
     if (!card._key) return [];
-    const k = card._key;
+    const k: string = card._key;
     return [
-      { key: `services.card.${k}.title`, label: `Service ${i + 1} title`, control: 'input' as const, schema: shortTextOpt },
-      { key: `services.card.${k}.description`, label: `Service ${i + 1} description`, control: 'textarea' as const, schema: mediumTextOpt },
+      { key: `sec.${sectionKey}.card.${k}.title`, label: `Service ${i + 1} title`, control: 'input' as const, schema: shortTextOpt },
+      { key: `sec.${sectionKey}.card.${k}.description`, label: `Service ${i + 1} description`, control: 'textarea' as const, schema: mediumTextOpt },
     ];
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function aboutStatFields(doc: Record<string, any>): FieldDef[] {
-  const about = findSection(doc, 'about');
-  if (!about || !Array.isArray(about.stats)) return [];
-  return about.stats.flatMap((stat: { _key?: string }, i: number) => {
+/**
+ * @deprecated Use buildSectionList() which inlines this logic.
+ */
+export function aboutStatFields(doc: AnyDoc, sectionKey = 'about'): FieldDef[] {
+  if (!Array.isArray(doc?.sections)) return [];
+  const section = (doc.sections as Array<AnyDoc>).find((s) => s._key === sectionKey);
+  if (!section || !Array.isArray(section.stats)) return [];
+  return section.stats.flatMap((stat: AnyDoc, i: number) => {
     if (!stat._key) return [];
-    const k = stat._key;
+    const k: string = stat._key;
     return [
-      { key: `about.stat.${k}.value`, label: `Stat ${i + 1} value`, control: 'input' as const, schema: statValue, placeholder: 'e.g. 15+ or 2,400' },
-      { key: `about.stat.${k}.label`, label: `Stat ${i + 1} label`, control: 'input' as const, schema: shortTextOpt, placeholder: 'e.g. Years in business' },
+      { key: `sec.${sectionKey}.stat.${k}.value`, label: `Stat ${i + 1} value`, control: 'input' as const, schema: statValue, placeholder: 'e.g. 15+ or 2,400' },
+      { key: `sec.${sectionKey}.stat.${k}.label`, label: `Stat ${i + 1} label`, control: 'input' as const, schema: shortTextOpt, placeholder: 'e.g. Years in business' },
     ];
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function processStepFields(doc: Record<string, any>): FieldDef[] {
-  const process = findSection(doc, 'process');
-  if (!process || !Array.isArray(process.steps)) return [];
-  return process.steps.flatMap((step: { _key?: string }, i: number) => {
+/**
+ * @deprecated Use buildSectionList() which inlines this logic.
+ */
+export function processStepFields(doc: AnyDoc, sectionKey = 'process'): FieldDef[] {
+  if (!Array.isArray(doc?.sections)) return [];
+  const section = (doc.sections as Array<AnyDoc>).find((s) => s._key === sectionKey);
+  if (!section || !Array.isArray(section.steps)) return [];
+  return section.steps.flatMap((step: AnyDoc, i: number) => {
     if (!step._key) return [];
-    const k = step._key;
+    const k: string = step._key;
     return [
-      { key: `process.step.${k}.title`, label: `Step ${i + 1} title`, control: 'input' as const, schema: shortTextOpt },
-      { key: `process.step.${k}.description`, label: `Step ${i + 1} description`, control: 'textarea' as const, schema: mediumTextOpt },
+      { key: `sec.${sectionKey}.step.${k}.title`, label: `Step ${i + 1} title`, control: 'input' as const, schema: shortTextOpt },
+      { key: `sec.${sectionKey}.step.${k}.description`, label: `Step ${i + 1} description`, control: 'textarea' as const, schema: mediumTextOpt },
     ];
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function footerColumnFields(doc: Record<string, any>): FieldDef[] {
-  const footer = findSection(doc, 'footer');
-  if (!footer || !Array.isArray(footer.columns)) return [];
-  return footer.columns.flatMap((col: { _key?: string; links?: Array<{ _key?: string }> }, ci: number) => {
+/**
+ * @deprecated Use buildSectionList() which inlines this logic.
+ */
+export function footerColumnFields(doc: AnyDoc, sectionKey = 'footer'): FieldDef[] {
+  if (!Array.isArray(doc?.sections)) return [];
+  const section = (doc.sections as Array<AnyDoc>).find((s) => s._key === sectionKey);
+  if (!section || !Array.isArray(section.columns)) return [];
+  return section.columns.flatMap((col: AnyDoc, ci: number) => {
     if (!col._key) return [];
-    const ck = col._key;
+    const ck: string = col._key;
     const colFields: FieldDef[] = [
-      { key: `footer.col.${ck}.heading`, label: `Column ${ci + 1} heading`, control: 'input', schema: shortTextOpt },
+      { key: `sec.${sectionKey}.col.${ck}.heading`, label: `Column ${ci + 1} heading`, control: 'input', schema: shortTextOpt },
     ];
     if (Array.isArray(col.links)) {
-      col.links.forEach((link: { _key?: string }, li: number) => {
+      (col.links as Array<AnyDoc>).forEach((link: AnyDoc, li: number) => {
         if (!link._key) return;
-        const lk = link._key;
+        const lk: string = link._key;
         colFields.push(
-          { key: `footer.col.${ck}.link.${lk}.label`, label: `Column ${ci + 1} link ${li + 1} label`, control: 'input', schema: shortTextOpt },
-          { key: `footer.col.${ck}.link.${lk}.href`, label: `Column ${ci + 1} link ${li + 1} URL`, control: 'input', schema: ctaHref, placeholder: '#anchor or https://...' },
+          { key: `sec.${sectionKey}.col.${ck}.link.${lk}.label`, label: `Column ${ci + 1} link ${li + 1} label`, control: 'input', schema: shortTextOpt },
+          { key: `sec.${sectionKey}.col.${ck}.link.${lk}.href`, label: `Column ${ci + 1} link ${li + 1} URL`, control: 'input', schema: ctaHref, placeholder: '#anchor or https://...' },
         );
       });
     }

@@ -16,6 +16,100 @@ import 'server-only';
 import { createWriteClient } from '@leadlandlord/sanity-schema/client';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 
+// ---------------------------------------------------------------------------
+// Key generation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a short alphanumeric key with the given prefix.
+ * Uses base-36 timestamp + random suffix. NO dashes — must pass isSafeKey.
+ * e.g. genKey('svc') => 'svc_k7z3m1'
+ */
+export function genKey(prefix: string): string {
+  const ts = Date.now().toString(36);
+  const rand = Math.floor(Math.random() * 1679616).toString(36).padStart(4, '0'); // 36^4 possibilities
+  return `${prefix}_${ts}${rand}`;
+}
+
+/**
+ * Deep-clones a section block and regenerates the section's own `_key` plus
+ * every nested sub-item `_key` (cards, stats, steps, footer columns and their
+ * nested links). Image asset refs and review `_ref`s are cloned as-is.
+ *
+ * Two-level nesting handled: footer columns (fcol_*) and their links (fcl_*).
+ */
+export function regenerateKeys(block: Record<string, unknown>): Record<string, unknown> {
+  // Deep clone via JSON round-trip (all values are serialisable Sanity blocks).
+  const clone = JSON.parse(JSON.stringify(block)) as Record<string, unknown>;
+
+  // Assign a new top-level section _key.
+  const sectionType = String(clone._type ?? 'sec');
+  clone._key = genKey(sectionTypePrefix(sectionType));
+
+  // Re-key nested arrays by type.
+  if (Array.isArray(clone.services)) {
+    clone.services = (clone.services as Array<Record<string, unknown>>).map((item) => ({
+      ...item,
+      _key: genKey('svc'),
+    }));
+  }
+
+  if (Array.isArray(clone.stats)) {
+    clone.stats = (clone.stats as Array<Record<string, unknown>>).map((item) => ({
+      ...item,
+      _key: genKey('st'),
+    }));
+  }
+
+  if (Array.isArray(clone.steps)) {
+    clone.steps = (clone.steps as Array<Record<string, unknown>>).map((item) => ({
+      ...item,
+      _key: genKey('ps'),
+    }));
+  }
+
+  if (Array.isArray(clone.columns)) {
+    clone.columns = (clone.columns as Array<Record<string, unknown>>).map((col, i) => {
+      const newCol: Record<string, unknown> = { ...col, _key: genKey(`fcol${i}`) };
+      if (Array.isArray(newCol.links)) {
+        newCol.links = (newCol.links as Array<Record<string, unknown>>).map((link, j) => ({
+          ...link,
+          _key: genKey(`fcl${i}_${j}`),
+        }));
+      }
+      return newCol;
+    });
+  }
+
+  return clone;
+}
+
+/** Maps a section _type to a short key prefix. */
+function sectionTypePrefix(type: string): string {
+  const map: Record<string, string> = {
+    bsHeroSection: 'hero',
+    bsServicesSection: 'svc',
+    bsAboutSection: 'abt',
+    bsProcessSection: 'prc',
+    bsReviewsSection: 'rev',
+    bsContactSection: 'cnt',
+    bsUgcSection: 'ugc',
+    bsFooterSection: 'ftr',
+  };
+  return map[type] ?? 'sec';
+}
+
+// ---------------------------------------------------------------------------
+// customerLayout type
+// ---------------------------------------------------------------------------
+
+export interface CustomerLayout {
+  sectionOrder: string[];
+  removedKeys: string[];
+  customerOwnedKeys: string[];
+  lockedAt?: string;
+}
+
 // Re-export for convenience so callers don't need a second import.
 export { buildsellSiteDocId };
 
@@ -113,6 +207,27 @@ export async function saveFields(
   const draftId = await ensureDraft(siteId);
   const client = createWriteClient();
   await client.patch(draftId).set(patchSet).commit({ visibility: 'async' });
+}
+
+// ---------------------------------------------------------------------------
+// Structural section write
+// ---------------------------------------------------------------------------
+
+/**
+ * Atomically replaces `sections[]` and `customerLayout` on the draft.
+ * Uses `visibility:'sync'` so a subsequent router.refresh() reads post-write state.
+ */
+export async function writeSections(
+  siteId: string,
+  sections: Array<Record<string, unknown>>,
+  customerLayout: CustomerLayout,
+): Promise<void> {
+  const draftId = await ensureDraft(siteId);
+  const client = createWriteClient();
+  await client
+    .patch(draftId)
+    .set({ sections, customerLayout })
+    .commit({ visibility: 'sync' });
 }
 
 // ---------------------------------------------------------------------------

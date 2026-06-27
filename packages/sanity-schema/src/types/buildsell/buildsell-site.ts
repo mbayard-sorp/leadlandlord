@@ -72,6 +72,13 @@ export const buildsellSite = defineType({
       description: 'Operator-approved content migrated from the prospect\'s existing site. Preserved across rebuilds (read-merge).',
     }),
     defineField({
+      name: 'customerLayout',
+      title: 'Customer Layout',
+      type: 'bsCustomerLayout',
+      hidden: true,
+      description: 'Machine-written overlay recording customer section order, removals, and owned keys. Preserved across rebuilds (read-merge). Set lockedAt when site goes live.',
+    }),
+    defineField({
       name: 'sections',
       title: 'Sections',
       type: 'array',
