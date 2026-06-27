@@ -9,6 +9,8 @@ interface HeroBlockProps {
   layoutVariant: 'split' | 'bold' | 'trust';
   reviewCount?: number | null;
   rating?: number | null;
+  businessName?: string | null;
+  city?: string | null;
 }
 
 /**
@@ -32,25 +34,88 @@ function ImagePlaceholder({ className, style }: { className?: string; style?: Re
   );
 }
 
-export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }: HeroBlockProps) {
+/**
+ * Case-insensitive, trim-tolerant headline split.
+ *
+ * Returns the three pieces [before, matchedSpan, after] if the highlight
+ * is found anywhere in the headline (ignoring case and surrounding whitespace).
+ * Returns null when the highlight is empty or not found — caller renders
+ * the headline as plain text.
+ */
+function splitHeadline(
+  headline: string,
+  highlight: string | null | undefined,
+): [string, string, string] | null {
+  const needle = highlight?.trim();
+  if (!needle) return null;
+  const idx = headline.toLowerCase().indexOf(needle.toLowerCase());
+  if (idx === -1) return null;
+  return [
+    headline.slice(0, idx),
+    headline.slice(idx, idx + needle.length),
+    headline.slice(idx + needle.length),
+  ];
+}
+
+/**
+ * Resolve the class name for a CTA button based on its `style` field.
+ * Mirrors the convention used by AboutBlock.tsx:
+ *   'primary' (or empty/undefined) → bs-btn-primary (solid)
+ *   'secondary' | 'ghost'          → bs-btn-outline
+ */
+function ctaClass(style?: string | null): string {
+  if (style === 'secondary' || style === 'ghost') return 'bs-btn-outline';
+  return 'bs-btn-primary';
+}
+
+export function HeroBlock({
+  section,
+  phone,
+  layoutVariant,
+  reviewCount,
+  rating,
+  businessName,
+  city,
+}: HeroBlockProps) {
   const isBold = layoutVariant === 'bold';
   const isTrust = layoutVariant === 'trust';
 
   const headline = section.headline ?? '[Headline — Replace]';
-  const highlightText = section.highlight;
-  const parts = highlightText ? headline.split(highlightText) : null;
+  const headlineParts = splitHeadline(headline, section.highlight);
 
   const ratingDisplay = rating ?? 5;
   const reviewLabel = reviewCount ? `${reviewCount.toLocaleString()} reviews` : 'Top-rated local service';
 
+  // Sensible image alt fallback: "{businessName} in {city}" or headline.
+  const defaultAlt =
+    businessName && city ? `${businessName} in ${city}` : headline;
+  const heroAlt = section.imageAlt?.trim() || defaultAlt;
+
+  // --- CTA href resolution ---
+  // primaryCta.href when non-empty; fall back to tel:{phone} (if phone) else #contact.
+  const primaryHref = section.primaryCta?.href?.trim()
+    ? section.primaryCta.href
+    : phone
+    ? `tel:${phone}`
+    : '#contact';
+
+  // primaryCta.label: when we are falling back to phone, show "Call {phone}".
+  const primaryLabel =
+    section.primaryCta?.label?.trim() ||
+    (phone && !section.primaryCta?.href?.trim() ? `Call ${phone}` : 'Get a Free Quote');
+
+  const secondaryHref = section.secondaryCta?.href?.trim()
+    ? section.secondaryCta.href
+    : '#contact';
+
   function HeadlineNode() {
     return (
       <h1 className="bs-hero-headline">
-        {parts && highlightText ? (
+        {headlineParts ? (
           <>
-            {parts[0]}
-            <span className="bs-hero-highlight">{highlightText}</span>
-            {parts[1]}
+            {headlineParts[0]}
+            <span className="bs-hero-highlight">{headlineParts[1]}</span>
+            {headlineParts[2]}
           </>
         ) : (
           headline
@@ -60,22 +125,18 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
   }
 
   function ActionRow() {
+    const primaryStyle = ctaClass(section.primaryCta?.style);
+    const secondaryStyle = ctaClass(section.secondaryCta?.style ?? 'secondary');
+
     return (
       <div className="bs-hero-actions">
-        {phone ? (
-          <a href={`tel:${phone}`} className="bs-btn bs-btn-primary bs-btn-lg">
-            Call {phone}
-            <ArrowRightIcon />
-          </a>
-        ) : (
-          <a href="#contact" className="bs-btn bs-btn-primary bs-btn-lg">
-            {section.primaryCta?.label ?? 'Get a Free Quote'}
-            <ArrowRightIcon />
-          </a>
-        )}
-        {section.secondaryCta?.href && (
-          <a href={section.secondaryCta.href} className="bs-btn bs-btn-outline bs-btn-lg">
-            {section.secondaryCta.label ?? 'Learn More'}
+        <a href={primaryHref} className={`bs-btn ${primaryStyle} bs-btn-lg`}>
+          {primaryLabel}
+          <ArrowRightIcon />
+        </a>
+        {section.secondaryCta?.label && (
+          <a href={secondaryHref} className={`bs-btn ${secondaryStyle} bs-btn-lg`}>
+            {section.secondaryCta.label}
           </a>
         )}
       </div>
@@ -119,7 +180,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
             {section.imageUrl ? (
               <Image
                 src={section.imageUrl}
-                alt=""
+                alt={heroAlt}
                 fill
                 priority
                 sizes="100vw"
@@ -199,7 +260,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
                 <div key={i} className="bs-hero-trust-tile" style={{ position: 'relative' }}>
                   <Image
                     src={tile.url}
-                    alt={i === 0 ? headline : ''}
+                    alt={i === 0 ? heroAlt : ''}
                     fill
                     priority={i === 0}
                     sizes="(max-width: 767px) 100vw, 33vw"
@@ -244,7 +305,7 @@ export function HeroBlock({ section, phone, layoutVariant, reviewCount, rating }
                 <div className="bs-hero-image-frame">
                   <Image
                     src={section.imageUrl}
-                    alt={`${headline} hero image`}
+                    alt={heroAlt}
                     fill
                     priority
                     sizes="(max-width: 767px) 100vw, 50vw"

@@ -49,12 +49,32 @@ const ctaHref = z
   )
   .optional()
   .or(z.literal(''));
+const phoneOpt = noHtml(z.string().trim().max(40))
+  .refine(
+    (v) => v === '' || /^[0-9()+\-.\sxX]{7,}$/.test(v),
+    'Enter a valid phone number, e.g. (555) 123-4567',
+  )
+  .optional()
+  .or(z.literal(''));
+
+// Friendly button-style choices. zod (`ctaStyle`) still accepts the legacy
+// 'ghost' value, but the customer is only offered the two they understand.
+const CTA_STYLE_OPTIONS: SelectOption[] = [
+  { value: '', label: 'Default' },
+  { value: 'primary', label: 'Solid button' },
+  { value: 'secondary', label: 'Outline button' },
+];
 
 // ---------------------------------------------------------------------------
 // Field descriptor types
 // ---------------------------------------------------------------------------
 
-export type ControlType = 'input' | 'textarea';
+export type ControlType = 'input' | 'textarea' | 'select';
+
+export interface SelectOption {
+  value: string;
+  label: string;
+}
 
 export interface FieldDef {
   /** Unique key used as the HTML form field name. */
@@ -64,6 +84,14 @@ export interface FieldDef {
   schema: z.ZodTypeAny;
   /** Optional placeholder text shown in the form control. */
   placeholder?: string;
+  /** Plain-language helper text shown under the label (the "what is this" hint). */
+  description?: string;
+  /** Soft character limit — drives a live counter + the HTML maxLength attribute. */
+  max?: number;
+  /** Options for `control: 'select'`. */
+  options?: SelectOption[];
+  /** Marks the field as required in the UI (validation still lives in `schema`). */
+  required?: boolean;
 }
 
 export interface SectionDef {
@@ -97,6 +125,10 @@ export function toClientField(field: FieldDef): ClientFieldDef {
     label: field.label,
     control: field.control,
     placeholder: field.placeholder,
+    description: field.description,
+    max: field.max,
+    options: field.options,
+    required: field.required,
   };
 }
 
@@ -113,14 +145,68 @@ export function toClientSection(section: SectionDef): ClientSectionDef {
 // ---------------------------------------------------------------------------
 
 /**
- * Top-level fields (not inside sections[]).
+ * Top-level fields (not inside sections[]). Split into two presentational
+ * groups so the form can lead with content and tuck SEO away at the end.
+ * Both are patched to top-level doc paths (see buildPatchSet / extractFormValues).
  */
-export const topLevelFields: FieldDef[] = [
-  { key: 'navCta.label', label: 'Nav button label', control: 'input', schema: shortTextOpt },
-  { key: 'navCta.href', label: 'Nav button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
-  { key: 'seo.metaTitle', label: 'Page title (SEO)', control: 'input', schema: shortTextOpt, placeholder: '50–60 characters recommended' },
-  { key: 'seo.metaDescription', label: 'Meta description (SEO)', control: 'textarea', schema: mediumTextOpt, placeholder: '150–160 characters recommended' },
+export const businessFields: FieldDef[] = [
+  {
+    key: 'phone',
+    label: 'Business phone number',
+    control: 'input',
+    schema: phoneOpt,
+    placeholder: '(555) 123-4567',
+    max: 40,
+    description:
+      'The number customers tap to call you. It powers the call button in your top menu, your main hero button, and your contact section.',
+  },
+  {
+    key: 'navCta.label',
+    label: 'Top menu button text',
+    control: 'input',
+    schema: shortTextOpt,
+    placeholder: 'Call Now',
+    max: 30,
+    description: "The button in your top menu bar, e.g. 'Call Now' or 'Get a Quote.'",
+  },
+  {
+    key: 'navCta.href',
+    label: 'Top menu button link',
+    control: 'input',
+    schema: ctaHref,
+    placeholder: '#contact',
+    description:
+      "Where the button takes visitors. Use #contact to jump to your contact form, or a tel: link like tel:5551234567 to start a call.",
+  },
 ];
+
+export const seoFields: FieldDef[] = [
+  {
+    key: 'seo.metaTitle',
+    label: 'Title in Google results',
+    control: 'input',
+    schema: shortTextOpt,
+    placeholder: 'Burbank Auto Doctor — Auto Repair in Burbank, CA',
+    max: 60,
+    description:
+      'The clickable blue title shown when your site appears in a Google search. Include your business and city. Aim for 50-60 characters. Optional.',
+  },
+  {
+    key: 'seo.metaDescription',
+    label: 'Description in Google results',
+    control: 'textarea',
+    schema: mediumTextOpt,
+    placeholder: 'Honest, expert auto repair in Burbank, CA. Upfront pricing and fast turnaround.',
+    max: 160,
+    description:
+      'The short gray summary under your title in Google search. Describe what you do and where. About 150 characters. Optional.',
+  },
+];
+
+/**
+ * All top-level fields, flat — used by the validation + patch-building loops.
+ */
+export const topLevelFields: FieldDef[] = [...businessFields, ...seoFields];
 
 /**
  * Section field definitions. The order here is the display order in the form.
@@ -129,27 +215,28 @@ export const topLevelFields: FieldDef[] = [
 export const sectionDefs: SectionDef[] = [
   {
     sectionKey: 'hero',
-    label: 'Hero',
+    label: 'Hero (top of your site)',
     fields: [
-      { key: 'hero.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'hero.headline', label: 'Headline', control: 'input', schema: shortText },
-      { key: 'hero.highlight', label: 'Highlighted word(s)', control: 'input', schema: shortTextOpt, placeholder: 'Words to emphasise in the headline' },
-      { key: 'hero.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
-      { key: 'hero.primaryCta.label', label: 'Primary button label', control: 'input', schema: shortTextOpt },
-      { key: 'hero.primaryCta.href', label: 'Primary button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
-      { key: 'hero.primaryCta.style', label: 'Primary button style', control: 'input', schema: ctaStyle, placeholder: 'primary | secondary | ghost' },
-      { key: 'hero.secondaryCta.label', label: 'Secondary button label', control: 'input', schema: shortTextOpt },
-      { key: 'hero.secondaryCta.href', label: 'Secondary button link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
-      { key: 'hero.secondaryCta.style', label: 'Secondary button style', control: 'input', schema: ctaStyle, placeholder: 'primary | secondary | ghost' },
+      { key: 'hero.eyebrow', label: 'Small line above your headline', control: 'input', schema: shortTextOpt, max: 60, placeholder: "Burbank's trusted auto shop", description: 'A short phrase that sits above your big headline. Optional.' },
+      { key: 'hero.headline', label: 'Main headline', control: 'input', schema: shortText, max: 120, required: true, description: 'The big bold text at the very top of your site — the first thing visitors read.' },
+      { key: 'hero.highlight', label: 'Word to highlight in color', control: 'input', schema: shortTextOpt, max: 60, placeholder: 'trusted', description: 'Copy a word or phrase exactly as it appears in your headline above to make it stand out in color. Leave blank for none.' },
+      { key: 'hero.subhead', label: 'Supporting sentence', control: 'textarea', schema: mediumTextOpt, max: 200, description: 'One or two sentences under your headline explaining what you do.' },
+      { key: 'hero.imageAlt', label: 'Hero photo description', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Mechanic repairing a car engine', description: 'Describe the hero photo in a few words. Helps Google Images and visually-impaired visitors.' },
+      { key: 'hero.primaryCta.label', label: 'Main button text', control: 'input', schema: shortTextOpt, max: 30, placeholder: 'Get a Free Quote', description: 'The text on your biggest, most prominent button.' },
+      { key: 'hero.primaryCta.href', label: 'Main button link', control: 'input', schema: ctaHref, placeholder: '#contact', description: 'Where the button goes. Leave blank to auto-use your phone number, or use #contact to jump to your form.' },
+      { key: 'hero.primaryCta.style', label: 'Main button style', control: 'select', schema: ctaStyle, options: CTA_STYLE_OPTIONS, description: 'Solid stands out most; outline is subtler.' },
+      { key: 'hero.secondaryCta.label', label: 'Second button text', control: 'input', schema: shortTextOpt, max: 30, placeholder: 'See Our Work', description: 'Optional smaller button beside the main one.' },
+      { key: 'hero.secondaryCta.href', label: 'Second button link', control: 'input', schema: ctaHref, placeholder: '#contact', description: 'Where it goes. Leave blank to jump to your contact section.' },
+      { key: 'hero.secondaryCta.style', label: 'Second button style', control: 'select', schema: ctaStyle, options: CTA_STYLE_OPTIONS, description: 'Solid stands out most; outline is subtler.' },
     ],
   },
   {
     sectionKey: 'services',
     label: 'Services',
     fields: [
-      { key: 'services.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'services.heading', label: 'Heading', control: 'input', schema: shortText },
-      { key: 'services.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
+      { key: 'services.eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above your services title.' },
+      { key: 'services.heading', label: 'Services section title', control: 'input', schema: shortText, max: 120, required: true, placeholder: 'What We Do', description: 'The title above your list of services.' },
+      { key: 'services.subhead', label: 'Intro sentence', control: 'textarea', schema: mediumTextOpt, max: 200, description: 'Optional sentence introducing your services.' },
       // Per-card fields are generated dynamically in buildPatchSet / extractFormValues
       // using keys read from the doc. They follow the pattern:
       //   services.card.<_key>.title
@@ -160,11 +247,13 @@ export const sectionDefs: SectionDef[] = [
     sectionKey: 'about',
     label: 'About',
     fields: [
-      { key: 'about.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'about.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      { key: 'about.body', label: 'Body text', control: 'textarea', schema: longTextOpt },
-      { key: 'about.cta.label', label: 'CTA label', control: 'input', schema: shortTextOpt },
-      { key: 'about.cta.href', label: 'CTA link', control: 'input', schema: ctaHref, placeholder: '#contact or tel:+1...' },
+      { key: 'about.eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above your About title.' },
+      { key: 'about.heading', label: 'About section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'About Our Shop', description: 'The title for your About section.' },
+      { key: 'about.body', label: 'About your business', control: 'textarea', schema: longTextOpt, max: 1500, description: 'A paragraph or two about who you are, your experience, and why customers trust you.' },
+      { key: 'about.imageAlt', label: 'About photo description', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Our team outside the shop', description: 'Describe the photo in your About section. Helps Google Images and screen readers.' },
+      { key: 'about.cta.label', label: 'Button text', control: 'input', schema: shortTextOpt, max: 30, description: 'Optional button at the end of your About text.' },
+      { key: 'about.cta.href', label: 'Button link', control: 'input', schema: ctaHref, placeholder: '#contact', description: 'Where the button goes.' },
+      { key: 'about.cta.style', label: 'Button style', control: 'select', schema: ctaStyle, options: CTA_STYLE_OPTIONS, description: 'Solid stands out most; outline is subtler.' },
       // Per-stat fields: about.stat.<_key>.value / .label — generated dynamically
     ],
   },
@@ -172,8 +261,8 @@ export const sectionDefs: SectionDef[] = [
     sectionKey: 'process',
     label: 'How It Works',
     fields: [
-      { key: 'process.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'process.heading', label: 'Heading', control: 'input', schema: shortText },
+      { key: 'process.eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above the section title.' },
+      { key: 'process.heading', label: 'Section title', control: 'input', schema: shortText, max: 120, required: true, placeholder: 'How It Works', description: 'The title above your step-by-step list.' },
       // Per-step fields: process.step.<_key>.title / .description — generated dynamically
     ],
   },
@@ -181,8 +270,8 @@ export const sectionDefs: SectionDef[] = [
     sectionKey: 'reviews',
     label: 'Reviews',
     fields: [
-      { key: 'reviews.eyebrow', label: 'Eyebrow text', control: 'input', schema: shortTextOpt },
-      { key: 'reviews.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
+      { key: 'reviews.eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above the section title.' },
+      { key: 'reviews.heading', label: 'Reviews section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'What Our Customers Say', description: 'Your reviews are pulled from Google and shown here automatically.' },
       // reviews[] references are BLOCKED — no per-review editing
     ],
   },
@@ -190,35 +279,44 @@ export const sectionDefs: SectionDef[] = [
     sectionKey: 'contact',
     label: 'Contact',
     fields: [
-      { key: 'contact.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      { key: 'contact.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
-      { key: 'contact.address.street', label: 'Street address', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.city', label: 'City', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.state', label: 'State', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.zip', label: 'ZIP code', control: 'input', schema: shortTextOpt },
-      { key: 'contact.address.hours', label: 'Business hours', control: 'input', schema: shortTextOpt, placeholder: 'e.g. Mon–Sat 7am–6pm' },
-      { key: 'contact.address.serviceArea', label: 'Service area', control: 'input', schema: shortTextOpt, placeholder: 'e.g. Greater Phoenix metro' },
-      { key: 'contact.formLabels.name', label: 'Form — Name label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.phone', label: 'Form — Phone label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.email', label: 'Form — Email label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.message', label: 'Form — Message label', control: 'input', schema: shortTextOpt },
-      { key: 'contact.formLabels.submit', label: 'Form — Submit button label', control: 'input', schema: shortTextOpt },
+      { key: 'contact.heading', label: 'Contact section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Get in Touch', description: 'The title for your contact section.' },
+      { key: 'contact.subhead', label: 'Intro sentence', control: 'textarea', schema: mediumTextOpt, max: 200, description: 'Optional sentence above your contact details.' },
+      { key: 'contact.address.street', label: 'Street address', control: 'input', schema: shortTextOpt, max: 120, description: 'Used by Google for local search. Keep it exactly as it appears on your Google Maps listing.' },
+      { key: 'contact.address.city', label: 'City', control: 'input', schema: shortTextOpt, max: 60 },
+      { key: 'contact.address.state', label: 'State', control: 'input', schema: shortTextOpt, max: 40, placeholder: 'CA' },
+      { key: 'contact.address.zip', label: 'ZIP code', control: 'input', schema: shortTextOpt, max: 12 },
+      { key: 'contact.address.hours', label: 'Hours', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Mon–Sat 7am–6pm', description: "When you're open. Shown to customers and used for the 'Open now' label in Google." },
+      { key: 'contact.address.serviceArea', label: 'Areas you serve', control: 'input', schema: shortTextOpt, max: 160, placeholder: 'Burbank, Glendale, Pasadena', description: 'Other nearby towns you serve, separated by commas. Helps you appear in nearby searches.' },
+      { key: 'contact.formLabels.name', label: "Contact form — 'Name' field label", control: 'input', schema: shortTextOpt, max: 30, description: 'Wording on your contact form. Most people leave these as-is.' },
+      { key: 'contact.formLabels.phone', label: "Contact form — 'Phone' field label", control: 'input', schema: shortTextOpt, max: 30 },
+      { key: 'contact.formLabels.email', label: "Contact form — 'Email' field label", control: 'input', schema: shortTextOpt, max: 30 },
+      { key: 'contact.formLabels.message', label: "Contact form — 'Message' field label", control: 'input', schema: shortTextOpt, max: 30 },
+      { key: 'contact.formLabels.submit', label: 'Contact form — send button text', control: 'input', schema: shortTextOpt, max: 30 },
     ],
   },
   {
     sectionKey: 'ugc',
-    label: 'Social Gallery',
+    label: 'Photo Gallery',
     fields: [
-      { key: 'ugc.heading', label: 'Heading', control: 'input', schema: shortTextOpt },
-      { key: 'ugc.subhead', label: 'Subheading', control: 'textarea', schema: mediumTextOpt },
+      { key: 'ugc.heading', label: 'Photo gallery title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Our Recent Work', description: 'The title above your photo gallery.' },
+      { key: 'ugc.subhead', label: 'Intro sentence', control: 'textarea', schema: mediumTextOpt, max: 200, description: 'Optional sentence introducing your gallery.' },
+    ],
+  },
+  {
+    sectionKey: 'faq',
+    label: 'FAQ',
+    fields: [
+      { key: 'faq.eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above the FAQ title.' },
+      { key: 'faq.heading', label: 'FAQ section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Frequently Asked Questions', description: 'Common questions and answers. Helps you appear in Google with an expandable FAQ.' },
+      // Per-item fields: faq.item.<_key>.question / .answer — generated dynamically
     ],
   },
   {
     sectionKey: 'footer',
     label: 'Footer',
     fields: [
-      { key: 'footer.tagline', label: 'Tagline', control: 'input', schema: shortTextOpt },
-      { key: 'footer.legal', label: 'Legal row text', control: 'input', schema: shortTextOpt },
+      { key: 'footer.tagline', label: 'Footer tagline', control: 'input', schema: shortTextOpt, max: 120, description: 'A short line about your business shown at the bottom of every page.' },
+      { key: 'footer.legal', label: 'Copyright line', control: 'input', schema: shortTextOpt, max: 120, placeholder: '© 2026 Your Company. All rights reserved.', description: 'The small print at the very bottom of your site.' },
       // Per-column fields: footer.col.<_key>.heading — generated dynamically
       // Per-link fields:   footer.col.<_key>.link.<_key2>.label / .href — generated dynamically
     ],
@@ -272,6 +370,7 @@ export function extractFormValues(doc: Record<string, any>): Record<string, stri
   }
 
   // Top-level
+  set('phone', doc?.phone);
   set('navCta.label', doc?.navCta?.label);
   set('navCta.href', doc?.navCta?.href);
   set('seo.metaTitle', doc?.seo?.metaTitle);
@@ -284,6 +383,7 @@ export function extractFormValues(doc: Record<string, any>): Record<string, stri
     set('hero.headline', hero.headline);
     set('hero.highlight', hero.highlight);
     set('hero.subhead', hero.subhead);
+    set('hero.imageAlt', hero.imageAlt);
     set('hero.primaryCta.label', hero.primaryCta?.label);
     set('hero.primaryCta.href', hero.primaryCta?.href);
     set('hero.primaryCta.style', hero.primaryCta?.style);
@@ -313,8 +413,10 @@ export function extractFormValues(doc: Record<string, any>): Record<string, stri
     set('about.eyebrow', about.eyebrow);
     set('about.heading', about.heading);
     set('about.body', about.body);
+    set('about.imageAlt', about.imageAlt);
     set('about.cta.label', about.cta?.label);
     set('about.cta.href', about.cta?.href);
+    set('about.cta.style', about.cta?.style);
     if (Array.isArray(about.stats)) {
       for (const stat of about.stats) {
         if (!stat._key) continue;
@@ -370,6 +472,20 @@ export function extractFormValues(doc: Record<string, any>): Record<string, stri
     set('ugc.subhead', ugc.subhead);
   }
 
+  // FAQ (optional section)
+  const faq = findSection(doc, 'faq');
+  if (faq) {
+    set('faq.eyebrow', faq.eyebrow);
+    set('faq.heading', faq.heading);
+    if (Array.isArray(faq.items)) {
+      for (const item of faq.items) {
+        if (!item._key) continue;
+        set(`faq.item.${item._key}.question`, item.question);
+        set(`faq.item.${item._key}.answer`, item.answer);
+      }
+    }
+  }
+
   // Footer
   const footer = findSection(doc, 'footer');
   if (footer) {
@@ -407,6 +523,8 @@ const dynamicFieldSchemas: Record<string, z.ZodTypeAny> = {
   'footer.col.*.heading': shortTextOpt,
   'footer.col.*.link.*.label': shortTextOpt,
   'footer.col.*.link.*.href': ctaHref,
+  'faq.item.*.question': mediumTextOpt,
+  'faq.item.*.answer': longTextOpt,
 };
 
 /**
@@ -449,6 +567,10 @@ export function schemaForKey(key: string): z.ZodTypeAny {
       const pattern = `footer.col.*.link.*.${parts[5]}`;
       if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern];
     }
+  }
+  if (parts[0] === 'faq' && parts[1] === 'item' && parts[3]) {
+    const pattern = `faq.item.*.${parts[3]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern];
   }
 
   // Unknown key: hard-reject. Callers (validateFormValues) surface this as a
@@ -511,6 +633,7 @@ export function buildPatchSet(
       ['hero.headline', `sections[_key=="hero"].headline`],
       ['hero.highlight', `sections[_key=="hero"].highlight`],
       ['hero.subhead', `sections[_key=="hero"].subhead`],
+      ['hero.imageAlt', `sections[_key=="hero"].imageAlt`],
       ['hero.primaryCta.label', `sections[_key=="hero"].primaryCta.label`],
       ['hero.primaryCta.href', `sections[_key=="hero"].primaryCta.href`],
       ['hero.primaryCta.style', `sections[_key=="hero"].primaryCta.style`],
@@ -552,8 +675,10 @@ export function buildPatchSet(
     emit(`sections[_key=="about"].eyebrow`, formValues['about.eyebrow']);
     emit(`sections[_key=="about"].heading`, formValues['about.heading']);
     emit(`sections[_key=="about"].body`, formValues['about.body']);
+    emit(`sections[_key=="about"].imageAlt`, formValues['about.imageAlt']);
     emit(`sections[_key=="about"].cta.label`, formValues['about.cta.label']);
     emit(`sections[_key=="about"].cta.href`, formValues['about.cta.href']);
+    emit(`sections[_key=="about"].cta.style`, formValues['about.cta.style']);
 
     if (aboutSection && Array.isArray(aboutSection.stats)) {
       for (const stat of aboutSection.stats) {
@@ -620,6 +745,28 @@ export function buildPatchSet(
   if (hasSection('ugc')) {
     emit(`sections[_key=="ugc"].heading`, formValues['ugc.heading']);
     emit(`sections[_key=="ugc"].subhead`, formValues['ugc.subhead']);
+  }
+
+  // FAQ (optional section)
+  if (hasSection('faq')) {
+    const faqSection = findSection(doc, 'faq');
+    emit(`sections[_key=="faq"].eyebrow`, formValues['faq.eyebrow']);
+    emit(`sections[_key=="faq"].heading`, formValues['faq.heading']);
+
+    if (faqSection && Array.isArray(faqSection.items)) {
+      for (const item of faqSection.items) {
+        if (!item._key || !isSafeKey(item._key)) continue;
+        const k = item._key;
+        emit(
+          `sections[_key=="faq"].items[_key=="${k}"].question`,
+          formValues[`faq.item.${k}.question`],
+        );
+        emit(
+          `sections[_key=="faq"].items[_key=="${k}"].answer`,
+          formValues[`faq.item.${k}.answer`],
+        );
+      }
+    }
   }
 
   // Footer
@@ -768,5 +915,19 @@ export function footerColumnFields(doc: Record<string, any>): FieldDef[] {
       });
     }
     return colFields;
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function faqItemFields(doc: Record<string, any>): FieldDef[] {
+  const faq = findSection(doc, 'faq');
+  if (!faq || !Array.isArray(faq.items)) return [];
+  return faq.items.flatMap((item: { _key?: string }, i: number) => {
+    if (!item._key) return [];
+    const k = item._key;
+    return [
+      { key: `faq.item.${k}.question`, label: `Question ${i + 1}`, control: 'input' as const, schema: mediumTextOpt, max: 200, placeholder: 'How long does a typical job take?' },
+      { key: `faq.item.${k}.answer`, label: `Answer ${i + 1}`, control: 'textarea' as const, schema: longTextOpt, max: 600 },
+    ];
   });
 }

@@ -20,15 +20,22 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@leadlandlord/db/client';
 import { buildsellSites } from '@leadlandlord/db/schema';
 import { requireCustomerSiteAccess, UnauthorizedError } from '@/lib/auth-guard';
-import { getEditableDoc, buildsellSiteDocId } from '@/lib/sanity-write';
 import {
-  topLevelFields,
+  getEditableDoc,
+  buildsellSiteDocId,
+  getAiImageGenerationCount,
+  AI_IMAGE_GENERATION_LIMIT,
+} from '@/lib/sanity-write';
+import {
+  businessFields,
+  seoFields,
   sectionDefs,
   extractFormValues,
   serviceCardFields,
   aboutStatFields,
   processStepFields,
   footerColumnFields,
+  faqItemFields,
   toClientSection,
   toClientField,
   type SectionDef,
@@ -81,6 +88,15 @@ export default async function EditPage({ params }: Props) {
   const doc = await getEditableDoc(id);
   const sanityDocId = buildsellSiteDocId(id); // bs-site-<uuid>
 
+  // Absolute preview URL on the site-host ORIGIN so the iframe's relative
+  // /_next asset requests resolve against site-host (styled), not the portal.
+  // Falls back to a same-origin relative path if SITE_HOST_ORIGIN is unset.
+  const previewOrigin = process.env.SITE_HOST_ORIGIN ?? '';
+  const previewUrl = `${previewOrigin}/preview/${id}`;
+
+  // AI image-generation quota (read from the published doc).
+  const generationsUsed = await getAiImageGenerationCount(id);
+
   // 4. Prefill form values from the doc.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const docAny = doc as Record<string, any> | null;
@@ -96,8 +112,12 @@ export default async function EditPage({ params }: Props) {
   }
 
   const enrichedSections: SectionDef[] = sectionDefs
-    // ugc is optional — only show if the section exists in the doc
-    .filter((s) => (s.sectionKey === 'ugc' ? presentSectionKeys.has('ugc') : true))
+    // ugc + faq are optional — only show if the section exists in the doc
+    .filter((s) =>
+      s.sectionKey === 'ugc' || s.sectionKey === 'faq'
+        ? presentSectionKeys.has(s.sectionKey)
+        : true,
+    )
     .map((s) => {
       if (!docAny) return s;
       switch (s.sectionKey) {
@@ -109,6 +129,8 @@ export default async function EditPage({ params }: Props) {
           return { ...s, fields: [...s.fields, ...processStepFields(docAny)] };
         case 'footer':
           return { ...s, fields: [...s.fields, ...footerColumnFields(docAny)] };
+        case 'faq':
+          return { ...s, fields: [...s.fields, ...faqItemFields(docAny)] };
         default:
           return s;
       }
@@ -143,6 +165,7 @@ export default async function EditPage({ params }: Props) {
     'favicon':     assetRefToUrl(imageRef(docAny?.favicon)),
     'hero.image':  assetRefToUrl(imageRef(heroSection?.image)),
     'about.image': assetRefToUrl(imageRef(aboutSection?.image)),
+    'seo.ogImage': assetRefToUrl(imageRef(docAny?.seo?.ogImage)),
   };
 
   return (
@@ -160,8 +183,12 @@ export default async function EditPage({ params }: Props) {
           sanityDocId={sanityDocId}
           initialValues={initialValues}
           sections={enrichedSections.map(toClientSection)}
-          topLevelFields={topLevelFields.map(toClientField)}
+          businessFields={businessFields.map(toClientField)}
+          seoFields={seoFields.map(toClientField)}
           initialThumbnails={initialThumbnails}
+          previewUrl={previewUrl}
+          generationsUsed={generationsUsed}
+          generationLimit={AI_IMAGE_GENERATION_LIMIT}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center p-6">
