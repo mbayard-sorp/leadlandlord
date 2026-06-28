@@ -4,6 +4,8 @@ import { fetchBuildSellSiteBySlug } from '@/lib/sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
 import { BuildSellHome } from '@/components/buildsell/BuildSellHome';
 import { BuildSellLocalBusinessJsonLd } from '@/components/buildsell/BuildSellLocalBusinessJsonLd';
+import { BuildSellBreadcrumbJsonLd } from '@/components/buildsell/BuildSellBreadcrumbJsonLd';
+import { BuildSellFaqJsonLd } from '@/components/buildsell/BuildSellFaqJsonLd';
 import { ALL_BS_FONTS } from '@/lib/buildsell-fonts';
 
 export const dynamic = 'force-dynamic';
@@ -46,11 +48,17 @@ export async function generateMetadata({
       title,
       description,
       url: canonicalPath,
+      ...(site.seo?.ogImageUrl
+        ? { images: [{ url: site.seo.ogImageUrl }] }
+        : {}),
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      ...(site.seo?.ogImageUrl
+        ? { images: [site.seo.ogImageUrl] }
+        : {}),
     },
   };
 }
@@ -73,6 +81,13 @@ export default async function BuildSellPage({
   return (
     <div className={fontVars}>
       <BuildSellLocalBusinessJsonLd site={site} url={pageUrl} />
+      <BuildSellBreadcrumbJsonLd
+        url={pageUrl}
+        base={base}
+        businessName={site.businessName}
+        slug={slug}
+      />
+      <BuildSellFaqJsonLd sections={site.sections} />
       <BuildSellHome site={site} draft={false} />
     </div>
   );

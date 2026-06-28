@@ -93,6 +93,7 @@ export function AboutBlock({ section, layoutVariant }: AboutBlockProps) {
 
   // bold: text left, image right — then a full-width dark stats band
   if (isBold) {
+    const aboutAlt = section.imageAlt?.trim() || section.heading || 'About our team';
     return (
       <>
         <section className="bs-section bs-reveal" id="about">
@@ -113,7 +114,7 @@ export function AboutBlock({ section, layoutVariant }: AboutBlockProps) {
                 {section.imageUrl ? (
                   <Image
                     src={section.imageUrl}
-                    alt={section.heading ?? 'About our team'}
+                    alt={aboutAlt}
                     fill
                     sizes="(max-width: 767px) 100vw, 50vw"
                     style={{ objectFit: 'cover' }}
@@ -146,6 +147,7 @@ export function AboutBlock({ section, layoutVariant }: AboutBlockProps) {
   }
 
   // split (default): image left, text right
+  const aboutAlt = section.imageAlt?.trim() || section.heading || 'About our team';
   return (
     <section className="bs-section bs-reveal" id="about">
       <div className="bs-container">
@@ -155,7 +157,7 @@ export function AboutBlock({ section, layoutVariant }: AboutBlockProps) {
             {section.imageUrl ? (
               <Image
                 src={section.imageUrl}
-                alt={section.heading ?? 'About our team'}
+                alt={aboutAlt}
                 fill
                 sizes="(max-width: 767px) 100vw, 50vw"
                 style={{ objectFit: 'cover' }}

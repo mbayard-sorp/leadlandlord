@@ -9,10 +9,9 @@
  *   LEFT  (42%) — curated form, grouped by section, only present sections
  *   RIGHT (58%) — live preview iframe proxied to site-host
  *
- * The iframe points at `/api/draft-mode/enable?redirect=/preview/<docId>`,
- * rewritten (next.config.ts) to site-host, which sets the draft-mode cookie
- * and redirects to the preview route mounting SanityLive. After each
- * successful save, EditorShell increments a refreshKey to reload the iframe.
+ * The iframe points at the site-host ORIGIN directly so its /_next assets
+ * resolve (fixes unstyled preview). After each successful save, EditorShell
+ * increments a refreshKey to reload the iframe.
  */
 
 import { redirect } from 'next/navigation';
@@ -20,9 +19,15 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@leadlandlord/db/client';
 import { buildsellSites } from '@leadlandlord/db/schema';
 import { requireCustomerSiteAccess, UnauthorizedError } from '@/lib/auth-guard';
-import { getEditableDoc, buildsellSiteDocId } from '@/lib/sanity-write';
 import {
-  topLevelFields,
+  getEditableDoc,
+  buildsellSiteDocId,
+  getAiImageGenerationCount,
+  AI_IMAGE_GENERATION_LIMIT,
+} from '@/lib/sanity-write';
+import {
+  businessFields,
+  seoFields,
   buildSectionList,
   extractFormValues,
   toClientSection,
@@ -76,6 +81,15 @@ export default async function EditPage({ params }: Props) {
   const doc = await getEditableDoc(id);
   const sanityDocId = buildsellSiteDocId(id); // bs-site-<uuid>
 
+  // Absolute preview URL on the site-host ORIGIN so the iframe's relative
+  // /_next asset requests resolve against site-host (styled), not the portal.
+  // Falls back to a same-origin relative path if SITE_HOST_ORIGIN is unset.
+  const previewOrigin = process.env.SITE_HOST_ORIGIN ?? '';
+  const previewUrl = `${previewOrigin}/preview/${id}`;
+
+  // AI image-generation quota (read from the published doc).
+  const generationsUsed = await getAiImageGenerationCount(id);
+
   // 4. Prefill form values from the doc.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const docAny = doc as Record<string, any> | null;
@@ -83,7 +97,7 @@ export default async function EditPage({ params }: Props) {
 
   // 5. Build the section list — one entry per section instance in doc array
   //    order, with instance-scoped field keys. buildSectionList() handles all
-  //    section types (including optional ugc) and dynamic sub-item fields.
+  //    section types (including optional ugc/faq) and dynamic sub-item fields.
   const enrichedSections = docAny ? buildSectionList(docAny) : [];
 
   // 5b. Structural lock: true if customerLayout.lockedAt is set on the doc.
@@ -118,6 +132,7 @@ export default async function EditPage({ params }: Props) {
     'favicon':     assetRefToUrl(imageRef(docAny?.favicon)),
     'hero.image':  assetRefToUrl(imageRef(heroSection?.image)),
     'about.image': assetRefToUrl(imageRef(aboutSection?.image)),
+    'seo.ogImage': assetRefToUrl(imageRef(docAny?.seo?.ogImage)),
   };
 
   return (
@@ -135,8 +150,12 @@ export default async function EditPage({ params }: Props) {
           sanityDocId={sanityDocId}
           initialValues={initialValues}
           sections={enrichedSections.map(toClientSection)}
-          topLevelFields={topLevelFields.map(toClientField)}
+          businessFields={businessFields.map(toClientField)}
+          seoFields={seoFields.map(toClientField)}
           initialThumbnails={initialThumbnails}
+          previewUrl={previewUrl}
+          generationsUsed={generationsUsed}
+          generationLimit={AI_IMAGE_GENERATION_LIMIT}
           isStructurallyLocked={isStructurallyLocked}
         />
       ) : (

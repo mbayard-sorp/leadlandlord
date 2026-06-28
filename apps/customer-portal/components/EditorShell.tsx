@@ -32,6 +32,7 @@ import {
   publishAction,
   discardAction,
   uploadImageAction,
+  generateImageAction,
   reorderSectionsAction,
   addSectionAction,
   removeSectionAction,
@@ -54,9 +55,23 @@ interface EditorShellProps {
   sanityDocId: string;
   initialValues: Record<string, string>;
   sections: ClientSectionDef[];
-  topLevelFields: ClientFieldDef[];
+  /** Phone + nav-CTA fields — rendered as "Your menu button & phone" group. */
+  businessFields: ClientFieldDef[];
+  /** SEO fields — rendered collapsed at the bottom of the content tab. */
+  seoFields: ClientFieldDef[];
   /** Initial CDN thumbnail URLs keyed by fieldKey, derived server-side from the doc. */
   initialThumbnails: Record<string, string | undefined>;
+  /**
+   * Absolute preview URL on the site-host ORIGIN (e.g. https://sites.example.com
+   * /preview/<uuid>). Must be absolute so the iframe's relative /_next asset
+   * requests resolve against site-host, not the portal — otherwise the preview
+   * renders unstyled. Built server-side from SITE_HOST_ORIGIN in page.tsx.
+   */
+  previewUrl: string;
+  /** AI image generations already used by this site (from the published doc). */
+  generationsUsed: number;
+  /** Hard cap on AI image generations per site. */
+  generationLimit: number;
   /** Whether structural edits are locked (site handed off). */
   isStructurallyLocked: boolean;
 }
@@ -66,8 +81,12 @@ export default function EditorShell({
   sanityDocId,
   initialValues,
   sections: initialSections,
-  topLevelFields,
+  businessFields,
+  seoFields,
   initialThumbnails,
+  previewUrl,
+  generationsUsed,
+  generationLimit,
   isStructurallyLocked,
 }: EditorShellProps) {
   const router = useRouter();
@@ -180,7 +199,6 @@ export default function EditorShell({
   );
 
   // Any op pending = disable structural controls.
-  // EditorForm exposes isSaving via the handle so we can check it too.
   const anyPending = structuralPending;
 
   // ---------------------------------------------------------------------------
@@ -240,6 +258,38 @@ export default function EditorShell({
           </button>
         </div>
 
+        {/* Mobile: "Open preview in new tab" button */}
+        <div
+          className="md:hidden px-4 py-2 border-b"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}
+        >
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-medium"
+            style={{ color: 'var(--color-accent)' }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+            Open preview in new tab
+          </a>
+        </div>
+
         {/* Tab panels — both mounted, only one visible, so form state is preserved */}
         <div className={`flex-1 overflow-hidden ${activeTab === 'content' ? 'flex flex-col' : 'hidden'}`}>
           <EditorForm
@@ -247,7 +297,8 @@ export default function EditorShell({
             siteId={siteId}
             initialValues={initialValues}
             sections={sections}
-            topLevelFields={topLevelFields}
+            businessFields={businessFields}
+            seoFields={seoFields}
             saveAction={saveAction}
             publishAction={publishAction}
             discardAction={discardAction}
@@ -268,6 +319,9 @@ export default function EditorShell({
             siteId={siteId}
             initialThumbnails={initialThumbnails}
             uploadImageAction={uploadImageAction}
+            generateImageAction={generateImageAction}
+            generationsUsed={generationsUsed}
+            generationLimit={generationLimit}
             onUploadSuccess={handleSaveSuccess}
           />
         </div>
@@ -275,7 +329,11 @@ export default function EditorShell({
 
       {/* Right: preview (hidden on mobile) */}
       <div className="hidden md:flex flex-col flex-1 overflow-hidden">
-        <LivePreview sanityDocId={sanityDocId} refreshKey={refreshKey} />
+        <LivePreview
+          sanityDocId={sanityDocId}
+          refreshKey={refreshKey}
+          previewUrl={previewUrl}
+        />
       </div>
     </div>
   );

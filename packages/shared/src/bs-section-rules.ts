@@ -18,6 +18,7 @@ export type BsSectionType =
   | 'bsReviewsSection'
   | 'bsContactSection'
   | 'bsUgcSection'
+  | 'bsFaqSection'
   | 'bsFooterSection';
 
 export interface BsSectionRule {
@@ -86,6 +87,12 @@ export const BS_SECTION_RULES: Record<BsSectionType, BsSectionRule> = {
   },
   bsUgcSection: {
     label: 'Social Gallery',
+    singleton: false,
+    removable: true,
+    addable: true,
+  },
+  bsFaqSection: {
+    label: 'FAQ',
     singleton: false,
     removable: true,
     addable: true,
@@ -209,6 +216,23 @@ export function seedSection(type: BsSectionType): Record<string, unknown> {
         subhead: '',
         // UGC items are operator-curated; never seed with fake content.
         items: [],
+      };
+
+    case 'bsFaqSection':
+      return {
+        _type: 'bsFaqSection',
+        eyebrow: '',
+        heading: 'Frequently Asked Questions',
+        // One starter item so the added section is editable via the portal's
+        // per-item field helper; question/answer are required by the schema.
+        items: [
+          {
+            _key: genSeedKey('faq', 0),
+            _type: 'bsFaqItem',
+            question: '[QUESTION]',
+            answer: '[ANSWER]',
+          },
+        ],
       };
 
     case 'bsFooterSection':

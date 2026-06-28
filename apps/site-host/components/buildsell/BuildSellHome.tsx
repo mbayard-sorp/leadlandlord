@@ -139,6 +139,8 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 layoutVariant={layoutVariant}
                 reviewCount={site.reviewCount}
                 rating={site.rating}
+                businessName={site.businessName}
+                city={site.city}
               />
             );
           case 'bsServicesSection':
