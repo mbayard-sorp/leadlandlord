@@ -16,12 +16,23 @@
  */
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import {
   requireCustomerSiteAccess,
   UnauthorizedError,
 } from '@/lib/auth-guard';
-import { getEditableDoc, saveFields, publishSite, discardDraft, uploadAndSetImage } from '@/lib/sanity-write';
+import {
+  getEditableDoc,
+  saveFields,
+  publishSite,
+  discardDraft,
+  uploadAndSetImage,
+  getAiImageGenerationCount,
+  incrementAiImageGenerationCount,
+  AI_IMAGE_GENERATION_LIMIT,
+} from '@/lib/sanity-write';
 import { validateFormValues, buildPatchSet } from '@/lib/fields';
+import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
 
 // ---------------------------------------------------------------------------
 // Save action
@@ -31,6 +42,8 @@ export interface SaveResult {
   ok: boolean;
   errors?: Record<string, string>;
   message?: string;
+  /** True when the save succeeded but there was nothing to write. */
+  noop?: boolean;
 }
 
 /**
@@ -78,10 +91,19 @@ export async function saveAction(_prev: SaveResult, formData: FormData): Promise
   const patchSet = buildPatchSet(doc, validation.values);
 
   if (Object.keys(patchSet).length === 0) {
-    return { ok: true }; // Nothing to patch.
+    return { ok: true, noop: true }; // Nothing changed.
   }
 
-  await saveFields(siteId, patchSet);
+  try {
+    await saveFields(siteId, patchSet);
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : 'Save failed. Please try again.',
+    };
+  }
+
+  revalidatePath(`/sites/${siteId}/edit`);
   return { ok: true };
 }
 
@@ -112,6 +134,7 @@ export async function publishAction(siteId: string): Promise<PublishResult> {
 
   try {
     await publishSite(siteId);
+    revalidatePath(`/sites/${siteId}/edit`);
     return { ok: true };
   } catch (err) {
     return {
@@ -147,6 +170,7 @@ export async function discardAction(siteId: string): Promise<DiscardResult> {
 
   try {
     await discardDraft(siteId);
+    revalidatePath(`/sites/${siteId}/edit`);
     return { ok: true };
   } catch (err) {
     return {
@@ -170,6 +194,7 @@ const ALLOWED_IMAGE_FIELD_KEYS = new Set([
   'favicon',
   'hero.image',
   'about.image',
+  'seo.ogImage',
 ]);
 
 export interface UploadImageResult {
@@ -244,5 +269,112 @@ export async function uploadImageAction(
       ok: false,
       error: err instanceof Error ? err.message : 'Upload failed. Please try again.',
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI image generation (Google Imagen)
+// ---------------------------------------------------------------------------
+
+/** Target field -> Imagen aspect ratio. Also serves as the allowlist. */
+const GENERATE_ASPECT: Record<string, '16:9' | '4:3' | '1:1' | '3:2'> = {
+  'logo': '1:1',
+  'hero.image': '16:9',
+  'about.image': '4:3',
+  'seo.ogImage': '16:9',
+};
+
+export interface GenerateImageResult {
+  ok: boolean;
+  assetUrl?: string;
+  /** Generations remaining for this site after this call. */
+  remaining?: number;
+  error?: string;
+}
+
+/**
+ * Generates an image from a customer prompt via Google Imagen, uploads it to
+ * Sanity, and sets it on the chosen image field of the draft.
+ *
+ * Security / limits:
+ *   - `requireCustomerSiteAccess(siteId)` first (fail-closed).
+ *   - `fieldKey` validated against GENERATE_ASPECT (same four image targets).
+ *   - Hard cap of AI_IMAGE_GENERATION_LIMIT per site, enforced server-side on a
+ *     counter stored on the PUBLISHED doc. Only successful generations count.
+ */
+export async function generateImageAction(
+  siteId: string,
+  fieldKey: string,
+  prompt: string,
+): Promise<GenerateImageResult> {
+  if (!siteId) return { ok: false, error: 'Missing site ID.' };
+
+  // 1. Auth guard first.
+  try {
+    await requireCustomerSiteAccess(siteId);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      redirect('/login');
+    }
+    return { ok: false, error: 'Access denied.' };
+  }
+
+  // 2. Target allowlist.
+  const aspectRatio = GENERATE_ASPECT[fieldKey];
+  if (!aspectRatio) {
+    return { ok: false, error: `Image field '${fieldKey}' is not permitted.` };
+  }
+
+  // 3. Prompt validation.
+  const clean = (prompt ?? '').trim();
+  if (clean.length < 3) return { ok: false, error: 'Please describe the image you want (a few words).' };
+  if (clean.length > 500) return { ok: false, error: 'Description is too long (max 500 characters).' };
+  if (clean.includes('<')) return { ok: false, error: 'Description contains invalid characters.' };
+
+  // 4. Usage limit — check BEFORE spending on generation.
+  const used = await getAiImageGenerationCount(siteId);
+  if (used >= AI_IMAGE_GENERATION_LIMIT) {
+    return {
+      ok: false,
+      remaining: 0,
+      error: `You've used all ${AI_IMAGE_GENERATION_LIMIT} AI image generations for this site.`,
+    };
+  }
+
+  // 5. Generate the image.
+  let img;
+  try {
+    img = await generateHeroImageBuffer(clean, {
+      aspectRatio,
+      negativePrompt: 'text, words, letters, watermark, signature, blurry, low quality, distorted',
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Image generation failed. Please try again.' };
+  }
+  if (!img) {
+    return {
+      ok: false,
+      error: 'Image generation is currently unavailable. Please upload your own image instead.',
+    };
+  }
+
+  // 6. Upload + set on the chosen field (reuses type/size/magic-byte validation
+  //    and the draft patch), then count the successful generation.
+  try {
+    const ext = img.contentType === 'image/png' ? 'png' : 'jpg';
+    const result = await uploadAndSetImage(siteId, fieldKey, {
+      buffer: img.buffer,
+      filename: `ai-${fieldKey.replace(/[^a-z0-9]+/gi, '-')}.${ext}`,
+      contentType: img.contentType,
+    });
+    const newUsed = await incrementAiImageGenerationCount(siteId);
+    revalidatePath(`/sites/${siteId}/edit`);
+    return {
+      ok: true,
+      assetUrl: result.assetUrl,
+      remaining: Math.max(0, AI_IMAGE_GENERATION_LIMIT - newUsed),
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Could not save the generated image.' };
   }
 }
