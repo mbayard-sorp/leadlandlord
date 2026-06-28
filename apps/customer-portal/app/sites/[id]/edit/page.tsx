@@ -9,10 +9,9 @@
  *   LEFT  (42%) — curated form, grouped by section, only present sections
  *   RIGHT (58%) — live preview iframe proxied to site-host
  *
- * The iframe points at `/api/draft-mode/enable?redirect=/preview/<docId>`,
- * rewritten (next.config.ts) to site-host, which sets the draft-mode cookie
- * and redirects to the preview route mounting SanityLive. After each
- * successful save, EditorShell increments a refreshKey to reload the iframe.
+ * The iframe points at the site-host ORIGIN directly so its /_next assets
+ * resolve (fixes unstyled preview). After each successful save, EditorShell
+ * increments a refreshKey to reload the iframe.
  */
 
 import { redirect } from 'next/navigation';
@@ -29,16 +28,10 @@ import {
 import {
   businessFields,
   seoFields,
-  sectionDefs,
+  buildSectionList,
   extractFormValues,
-  serviceCardFields,
-  aboutStatFields,
-  processStepFields,
-  footerColumnFields,
-  faqItemFields,
   toClientSection,
   toClientField,
-  type SectionDef,
 } from '@/lib/fields';
 import EditorShell from '@/components/EditorShell';
 import SiteNav from '@/components/SiteNav';
@@ -107,39 +100,13 @@ export default async function EditPage({ params }: Props) {
   const docAny = doc as Record<string, any> | null;
   const initialValues = docAny ? extractFormValues(docAny) : {};
 
-  // 5. Build the section list — static defs merged with dynamic sub-array
-  //    fields, filtered to only sections present in the doc.
-  const presentSectionKeys = new Set<string>();
-  if (docAny && Array.isArray(docAny.sections)) {
-    for (const s of docAny.sections as Array<{ _key?: string }>) {
-      if (s._key) presentSectionKeys.add(s._key);
-    }
-  }
+  // 5. Build the section list — one entry per section instance in doc array
+  //    order, with instance-scoped field keys. buildSectionList() handles all
+  //    section types (including optional ugc/faq) and dynamic sub-item fields.
+  const enrichedSections = docAny ? buildSectionList(docAny) : [];
 
-  const enrichedSections: SectionDef[] = sectionDefs
-    // ugc + faq are optional — only show if the section exists in the doc
-    .filter((s) =>
-      s.sectionKey === 'ugc' || s.sectionKey === 'faq'
-        ? presentSectionKeys.has(s.sectionKey)
-        : true,
-    )
-    .map((s) => {
-      if (!docAny) return s;
-      switch (s.sectionKey) {
-        case 'services':
-          return { ...s, fields: [...s.fields, ...serviceCardFields(docAny)] };
-        case 'about':
-          return { ...s, fields: [...s.fields, ...aboutStatFields(docAny)] };
-        case 'process':
-          return { ...s, fields: [...s.fields, ...processStepFields(docAny)] };
-        case 'footer':
-          return { ...s, fields: [...s.fields, ...footerColumnFields(docAny)] };
-        case 'faq':
-          return { ...s, fields: [...s.fields, ...faqItemFields(docAny)] };
-        default:
-          return s;
-      }
-    });
+  // 5b. Structural lock: true if customerLayout.lockedAt is set on the doc.
+  const isStructurallyLocked = Boolean(docAny?.customerLayout?.lockedAt);
 
   // 6. Derive initial image thumbnails from the doc (server-side only).
   //    Sanity CDN URL format:
@@ -194,6 +161,7 @@ export default async function EditPage({ params }: Props) {
           previewUrl={previewUrl}
           generationsUsed={generationsUsed}
           generationLimit={AI_IMAGE_GENERATION_LIMIT}
+          isStructurallyLocked={isStructurallyLocked}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center p-6">

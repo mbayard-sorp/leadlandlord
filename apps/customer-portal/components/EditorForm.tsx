@@ -8,25 +8,58 @@
  * the parent (EditorShell) can refresh the preview iframe.
  *
  * Publish and Discard use `useTransition` so they don't clobber form state.
+ *
+ * D3: Sections are wrapped in a dnd-kit SortableContext. Each section header
+ * has a drag handle and duplicate/remove buttons.
+ *
+ * D4: Exposes a `flushSave()` imperative handle (via ref) so EditorShell can
+ * programmatically flush pending text edits before any structural op.
  */
 
-import {
+import React, {
   useState,
   useActionState,
   useTransition,
   useRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
+  forwardRef,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { SaveResult, PublishResult, DiscardResult } from '@/app/sites/[id]/edit/actions';
 import type { ClientFieldDef, ClientSectionDef } from '@/lib/fields';
+import { BS_SECTION_RULES } from '@leadlandlord/shared';
 
 // ---------------------------------------------------------------------------
-// Sections that have dynamic (add/remove-blocked) sub-items
+// Imperative handle (D4 flush)
 // ---------------------------------------------------------------------------
 
-const DYNAMIC_SECTION_KEYS = new Set(['services', 'about', 'process', 'footer', 'faq']);
+export interface EditorFormHandle {
+  /**
+   * Programmatically submits the form and awaits the save result.
+   * Resolves on success, throws on failure.
+   * Short-circuits (resolves immediately) if the form is clean.
+   */
+  flushSave: () => Promise<void>;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,12 +69,24 @@ interface EditorFormProps {
   siteId: string;
   initialValues: Record<string, string>;
   sections: ClientSectionDef[];
+  /** Phone + nav-CTA fields — rendered as "Your menu button & phone" group. */
   businessFields: ClientFieldDef[];
+  /** SEO fields — rendered collapsed at the bottom. */
   seoFields: ClientFieldDef[];
   saveAction: (prev: SaveResult, formData: FormData) => Promise<SaveResult>;
   publishAction: (siteId: string) => Promise<PublishResult>;
   discardAction: (siteId: string) => Promise<DiscardResult>;
   onSaveSuccess: () => void;
+  /** Structural callbacks (from EditorShell). */
+  onReorder: (newOrder: ClientSectionDef[]) => void;
+  onAdd: (sectionType: string) => void;
+  onRemove: (sectionKey: string) => void;
+  onDuplicate: (sectionKey: string) => void;
+  isStructurallyLocked: boolean;
+  /** Types the user can add (already filtered for singletons). */
+  addableTypes: Array<keyof typeof BS_SECTION_RULES>;
+  structuralPending: boolean;
+  structuralError: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,22 +212,35 @@ function FieldControl({
 }
 
 // ---------------------------------------------------------------------------
-// Section group (collapsible)
+// Section group content (shared between sortable + locked variants)
 // ---------------------------------------------------------------------------
 
-function SectionGroup({
+function SectionGroupContent({
   section,
   values,
   errors,
+  onRemove,
+  onDuplicate,
   onDirty,
+  isLocked,
+  disabled,
+  dragHandleProps,
 }: {
   section: ClientSectionDef;
   values: Record<string, string>;
   errors: Record<string, string>;
+  onRemove: (key: string) => void;
+  onDuplicate: (key: string) => void;
   onDirty: () => void;
+  isLocked: boolean;
+  disabled: boolean;
+  dragHandleProps?: React.HTMLAttributes<HTMLSpanElement>;
 }) {
+  const rule = BS_SECTION_RULES[section.sectionType as keyof typeof BS_SECTION_RULES];
+  const canRemove = rule?.removable ?? false;
+  const canDuplicate = !(rule?.singleton ?? true);
+
   if (section.fields.length === 0) return null;
-  const showDynamicNote = DYNAMIC_SECTION_KEYS.has(section.sectionKey);
 
   return (
     <details open className="mb-5">
@@ -192,9 +250,85 @@ function SectionGroup({
           background: 'var(--color-border)',
           color: 'var(--color-fg)',
           listStyle: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
         }}
       >
-        {section.label}
+        {/* Drag handle — only when not locked */}
+        {!isLocked && dragHandleProps && (
+          <span
+            {...dragHandleProps}
+            title="Drag to reorder"
+            style={{
+              cursor: disabled ? 'not-allowed' : 'grab',
+              touchAction: 'none',
+              userSelect: 'none',
+              color: 'var(--color-muted)',
+              fontSize: '14px',
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            &#x2630;
+          </span>
+        )}
+
+        {/* Label */}
+        <span style={{ flex: 1 }}>{section.label}</span>
+
+        {/* Duplicate button */}
+        {canDuplicate && !isLocked && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={(e) => {
+              e.preventDefault();
+              onDuplicate(section.sectionKey);
+            }}
+            title="Duplicate section"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-muted)',
+              borderRadius: '4px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              padding: '2px 6px',
+              fontSize: '11px',
+              color: 'var(--color-muted)',
+              lineHeight: 1.4,
+              flexShrink: 0,
+            }}
+          >
+            Copy
+          </button>
+        )}
+
+        {/* Remove button */}
+        {canRemove && !isLocked && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={(e) => {
+              e.preventDefault();
+              if (!confirm(`Remove the '${section.label}' section?`)) return;
+              onRemove(section.sectionKey);
+            }}
+            title="Remove section"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-error)',
+              borderRadius: '4px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              padding: '2px 6px',
+              fontSize: '11px',
+              color: 'var(--color-error)',
+              lineHeight: 1.4,
+              flexShrink: 0,
+            }}
+          >
+            Remove
+          </button>
+        )}
       </summary>
       <div className="mt-3 pl-1">
         {section.fields.map((field) => (
@@ -206,13 +340,194 @@ function SectionGroup({
             onDirty={onDirty}
           />
         ))}
-        {showDynamicNote && (
-          <p className="mt-2 mb-1 text-xs italic" style={{ color: 'var(--color-muted)' }}>
-            Need to add or remove items here? Contact us and we&rsquo;ll set it up.
-          </p>
-        )}
       </div>
     </details>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sortable section group (dnd-kit) — used inside DndContext
+// ---------------------------------------------------------------------------
+
+function SortableSectionGroup({
+  section,
+  values,
+  errors,
+  onRemove,
+  onDuplicate,
+  onDirty,
+  disabled,
+}: {
+  section: ClientSectionDef;
+  values: Record<string, string>;
+  errors: Record<string, string>;
+  onRemove: (key: string) => void;
+  onDuplicate: (key: string) => void;
+  onDirty: () => void;
+  disabled: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: section.sectionKey });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SectionGroupContent
+        section={section}
+        values={values}
+        errors={errors}
+        onRemove={onRemove}
+        onDuplicate={onDuplicate}
+        onDirty={onDirty}
+        isLocked={false}
+        disabled={disabled}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Static section group — used when structurally locked
+// ---------------------------------------------------------------------------
+
+function StaticSectionGroup({
+  section,
+  values,
+  errors,
+  onRemove,
+  onDuplicate,
+  onDirty,
+  disabled,
+}: {
+  section: ClientSectionDef;
+  values: Record<string, string>;
+  errors: Record<string, string>;
+  onRemove: (key: string) => void;
+  onDuplicate: (key: string) => void;
+  onDirty: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <SectionGroupContent
+      section={section}
+      values={values}
+      errors={errors}
+      onRemove={onRemove}
+      onDuplicate={onDuplicate}
+      onDirty={onDirty}
+      isLocked={true}
+      disabled={disabled}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add section picker
+// ---------------------------------------------------------------------------
+
+function AddSectionPicker({
+  addableTypes,
+  disabled,
+  onAdd,
+}: {
+  addableTypes: Array<keyof typeof BS_SECTION_RULES>;
+  disabled: boolean;
+  onAdd: (type: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (addableTypes.length === 0) return null;
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', marginBottom: '8px' }}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center justify-center min-h-[36px] px-3 py-1.5 text-xs font-medium rounded"
+        style={{
+          background: 'transparent',
+          border: '1px dashed var(--color-accent)',
+          color: 'var(--color-accent)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
+          gap: '4px',
+        }}
+      >
+        + Add section
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10,
+            }}
+            onClick={() => setOpen(false)}
+          />
+          {/* Menu */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              marginTop: '4px',
+              zIndex: 20,
+              background: 'var(--color-panel)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+              minWidth: '180px',
+            }}
+          >
+            {addableTypes.map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onAdd(type);
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 14px',
+                  textAlign: 'left',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  color: 'var(--color-fg)',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-bg)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                }}
+              >
+                {BS_SECTION_RULES[type].label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -302,17 +617,28 @@ const INITIAL_SAVE_STATE: SaveResult = { ok: false };
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function EditorForm({
-  siteId,
-  initialValues,
-  sections,
-  businessFields,
-  seoFields,
-  saveAction,
-  publishAction,
-  discardAction,
-  onSaveSuccess,
-}: EditorFormProps) {
+const EditorForm = forwardRef<EditorFormHandle, EditorFormProps>(function EditorForm(
+  {
+    siteId,
+    initialValues,
+    sections,
+    businessFields,
+    seoFields,
+    saveAction,
+    publishAction,
+    discardAction,
+    onSaveSuccess,
+    onReorder,
+    onAdd,
+    onRemove,
+    onDuplicate,
+    isStructurallyLocked,
+    addableTypes,
+    structuralPending,
+    structuralError,
+  },
+  ref,
+) {
   const [saveState, formAction, isSaving] = useActionState(saveAction, INITIAL_SAVE_STATE);
   const [publishPending, startPublish] = useTransition();
   const [discardPending, startDiscard] = useTransition();
@@ -321,26 +647,45 @@ export default function EditorForm({
   const [discardResult, setDiscardResult] = useState<DiscardResult | null>(null);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
 
-  // Unsaved-changes tracking (a ref, not state — it's only read inside the
-  // beforeunload handler, so it must not trigger renders or setState-in-effect).
+  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+
+  // Track "dirty" — any input change marks it dirty; save clears it.
   const dirtyRef = useRef(false);
   const markDirty = useCallback(() => {
     dirtyRef.current = true;
   }, []);
 
-  const formRef = useRef<HTMLFormElement>(null);
-  const router = useRouter();
+  // Resolve/reject for an in-flight programmatic flush (D4).
+  const flushResolveRef = useRef<(() => void) | null>(null);
+  const flushRejectRef = useRef<((err: Error) => void) | null>(null);
 
-  // Refresh the preview + re-fetch server data after each successful save.
+  // Notify parent after a successful save (once per success).
+  const prevSaveOkRef = useRef(false);
   useEffect(() => {
-    if (saveState.ok && !saveState.noop) {
-      onSaveSuccess();
-      router.refresh();
+    if (saveState.ok && !prevSaveOkRef.current) {
+      prevSaveOkRef.current = true;
       dirtyRef.current = false;
+      if (!saveState.noop) {
+        onSaveSuccess();
+        router.refresh();
+      }
+      // If there's a pending flush, resolve it.
+      flushResolveRef.current?.();
+      flushResolveRef.current = null;
+      flushRejectRef.current = null;
+    } else if (!saveState.ok) {
+      prevSaveOkRef.current = false;
+      // If there's a pending flush and we got a hard error (not just initial state), reject.
+      if (saveState.message && flushRejectRef.current) {
+        flushRejectRef.current(new Error(saveState.message));
+        flushResolveRef.current = null;
+        flushRejectRef.current = null;
+      }
     }
-  }, [saveState, onSaveSuccess, router]);
+  });
 
-  // Scroll to first error field when validation fails
+  // Scroll to first error field when validation fails.
   useEffect(() => {
     const errs = saveState.errors;
     if (!errs || Object.keys(errs).length === 0) return;
@@ -353,7 +698,7 @@ export default function EditorForm({
     }
   }, [saveState]);
 
-  // Beforeunload guard for dirty form
+  // Beforeunload guard for dirty form.
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
       if (!dirtyRef.current) return;
@@ -363,9 +708,26 @@ export default function EditorForm({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
+  // D4 imperative handle: flushSave.
+  useImperativeHandle(
+    ref,
+    () => ({
+      flushSave: (): Promise<void> => {
+        if (!dirtyRef.current) return Promise.resolve();
+        return new Promise<void>((resolve, reject) => {
+          flushResolveRef.current = resolve;
+          flushRejectRef.current = reject;
+          // Programmatically submit the form.
+          formRef.current?.requestSubmit();
+        });
+      },
+    }),
+    [],
+  );
+
   const errors: Record<string, string> = saveState.errors ?? {};
   const hasErrors = Object.keys(errors).length > 0;
-  const anyPending = isSaving || publishPending || discardPending;
+  const anyPending = isSaving || publishPending || discardPending || structuralPending;
 
   const handlePublish = useCallback(() => {
     setPublishResult(null);
@@ -388,6 +750,38 @@ export default function EditorForm({
       }
     });
   }, [discardAction, siteId, router]);
+
+  // ---------------------------------------------------------------------------
+  // dnd-kit sensors and drag end handler
+  // ---------------------------------------------------------------------------
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        // Require a 5px move before activating drag (avoids swallowing clicks
+        // on the summary expand or the action buttons inside the header).
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const oldIndex = sections.findIndex((s) => s.sectionKey === active.id);
+      const newIndex = sections.findIndex((s) => s.sectionKey === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(sections, oldIndex, newIndex);
+      onReorder(reordered);
+    },
+    [sections, onReorder],
+  );
 
   return (
     <>
@@ -445,11 +839,13 @@ export default function EditorForm({
 
             {/* Status indicator */}
             <div className="shrink-0 text-xs" aria-live="polite">
-              {isSaving && <span style={{ color: 'var(--color-muted)' }}>Saving...</span>}
-              {!isSaving && saveState.ok && saveState.noop && (
+              {(isSaving || structuralPending) && (
+                <span style={{ color: 'var(--color-muted)' }}>Saving...</span>
+              )}
+              {!isSaving && !structuralPending && saveState.ok && saveState.noop && (
                 <span style={{ color: 'var(--color-muted)' }}>No changes to save</span>
               )}
-              {!isSaving && saveState.ok && !saveState.noop && (
+              {!isSaving && !structuralPending && saveState.ok && !saveState.noop && (
                 <span style={{ color: 'var(--color-success)' }}>Saved as draft</span>
               )}
               {!isSaving && !saveState.ok && saveState.message && (
@@ -475,6 +871,15 @@ export default function EditorForm({
         {discardResult && !discardResult.ok && discardResult.message && (
           <InfoBanner message={`Discard failed: ${discardResult.message}`} type="error" />
         )}
+        {structuralError && (
+          <InfoBanner message={structuralError} type="error" />
+        )}
+        {isStructurallyLocked && (
+          <InfoBanner
+            message="This site is live. Section structure is locked, but text edits are still allowed."
+            type="success"
+          />
+        )}
 
         {/* Error summary banner */}
         {hasErrors && (
@@ -499,20 +904,62 @@ export default function EditorForm({
           action={formAction}
           className="flex-1 overflow-y-auto px-4 py-4"
           onChange={markDirty}
+          onInput={markDirty}
         >
           {/* siteId hidden field — checked first in the server action */}
           <input type="hidden" name="siteId" value={siteId} />
 
-          {/* 1. Sections first (Hero is first in the registry) */}
-          {sections.map((section) => (
-            <SectionGroup
-              key={section.sectionKey}
-              section={section}
-              values={initialValues}
-              errors={errors}
-              onDirty={markDirty}
-            />
-          ))}
+          {/* 1. Sections first (Hero is first in the doc order) */}
+          {!isStructurallyLocked ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sections.map((s) => s.sectionKey)}
+                strategy={verticalListSortingStrategy}
+              >
+                {sections.map((section) => (
+                  <SortableSectionGroup
+                    key={section.sectionKey}
+                    section={section}
+                    values={initialValues}
+                    errors={errors}
+                    onRemove={onRemove}
+                    onDuplicate={onDuplicate}
+                    onDirty={markDirty}
+                    disabled={anyPending}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            // Locked: render static (no drag handles, no structural controls).
+            sections.map((section) => (
+              <StaticSectionGroup
+                key={section.sectionKey}
+                section={section}
+                values={initialValues}
+                errors={errors}
+                onRemove={onRemove}
+                onDuplicate={onDuplicate}
+                onDirty={markDirty}
+                disabled={anyPending}
+              />
+            ))
+          )}
+
+          {/* Add section picker — shown below sections */}
+          {!isStructurallyLocked && addableTypes.length > 0 && (
+            <div className="mt-2 mb-4">
+              <AddSectionPicker
+                addableTypes={addableTypes}
+                disabled={anyPending}
+                onAdd={onAdd}
+              />
+            </div>
+          )}
 
           {/* 2. Business fields: phone + menu button */}
           {businessFields.length > 0 && (
@@ -566,4 +1013,6 @@ export default function EditorForm({
       </div>
     </>
   );
-}
+});
+
+export default EditorForm;

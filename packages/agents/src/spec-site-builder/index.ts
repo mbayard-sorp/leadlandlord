@@ -17,7 +17,13 @@ import {
   SpecSiteContent,
   type SpecSiteContent as SpecSiteContentType,
 } from './schema';
-import { writeBuildSellToSanity, type ExistingDocFields, type MigratedOverlay } from './persist-sanity';
+import {
+  writeBuildSellToSanity,
+  RebuildProtectedError,
+  type ExistingDocFields,
+  type MigratedOverlay,
+  type CustomerLayoutOverlay,
+} from './persist-sanity';
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 import {
@@ -38,16 +44,9 @@ const SYSTEM_PROMPT = readFileSync(resolve(__dirname, 'system.md'), 'utf-8');
 
 const SUBMIT_TOOL = 'submit_spec_site';
 
-/**
- * Thrown when a rebuild is attempted on a paid/live site without forceRebuild.
- * Phase 4 operator UI surfaces this and passes forceRebuild via a confirmation modal.
- */
-export class RebuildProtectedError extends Error {
-  constructor(siteId: string, status: string) {
-    super(`Cannot rebuild site ${siteId}: status is '${status}'. Pass forceRebuild:true to override.`);
-    this.name = 'RebuildProtectedError';
-  }
-}
+// RebuildProtectedError is defined in persist-sanity.ts and re-exported from
+// there; re-exporting here keeps the public surface of index.ts unchanged.
+export { RebuildProtectedError };
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -403,6 +402,26 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
         const contactSection = sections.find((s) => s['_type'] === 'bsContactSection');
         const addr = contactSection?.['address'] as Record<string, unknown> | undefined;
         existingTheme = extractExistingTheme(existing['theme']);
+        // Workstream C — parse customerLayout overlay from the existing doc.
+        const rawLayout = existing['customerLayout'];
+        const customerLayout: CustomerLayoutOverlay | null =
+          rawLayout && typeof rawLayout === 'object'
+            ? {
+                sectionOrder: Array.isArray((rawLayout as Record<string, unknown>)['sectionOrder'])
+                  ? ((rawLayout as Record<string, unknown>)['sectionOrder'] as string[])
+                  : null,
+                removedKeys: Array.isArray((rawLayout as Record<string, unknown>)['removedKeys'])
+                  ? ((rawLayout as Record<string, unknown>)['removedKeys'] as string[])
+                  : null,
+                customerOwnedKeys: Array.isArray((rawLayout as Record<string, unknown>)['customerOwnedKeys'])
+                  ? ((rawLayout as Record<string, unknown>)['customerOwnedKeys'] as string[])
+                  : null,
+                lockedAt:
+                  typeof (rawLayout as Record<string, unknown>)['lockedAt'] === 'string'
+                    ? ((rawLayout as Record<string, unknown>)['lockedAt'] as string)
+                    : null,
+              }
+            : null;
         existingDoc = {
           draftMode: typeof existing['draftMode'] === 'boolean' ? existing['draftMode'] : null,
           robotsDisallow: typeof existing['robotsDisallow'] === 'boolean' ? existing['robotsDisallow'] : null,
@@ -423,6 +442,9 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
                 fontBody: existingTheme.fontBody,
               }
             : null,
+          // Workstream C — carry customerLayout + full sections for the merge algorithm.
+          customerLayout,
+          existingSections: sections,
         };
       }
     } catch (err) {
@@ -653,6 +675,8 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       purchaseUrl: site.paymentLink ?? undefined,
       existingDoc,
       generatedAt,
+      // Workstream C — thread status for defense-in-depth handoff lock in persist-sanity.ts.
+      siteStatus: site.status,
     });
 
     // ── Step 4: finalize Postgres row ──

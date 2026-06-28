@@ -1,6 +1,20 @@
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId, buildsellReviewDocId } from '@leadlandlord/sanity-schema/ids';
+import { BS_SECTION_RULES, type BsSectionType } from '@leadlandlord/shared';
 import type { SpecSiteContent } from './schema';
+
+/**
+ * Thrown when a rebuild is attempted on a live/handed-off site.
+ *
+ * Defined here (persist-sanity.ts) so both this module and index.ts can use
+ * the same class without a circular import. index.ts re-exports it.
+ */
+export class RebuildProtectedError extends Error {
+  constructor(siteId: string, status: string) {
+    super(`Cannot rebuild site ${siteId}: status is '${status}'. Pass forceRebuild:true to override.`);
+    this.name = 'RebuildProtectedError';
+  }
+}
 
 /**
  * Operator-approved content migrated from the prospect's existing site
@@ -27,6 +41,25 @@ export interface MigratedOverlay {
   ugc?: MigratedUgcOverlayItem[] | null;
   source?: string | null;
   migratedAt?: string | null;
+}
+
+/**
+ * Customer-controlled section layout overlay stored at `buildsellSite.customerLayout`.
+ * Written by the customer portal (Workstream D) and preserved verbatim by the builder
+ * on every rebuild — exactly like `migrated`. The builder reads this to know:
+ *   - which order to emit sections (sectionOrder)
+ *   - which sections the customer deleted (removedKeys — builder skips these)
+ *   - which sections contain customer-authored content (customerOwnedKeys — builder
+ *     takes these verbatim from the existing Sanity doc rather than regenerating)
+ *   - when the site was handed off / locked (lockedAt — signals no destructive rebuild)
+ */
+export interface CustomerLayoutOverlay {
+  sectionOrder?: string[] | null;
+  removedKeys?: string[] | null;
+  customerOwnedKeys?: string[] | null;
+  /** ISO datetime string set at handoff. Presence of siteStatus==='live' is the
+   * authoritative gate; this field is informational for audit purposes. */
+  lockedAt?: string | null;
 }
 
 /**
@@ -57,6 +90,18 @@ export interface ExistingDocFields {
     fontHeading?: string;
     fontBody?: string;
   } | null;
+  /**
+   * Customer-controlled section layout overlay. Preserved verbatim on every
+   * rebuild (same pattern as `migrated`). Absent on all existing sites — the
+   * builder treats absence as "proceed normally" (backward-compatible).
+   */
+  customerLayout?: CustomerLayoutOverlay | null;
+  /**
+   * Full sections array from the existing doc. Used by the read-merge algorithm
+   * to take customer-owned or customer-ordered sections verbatim. Only meaningful
+   * when customerLayout.sectionOrder is present.
+   */
+  existingSections?: Array<Record<string, unknown>> | null;
 }
 
 export interface WriteBuildSellArgs {
@@ -98,6 +143,13 @@ export interface WriteBuildSellArgs {
    * draftMode/robotsDisallow/purchaseUrl/ownerEmail (D4 read-merge policy).
    */
   existingDoc?: ExistingDocFields | null;
+  /**
+   * Postgres buildsell_sites.status for this site. Used to enforce the handoff
+   * lock: if status is 'live', writeBuildSellToSanity refuses a destructive
+   * rebuild (defense-in-depth; the agent's execute() also gates on this earlier).
+   * Optional so the signature is backward-compatible with any direct callers.
+   */
+  siteStatus?: string | null;
 }
 
 export interface WriteBuildSellResult {
@@ -107,86 +159,53 @@ export interface WriteBuildSellResult {
   sectionCount: number;
 }
 
+// ---------------------------------------------------------------------------
+// Section read-merge helpers
+// ---------------------------------------------------------------------------
+
 /**
- * Persist a generated spec site to Sanity as a `buildsellSite` doc plus its
- * `bsReview` docs, in one transaction.
+ * Build the canonical sections array the builder would produce from scratch.
+ * Keys are the stable semantic identifiers used by image-regen patch paths:
+ *   sections[_key=="hero"].image, sections[_key=="about"].image, etc.
  *
- * D4 read-merge: operator-owned fields (draftMode, robotsDisallow, purchaseUrl,
- * ownerEmail, existingStreet) are carried from `args.existingDoc` so rebuilds
- * never silently de-index a live site or wipe the purchase URL.
- *
- * B-COLOR: all 8 theme colors are written as `{_type:'color',hex}` objects.
- * B-HEADINGS: headings come from model output (args.content), never hardcoded.
- *
- * Deterministic ids: `bs-site-${id}`, `bs-review-${id}-N` — keep idempotent.
+ * Extracted from writeBuildSellToSanity so the merge algorithm can compare
+ * builder-canonical sections against the existing doc's sections.
  */
-export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<WriteBuildSellResult> {
-  const { content } = args;
-  const client = createWriteClient();
-  const docId = buildsellSiteDocId(args.buildsellSiteId);
-  const tx = client.transaction();
-
-  const ex = args.existingDoc ?? {};
-
-  // Review docs first — referenced by the reviews section.
-  const reviewDocIds: string[] = [];
-  content.reviews.items.forEach((r, i) => {
-    const id = buildsellReviewDocId(`${args.buildsellSiteId}-${i}`);
-    reviewDocIds.push(id);
-    // Derive initials: prefer explicit field, else take first chars of author words.
-    const derivedInitials = r.author
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => (w[0] ?? ''))
-      .join('')
-      .toUpperCase();
-    const initials = r.initials ?? (derivedInitials.length > 0 ? derivedInitials : undefined);
-    tx.createOrReplace({
-      _id: id,
-      _type: 'bsReview',
-      buildsellSiteId: args.buildsellSiteId,
-      author: r.author,
-      initials,
-      rating: r.rating,
-      text: r.text,
-      location: r.location ?? undefined,
-      /**
-       * ToS guard: source is ALWAYS 'manual' for model-generated content.
-       * Never 'google' on a generated testimonial (R6 / ADR 0025 D5).
-       */
-      source: 'manual',
-      date: new Date().toISOString().slice(0, 10),
-      featured: i < 3,
-      order: i,
-    });
-  });
-
-  // Resolve address: prefer incoming payload; fall back to existing doc's street
-  // so a reaped-lead rebuild doesn't blank the field.
-  const streetToWrite = args.addressLine ?? ex.existingStreet ?? undefined;
-
-  // Migration overlay (operator-approved). Applied AFTER the builder's lint
-  // (which runs in index.ts on generated content only), so approved real copy
-  // bypasses the invention-guard. Everything migration-owned is re-derived
-  // from this object on each rebuild — that's what makes it durable.
-  const m = ex.migrated ?? null;
-  const heroHeadline = m?.headline?.trim() || content.hero.headline;
-  // Drop the model's highlight fragment when a migrated headline replaces it
-  // (the fragment likely no longer appears in the new headline).
-  const heroHighlight = m?.headline ? undefined : content.hero.highlight;
-  const aboutBody = m?.aboutBody?.trim() || content.about.body;
-  const heroImageAssetId = m?.heroImageAssetId ?? args.heroImageAssetId ?? null;
-  const heroImageBAssetId = args.heroImageBAssetId ?? null;
-  const heroImageCAssetId = args.heroImageCAssetId ?? null;
-  const aboutImageAssetId = m?.aboutImageAssetId ?? args.aboutImageAssetId ?? null;
-  const serviceCards =
-    m?.services && m.services.length > 0
-      ? m.services.map((s) => ({ icon: s.icon, title: s.title, description: s.description }))
-      : content.services.cards;
-  const footerSocial =
-    m?.socials && m.socials.length > 0 ? m.socials : (content.footer.social ?? []);
-
-  const sections = [
+function buildCanonicalSections(
+  content: SpecSiteContent,
+  {
+    heroHeadline,
+    heroHighlight,
+    aboutBody,
+    heroImageAssetId,
+    heroImageBAssetId,
+    heroImageCAssetId,
+    aboutImageAssetId,
+    serviceCards,
+    footerSocial,
+    reviewDocIds,
+    streetToWrite,
+    city,
+    state,
+    m,
+  }: {
+    heroHeadline: string;
+    heroHighlight: string | undefined;
+    aboutBody: string;
+    heroImageAssetId: string | null;
+    heroImageBAssetId: string | null;
+    heroImageCAssetId: string | null;
+    aboutImageAssetId: string | null;
+    serviceCards: Array<{ icon: string; title: string; description: string; link?: string }>;
+    footerSocial: Array<{ platform: string; href: string }>;
+    reviewDocIds: string[];
+    streetToWrite: string | undefined;
+    city: string;
+    state: string;
+    m: MigratedOverlay | null;
+  },
+): Array<Record<string, unknown>> {
+  const sections: Array<Record<string, unknown>> = [
     {
       _key: 'hero',
       _type: 'bsHeroSection',
@@ -273,8 +292,8 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       address: {
         _type: 'bsAddress',
         street: streetToWrite,
-        city: args.city,
-        state: args.state,
+        city,
+        state,
         hours: content.contact.hours,
         serviceArea: content.contact.serviceArea,
       },
@@ -325,6 +344,268 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
       })),
     },
   ];
+
+  return sections;
+}
+
+/**
+ * Merge builder-canonical sections with the customer layout overlay.
+ *
+ * Algorithm (per Workstream C spec):
+ *
+ * 1. No `customerLayout.sectionOrder` → return canonical sections unchanged
+ *    (backward-compatible: all existing sites have no customerLayout).
+ *
+ * 2. Build a map of `_key → existing section object` from the existing doc.
+ *
+ * 3. Emit sections in `sectionOrder` order:
+ *    - Key in `removedKeys` → skip (customer deleted it).
+ *    - Key in `customerOwnedKeys` → take the existing object verbatim (customer edited it).
+ *    - Otherwise → use the builder's freshly-generated canonical block for that `_key`.
+ *
+ * 4. Canonical sections whose `_key` is NOT in `sectionOrder` AND NOT in
+ *    `removedKeys` (e.g. a new section type added in a later release) → append
+ *    after the customer's last non-footer section, keeping footer last.
+ *
+ * Returns the merged sections array.
+ */
+function mergeSections(
+  canonicalSections: Array<Record<string, unknown>>,
+  existingSections: Array<Record<string, unknown>>,
+  customerLayout: CustomerLayoutOverlay,
+): Array<Record<string, unknown>> {
+  const sectionOrder = customerLayout.sectionOrder;
+  if (!sectionOrder || sectionOrder.length === 0) {
+    // No order directive — proceed exactly as today (backward-compatible).
+    return canonicalSections;
+  }
+
+  const removedKeys = new Set(customerLayout.removedKeys ?? []);
+  const customerOwnedKeys = new Set(customerLayout.customerOwnedKeys ?? []);
+
+  // Map existing doc sections by _key for O(1) lookup.
+  const existingByKey = new Map<string, Record<string, unknown>>();
+  for (const sec of existingSections) {
+    const key = typeof sec['_key'] === 'string' ? sec['_key'] : null;
+    if (key) existingByKey.set(key, sec);
+  }
+
+  // Map canonical sections by _key for builder-fresh lookup.
+  const canonicalByKey = new Map<string, Record<string, unknown>>();
+  for (const sec of canonicalSections) {
+    const key = typeof sec['_key'] === 'string' ? sec['_key'] : null;
+    if (key) canonicalByKey.set(key, sec);
+  }
+
+  // Track which canonical keys we've emitted so we can append new ones later.
+  const emittedCanonicalKeys = new Set<string>();
+
+  const merged: Array<Record<string, unknown>> = [];
+
+  for (const key of sectionOrder) {
+    // Skip keys the customer explicitly removed.
+    if (removedKeys.has(key)) continue;
+
+    if (customerOwnedKeys.has(key)) {
+      // Customer-owned: take the existing Sanity object verbatim.
+      // If somehow missing from existing (shouldn't happen), fall through to canonical.
+      const existing = existingByKey.get(key);
+      if (existing) {
+        merged.push(existing);
+        emittedCanonicalKeys.add(key);
+        continue;
+      }
+    }
+
+    // Builder-canonical key: use the freshly-generated block if available.
+    const canonical = canonicalByKey.get(key);
+    if (canonical) {
+      merged.push(canonical);
+      emittedCanonicalKeys.add(key);
+      continue;
+    }
+
+    // Key from sectionOrder not found in canonical and not customer-owned:
+    // this is a customer-added section (generated key from Workstream D).
+    // Take it verbatim from the existing doc.
+    const existing = existingByKey.get(key);
+    if (existing) {
+      merged.push(existing);
+    }
+    // If neither exists, silently drop (orphaned key — e.g. doc was manually patched).
+  }
+
+  // Append any canonical sections that are new (not in sectionOrder and not removed).
+  // Keep footer always last: separate footer from the rest, insert non-footer new
+  // sections after the last non-footer merged section, then re-append footer.
+  const newCanonical: Array<Record<string, unknown>> = [];
+  const footerKey = 'footer';
+  let footerSection: Record<string, unknown> | undefined;
+
+  for (const sec of canonicalSections) {
+    const key = typeof sec['_key'] === 'string' ? sec['_key'] : '';
+    if (emittedCanonicalKeys.has(key)) continue;
+    if (removedKeys.has(key)) continue;
+    if (key === footerKey) {
+      footerSection = sec;
+    } else {
+      newCanonical.push(sec);
+    }
+  }
+
+  if (newCanonical.length > 0) {
+    // Find the last non-footer section in merged and insert after it.
+    let lastNonFooterIdx = -1;
+    for (let i = merged.length - 1; i >= 0; i--) {
+      const sec = merged[i];
+      const key = sec && typeof sec['_key'] === 'string' ? sec['_key'] : '';
+      if (key !== footerKey) {
+        lastNonFooterIdx = i;
+        break;
+      }
+    }
+    merged.splice(lastNonFooterIdx + 1, 0, ...newCanonical);
+  }
+
+  // Ensure footer section is present and last (it's a singleton that can't be removed).
+  // If footer was already emitted via sectionOrder (normal case), it's already there.
+  // If not emitted but exists in canonical, append it now.
+  const alreadyHasFooter = merged.some((s) => typeof s['_key'] === 'string' && s['_key'] === footerKey);
+  if (!alreadyHasFooter && footerSection) {
+    merged.push(footerSection);
+  }
+
+  return merged;
+}
+
+/**
+ * Persist a generated spec site to Sanity as a `buildsellSite` doc plus its
+ * `bsReview` docs, in one transaction.
+ *
+ * D4 read-merge: operator-owned fields (draftMode, robotsDisallow, purchaseUrl,
+ * ownerEmail, existingStreet) are carried from `args.existingDoc` so rebuilds
+ * never silently de-index a live site or wipe the purchase URL.
+ *
+ * B-COLOR: all 8 theme colors are written as `{_type:'color',hex}` objects.
+ * B-HEADINGS: headings come from model output (args.content), never hardcoded.
+ *
+ * Workstream C — section read-merge:
+ * When `args.existingDoc.customerLayout.sectionOrder` is present, the merged
+ * sections array respects the customer's ordering, preserves customer-owned
+ * content verbatim, and skips removed keys. customerLayout is re-emitted
+ * unchanged in the write payload (same preservation as `migrated`).
+ *
+ * Workstream C — handoff lock (defense-in-depth):
+ * If `args.siteStatus === 'live'`, refuses the write with RebuildProtectedError.
+ * The agent's execute() already gates on this earlier; this is a second line of
+ * defense in case writeBuildSellToSanity is called directly by other code paths.
+ *
+ * Deterministic ids: `bs-site-${id}`, `bs-review-${id}-N` — keep idempotent.
+ */
+export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<WriteBuildSellResult> {
+  const { content } = args;
+  const client = createWriteClient();
+  const docId = buildsellSiteDocId(args.buildsellSiteId);
+  const tx = client.transaction();
+
+  // Workstream C — handoff lock (defense-in-depth).
+  // The agent's execute() already throws RebuildProtectedError before reaching
+  // this point for 'paid' and 'live' sites. This guard catches any direct caller
+  // that bypasses the agent (e.g. scripts, future routes).
+  if (args.siteStatus === 'live') {
+    throw new RebuildProtectedError(args.buildsellSiteId, args.siteStatus);
+  }
+
+  const ex = args.existingDoc ?? {};
+
+  // Review docs first — referenced by the reviews section.
+  const reviewDocIds: string[] = [];
+  content.reviews.items.forEach((r, i) => {
+    const id = buildsellReviewDocId(`${args.buildsellSiteId}-${i}`);
+    reviewDocIds.push(id);
+    // Derive initials: prefer explicit field, else take first chars of author words.
+    const derivedInitials = r.author
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => (w[0] ?? ''))
+      .join('')
+      .toUpperCase();
+    const initials = r.initials ?? (derivedInitials.length > 0 ? derivedInitials : undefined);
+    tx.createOrReplace({
+      _id: id,
+      _type: 'bsReview',
+      buildsellSiteId: args.buildsellSiteId,
+      author: r.author,
+      initials,
+      rating: r.rating,
+      text: r.text,
+      location: r.location ?? undefined,
+      /**
+       * ToS guard: source is ALWAYS 'manual' for model-generated content.
+       * Never 'google' on a generated testimonial (R6 / ADR 0025 D5).
+       */
+      source: 'manual',
+      date: new Date().toISOString().slice(0, 10),
+      featured: i < 3,
+      order: i,
+    });
+  });
+
+  // Resolve address: prefer incoming payload; fall back to existing doc's street
+  // so a reaped-lead rebuild doesn't blank the field.
+  const streetToWrite = args.addressLine ?? ex.existingStreet ?? undefined;
+
+  // Migration overlay (operator-approved). Applied AFTER the builder's lint
+  // (which runs in index.ts on generated content only), so approved real copy
+  // bypasses the invention-guard. Everything migration-owned is re-derived
+  // from this object on each rebuild — that's what makes it durable.
+  const m = ex.migrated ?? null;
+  const heroHeadline = m?.headline?.trim() || content.hero.headline;
+  // Drop the model's highlight fragment when a migrated headline replaces it
+  // (the fragment likely no longer appears in the new headline).
+  const heroHighlight = m?.headline ? undefined : content.hero.highlight;
+  const aboutBody = m?.aboutBody?.trim() || content.about.body;
+  const heroImageAssetId = m?.heroImageAssetId ?? args.heroImageAssetId ?? null;
+  const heroImageBAssetId = args.heroImageBAssetId ?? null;
+  const heroImageCAssetId = args.heroImageCAssetId ?? null;
+  const aboutImageAssetId = m?.aboutImageAssetId ?? args.aboutImageAssetId ?? null;
+  const serviceCards =
+    m?.services && m.services.length > 0
+      ? m.services.map((s) => ({ icon: s.icon, title: s.title, description: s.description }))
+      : content.services.cards;
+  const footerSocial =
+    m?.socials && m.socials.length > 0 ? m.socials : (content.footer.social ?? []);
+
+  // Build the builder's canonical sections array (the hardcoded sequence, same
+  // as before Workstream C). This is always correct for new/fresh builds.
+  const canonicalSections = buildCanonicalSections(content, {
+    heroHeadline,
+    heroHighlight,
+    aboutBody,
+    heroImageAssetId,
+    heroImageBAssetId,
+    heroImageCAssetId,
+    aboutImageAssetId,
+    serviceCards,
+    footerSocial,
+    reviewDocIds,
+    streetToWrite,
+    city: args.city,
+    state: args.state,
+    m,
+  });
+
+  // Workstream C — section read-merge.
+  //
+  // If customerLayout.sectionOrder is present, produce the merged sections array
+  // that respects the customer's ordering while refreshing builder-owned content.
+  // If absent (all existing sites), return canonical unchanged (backward-compatible).
+  const customerLayout = ex.customerLayout ?? null;
+  const existingSections = ex.existingSections ?? [];
+  const sections =
+    customerLayout?.sectionOrder && customerLayout.sectionOrder.length > 0
+      ? mergeSections(canonicalSections, existingSections, customerLayout)
+      : canonicalSections;
 
   // D4 read-merge: prefer existing operator-owned values; fall back to safe defaults.
   const draftMode = ex.draftMode !== undefined && ex.draftMode !== null ? ex.draftMode : true;
@@ -439,6 +720,26 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
           },
         }
       : {}),
+    // Workstream C — re-emit customerLayout unchanged so the customer's section
+    // ordering, removals, and customer-owned flags survive every rebuild.
+    // This is the same preservation pattern as `migrated` above. Without this,
+    // createOrReplace would silently drop the overlay on the next build.
+    //
+    // lockedAt is set by the customer portal (Workstream D) at handoff time.
+    // We do NOT set it here: by the time siteStatus==='live' we throw above,
+    // so we never reach this point on a live site. Any non-live path that
+    // reaches here just preserves whatever lockedAt the portal already set.
+    ...(customerLayout
+      ? {
+          customerLayout: {
+            _type: 'bsCustomerLayout',
+            ...(customerLayout.sectionOrder ? { sectionOrder: customerLayout.sectionOrder } : {}),
+            ...(customerLayout.removedKeys ? { removedKeys: customerLayout.removedKeys } : {}),
+            ...(customerLayout.customerOwnedKeys ? { customerOwnedKeys: customerLayout.customerOwnedKeys } : {}),
+            ...(customerLayout.lockedAt ? { lockedAt: customerLayout.lockedAt } : {}),
+          },
+        }
+      : {}),
     sections,
     generatedAt: args.generatedAt,
   });
@@ -446,3 +747,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
   const res = await tx.commit({ visibility: 'sync' });
   return { docId, reviewDocIds, transactionId: res.transactionId, sectionCount: sections.length };
 }
+
+// Re-export BS_SECTION_RULES for convenience (callers in agents that need the
+// ruleset alongside the write function don't need a separate import).
+export { BS_SECTION_RULES };

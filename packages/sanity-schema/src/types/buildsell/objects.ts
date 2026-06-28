@@ -252,6 +252,56 @@ export const bsMigratedUgcItem = defineType({
   preview: { select: { title: 'platform', subtitle: 'caption' } },
 });
 
+/**
+ * Machine-written overlay recording how the customer has structured their page.
+ * Written by the customer portal (Workstream D) and the build/persist layer
+ * (Workstream C). Never operator-edited — hidden in Studio.
+ *
+ * - `sectionOrder`: ordered list of section `_key`s as the customer arranged them.
+ * - `removedKeys`: section `_key`s the customer deleted; builder skips these on merge.
+ * - `customerOwnedKeys`: section `_key`s the customer has edited or added; builder
+ *   preserves these verbatim on rebuild rather than regenerating.
+ * - `lockedAt`: set when the site goes live/handed off (`status='live'`); signals
+ *   the build layer to refuse destructive rebuilds.
+ */
+export const bsCustomerLayout = defineType({
+  name: 'bsCustomerLayout',
+  title: 'Customer Layout',
+  type: 'object',
+  hidden: true,
+  description: 'Machine-written section-order overlay. Do not edit manually.',
+  fields: [
+    defineField({
+      name: 'sectionOrder',
+      title: 'Section Order',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Ordered list of section _key values as the customer arranged them.',
+    }),
+    defineField({
+      name: 'removedKeys',
+      title: 'Removed Keys',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Section _key values the customer deleted. Builder skips these on merge.',
+    }),
+    defineField({
+      name: 'customerOwnedKeys',
+      title: 'Customer Owned Keys',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Section _key values the customer has edited or added. Builder preserves these verbatim on rebuild.',
+    }),
+    defineField({
+      name: 'lockedAt',
+      title: 'Locked At',
+      type: 'datetime',
+      description: 'Set when the site goes live/handed off. Triggers destructive-rebuild protection in the build layer.',
+    }),
+  ],
+  preview: { prepare: () => ({ title: 'Customer Layout' }) },
+});
+
 export const buildsellObjectTypes = [
   bsCtaButton,
   bsServiceCard,
@@ -267,4 +317,5 @@ export const buildsellObjectTypes = [
   bsUgcItem,
   bsMigrated,
   bsMigratedUgcItem,
+  bsCustomerLayout,
 ];
