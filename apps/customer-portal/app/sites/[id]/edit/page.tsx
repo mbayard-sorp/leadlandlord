@@ -90,8 +90,13 @@ export default async function EditPage({ params }: Props) {
 
   // Absolute preview URL on the site-host ORIGIN so the iframe's relative
   // /_next asset requests resolve against site-host (styled), not the portal.
-  // Falls back to a same-origin relative path if SITE_HOST_ORIGIN is unset.
-  const previewOrigin = process.env.SITE_HOST_ORIGIN ?? '';
+  // In dev, default to the local site-host server when SITE_HOST_ORIGIN is unset
+  // so the preview renders styled (a relative path would be proxied through the
+  // portal origin, where /_next assets 404 and the page is unstyled). In prod we
+  // keep the relative fallback so a misconfigured env never points at localhost.
+  const previewOrigin =
+    process.env.SITE_HOST_ORIGIN ??
+    (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001');
   const previewUrl = `${previewOrigin}/preview/${id}`;
 
   // AI image-generation quota (read from the published doc).
