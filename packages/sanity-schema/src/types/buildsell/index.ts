@@ -12,10 +12,14 @@ export type { BuildsellPreset } from './presets';
 export { bsReview } from './review';
 export { buildsellSite } from './buildsell-site';
 
+// bsFaqItem must be registered before bsFaqSection (which has an array of it).
+import { bsFaqItem } from './sections';
+
 /** All Build & Sell schema types, ready to spread into `schemaTypes`. */
 export const buildsellSchemaTypes = [
   ...buildsellObjectTypes,
   buildsellTheme,
+  bsFaqItem,
   ...buildsellSectionTypes,
   bsReview,
   buildsellSite,

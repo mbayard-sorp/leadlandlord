@@ -300,6 +300,7 @@ const BUILDSELL_PROJECTION = `{
     "imageUrl": image.asset->url,
     "imageUrlB": imageB.asset->url,
     "imageUrlC": imageC.asset->url,
+    imageAlt,
     "reviews": reviews[]->{
       author,
       rating,
@@ -317,7 +318,9 @@ const BUILDSELL_PROJECTION = `{
       postUrl,
       caption,
       order,
-      "thumbnailUrl": thumbnail.asset->url
+      "thumbnailUrl": thumbnail.asset->url,
+      question,
+      answer
     }
   }
 }`;
@@ -362,13 +365,15 @@ export interface BuildSellSection {
   highlight?: string | null;
   subhead?: string | null;
   imageUrl?: string | null;
+  /** Customer-supplied alt text for the hero / about image. */
+  imageAlt?: string | null;
   /** Trust-variant hero strip tiles 2 & 3 (auto-filled from the hero prompt). */
   imageUrlB?: string | null;
   imageUrlC?: string | null;
   showRating?: boolean | null;
   badges?: Array<{ icon?: string | null; label?: string | null }> | null;
   primaryCta?: { label?: string | null; href?: string | null; style?: string | null } | null;
-  secondaryCta?: { label?: string | null; href?: string | null } | null;
+  secondaryCta?: { label?: string | null; href?: string | null; style?: string | null } | null;
   // bsServicesSection
   heading?: string | null;
   services?: Array<{ icon?: string | null; title?: string | null; description?: string | null; link?: string | null }> | null;
@@ -399,6 +404,8 @@ export interface BuildSellSection {
   formEndpoint?: string | null;
   showDetails?: boolean | null;
   showMap?: boolean | null;
+  // bsFaqSection
+  /** FAQ items — shared `items` array, each with question + answer (bsFaqItem). */
   // bsFooterSection
   tagline?: string | null;
   columns?: Array<{
@@ -408,13 +415,17 @@ export interface BuildSellSection {
   social?: Array<{ platform?: string | null; href?: string | null }> | null;
   legal?: string | null;
   legalLinks?: Array<{ label?: string | null; href?: string | null }> | null;
-  // bsUgcSection
+  // bsUgcSection + bsFaqSection share the `items` array name
   items?: Array<{
+    // bsUgcSection fields
     platform?: string | null;
     postUrl?: string | null;
     caption?: string | null;
     order?: number | null;
     thumbnailUrl?: string | null;
+    // bsFaqItem fields
+    question?: string | null;
+    answer?: string | null;
   }> | null;
 }
 
@@ -528,6 +539,7 @@ export function stegaCleanStructural(site: BuildSellSite): BuildSellSite {
         ? {
             ...section.secondaryCta,
             href: section.secondaryCta.href != null ? stegaClean(section.secondaryCta.href) : section.secondaryCta.href,
+            style: section.secondaryCta.style != null ? stegaClean(section.secondaryCta.style) : section.secondaryCta.style,
           }
         : section.secondaryCta,
       cta: section.cta
@@ -590,14 +602,27 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * the doc's live state, so a draft must resolve by slug here.
  */
 export async function fetchBuildSellSitePreview(idOrSlug: string): Promise<BuildSellSite | null> {
-  if (UUID_RE.test(idOrSlug)) {
-    return fetchBuildSellSiteById(idOrSlug);
-  }
-  const result = await sanity.fetch<BuildSellSite | null>(
-    BUILDSELL_PREVIEW_BY_SLUG_QUERY,
-    { slug: idOrSlug },
+  // The preview route ALWAYS shows draft content (draft overlaid on published),
+  // independent of any draft-mode cookie. The customer portal embeds /preview to
+  // show the owner their unsaved-to-published edits, so we resolve drafts here
+  // with a token'd `previewDrafts` client rather than the cookie-gated live fetch
+  // or the published-perspective client. Stega watermarks are stripped because
+  // VisualEditing is not active on this embed.
+  // Use the NON-stega client (plus a read token + drafts perspective). The
+  // stega-enabled client encodes zero-width watermark characters into every
+  // string; without active VisualEditing to strip them they leak into hrefs
+  // (tel:), alt text, and visible copy — breaking the embedded preview.
+  const previewClient = sanity.withConfig({
+    token: process.env.SANITY_API_READ_TOKEN,
+    perspective: 'previewDrafts',
+    useCdn: false,
+  });
+  const isUuid = UUID_RE.test(idOrSlug);
+  const result = await previewClient.fetch<BuildSellSite | null>(
+    isUuid ? BUILDSELL_BY_ID_QUERY : BUILDSELL_PREVIEW_BY_SLUG_QUERY,
+    isUuid ? { id: idOrSlug } : { slug: idOrSlug },
   );
-  return result ?? null;
+  return result ? stegaCleanStructural(result) : null;
 }
 
 export async function fetchBuildSellSiteBySlug(slug: string): Promise<BuildSellSite | null> {

@@ -39,6 +39,12 @@ export const bsHeroSection = defineType({
     defineField({ name: 'badges', title: 'Trust Badges', type: 'array', of: [{ type: 'bsTrustBadge' }] }),
     defineField({ name: 'primaryCta', title: 'Primary CTA', type: 'bsCtaButton' }),
     defineField({ name: 'secondaryCta', title: 'Secondary CTA', type: 'bsCtaButton' }),
+    defineField({
+      name: 'imageAlt',
+      title: 'Image Alt Text',
+      type: 'string',
+      description: 'Describes the hero image for Google Images + screen readers.',
+    }),
   ],
   preview: { select: { title: 'headline' }, prepare: ({ title }) => ({ title: `Hero — ${title ?? ''}` }) },
 });
@@ -67,6 +73,12 @@ export const bsAboutSection = defineType({
     defineField({ name: 'image', title: 'Image', type: 'image', options: { hotspot: true } }),
     defineField({ name: 'stats', title: 'Stats', type: 'array', of: [{ type: 'bsStatItem' }] }),
     defineField({ name: 'cta', title: 'CTA', type: 'bsCtaButton', description: 'Optional call-to-action at the end of the about copy.' }),
+    defineField({
+      name: 'imageAlt',
+      title: 'Image Alt Text',
+      type: 'string',
+      description: 'Describes the about image for Google Images + screen readers.',
+    }),
   ],
   preview: { prepare: () => ({ title: 'About' }) },
 });
@@ -157,6 +169,43 @@ export const bsUgcSection = defineType({
   preview: { prepare: () => ({ title: 'Social Gallery' }) },
 });
 
+/**
+ * Inline object for a single FAQ item inside bsFaqSection.
+ */
+export const bsFaqItem = defineType({
+  name: 'bsFaqItem',
+  title: 'FAQ Item',
+  type: 'object',
+  fields: [
+    defineField({ name: 'question', title: 'Question', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'answer', title: 'Answer', type: 'text', rows: 3, validation: (r) => r.required() }),
+  ],
+  preview: {
+    select: { title: 'question' },
+    prepare: ({ title }) => ({ title: title ?? '(question)' }),
+  },
+});
+
+/**
+ * FAQ accordion section. Used for FAQPage JSON-LD and optional visible render.
+ */
+export const bsFaqSection = defineType({
+  name: 'bsFaqSection',
+  title: 'FAQ',
+  type: 'object',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    defineField({
+      name: 'items',
+      title: 'FAQ Items',
+      type: 'array',
+      of: [{ type: 'bsFaqItem' }],
+    }),
+  ],
+  preview: { prepare: () => ({ title: 'FAQ' }) },
+});
+
 export const buildsellSectionTypes = [
   bsHeroSection,
   bsServicesSection,
@@ -164,6 +213,7 @@ export const buildsellSectionTypes = [
   bsProcessSection,
   bsReviewsSection,
   bsContactSection,
+  bsFaqSection,
   bsFooterSection,
   bsUgcSection,
 ];

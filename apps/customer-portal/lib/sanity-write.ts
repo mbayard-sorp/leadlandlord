@@ -29,10 +29,11 @@ export { buildsellSiteDocId };
  * server action boundary and again here.
  */
 const IMAGE_FIELD_PATHS: Record<string, string> = {
-  'logo':        'logo',
-  'favicon':     'favicon',
-  'hero.image':  'sections[_key=="hero"].image',
-  'about.image': 'sections[_key=="about"].image',
+  'logo':         'logo',
+  'favicon':      'favicon',
+  'hero.image':   'sections[_key=="hero"].image',
+  'about.image':  'sections[_key=="about"].image',
+  'seo.ogImage':  'seo.ogImage',
 } as const;
 
 export type ImageFieldKey = keyof typeof IMAGE_FIELD_PATHS;
@@ -112,7 +113,9 @@ export async function saveFields(
 ): Promise<void> {
   const draftId = await ensureDraft(siteId);
   const client = createWriteClient();
-  await client.patch(draftId).set(patchSet).commit({ visibility: 'async' });
+  // Synchronous so the change is durable before the editor reloads the live
+  // preview — an async commit races the iframe refresh and looks like a no-op.
+  await client.patch(draftId).set(patchSet).commit({ visibility: 'sync' });
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +264,12 @@ export async function publishSite(siteId: string): Promise<void> {
   const publishedId = buildsellSiteDocId(siteId);
   const draftId = `drafts.${publishedId}`;
 
+  // Guarantee a draft exists before we patch/promote it. Without this, a
+  // customer who hits Publish without first saving (no draft yet) would hit
+  // "document not found" on the safety-lock patch below. ensureDraft forks
+  // from the published doc when needed and is a no-op when a draft exists.
+  await ensureDraft(siteId);
+
   // Safety lock — synchronous so it completes before the action.
   await client
     .patch(draftId)
@@ -298,4 +307,41 @@ export async function discardDraft(siteId: string): Promise<void> {
     // If the action fails (e.g. no draft), fall back to a plain delete.
     await client.delete(draftId);
   }
+}
+
+// ---------------------------------------------------------------------------
+// AI image-generation usage counter
+//
+// Stored on the PUBLISHED doc (not the draft) so a customer can't reset their
+// quota by discarding the draft. Enforced server-side in the generate action.
+// ---------------------------------------------------------------------------
+
+/** Hard cap on customer AI image generations per site. */
+export const AI_IMAGE_GENERATION_LIMIT = 5;
+
+/** Current number of AI images this site has generated (0 if never). */
+export async function getAiImageGenerationCount(siteId: string): Promise<number> {
+  const client = createWriteClient();
+  const publishedId = buildsellSiteDocId(siteId);
+  const doc = (await client.getDocument(publishedId)) as
+    | { aiImageGenerations?: number }
+    | undefined;
+  const n = doc?.aiImageGenerations;
+  return typeof n === 'number' && n > 0 ? n : 0;
+}
+
+/**
+ * Atomically bumps the per-site generation counter on the published doc.
+ * Returns the new total. Call only AFTER a generation has succeeded.
+ */
+export async function incrementAiImageGenerationCount(siteId: string): Promise<number> {
+  const client = createWriteClient();
+  const publishedId = buildsellSiteDocId(siteId);
+  const res = await client
+    .patch(publishedId)
+    .setIfMissing({ aiImageGenerations: 0 })
+    .inc({ aiImageGenerations: 1 })
+    .commit({ visibility: 'sync' });
+  const n = (res as unknown as { aiImageGenerations?: number }).aiImageGenerations;
+  return typeof n === 'number' ? n : 0;
 }

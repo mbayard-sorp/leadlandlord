@@ -9,11 +9,10 @@
  *   LEFT  (42%) — curated form, grouped by section, only present sections
  *   RIGHT (58%) — live preview iframe proxied to site-host
  *
- * The iframe points directly at `/preview/<siteId>`, rewritten (next.config.ts)
- * to site-host. That route resolves the site by UUID/slug and renders
- * draft-preferred content unconditionally (no draft-mode/secret handshake).
- * After each successful save, EditorShell increments a refreshKey to reload
- * the iframe with fresh draft content.
+ * The iframe points at `/api/draft-mode/enable?redirect=/preview/<docId>`,
+ * rewritten (next.config.ts) to site-host, which sets the draft-mode cookie
+ * and redirects to the preview route mounting SanityLive. After each
+ * successful save, EditorShell increments a refreshKey to reload the iframe.
  */
 
 import { redirect } from 'next/navigation';
@@ -21,15 +20,22 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@leadlandlord/db/client';
 import { buildsellSites } from '@leadlandlord/db/schema';
 import { requireCustomerSiteAccess, UnauthorizedError } from '@/lib/auth-guard';
-import { getEditableDoc } from '@/lib/sanity-write';
 import {
-  topLevelFields,
+  getEditableDoc,
+  buildsellSiteDocId,
+  getAiImageGenerationCount,
+  AI_IMAGE_GENERATION_LIMIT,
+} from '@/lib/sanity-write';
+import {
+  businessFields,
+  seoFields,
   sectionDefs,
   extractFormValues,
   serviceCardFields,
   aboutStatFields,
   processStepFields,
   footerColumnFields,
+  faqItemFields,
   toClientSection,
   toClientField,
   type SectionDef,
@@ -80,6 +86,21 @@ export default async function EditPage({ params }: Props) {
 
   // 3. Load current editable doc from Sanity (draft preferred over published).
   const doc = await getEditableDoc(id);
+  const sanityDocId = buildsellSiteDocId(id); // bs-site-<uuid>
+
+  // Absolute preview URL on the site-host ORIGIN so the iframe's relative
+  // /_next asset requests resolve against site-host (styled), not the portal.
+  // In dev, default to the local site-host server when SITE_HOST_ORIGIN is unset
+  // so the preview renders styled (a relative path would be proxied through the
+  // portal origin, where /_next assets 404 and the page is unstyled). In prod we
+  // keep the relative fallback so a misconfigured env never points at localhost.
+  const previewOrigin =
+    process.env.SITE_HOST_ORIGIN ??
+    (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001');
+  const previewUrl = `${previewOrigin}/preview/${id}`;
+
+  // AI image-generation quota (read from the published doc).
+  const generationsUsed = await getAiImageGenerationCount(id);
 
   // 4. Prefill form values from the doc.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,8 +117,12 @@ export default async function EditPage({ params }: Props) {
   }
 
   const enrichedSections: SectionDef[] = sectionDefs
-    // ugc is optional — only show if the section exists in the doc
-    .filter((s) => (s.sectionKey === 'ugc' ? presentSectionKeys.has('ugc') : true))
+    // ugc + faq are optional — only show if the section exists in the doc
+    .filter((s) =>
+      s.sectionKey === 'ugc' || s.sectionKey === 'faq'
+        ? presentSectionKeys.has(s.sectionKey)
+        : true,
+    )
     .map((s) => {
       if (!docAny) return s;
       switch (s.sectionKey) {
@@ -109,6 +134,8 @@ export default async function EditPage({ params }: Props) {
           return { ...s, fields: [...s.fields, ...processStepFields(docAny)] };
         case 'footer':
           return { ...s, fields: [...s.fields, ...footerColumnFields(docAny)] };
+        case 'faq':
+          return { ...s, fields: [...s.fields, ...faqItemFields(docAny)] };
         default:
           return s;
       }
@@ -143,6 +170,7 @@ export default async function EditPage({ params }: Props) {
     'favicon':     assetRefToUrl(imageRef(docAny?.favicon)),
     'hero.image':  assetRefToUrl(imageRef(heroSection?.image)),
     'about.image': assetRefToUrl(imageRef(aboutSection?.image)),
+    'seo.ogImage': assetRefToUrl(imageRef(docAny?.seo?.ogImage)),
   };
 
   return (
@@ -157,11 +185,15 @@ export default async function EditPage({ params }: Props) {
       {doc ? (
         <EditorShell
           siteId={id}
-          siteHostOrigin={process.env.SITE_HOST_ORIGIN ?? 'http://localhost:3001'}
+          sanityDocId={sanityDocId}
           initialValues={initialValues}
           sections={enrichedSections.map(toClientSection)}
-          topLevelFields={topLevelFields.map(toClientField)}
+          businessFields={businessFields.map(toClientField)}
+          seoFields={seoFields.map(toClientField)}
           initialThumbnails={initialThumbnails}
+          previewUrl={previewUrl}
+          generationsUsed={generationsUsed}
+          generationLimit={AI_IMAGE_GENERATION_LIMIT}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center p-6">
