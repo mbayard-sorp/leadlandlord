@@ -1919,6 +1919,176 @@ a.bs-ugc-card:hover {
   box-shadow: 0 6px 16px -6px var(--bs-primary);
   flex: none;
 }
+/* Uploaded logo replaces the monogram mark in the nav. Cap height so it lines
+   up with the brand text; let width scale to preserve the logo aspect ratio. */
+.bs-nav-logo {
+  display: block;
+  height: 2.1rem;
+  width: auto;
+  max-width: 9rem;
+  object-fit: contain;
+  flex: none;
+}
+/* Freeform Custom HTML section: keep embedded media from overflowing the
+   layout. The block itself is unstyled so authored markup controls its look. */
+.bs-html-block img,
+.bs-html-block iframe,
+.bs-html-block video,
+.bs-html-block svg {
+  max-width: 100%;
+}
+/* ---- Pricing ------------------------------------------------------------- */
+/* Cards layout: tier columns, the featured one lifted as "most popular". */
+.bs-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 1.5rem;
+  align-items: stretch;
+  max-width: 1040px;
+  margin-inline: auto;
+}
+.bs-price-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bs-surface);
+  border: 1px solid color-mix(in srgb, var(--bs-text) 10%, transparent);
+  border-radius: var(--bs-radius-card);
+  padding: 2rem 1.75rem;
+  box-shadow: var(--bs-shadow-sm);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.bs-price-card:hover {
+  box-shadow: var(--bs-shadow-md);
+  transform: translateY(-3px);
+}
+.bs-price-card--featured {
+  border-color: var(--bs-primary);
+  border-width: 2px;
+  box-shadow: var(--bs-shadow-lg);
+}
+@media (min-width: 880px) {
+  .bs-price-card--featured { transform: scale(1.045); z-index: 1; }
+  .bs-price-card--featured:hover { transform: scale(1.045) translateY(-3px); }
+}
+.bs-price-badge {
+  position: absolute;
+  top: -0.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bs-primary);
+  color: var(--bs-on-primary);
+  font-family: var(--bs-font-body);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.32rem 0.85rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: var(--bs-shadow-sm);
+}
+.bs-price-name {
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.15rem;
+  margin: 0;
+}
+.bs-price-amount {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0.35rem;
+}
+.bs-price-amount .amt {
+  font-family: var(--bs-font-heading);
+  font-weight: 800;
+  font-size: clamp(2rem, 4vw, 2.6rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bs-text);
+}
+.bs-price-amount .unit { color: var(--bs-muted); font-size: 0.9rem; font-weight: 500; }
+.bs-price-desc { color: var(--bs-muted); font-size: 0.95rem; margin: 0 0 1.35rem; }
+.bs-price-features {
+  list-style: none;
+  margin: 0 0 1.6rem;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.bs-price-features li {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.bs-price-check { color: var(--bs-primary); flex: none; margin-top: 0.12rem; }
+.bs-price-card .bs-btn { margin-top: auto; width: 100%; justify-content: center; }
+
+/* Table layout: compact name → price list. */
+.bs-pricetable {
+  max-width: 780px;
+  margin-inline: auto;
+  background: var(--bs-surface);
+  border: 1px solid color-mix(in srgb, var(--bs-text) 10%, transparent);
+  border-radius: var(--bs-radius-card);
+  box-shadow: var(--bs-shadow-sm);
+  overflow: hidden;
+}
+.bs-pricetable-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--bs-text) 8%, transparent);
+}
+.bs-pricetable-row:first-child { border-top: none; }
+.bs-pricetable-row--featured { background: var(--bs-primary-10); }
+.bs-pricetable-info { min-width: 0; }
+.bs-pricetable-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--bs-font-heading);
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+.bs-pricetable-badge {
+  background: var(--bs-primary);
+  color: var(--bs-on-primary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.bs-pricetable-desc { color: var(--bs-muted); font-size: 0.9rem; margin-top: 0.15rem; }
+.bs-pricetable-price { display: flex; align-items: baseline; gap: 0.3rem; white-space: nowrap; }
+.bs-pricetable-price .amt {
+  font-family: var(--bs-font-heading);
+  font-weight: 800;
+  font-size: 1.4rem;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bs-text);
+}
+.bs-pricetable-price .unit { color: var(--bs-muted); font-size: 0.85rem; }
+
+.bs-pricing-footnote {
+  text-align: center;
+  color: var(--bs-muted);
+  font-size: 0.9rem;
+  margin: 1.75rem auto 0;
+  max-width: 640px;
+}
+
 .bs-footer-brand { display: inline-flex; align-items: center; gap: 0.55rem; }
 .bs-footer-brand-mark { width: 2rem; height: 2rem; font-size: 0.95rem; }
 .bs-nav-rating {

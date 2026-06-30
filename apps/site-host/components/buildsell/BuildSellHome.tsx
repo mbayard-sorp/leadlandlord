@@ -11,6 +11,7 @@ import { ServicesBlock } from './blocks/ServicesBlock';
 import { AboutBlock } from './blocks/AboutBlock';
 import { ProcessBlock } from './blocks/ProcessBlock';
 import { ReviewsBlock } from './blocks/ReviewsBlock';
+import { PricingBlock } from './blocks/PricingBlock';
 import { ContactBlock } from './blocks/ContactBlock';
 import { FooterBlock } from './blocks/FooterBlock';
 import { UgcBlock } from './blocks/UgcBlock';
@@ -77,9 +78,23 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
       <nav className="bs-nav" data-nav aria-label="Site navigation">
         <div className="bs-container bs-nav-inner">
           <a href="#home" className="bs-nav-brand">
-            <span className="bs-nav-brand-mark" aria-hidden="true">
-              {site.businessName.charAt(0)}
-            </span>
+            {site.logo?.asset?.url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Sanity CDN asset, sized via CSS
+              <img
+                className="bs-nav-logo"
+                src={site.logo.asset.url}
+                alt={site.businessName}
+                style={
+                  site.logoSize
+                    ? { height: `${site.logoSize}px`, maxWidth: 'none' }
+                    : undefined
+                }
+              />
+            ) : (
+              <span className="bs-nav-brand-mark" aria-hidden="true">
+                {site.businessName.charAt(0)}
+              </span>
+            )}
             {site.businessName}
           </a>
 
@@ -195,6 +210,33 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 layoutVariant={layoutVariant}
               />
             );
+          case 'bsPricingSection':
+            return (
+              <PricingBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
+          case 'bsHtmlSection': {
+            // Operator-authored freeform HTML (not exposed in the customer
+            // portal), rendered verbatim. fullWidth skips the centered wrapper.
+            if (!section.html) return null;
+            return section.fullWidth ? (
+              <div
+                key={section._key}
+                className="bs-html-block"
+                dangerouslySetInnerHTML={{ __html: section.html }}
+              />
+            ) : (
+              <section key={section._key} className="bs-section bs-html-block">
+                <div
+                  className="bs-container"
+                  dangerouslySetInnerHTML={{ __html: section.html }}
+                />
+              </section>
+            );
+          }
           case 'bsFooterSection':
             return (
               <FooterBlock

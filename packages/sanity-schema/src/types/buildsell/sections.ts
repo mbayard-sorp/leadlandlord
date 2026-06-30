@@ -46,7 +46,10 @@ export const bsHeroSection = defineType({
       description: 'Describes the hero image for Google Images + screen readers.',
     }),
   ],
-  preview: { select: { title: 'headline' }, prepare: ({ title }) => ({ title: `Hero — ${title ?? ''}` }) },
+  preview: {
+    select: { title: 'headline', media: 'image' },
+    prepare: ({ title, media }) => ({ title: `Hero — ${title ?? ''}`, media }),
+  },
 });
 
 export const bsServicesSection = defineType({
@@ -80,7 +83,10 @@ export const bsAboutSection = defineType({
       description: 'Describes the about image for Google Images + screen readers.',
     }),
   ],
-  preview: { prepare: () => ({ title: 'About' }) },
+  preview: {
+    select: { media: 'image' },
+    prepare: ({ media }) => ({ title: 'About', media }),
+  },
 });
 
 export const bsProcessSection = defineType({
@@ -206,6 +212,93 @@ export const bsFaqSection = defineType({
   preview: { prepare: () => ({ title: 'FAQ' }) },
 });
 
+/**
+ * Pricing section. Two render layouts off the same data:
+ *  - 'cards': tier cards with a big price + feature bullets, one tier liftable
+ *    as "most popular". Best for plans / packages.
+ *  - 'table': compact price list (name + price per row). Best for service menus
+ *    and volume-based pricing where you just need name → price fast.
+ * Low-effort to populate: a row needs only a name + price; everything else is
+ * optional polish.
+ */
+export const bsPricingSection = defineType({
+  name: 'bsPricingSection',
+  title: 'Pricing',
+  type: 'object',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', initialValue: 'Pricing' }),
+    defineField({ name: 'subhead', title: 'Subhead', type: 'text', rows: 2 }),
+    defineField({
+      name: 'layout',
+      title: 'Layout',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Cards (plans with features)', value: 'cards' },
+          { title: 'Table (simple price list)', value: 'table' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'cards',
+      description: 'Cards = tier cards with feature bullets. Table = compact name → price list.',
+    }),
+    defineField({
+      name: 'tiers',
+      title: 'Tiers / Rows',
+      type: 'array',
+      of: [{ type: 'bsPricingTier' }],
+      validation: (r) => r.min(1),
+    }),
+    defineField({ name: 'footnote', title: 'Footnote', type: 'text', rows: 2, description: 'Fine print under the prices, e.g. "Prices vary by load size and material. Final quote confirmed on site."' }),
+  ],
+  preview: {
+    select: { layout: 'layout', tiers: 'tiers' },
+    prepare: ({ layout, tiers }) => ({
+      title: 'Pricing',
+      subtitle: [layout === 'table' ? 'Table' : 'Cards', tiers?.length ? `${tiers.length} tiers` : null].filter(Boolean).join(' · '),
+    }),
+  },
+});
+
+/**
+ * Freeform HTML block. Renders raw markup as-is on the page, in section order.
+ * Operator-authored only (not exposed in the customer self-edit portal), so the
+ * content is trusted; the site renderer injects it via dangerouslySetInnerHTML.
+ */
+export const bsHtmlSection = defineType({
+  name: 'bsHtmlSection',
+  title: 'Custom HTML',
+  type: 'object',
+  fields: [
+    defineField({
+      name: 'label',
+      title: 'Label (internal)',
+      type: 'string',
+      description: 'Optional name shown in the Studio sections list to identify this block. Not rendered on the site.',
+    }),
+    defineField({
+      name: 'html',
+      title: 'HTML',
+      type: 'text',
+      rows: 14,
+      description: 'Raw HTML rendered exactly as written. Authored by operators only — invalid or unsafe markup will render as-is, so paste with care.',
+      validation: (r) => r.required(),
+    }),
+    defineField({
+      name: 'fullWidth',
+      title: 'Full width (edge-to-edge)',
+      type: 'boolean',
+      initialValue: false,
+      description: 'Off: wrapped in the site’s centered container with standard section padding. On: spans the full viewport width with no wrapper.',
+    }),
+  ],
+  preview: {
+    select: { label: 'label' },
+    prepare: ({ label }) => ({ title: label ? `Custom HTML — ${label}` : 'Custom HTML' }),
+  },
+});
+
 export const buildsellSectionTypes = [
   bsHeroSection,
   bsServicesSection,
@@ -216,4 +309,6 @@ export const buildsellSectionTypes = [
   bsFaqSection,
   bsFooterSection,
   bsUgcSection,
+  bsHtmlSection,
+  bsPricingSection,
 ];
