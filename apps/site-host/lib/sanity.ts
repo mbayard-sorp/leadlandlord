@@ -292,6 +292,7 @@ const BUILDSELL_PROJECTION = `{
   ogImagePrompt,
   "logo": logo{ "asset": asset->{ url } },
   logoSize,
+  navShowBusinessName,
   "faviconUrl": favicon.asset->url,
   seo{ metaTitle, metaDescription, "ogImageUrl": ogImage.asset->url },
   "sections": sections[]{
@@ -476,6 +477,7 @@ export interface BuildSellSite {
   ogImagePrompt?: string | null;
   logo?: { asset?: { url?: string | null } | null } | null;
   logoSize?: number | null;
+  navShowBusinessName?: boolean | null;
   faviconUrl?: string | null;
 }
 

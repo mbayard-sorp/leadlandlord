@@ -77,7 +77,13 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
           rating) is handled in CSS via the .bs-root[data-bs-layout] attribute. */}
       <nav className="bs-nav" data-nav aria-label="Site navigation">
         <div className="bs-container bs-nav-inner">
-          <a href="#home" className="bs-nav-brand">
+          <a
+            href="#home"
+            className="bs-nav-brand"
+            aria-label={
+              site.navShowBusinessName === false ? site.businessName : undefined
+            }
+          >
             {site.logo?.asset?.url ? (
               // eslint-disable-next-line @next/next/no-img-element -- Sanity CDN asset, sized via CSS
               <img
@@ -95,7 +101,7 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 {site.businessName.charAt(0)}
               </span>
             )}
-            {site.businessName}
+            {site.navShowBusinessName === false ? null : site.businessName}
           </a>
 
           <ul className="bs-nav-links" role="list">

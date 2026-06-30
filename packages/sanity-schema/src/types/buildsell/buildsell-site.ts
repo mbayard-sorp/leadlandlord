@@ -45,6 +45,15 @@ export const buildsellSite = defineType({
       validation: (r) => r.min(16).max(160).integer(),
       hidden: ({ document }) => !document?.logo,
     }),
+    defineField({
+      name: 'navShowBusinessName',
+      title: 'Show business name next to logo',
+      type: 'boolean',
+      group: 'images',
+      initialValue: true,
+      description: 'When off, the header shows the logo alone (no business-name text beside it). Best with a logo that already includes the name.',
+      hidden: ({ document }) => !document?.logo,
+    }),
     defineField({ name: 'favicon', title: 'Favicon', type: 'image', group: 'images', description: 'Browser tab icon. Auto-generated as an initials monogram on the preset color (or derived from the logo when one exists). Regenerable in the operator image panel.' }),
     defineField({ name: 'socials', title: 'Social Links', type: 'array', of: [{ type: 'bsSocialLink' }], description: 'Brand social profiles.' }),
     defineField({
