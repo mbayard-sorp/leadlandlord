@@ -291,6 +291,8 @@ const BUILDSELL_PROJECTION = `{
   aboutImagePrompt,
   ogImagePrompt,
   "logo": logo{ "asset": asset->{ url } },
+  logoSize,
+  navShowBusinessName,
   "faviconUrl": favicon.asset->url,
   seo{ metaTitle, metaDescription, "ogImageUrl": ogImage.asset->url },
   "sections": sections[]{
@@ -406,6 +408,23 @@ export interface BuildSellSection {
   showMap?: boolean | null;
   // bsFaqSection
   /** FAQ items — shared `items` array, each with question + answer (bsFaqItem). */
+  // bsHtmlSection — freeform operator-authored HTML rendered as-is.
+  html?: string | null;
+  label?: string | null;
+  fullWidth?: boolean | null;
+  // bsPricingSection — `layout` is 'cards' | 'table'.
+  layout?: string | null;
+  footnote?: string | null;
+  tiers?: Array<{
+    name?: string | null;
+    price?: string | null;
+    unit?: string | null;
+    description?: string | null;
+    features?: Array<string> | null;
+    featured?: boolean | null;
+    badge?: string | null;
+    cta?: { label?: string | null; href?: string | null; style?: string | null } | null;
+  }> | null;
   // bsFooterSection
   tagline?: string | null;
   columns?: Array<{
@@ -457,6 +476,8 @@ export interface BuildSellSite {
   aboutImagePrompt?: string | null;
   ogImagePrompt?: string | null;
   logo?: { asset?: { url?: string | null } | null } | null;
+  logoSize?: number | null;
+  navShowBusinessName?: boolean | null;
   faviconUrl?: string | null;
 }
 

@@ -11,6 +11,7 @@ import { ServicesBlock } from './blocks/ServicesBlock';
 import { AboutBlock } from './blocks/AboutBlock';
 import { ProcessBlock } from './blocks/ProcessBlock';
 import { ReviewsBlock } from './blocks/ReviewsBlock';
+import { PricingBlock } from './blocks/PricingBlock';
 import { ContactBlock } from './blocks/ContactBlock';
 import { FooterBlock } from './blocks/FooterBlock';
 import { UgcBlock } from './blocks/UgcBlock';
@@ -76,54 +77,95 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
           rating) is handled in CSS via the .bs-root[data-bs-layout] attribute. */}
       <nav className="bs-nav" data-nav aria-label="Site navigation">
         <div className="bs-container bs-nav-inner">
-          <a href="#home" className="bs-nav-brand">
-            <span className="bs-nav-brand-mark" aria-hidden="true">
-              {site.businessName.charAt(0)}
-            </span>
-            {site.businessName}
-          </a>
-
-          <ul className="bs-nav-links" role="list">
-            {site.navigation && site.navigation.length > 0
-              ? site.navigation.map((link, i) => (
-                  <li key={i}>
-                    <a href={link.href}>{link.label}</a>
-                  </li>
-                ))
-              : (
-                <>
-                  <li><a href="#services">Services</a></li>
-                  <li><a href="#about">About</a></li>
-                  <li><a href="#reviews">Reviews</a></li>
-                  <li><a href="#contact">Contact</a></li>
-                </>
-              )}
-          </ul>
-
-          <div className="bs-nav-cta-group">
-            {/* Trust variant surfaces the rating inline in the nav */}
-            {layoutVariant === 'trust' && site.rating != null && (
-              <span className="bs-nav-rating" aria-label={`Rated ${site.rating} out of 5`}>
-                <Stars rating={site.rating} count={1} size={15} />
-                {site.rating.toFixed(1)}
+          <a
+            href="#home"
+            className="bs-nav-brand"
+            aria-label={
+              site.navShowBusinessName === false ? site.businessName : undefined
+            }
+          >
+            {site.logo?.asset?.url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Sanity CDN asset, sized via CSS
+              <img
+                className="bs-nav-logo"
+                src={site.logo.asset.url}
+                alt={site.businessName}
+                style={
+                  site.logoSize
+                    ? { height: `${site.logoSize}px`, maxWidth: 'none' }
+                    : undefined
+                }
+              />
+            ) : (
+              <span className="bs-nav-brand-mark" aria-hidden="true">
+                {site.businessName.charAt(0)}
               </span>
             )}
-            {(site.navShowPhone ?? true) && site.phone && (
+            {site.navShowBusinessName === false ? null : site.businessName}
+          </a>
+
+          {/* Collapsible menu: `display: contents` on desktop so brand | links
+              | CTA stay a single flex row; on mobile it becomes the dropdown
+              panel toggled by the hamburger via [data-nav].is-menu-open. */}
+          <div className="bs-nav-collapse" id="bs-mobile-menu" data-nav-menu>
+            <ul className="bs-nav-links" role="list">
+              {site.navigation && site.navigation.length > 0
+                ? site.navigation.map((link, i) => (
+                    <li key={i}>
+                      <a href={link.href}>{link.label}</a>
+                    </li>
+                  ))
+                : (
+                  <>
+                    <li><a href="#services">Services</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#reviews">Reviews</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                  </>
+                )}
+            </ul>
+
+            <div className="bs-nav-cta-group">
+              {/* Trust variant surfaces the rating inline in the nav */}
+              {layoutVariant === 'trust' && site.rating != null && (
+                <span className="bs-nav-rating" aria-label={`Rated ${site.rating} out of 5`}>
+                  <Stars rating={site.rating} count={1} size={15} />
+                  {site.rating.toFixed(1)}
+                </span>
+              )}
+              {(site.navShowPhone ?? true) && site.phone && (
+                <a
+                  href={`tel:${site.phone}`}
+                  className="bs-btn bs-btn-outline"
+                  aria-label={`Call ${site.phone}`}
+                >
+                  {site.phone}
+                </a>
+              )}
               <a
-                href={`tel:${site.phone}`}
-                className="bs-btn bs-btn-outline"
-                aria-label={`Call ${site.phone}`}
+                href={site.navCta?.href ?? '#contact'}
+                className="bs-btn bs-btn-primary"
               >
-                {site.phone}
+                {site.navCta?.label ?? 'Get a Free Quote'}
               </a>
-            )}
-            <a
-              href={site.navCta?.href ?? '#contact'}
-              className="bs-btn bs-btn-primary"
-            >
-              {site.navCta?.label ?? 'Get a Free Quote'}
-            </a>
+            </div>
           </div>
+
+          {/* Mobile-only hamburger (top right). Toggled by BuildSellMotion. */}
+          <button
+            type="button"
+            className="bs-nav-toggle"
+            data-nav-toggle
+            aria-label="Open menu"
+            aria-controls="bs-mobile-menu"
+            aria-expanded="false"
+          >
+            <span className="bs-nav-toggle-box" aria-hidden="true">
+              <span className="bs-nav-toggle-bar" />
+              <span className="bs-nav-toggle-bar" />
+              <span className="bs-nav-toggle-bar" />
+            </span>
+          </button>
         </div>
       </nav>
 
@@ -195,6 +237,33 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 layoutVariant={layoutVariant}
               />
             );
+          case 'bsPricingSection':
+            return (
+              <PricingBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
+          case 'bsHtmlSection': {
+            // Operator-authored freeform HTML (not exposed in the customer
+            // portal), rendered verbatim. fullWidth skips the centered wrapper.
+            if (!section.html) return null;
+            return section.fullWidth ? (
+              <div
+                key={section._key}
+                className="bs-html-block"
+                dangerouslySetInnerHTML={{ __html: section.html }}
+              />
+            ) : (
+              <section key={section._key} className="bs-section bs-html-block">
+                <div
+                  className="bs-container"
+                  dangerouslySetInnerHTML={{ __html: section.html }}
+                />
+              </section>
+            );
+          }
           case 'bsFooterSection':
             return (
               <FooterBlock

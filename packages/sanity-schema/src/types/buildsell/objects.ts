@@ -52,6 +52,38 @@ export const bsServiceCard = defineType({
   preview: { select: { title: 'title', subtitle: 'icon' } },
 });
 
+/**
+ * One pricing tier / line item inside a bsPricingSection.
+ *
+ * `price` is a free string ("$250", "From $99", "Call for quote") so it works
+ * for fixed prices, ranges, and "contact us" rows without parsing. `unit` is the
+ * small qualifier shown next to it ("per load", "/mo"). `features` drives the
+ * card-layout bullet list; the table layout ignores it. `featured` lifts the
+ * tier (the "most popular" column / highlighted row) and `badge` is its ribbon.
+ */
+export const bsPricingTier = defineType({
+  name: 'bsPricingTier',
+  title: 'Pricing Tier',
+  type: 'object',
+  fields: [
+    defineField({ name: 'name', title: 'Name', type: 'string', description: 'e.g. "1/4 Truck", "Standard", "Single Item".', validation: (r) => r.required() }),
+    defineField({ name: 'price', title: 'Price', type: 'string', description: 'Shown big. Free text: "$250", "From $99", "Call for quote".', validation: (r) => r.required() }),
+    defineField({ name: 'unit', title: 'Unit / Period', type: 'string', description: 'Small qualifier next to the price, e.g. "per load", "/month", "flat rate".' }),
+    defineField({ name: 'description', title: 'Description', type: 'text', rows: 2, description: 'One short line explaining what this tier covers.' }),
+    defineField({ name: 'features', title: 'Features', type: 'array', of: [{ type: 'string' }], description: 'Bullet points shown in the Cards layout. Optional; ignored by the Table layout.' }),
+    defineField({ name: 'featured', title: 'Highlight this tier', type: 'boolean', initialValue: false, description: 'Lifts this tier as the "most popular" option.' }),
+    defineField({ name: 'badge', title: 'Badge', type: 'string', description: 'Ribbon label on a highlighted tier, e.g. "Most Popular", "Best Value".' }),
+    defineField({ name: 'cta', title: 'Button', type: 'bsCtaButton', description: 'Per-tier action button. Defaults to a "Get a Quote" → #contact button in the Cards layout when empty.' }),
+  ],
+  preview: {
+    select: { title: 'name', price: 'price', featured: 'featured' },
+    prepare: ({ title, price, featured }) => ({
+      title: [title, featured ? '★' : null].filter(Boolean).join(' '),
+      subtitle: price ?? '',
+    }),
+  },
+});
+
 export const bsProcessStep = defineType({
   name: 'bsProcessStep',
   title: 'Process Step',
@@ -305,6 +337,7 @@ export const bsCustomerLayout = defineType({
 export const buildsellObjectTypes = [
   bsCtaButton,
   bsServiceCard,
+  bsPricingTier,
   bsProcessStep,
   bsTrustBadge,
   bsStatItem,

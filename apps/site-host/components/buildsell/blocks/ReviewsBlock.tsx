@@ -108,6 +108,22 @@ export function ReviewsBlock({ section, layoutVariant, rating, reviewCount }: Re
             ))}
           </div>
         )}
+
+        {/* Optional CTA below the reviews */}
+        {section.cta?.href && section.cta.label && (
+          <div className="bs-reviews-cta">
+            <a
+              href={section.cta.href}
+              className={`bs-btn ${
+                section.cta.style === 'secondary' || section.cta.style === 'ghost'
+                  ? 'bs-btn-outline'
+                  : 'bs-btn-primary'
+              } bs-btn-lg`}
+            >
+              {section.cta.label}
+            </a>
+          </div>
+        )}
       </div>
     </section>
   );
