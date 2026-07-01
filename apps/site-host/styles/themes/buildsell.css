@@ -1981,6 +1981,9 @@ a.bs-ugc-card:hover {
 .bs-hero-rating { margin-top: 0; margin-bottom: 1.25rem; }
 .bs-hero-rating--pill {
   align-self: center;
+  /* Center the stars + label along the flex main axis. Without this the row
+     fills the pill's full width and defaults to flex-start (left). */
+  justify-content: center;
   margin: 0 auto 1.25rem;
   background: var(--bs-surface);
   border: 1px solid color-mix(in srgb, var(--bs-text) 9%, transparent);
