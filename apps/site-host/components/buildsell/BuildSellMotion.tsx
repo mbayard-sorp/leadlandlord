@@ -92,6 +92,55 @@ export function BuildSellMotion() {
     handleScroll(); // set correct initial state
     cleanups.push(() => window.removeEventListener('scroll', handleScroll));
 
+    // --- 2b. Mobile hamburger menu (always on) ---------------------------
+    const toggle = document.querySelector<HTMLButtonElement>('[data-nav-toggle]');
+    const menu = document.querySelector<HTMLElement>('[data-nav-menu]');
+    if (nav && toggle && menu) {
+      const setMenu = (open: boolean) => {
+        nav.classList.toggle('is-menu-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      };
+      const isOpen = () => nav.classList.contains('is-menu-open');
+
+      const onToggleClick = (e: MouseEvent) => {
+        e.stopPropagation();
+        setMenu(!isOpen());
+      };
+      // Close after tapping a link so anchor scroll isn't hidden behind the panel.
+      const onMenuClick = (e: MouseEvent) => {
+        if ((e.target as HTMLElement).closest('a')) setMenu(false);
+      };
+      const onDocClick = (e: MouseEvent) => {
+        if (isOpen() && !nav.contains(e.target as Node)) setMenu(false);
+      };
+      const onKeydown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && isOpen()) {
+          setMenu(false);
+          toggle.focus();
+        }
+      };
+      // Reset to closed when growing past the mobile breakpoint.
+      const desktopMq = window.matchMedia('(min-width: 768px)');
+      const onBreakpoint = () => {
+        if (desktopMq.matches) setMenu(false);
+      };
+
+      toggle.addEventListener('click', onToggleClick);
+      menu.addEventListener('click', onMenuClick);
+      document.addEventListener('click', onDocClick);
+      document.addEventListener('keydown', onKeydown);
+      desktopMq.addEventListener('change', onBreakpoint);
+      cleanups.push(() => {
+        toggle.removeEventListener('click', onToggleClick);
+        menu.removeEventListener('click', onMenuClick);
+        document.removeEventListener('click', onDocClick);
+        document.removeEventListener('keydown', onKeydown);
+        desktopMq.removeEventListener('change', onBreakpoint);
+        nav.classList.remove('is-menu-open');
+      });
+    }
+
     // --- 3. Stat counters (always on; reduced-motion paints final value) -
     const statEls = Array.from(document.querySelectorAll<HTMLElement>('.bs-stat-value'));
     if (!prefersReduced) {

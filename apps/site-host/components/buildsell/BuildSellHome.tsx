@@ -104,47 +104,68 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
             {site.navShowBusinessName === false ? null : site.businessName}
           </a>
 
-          <ul className="bs-nav-links" role="list">
-            {site.navigation && site.navigation.length > 0
-              ? site.navigation.map((link, i) => (
-                  <li key={i}>
-                    <a href={link.href}>{link.label}</a>
-                  </li>
-                ))
-              : (
-                <>
-                  <li><a href="#services">Services</a></li>
-                  <li><a href="#about">About</a></li>
-                  <li><a href="#reviews">Reviews</a></li>
-                  <li><a href="#contact">Contact</a></li>
-                </>
-              )}
-          </ul>
+          {/* Collapsible menu: `display: contents` on desktop so brand | links
+              | CTA stay a single flex row; on mobile it becomes the dropdown
+              panel toggled by the hamburger via [data-nav].is-menu-open. */}
+          <div className="bs-nav-collapse" id="bs-mobile-menu" data-nav-menu>
+            <ul className="bs-nav-links" role="list">
+              {site.navigation && site.navigation.length > 0
+                ? site.navigation.map((link, i) => (
+                    <li key={i}>
+                      <a href={link.href}>{link.label}</a>
+                    </li>
+                  ))
+                : (
+                  <>
+                    <li><a href="#services">Services</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#reviews">Reviews</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                  </>
+                )}
+            </ul>
 
-          <div className="bs-nav-cta-group">
-            {/* Trust variant surfaces the rating inline in the nav */}
-            {layoutVariant === 'trust' && site.rating != null && (
-              <span className="bs-nav-rating" aria-label={`Rated ${site.rating} out of 5`}>
-                <Stars rating={site.rating} count={1} size={15} />
-                {site.rating.toFixed(1)}
-              </span>
-            )}
-            {(site.navShowPhone ?? true) && site.phone && (
+            <div className="bs-nav-cta-group">
+              {/* Trust variant surfaces the rating inline in the nav */}
+              {layoutVariant === 'trust' && site.rating != null && (
+                <span className="bs-nav-rating" aria-label={`Rated ${site.rating} out of 5`}>
+                  <Stars rating={site.rating} count={1} size={15} />
+                  {site.rating.toFixed(1)}
+                </span>
+              )}
+              {(site.navShowPhone ?? true) && site.phone && (
+                <a
+                  href={`tel:${site.phone}`}
+                  className="bs-btn bs-btn-outline"
+                  aria-label={`Call ${site.phone}`}
+                >
+                  {site.phone}
+                </a>
+              )}
               <a
-                href={`tel:${site.phone}`}
-                className="bs-btn bs-btn-outline"
-                aria-label={`Call ${site.phone}`}
+                href={site.navCta?.href ?? '#contact'}
+                className="bs-btn bs-btn-primary"
               >
-                {site.phone}
+                {site.navCta?.label ?? 'Get a Free Quote'}
               </a>
-            )}
-            <a
-              href={site.navCta?.href ?? '#contact'}
-              className="bs-btn bs-btn-primary"
-            >
-              {site.navCta?.label ?? 'Get a Free Quote'}
-            </a>
+            </div>
           </div>
+
+          {/* Mobile-only hamburger (top right). Toggled by BuildSellMotion. */}
+          <button
+            type="button"
+            className="bs-nav-toggle"
+            data-nav-toggle
+            aria-label="Open menu"
+            aria-controls="bs-mobile-menu"
+            aria-expanded="false"
+          >
+            <span className="bs-nav-toggle-box" aria-hidden="true">
+              <span className="bs-nav-toggle-bar" />
+              <span className="bs-nav-toggle-bar" />
+              <span className="bs-nav-toggle-bar" />
+            </span>
+          </button>
         </div>
       </nav>
 

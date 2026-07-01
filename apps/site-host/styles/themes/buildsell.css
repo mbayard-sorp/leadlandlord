@@ -116,11 +116,100 @@
   flex-shrink: 0;
 }
 
+/* Collapsible menu wrapper. Desktop: `contents` so brand | links | CTA remain
+   one flex row exactly as before. The hamburger is mobile-only. */
+.bs-nav-collapse { display: contents; }
+.bs-nav-toggle { display: none; }
+
 @media (max-width: 767px) {
-  .bs-nav-links { display: none; }
-  /* The outline phone button duplicates the sticky bottom call bar on
-     mobile; hide it so the business name keeps room and doesn't collapse. */
-  .bs-nav-cta-group .bs-btn-outline { display: none; }
+  /* --- Hamburger button (top right) --- */
+  .bs-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-right: -0.5rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--bs-text);
+    cursor: pointer;
+    flex: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bs-nav-toggle-box { position: relative; display: block; width: 24px; height: 18px; }
+  .bs-nav-toggle-bar {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    transition: transform 0.25s ease, opacity 0.2s ease, top 0.25s ease;
+  }
+  .bs-nav-toggle-bar:nth-child(1) { top: 0; }
+  .bs-nav-toggle-bar:nth-child(2) { top: 8px; }
+  .bs-nav-toggle-bar:nth-child(3) { top: 16px; }
+  .bs-nav.is-menu-open .bs-nav-toggle-bar:nth-child(1) { top: 8px; transform: rotate(45deg); }
+  .bs-nav.is-menu-open .bs-nav-toggle-bar:nth-child(2) { opacity: 0; }
+  .bs-nav.is-menu-open .bs-nav-toggle-bar:nth-child(3) { top: 8px; transform: rotate(-45deg); }
+
+  /* --- Dropdown panel --- */
+  .bs-nav-collapse {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 0.5rem clamp(16px, 4vw, 48px) 1.25rem;
+    background: var(--bs-surface);
+    border-bottom: 1px solid color-mix(in srgb, var(--bs-text) 8%, transparent);
+    box-shadow: var(--bs-shadow-lg);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+  }
+  .bs-nav.is-menu-open .bs-nav-collapse {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  /* Links stack full-width */
+  .bs-nav-links {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    flex: none;
+    width: 100%;
+  }
+  .bs-nav-links a {
+    display: block;
+    padding: 0.85rem 0.25rem;
+    font-size: 1.05rem;
+    color: var(--bs-text);
+    border-bottom: 1px solid color-mix(in srgb, var(--bs-text) 6%, transparent);
+  }
+  .bs-nav-links li:last-child a { border-bottom: none; }
+
+  /* CTA group stacks under the links; phone button reappears inside the menu */
+  .bs-nav-cta-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    margin-top: 0.85rem;
+    width: 100%;
+  }
+  .bs-nav-cta-group .bs-btn { width: 100%; justify-content: center; }
+  .bs-nav-cta-group .bs-btn-outline { display: inline-flex; }
+  .bs-nav-rating { justify-content: center; margin-bottom: 0.25rem; }
 }
 
 /* ---- Buttons ------------------------------------------------------------- */
@@ -2118,6 +2207,34 @@ a.bs-ugc-card:hover {
 }
 .bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-cta-group .bs-btn-outline:hover {
   background-color: color-mix(in srgb, var(--bs-on-primary) 15%, transparent);
+}
+/* Bold: hamburger reads white over the transparent hero photo. */
+.bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-toggle {
+  color: var(--bs-on-primary);
+}
+@media (max-width: 767px) {
+  /* Open menu gives the bold nav a solid surface so brand + X icon stay
+     readable over the hero before the user scrolls. */
+  .bs-root[data-bs-layout='bold'] .bs-nav.is-menu-open:not(.is-scrolled) {
+    background-color: color-mix(in srgb, var(--bs-surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom-color: color-mix(in srgb, var(--bs-text) 8%, transparent);
+  }
+  .bs-root[data-bs-layout='bold'] .bs-nav.is-menu-open:not(.is-scrolled) .bs-nav-brand,
+  .bs-root[data-bs-layout='bold'] .bs-nav.is-menu-open:not(.is-scrolled) .bs-nav-toggle {
+    color: var(--bs-text);
+  }
+  /* Dropdown links + phone button are dark-on-surface, not the white
+     over-hero treatment (overrides the desktop bold rules at equal
+     specificity via later source order). */
+  .bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-links a {
+    color: var(--bs-text);
+  }
+  .bs-root[data-bs-layout='bold'] .bs-nav:not(.is-scrolled) .bs-nav-cta-group .bs-btn-outline {
+    color: var(--bs-primary);
+    border-color: var(--bs-primary);
+  }
 }
 
 /* ---- Bold: overlapping trust strip (elevated icon-tile cards) ----------- */
