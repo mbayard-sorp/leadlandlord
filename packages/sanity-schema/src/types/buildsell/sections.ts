@@ -117,6 +117,12 @@ export const bsReviewsSection = defineType({
       of: [{ type: 'reference', to: [{ type: 'bsReview' }] }],
       description: 'References to bsReview docs (Claude-written representative testimonials).',
     }),
+    defineField({
+      name: 'cta',
+      title: 'Call-to-action Button',
+      type: 'bsCtaButton',
+      description: 'Optional button shown centered below the reviews (e.g. "Read More Reviews" → Google, or "Get a Free Quote" → #contact). Leave empty to hide.',
+    }),
   ],
   preview: { prepare: () => ({ title: 'Reviews' }) },
 });

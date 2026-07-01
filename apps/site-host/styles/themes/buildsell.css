@@ -1454,6 +1454,13 @@
   margin-bottom: 2rem;
 }
 
+/* Optional CTA below the reviews grid */
+.bs-reviews-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 2.5rem;
+}
+
 /* Review card shared */
 .bs-review-text {
   color: var(--bs-text);
