@@ -27,7 +27,17 @@ export async function generateMetadata({
     // keep the generic fallback title
   }
   return {
-    title,
+    // `absolute` opts out of the R&R root layout's `title.template`
+    // (`%s — ${site.businessName}`). Without it, Next.js welds an arbitrary
+    // R&R tenant's businessName — resolved by Host on the shared preview host —
+    // onto this B&S title (e.g. "Hauling & Cleanouts — Midland Water Damage
+    // Restoration Pros"). B&S is fully separated from R&R; no R&R name leaks here.
+    title: { absolute: title },
+    // Override OG/description so no R&R-derived metadata inherited from the root
+    // layout leaks into the B&S preview's social/share tags either.
+    description: null,
+    openGraph: { title, siteName: title },
+    alternates: { canonical: null },
     robots: { index: false, follow: false },
   };
 }
