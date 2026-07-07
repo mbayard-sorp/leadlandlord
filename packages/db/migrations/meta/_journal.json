@@ -421,6 +421,13 @@
       "when": 1783387766901,
       "tag": "0060_niche_scout_pop_band_cap",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1783446286229,
+      "tag": "0061_buildsell_klaviyo_columns",
+      "breakpoints": true
     }
   ]
 }

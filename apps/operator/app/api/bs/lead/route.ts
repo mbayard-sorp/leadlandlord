@@ -10,6 +10,7 @@ import {
   type BuildsellSiteLead,
 } from '@leadlandlord/db';
 import { sendEmail } from '@leadlandlord/integrations/resend';
+import { createOrUpdateProfile, subscribeProfileToList } from '@leadlandlord/integrations/klaviyo';
 import { log } from '@leadlandlord/shared/log';
 
 export const runtime = 'nodejs';
@@ -80,6 +81,7 @@ function getClientIp(req: Request): string {
  *   3. Insert buildsellSiteLeads with forwardStatus:'pending'
  *   4. Return 200 immediately
  *   5. after() → forward to site.ownerEmail via Resend (skipped if no key/owner)
+ *              → push to Klaviyo (skipped if no key/list)
  */
 
 const Body = z.object({
@@ -170,7 +172,10 @@ export async function POST(req: Request) {
   log.info({ leadId: inserted.id, siteId: site.id }, 'bs/lead: captured');
 
   // Fan out without blocking the response
-  after(() => forwardToOwner(inserted, site, payload.email));
+  after(() => {
+    void forwardToOwner(inserted, site, payload.email);
+    void forwardToKlaviyo(inserted, site, payload.email, payload.phone);
+  });
 
   return corsResponse(NextResponse.json({ ok: true, lead_id: inserted.id }));
 }
@@ -228,6 +233,70 @@ async function forwardToOwner(
     await db
       .update(buildsellSiteLeads)
       .set({ forwardStatus: 'failed' })
+      .where(eq(buildsellSiteLeads.id, lead.id))
+      .execute();
+  }
+}
+
+/**
+ * Push a B&S lead onto the site's Klaviyo list.
+ *
+ * `site.klaviyoListId` is set eagerly at build time by spec-site-builder
+ * (see ensureKlaviyoListForBuildSell) — there is no lazy/on-demand list
+ * creation here. If it's still null, the build-time provisioning was skipped
+ * (no API key) or failed; this just records 'skipped' and moves on.
+ */
+async function forwardToKlaviyo(
+  lead: BuildsellSiteLead,
+  site: BuildsellSite,
+  submitterEmail?: string,
+  submitterPhone?: string,
+): Promise<void> {
+  const db = getDb();
+
+  if (!process.env.KLAVIYO_PRIVATE_API_KEY || !site.klaviyoListId) {
+    await db
+      .update(buildsellSiteLeads)
+      .set({ klaviyoStatus: 'skipped' })
+      .where(eq(buildsellSiteLeads.id, lead.id))
+      .execute();
+    return;
+  }
+
+  try {
+    const { profileId } = await createOrUpdateProfile({
+      email: submitterEmail,
+      phone: submitterPhone,
+      firstName: lead.name ?? undefined,
+      properties: {
+        lead_source: lead.source,
+        buildsell_site_id: site.id,
+        trade: site.trade,
+        city: site.city,
+        state: site.state,
+      },
+    });
+
+    await subscribeProfileToList({
+      listId: site.klaviyoListId,
+      email: submitterEmail,
+      phone: submitterPhone,
+      consentMethod: `bs-lead-form (${site.trade} ${site.city})`,
+    });
+
+    await db
+      .update(buildsellSiteLeads)
+      .set({ klaviyoStatus: 'sent', klaviyoProfileId: profileId })
+      .where(eq(buildsellSiteLeads.id, lead.id))
+      .execute();
+  } catch (err) {
+    log.error(
+      { err: err instanceof Error ? err.message : err, leadId: lead.id },
+      'bs/lead: forward to klaviyo failed',
+    );
+    await db
+      .update(buildsellSiteLeads)
+      .set({ klaviyoStatus: 'failed' })
       .where(eq(buildsellSiteLeads.id, lead.id))
       .execute();
   }

@@ -11,6 +11,7 @@ import { BuildSellRevisePanel } from '../BuildSellRevisePanel';
 import { BuildSellRegeneratePanel } from '../BuildSellRegeneratePanel';
 import { CustomerAccessPanel } from './CustomerAccessPanel';
 import { listSiteAccess } from './customer-access-actions';
+import { LeadForwardingPanel } from './LeadForwardingPanel';
 import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
@@ -233,6 +234,13 @@ export default async function BuildSellDetailPage({ params }: Params) {
 
       {/* Image prompt control panel */}
       <BuildSellImagePanel siteId={site.id} />
+
+      {/* Lead forwarding: owner email + Klaviyo list */}
+      <LeadForwardingPanel
+        siteId={site.id}
+        initialOwnerEmail={site.ownerEmail}
+        initialKlaviyoListId={site.klaviyoListId}
+      />
 
       {/* Customer portal access grants */}
       <div className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-4">

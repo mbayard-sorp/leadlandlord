@@ -71,6 +71,8 @@ export interface ExistingDocFields {
   robotsDisallow?: boolean | null;
   purchaseUrl?: string | null;
   ownerEmail?: string | null;
+  /** Preserved across rebuilds — mirrors buildsell_sites.klaviyo_list_id. */
+  klaviyoListId?: string | null;
   /** Preserved when incoming payload has no street (reaped-lead rebuild degrades cleanly). */
   existingStreet?: string | null;
   /** Preserved when incoming payload has no phone (revise/rebuild keeps the NAP number). */
@@ -111,6 +113,8 @@ export interface WriteBuildSellArgs {
   city: string;
   state: string;
   ownerEmail?: string | null;
+  /** Set by ensureKlaviyoListForBuildSell before the Sanity write. Mirrored into the doc. */
+  klaviyoListId?: string | null;
   /** Google Places place_id — stored verbatim. Null when unavailable. */
   placeId?: string | null;
   slug: string;
@@ -613,6 +617,8 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
   const purchaseUrl = args.purchaseUrl ?? ex.purchaseUrl ?? undefined;
   // ownerEmail: prefer incoming arg (operator may have updated via UI); fall back to existing.
   const ownerEmail = args.ownerEmail ?? ex.ownerEmail ?? undefined;
+  // klaviyoListId: same precedence — incoming arg (freshly provisioned or operator retry) wins.
+  const klaviyoListId = args.klaviyoListId ?? ex.klaviyoListId ?? undefined;
 
   tx.createOrReplace({
     _id: docId,
@@ -625,6 +631,7 @@ export async function writeBuildSellToSanity(args: WriteBuildSellArgs): Promise<
     // Keep the existing NAP phone when this run carries none (revise/rebuild).
     phone: args.phone ?? ex.existingPhone ?? undefined,
     ownerEmail: ownerEmail ?? undefined,
+    klaviyoListId: klaviyoListId ?? undefined,
     placeId: args.placeId ?? undefined,
     slug: { _type: 'slug', current: args.slug },
     navigation: content.navigation.map((n, i) => ({ _key: `nav${i}`, _type: 'bsNavLink', ...n })),
