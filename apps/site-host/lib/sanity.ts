@@ -372,6 +372,8 @@ export interface BuildSellSection {
   /** Trust-variant hero strip tiles 2 & 3 (auto-filled from the hero prompt). */
   imageUrlB?: string | null;
   imageUrlC?: string | null;
+  /** Trust layout only: hero image renders uncropped above tiles B & C when true. */
+  imageIsLead?: boolean | null;
   showRating?: boolean | null;
   badges?: Array<{ icon?: string | null; label?: string | null }> | null;
   primaryCta?: { label?: string | null; href?: string | null; style?: string | null } | null;
