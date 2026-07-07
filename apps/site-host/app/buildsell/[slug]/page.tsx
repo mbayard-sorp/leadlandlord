@@ -2,11 +2,8 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchBuildSellSiteBySlug } from '@/lib/sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
-import { BuildSellHome } from '@/components/buildsell/BuildSellHome';
-import { BuildSellLocalBusinessJsonLd } from '@/components/buildsell/BuildSellLocalBusinessJsonLd';
-import { BuildSellBreadcrumbJsonLd } from '@/components/buildsell/BuildSellBreadcrumbJsonLd';
-import { BuildSellFaqJsonLd } from '@/components/buildsell/BuildSellFaqJsonLd';
-import { ALL_BS_FONTS } from '@/lib/buildsell-fonts';
+import { buildBuildSellMetadata } from '@/lib/buildsell-meta';
+import { BuildSellSiteView } from '@/components/buildsell/BuildSellSiteView';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,44 +20,12 @@ export async function generateMetadata({
   }
 
   const base = await currentRequestBaseUrl();
-  const canonicalPath = `/buildsell/${slug}`;
-  const title = site.seo?.metaTitle ?? site.businessName;
-  const description = site.seo?.metaDescription ?? undefined;
-
-  return {
-    metadataBase: new URL(base),
-    title,
-    description,
-    robots: site.robotsDisallow
-      ? { index: false, follow: false }
-      : { index: true, follow: true },
-    ...(site.faviconUrl
-      ? { icons: { icon: [{ url: site.faviconUrl, type: 'image/svg+xml' }] } }
-      : {}),
-    alternates: {
-      canonical: canonicalPath,
-      types: {
-        'text/markdown': `/buildsell/${slug}/index.md`,
-      },
-    },
-    openGraph: {
-      type: 'website',
-      title,
-      description,
-      url: canonicalPath,
-      ...(site.seo?.ogImageUrl
-        ? { images: [{ url: site.seo.ogImageUrl }] }
-        : {}),
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      ...(site.seo?.ogImageUrl
-        ? { images: [site.seo.ogImageUrl] }
-        : {}),
-    },
-  };
+  return buildBuildSellMetadata({
+    site,
+    base,
+    canonicalPath: `/buildsell/${slug}`,
+    mdPath: `/buildsell/${slug}/index.md`,
+  });
 }
 
 export default async function BuildSellPage({
@@ -76,19 +41,5 @@ export default async function BuildSellPage({
   const base = await currentRequestBaseUrl();
   const pageUrl = `${base}/buildsell/${slug}`;
 
-  const fontVars = ALL_BS_FONTS.map((f) => f.variable).join(' ');
-
-  return (
-    <div className={fontVars}>
-      <BuildSellLocalBusinessJsonLd site={site} url={pageUrl} />
-      <BuildSellBreadcrumbJsonLd
-        url={pageUrl}
-        base={base}
-        businessName={site.businessName}
-        slug={slug}
-      />
-      <BuildSellFaqJsonLd sections={site.sections} />
-      <BuildSellHome site={site} draft={false} />
-    </div>
-  );
+  return <BuildSellSiteView site={site} pageUrl={pageUrl} base={base} />;
 }

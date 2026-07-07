@@ -270,6 +270,7 @@ const BUILDSELL_PROJECTION = `{
   phone,
   placeId,
   "slug": slug.current,
+  customDomain,
   draftMode,
   themeLocked,
   robotsDisallow,
@@ -331,6 +332,9 @@ const BUILDSELL_BY_ID_QUERY = `*[_type=="buildsellSite" && buildsellSiteId==$id]
 const BUILDSELL_BY_SLUG_QUERY = `*[_type=="buildsellSite" && slug.current==$slug && draftMode==false][0]${BUILDSELL_PROJECTION}`;
 // Preview resolves drafts too, so no draftMode filter here (see fetchBuildSellSitePreview).
 const BUILDSELL_PREVIEW_BY_SLUG_QUERY = `*[_type=="buildsellSite" && slug.current==$slug][0]${BUILDSELL_PROJECTION}`;
+// customDomain is stored as the bare apex (no www); fetchBuildSellSiteByHost
+// strips www/port before querying so both the apex and www hosts resolve.
+const BUILDSELL_BY_HOST_QUERY = `*[_type=="buildsellSite" && customDomain==$host && draftMode==false][0]${BUILDSELL_PROJECTION}`;
 
 export interface BuildSellTheme {
   layoutVariant: 'split' | 'bold' | 'trust';
@@ -458,6 +462,7 @@ export interface BuildSellSite {
   phone?: string | null;
   placeId?: string | null;
   slug: string;
+  customDomain?: string | null;
   draftMode?: boolean | null;
   themeLocked?: boolean | null;
   robotsDisallow?: boolean | null;
@@ -648,6 +653,18 @@ export async function fetchBuildSellSitePreview(idOrSlug: string): Promise<Build
 
 export async function fetchBuildSellSiteBySlug(slug: string): Promise<BuildSellSite | null> {
   const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_SLUG_QUERY, { slug });
+  return result ?? null;
+}
+
+/**
+ * Look up a B&S site by Host header once a custom domain has been attached
+ * (see attachBuildSellDomain). Strips port and a leading "www." so both
+ * tesshauling.com and www.tesshauling.com resolve to the same doc — the
+ * apex is what's stored in customDomain.
+ */
+export async function fetchBuildSellSiteByHost(host: string): Promise<BuildSellSite | null> {
+  const bare = host.split(':')[0]!.toLowerCase().replace(/^www\./, '');
+  const result = await sanity.fetch<BuildSellSite | null>(BUILDSELL_BY_HOST_QUERY, { host: bare });
   return result ?? null;
 }
 

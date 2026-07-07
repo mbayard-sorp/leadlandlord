@@ -17,6 +17,10 @@ import {
 } from '@leadlandlord/agents/content-migrator/types';
 import { searchLeads } from '@leadlandlord/integrations/google-places';
 import { sendEmail } from '@leadlandlord/integrations/resend';
+import {
+  attachDomain as vercelAttachDomain,
+  getDomainConfig,
+} from '@leadlandlord/integrations/vercel';
 import { createWriteClient, uploadHeroImage } from '@leadlandlord/integrations/sanity';
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
 import { generateAndUploadFavicon } from '@leadlandlord/integrations/favicon';
@@ -545,6 +549,142 @@ export async function markPaid(formData: FormData): Promise<MarkPaidResult> {
     slug: existing.slug,
   };
 }
+
+// ─── Custom domain attach ────────────────────────────────────────────────────
+
+export interface AttachDomainResult {
+  ok: boolean;
+  message?: string;
+  /** DNS records for the operator to hand the customer at their registrar. */
+  dns?: {
+    aValues: string[];
+    cnames: string[];
+  };
+}
+
+// Bare apex only: no scheme, no path, no leading "www." (www is derived and
+// attached alongside the apex — see below).
+const BARE_HOSTNAME_RE =
+  /^(?!www\.)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/**
+ * Attach the customer's own domain (bare apex, e.g. "tesshauling.com") to the
+ * site-host Vercel project and record it on both Postgres and the Sanity doc
+ * so Host-header resolution (fetchBuildSellSiteByHost) picks it up.
+ *
+ * Attaches both the apex and the `www` subdomain — apex is primary; www
+ * attach is best-effort since most customers only need the apex to work.
+ * Idempotent: re-running with the same domain re-attaches (Vercel no-ops)
+ * and re-syncs Postgres/Sanity.
+ *
+ * Guard: only proceeds once the sale is in flight (invoiced/paid/live) —
+ * attaching a real domain to a draft site nobody has committed to buy yet
+ * doesn't make sense.
+ *
+ * This does NOT flip the site's own sold status — that's markPaid. Domain
+ * attach and mark-paid are independent operator steps; do either first.
+ */
+export async function attachBuildSellDomain(formData: FormData): Promise<AttachDomainResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const id = String(formData.get('id') ?? '').trim();
+  const rawDomain = String(formData.get('domain') ?? '').trim().toLowerCase();
+  if (!id) return { ok: false, message: 'Missing site id.' };
+
+  // Forgive a pasted URL or trailing slash/dot; still require a bare apex.
+  const domain = rawDomain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/\.$/, '');
+  if (!BARE_HOSTNAME_RE.test(domain)) {
+    return {
+      ok: false,
+      message: 'Enter the bare domain the customer owns (e.g. "tesshauling.com") — not a URL, and not "www.".',
+    };
+  }
+
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, id))
+    .limit(1);
+
+  if (!existing) return { ok: false, message: 'Site not found.' };
+  if (existing.status !== 'invoiced' && existing.status !== 'paid' && existing.status !== 'live') {
+    return { ok: false, message: 'Send an invoice (or mark paid) before attaching a domain.' };
+  }
+
+  const projectId = process.env.VERCEL_SITES_PROJECT_ID;
+  if (!projectId) {
+    return { ok: false, message: 'VERCEL_SITES_PROJECT_ID is not set on this operator deploy.' };
+  }
+
+  // 1. Attach the apex to Vercel first — this is the call that must succeed.
+  try {
+    await vercelAttachDomain(projectId, domain);
+  } catch (err) {
+    log.error({ id, domain, err }, 'attachBuildSellDomain: vercel attach (apex) failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'Vercel attach failed.' };
+  }
+
+  // 2. Attach www too — best-effort, non-fatal (the apex is what matters).
+  try {
+    await vercelAttachDomain(projectId, `www.${domain}`);
+  } catch (err) {
+    log.warn({ id, domain, err }, 'attachBuildSellDomain: vercel attach (www) failed (non-fatal)');
+  }
+
+  // 3. Fetch DNS instructions — best-effort. Fall back to Vercel's documented
+  // defaults (same ones used for R&R domain attach) if the config call fails;
+  // the attach itself already succeeded either way.
+  let dns: AttachDomainResult['dns'] = { aValues: ['76.76.21.21'], cnames: ['cname.vercel-dns.com'] };
+  try {
+    const cfg = await getDomainConfig(projectId, domain);
+    dns = {
+      aValues: cfg.aValues?.length ? cfg.aValues : dns.aValues,
+      cnames: cfg.cnames?.length ? cfg.cnames : dns.cnames,
+    };
+  } catch (err) {
+    log.warn({ id, domain, err }, 'attachBuildSellDomain: domain config fetch failed — using documented defaults');
+  }
+
+  // 4. Record on the Postgres row. Unique constraint on custom_domain means
+  // this fails loudly if the domain is already attached to a different site.
+  try {
+    await db
+      .update(buildsellSites)
+      .set({ customDomain: domain, domainStatus: 'pending', domainAttachedAt: new Date() })
+      .where(eq(buildsellSites.id, id));
+  } catch (err) {
+    log.error({ id, domain, err }, 'attachBuildSellDomain: db update failed');
+    return {
+      ok: false,
+      dns,
+      message: `Vercel attach succeeded, but saving the domain failed (it may already be attached to another site): ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // 5. Mirror onto the Sanity doc so fetchBuildSellSiteByHost can resolve it.
+  try {
+    await createWriteClient()
+      .patch(buildsellSiteDocId(id))
+      .set({ customDomain: domain })
+      .commit({ visibility: 'sync' });
+  } catch (err) {
+    log.error({ id, domain, err }, 'attachBuildSellDomain: sanity patch failed — DB has the domain, Sanity does not yet');
+    revalidatePath('/operator/buildsell');
+    return {
+      ok: true,
+      dns,
+      message: `Domain attached and saved, but the Sanity write failed — the site will NOT resolve on the domain until this succeeds (safe to re-run): ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  log.info({ id, domain }, 'attachBuildSellDomain: domain attached');
+  revalidatePath('/operator/buildsell');
+  revalidatePath(`/operator/buildsell/${id}`);
+
+  return { ok: true, dns };
+}
+
 // ─── Image-prompt control ────────────────────────────────────────────────────
 
 export type BuildSellImageKind = 'hero' | 'about' | 'og';
