@@ -51,6 +51,7 @@ vi.mock('@leadlandlord/db', () => ({
     scoutRefineTopK: null,
     scoutRefineBudgetUsd: null,
     scoutRefineMeasureVolume: null,
+    scoutBelowTopkSampleCount: null,
     scoutMaxPerTrade: null,
     scoutMaxCategoryShare: null,
   })),
@@ -420,7 +421,10 @@ describe('NicheScout', () => {
     it('refine_top_k=N with generous budget refines top-N, re-ranks, persists measured fields', async () => {
       refineMock.serpDifficulty = 30; // winnability_local = 0.70
       const N = 3;
-      const out = await runScout({ refine_top_k: N, refine_budget_usd: 100 });
+      // refine_below_topk_sample_count=0: isolate the top-K behavior from the
+      // below-top-K sampling pass (Phase 5), which would otherwise also
+      // consume the generous $100 budget in this test.
+      const out = await runScout({ refine_top_k: N, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
       expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(N);
       expect(out.refined_count).toBe(N);
       expect(out.refine_spend_usd).toBeCloseTo(N * 0.075, 4);
@@ -449,7 +453,12 @@ describe('NicheScout', () => {
 
     it('refine_measure_volume measures local volume and persists localMeasuredVolume', async () => {
       refineMock.metricsVolume = 500;
-      const out = await runScout({ refine_top_k: 2, refine_budget_usd: 100, refine_measure_volume: true });
+      const out = await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_measure_volume: true,
+        refine_below_topk_sample_count: 0,
+      });
       expect(vi.mocked(getLocalKeywordMetrics)).toHaveBeenCalledTimes(2);
       expect(out.refined_count).toBe(2);
       const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
@@ -504,13 +513,117 @@ describe('NicheScout', () => {
     it('dedupe: a duplicated (city,state,trade) in top-K triggers a single SERP call', async () => {
       // The grid never produces duplicates, so the guard is exercised indirectly:
       // with refine_top_k larger than the unique cell count, each unique cell is
-      // refined exactly once (no double calls).
-      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100 });
+      // refined exactly once (no double calls). refine_below_topk_sample_count=0
+      // isolates this from the below-top-K sampling pass (Phase 5).
+      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
       const issuedKeys = vi
         .mocked(getSerpComposition)
         .mock.calls.map((c) => (c[0] as { keyword: string }).keyword);
       expect(new Set(issuedKeys).size).toBe(issuedKeys.length);
       expect(out.refined_count).toBe(issuedKeys.length);
+    });
+  });
+
+  // ── Below-top-K sampling (Phase 5 follow-up to ADR 0024) ──────────────────
+  describe('Below-top-K sampling', () => {
+    it('samples up to the requested count from the next tier down, budget permitting', async () => {
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 5,
+      });
+      // 3 refined (top-K) + up to 5 sampled — grid is large enough (many
+      // home_services trades × 3 cities) that the tier [3, 12) has >= 5 cells.
+      expect(out.sampled_count).toBe(5);
+      const run = insertedRuns[0]! as { report: { refinement: { sampled_count: number } } };
+      expect(run.report.refinement.sampled_count).toBe(5);
+    });
+
+    it('same seed (ctx.runId) -> same sampled cells; different seed -> can differ', async () => {
+      const captureKeys = async () => {
+        const out = await runScout({
+          refine_top_k: 3,
+          refine_budget_usd: 100,
+          refine_below_topk_sample_count: 5,
+        });
+        const keys = vi
+          .mocked(getSerpComposition)
+          .mock.calls.map((c) => (c[0] as { keyword: string }).keyword);
+        return { out, keys };
+      };
+
+      const first = await captureKeys();
+      vi.mocked(getSerpComposition).mockClear();
+      insertedRuns.length = 0;
+      insertedCandidates.length = 0;
+      statusUpdates.length = 0;
+      const second = await captureKeys();
+
+      // MOCK_CTX.runId is a fixed constant, so both runs share the same seed
+      // -> the exact same set of SERP keywords must be issued in both runs.
+      expect(second.keys).toEqual(first.keys);
+      expect(second.out.sampled_count).toBe(first.out.sampled_count);
+    });
+
+    it('refine_below_topk_sample_count=0 disables the sampling pass entirely', async () => {
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+      });
+      expect(out.sampled_count).toBe(0);
+      expect(out.refined_count).toBe(3);
+    });
+
+    it('respects the same worstCaseCellCost budget guard the top-K loop uses', async () => {
+      // Budget covers exactly the 3 top-K cold calls (0.225) and nothing more —
+      // the sampling pass must not issue any additional cold calls once the
+      // budget is exhausted by the top-K loop.
+      refineMock.serpCost = 0.075;
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 0.225,
+        refine_below_topk_sample_count: 5,
+      });
+      expect(out.refined_count).toBe(3);
+      expect(out.sampled_count).toBe(0);
+      expect(out.refine_spend_usd).toBeCloseTo(0.225, 4);
+      const run = insertedRuns[0]! as { report: { refinement: { refine_budget_exhausted: boolean } } };
+      expect(run.report.refinement.refine_budget_exhausted).toBe(true);
+    });
+
+    it('does not resample a cell already refined by the top-K loop', async () => {
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 5,
+      });
+      const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
+      // 3 top-K + 5 sampled = 8 distinct refined cells (no double-refinement).
+      expect(refined).toHaveLength(Number(out.refined_count) + Number(out.sampled_count));
+      const keys = refined.map((c) => `${c.trade}|${c.city}|${c.state}`);
+      expect(new Set(keys).size).toBe(keys.length);
+    });
+
+    it('system_state override changes the sampled count', async () => {
+      vi.mocked(getSystemState).mockResolvedValueOnce({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: 2,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+      } as Awaited<ReturnType<typeof getSystemState>>);
+      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100 });
+      expect(out.sampled_count).toBe(2);
     });
   });
 
@@ -594,6 +707,7 @@ describe('NicheScout', () => {
       scoutRefineTopK: null,
       scoutRefineBudgetUsd: null,
       scoutRefineMeasureVolume: null,
+      scoutBelowTopkSampleCount: null,
       scoutMaxPerTrade: null,
       scoutMaxCategoryShare: null,
     } as Awaited<ReturnType<typeof getSystemState>>);

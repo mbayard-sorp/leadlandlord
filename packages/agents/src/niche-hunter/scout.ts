@@ -16,12 +16,15 @@ import {
   resolveDemandVolume,
   DEFAULT_SCOUT_REFINE_BUDGET_USD,
   DEFAULT_SCOUT_REFINE_TOP_K,
+  DEFAULT_SCOUT_BELOW_TOPK_SAMPLE_COUNT,
+  BELOW_TOPK_TIER_MULTIPLIER,
   SCOUT_MAX_PER_TRADE,
   SCOUT_MAX_CATEGORY_SHARE,
   MIN_WINNABILITY_FLOOR,
 } from './scoring-config';
 import { buildScoutReport, type ScoredCell } from './scout-report';
 import { selectDiversified } from './selection';
+import { seededRandom, sampleIndices } from './rng';
 
 /**
  * Niche Scout — phase 1 of the deterministic scout/validate engine.
@@ -57,6 +60,12 @@ export const NicheScoutInput = z.object({
   refine_top_k: z.number().int().nonnegative().optional(),
   refine_budget_usd: z.number().nonnegative().optional(),
   refine_measure_volume: z.boolean().optional(),
+  /**
+   * Below-top-K sampling (Phase 5 follow-up to ADR 0024). Per-run override of
+   * system_state.scout_below_topk_sample_count; undefined → sys.* → code
+   * default (10). 0 disables the sampling pass entirely.
+   */
+  refine_below_topk_sample_count: z.number().int().nonnegative().optional(),
 });
 export type NicheScoutInput = z.infer<typeof NicheScoutInput>;
 
@@ -72,6 +81,8 @@ export const NicheScoutOutput = z.object({
   refined_count: z.number(),
   /** Stage-3 DataForSEO spend actually incurred (cache hits cost $0). */
   refine_spend_usd: z.number(),
+  /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). */
+  sampled_count: z.number(),
 });
 export type NicheScoutOutput = z.infer<typeof NicheScoutOutput>;
 
@@ -100,7 +111,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutMinLeadPrice != null ? parseFloat(sys.scoutMinLeadPrice) : undefined;
     const minRentabilityPrior =
       sys.scoutMinRentabilityPrior != null ? parseFloat(sys.scoutMinRentabilityPrior) : undefined;
-    // Structural geo blend strengths (ADR 0022) — NULL = code defaults (0.0 → inert).
+    // Structural geo blend strengths (ADR 0022) — NULL = code defaults (0.25).
     const compBlendStrength =
       sys.scoutGeoCompBlend != null ? parseFloat(sys.scoutGeoCompBlend) : undefined;
     const demandBlendStrength =
@@ -329,41 +340,32 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       input.refine_measure_volume ?? sys.scoutRefineMeasureVolume ?? false;
 
     let refinedCount = 0;
+    let sampledCount = 0;
     let refineSpendUsd = 0;
     let refineBudgetExhausted = false;
-    // TODO(niche): consider sampling beyond top-K so buried low-competition cells can surface (ADR 0024 follow-up)
 
     if (refineTopK > 0) {
-      ctx.progress({ step: 3, total: 5, label: `refining top ${refineTopK} cells (local SERP)` });
       // Worst-case cold cost of one cell's calls — used only for the pre-check.
       const COLD_SERP_COST = 0.075;
       const COLD_METRICS_COST = 0.0012;
       const worstCaseCellCost = COLD_SERP_COST + (refineMeasureVolume ? COLD_METRICS_COST : 0);
 
-      // Dedupe defensively by `${city}|${state}|${trade}` — the grid never
-      // produces dups, but a future caller might. Iterate in score order.
-      const seen = new Set<string>();
-      const targets: ScoredCell[] = [];
-      for (const c of cells.slice(0, refineTopK)) {
-        const key = `${c.city}|${c.state}|${c.trade}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        targets.push(c);
-      }
-
-      for (const cell of targets) {
+      // Refines one cell in place via measured local-SERP signal (+ optionally
+      // measured local volume), rescoring through the SAME estimateScoutValue
+      // math (geo blends, dollar formula) via overrides — no formula
+      // duplication. Shared by both the top-K loop and the below-top-K
+      // sampling pass below. Returns false when the budget pre-check trips
+      // (caller decides whether that means "stop" or "skip this cell").
+      const refineOneCell = async (cell: ScoredCell): Promise<boolean> => {
         // Pre-check (graceful abort): would a worst-case cold call push ACTUAL
         // spend over budget? Compared against the budget net of what we have
         // actually spent so far — and actual spend only ever moved on cold calls,
         // because cache hits report 0 via onCost and never decrement the budget.
         // That cache-hit-is-free accounting means warm cells encountered earlier
-        // in score order let MORE cells refine before this guard ever trips. Once
-        // a worst-case cold call would exceed the remaining budget we stop issuing
-        // new calls entirely (break) — the simplest correct reconciliation of the
-        // worst-case pre-check with the realized onCost accounting.
+        // let MORE cells refine before this guard ever trips.
         if (refineSpendUsd + worstCaseCellCost > refineBudgetUsd) {
           refineBudgetExhausted = true;
-          break;
+          return false;
         }
 
         // Local onCost: sum this call's incurred cost into a per-call accumulator
@@ -440,7 +442,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           cell.localAggregatorShare = serp.aggregator_share;
           cell.hasLocalPack = serp.has_local_pack;
           if (measuredCityVolume !== undefined) cell.localMeasuredVolume = measuredCityVolume;
-          refinedCount++;
+          return true;
         } catch (err) {
           ctx.log.warn(
             {
@@ -452,8 +454,72 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
             'niche-scout: local-SERP refinement failed — leaving cell as proxy',
           );
           // Leave the cell as proxy; do not abort the whole run.
+          return true;
         } finally {
           refineSpendUsd += cellSpend;
+        }
+      };
+
+      // Dedupe defensively by `${city}|${state}|${trade}` — the grid never
+      // produces dups, but a future caller might. Iterate in score order.
+      const dedupeKey = (c: ScoredCell) => `${c.city}|${c.state}|${c.trade}`;
+      const seen = new Set<string>();
+      const targets: ScoredCell[] = [];
+      for (const c of cells.slice(0, refineTopK)) {
+        const key = dedupeKey(c);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        targets.push(c);
+      }
+
+      ctx.progress({ step: 3, total: 5, label: `refining top ${refineTopK} cells (local SERP)` });
+      for (const cell of targets) {
+        const proceeded = await refineOneCell(cell);
+        if (!proceeded) break; // budget pre-check tripped — stop issuing new calls entirely
+        refinedCount++;
+      }
+
+      // Below-top-K sampling (Phase 5 follow-up to ADR 0024): a low-competition
+      // cell buried just outside the top-K cut never gets measured otherwise.
+      // Only runs when refine budget remains — reuses the exact same
+      // worstCaseCellCost pre-check via refineOneCell, so the budget guard
+      // still holds. Sampled uniformly at random (seeded on ctx.runId for
+      // reproducibility) from the next tier down: [refineTopK, refineTopK *
+      // BELOW_TOPK_TIER_MULTIPLIER), NOT the whole remaining tail.
+      const belowTopKSampleCount =
+        input.refine_below_topk_sample_count ??
+        (sys.scoutBelowTopkSampleCount != null ? Number(sys.scoutBelowTopkSampleCount) : undefined) ??
+        DEFAULT_SCOUT_BELOW_TOPK_SAMPLE_COUNT;
+
+      if (belowTopKSampleCount > 0 && !refineBudgetExhausted) {
+        const tierStart = refineTopK;
+        const tierEnd = Math.min(cells.length, refineTopK * BELOW_TOPK_TIER_MULTIPLIER);
+        if (tierEnd > tierStart) {
+          const tierSeen = new Set<string>(seen);
+          const tierCandidates: ScoredCell[] = [];
+          for (const c of cells.slice(tierStart, tierEnd)) {
+            const key = dedupeKey(c);
+            if (tierSeen.has(key)) continue;
+            tierSeen.add(key);
+            tierCandidates.push(c);
+          }
+
+          const rng = seededRandom(`niche-scout-below-topk:${ctx.runId}`);
+          const sampleTargetIdx = sampleIndices(tierCandidates.length, belowTopKSampleCount, rng);
+          const sampleTargets = sampleTargetIdx.map((i) => tierCandidates[i]!);
+
+          if (sampleTargets.length > 0) {
+            ctx.progress({
+              step: 3,
+              total: 5,
+              label: `sampling ${sampleTargets.length} below-top-${refineTopK} cells (local SERP)`,
+            });
+            for (const cell of sampleTargets) {
+              const proceeded = await refineOneCell(cell);
+              if (!proceeded) break;
+              sampledCount++;
+            }
+          }
         }
       }
 
@@ -498,6 +564,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         refined_count: refinedCount,
         refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
         refine_budget_exhausted: refineBudgetExhausted,
+        sampled_count: sampledCount,
       },
       cellsDesc: rankedCells,
       grid: {
@@ -600,6 +667,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         dfs_spend_usd: dfsSpendUsd,
         uncached_trades: uncachedTrades,
         refined_count: refinedCount,
+        sampled_count: sampledCount,
         refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
         refine_budget_exhausted: refineBudgetExhausted,
       },
@@ -616,6 +684,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       dfs_spend_usd: Number(dfsSpendUsd.toFixed(4)),
       refined_count: refinedCount,
       refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
+      sampled_count: sampledCount,
     };
   }
 }

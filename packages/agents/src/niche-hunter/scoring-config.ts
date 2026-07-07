@@ -53,21 +53,21 @@ export const DEFAULT_BENCHMARK_WINNABILITY = 0.5;
 
 /**
  * Blend strength (α_comp) folding the structural metro-density competition
- * proxy into winnability. Shipped at 0.0 so the feature is inert: at α=0,
- * localRankMult = 1.0 and scout output reproduces the ADR 0021 formula
- * bit-for-bit. Operator-overridable via system_state.scout_geo_comp_blend;
- * suggested starting value 0.3–0.5 once the geo-tier report is observed.
+ * proxy into winnability. Calibrated on and shipped at 0.25 (ADR 0022): the
+ * geo-tier report was observed and the blend is now live rather than inert.
+ * Operator-overridable via system_state.scout_geo_comp_blend — that value
+ * still wins over this default.
  */
-export const DEFAULT_GEO_COMP_BLEND = 0.0;
+export const DEFAULT_GEO_COMP_BLEND = 0.25;
 
 /**
  * Blend strength (α_dem) folding Census-derived demand quality into estimated
- * monthly value. Shipped at 0.0 so the feature is inert: at α=0,
- * demandMult = 1.0 and scout output reproduces the ADR 0021 formula
- * bit-for-bit. Operator-overridable via system_state.scout_geo_demand_blend;
- * suggested starting value 0.3–0.5 once the geo-tier report is observed.
+ * monthly value. Calibrated on and shipped at 0.25 (ADR 0022): the geo-tier
+ * report was observed and the blend is now live rather than inert.
+ * Operator-overridable via system_state.scout_geo_demand_blend — that value
+ * still wins over this default.
  */
-export const DEFAULT_GEO_DEMAND_BLEND = 0.0;
+export const DEFAULT_GEO_DEMAND_BLEND = 0.25;
 
 // ── Scout Stage-3 local-SERP refinement budget (ADR 0022 §5) ────────────────
 
@@ -87,6 +87,44 @@ export const DEFAULT_SCOUT_REFINE_BUDGET_USD = 3.00;
  * ScoutForm or globally via system_state.scout_refine_top_k to disable.
  */
 export const DEFAULT_SCOUT_REFINE_TOP_K = 25;
+
+/**
+ * Below-top-K sampling (Phase 5, Niche Algorithm Accuracy plan). The top-K
+ * refinement loop above only ever measures the highest-ranked proxy cells, so
+ * a low-competition cell buried just outside the cut (e.g. rank 60) never gets
+ * a real local-SERP measurement and can never surface. After the top-K loop
+ * completes, if refine budget remains, up to this many additional cells are
+ * sampled uniformly at random from the next tier down — ranks
+ * [refine_top_k, refine_top_k * BELOW_TOPK_TIER_MULTIPLIER) — and refined
+ * using the same budget-checked path as the top-K loop.
+ */
+export const DEFAULT_SCOUT_BELOW_TOPK_SAMPLE_COUNT = 10;
+
+/**
+ * Width (in multiples of refine_top_k) of the "next tier down" sampled by
+ * the below-top-K pass. 4x keeps the sample scoped to cells that are still
+ * plausibly competitive (not the whole long tail of the grid).
+ */
+export const BELOW_TOPK_TIER_MULTIPLIER = 4;
+
+// ── Approval-time diversity warning (Phase 5, Niche Algorithm Accuracy plan) ─
+
+/**
+ * Same-trade concentration threshold for the operator approve-flow warning
+ * (apps/operator/app/operator/niches/actions.ts). When the trade being
+ * approved already has this many (or more) approved niches, a non-blocking
+ * warning surfaces before the decision is finalized. Not operator-overridable
+ * (a small, easy-to-reason-about constant) — only the per-state share below
+ * has a system_state override, matching what the plan asked for.
+ */
+export const APPROVE_SAME_TRADE_WARNING_COUNT = 3;
+
+/**
+ * Max fraction of the APPROVED set any single state may occupy before the
+ * approve-flow warning surfaces (non-blocking — approval still proceeds).
+ * Operator-overridable via system_state.approve_max_per_state_share.
+ */
+export const DEFAULT_APPROVE_MAX_PER_STATE_SHARE = 0.40;
 
 // ── Candidate diversity caps (ADR 0023) ─────────────────────────────────────
 //
@@ -162,4 +200,99 @@ export function resolveDemandVolume(
     return { volume: dfsVolume, source: 'dataforseo' };
   }
   return { volume: claudeMid, source: 'claude_estimate' };
+}
+
+// ── Seasonality dampening (Phase 5, Niche Algorithm Accuracy plan) ──────────
+
+/**
+ * Below this trough/peak ratio, a trade is considered "highly seasonal"
+ * (e.g. snow removal: trough near 0 in July, peak in January). A value near
+ * 1.0 means flat demand year-round. Below the threshold, validate.ts dampens
+ * the measured current-month-driven volume toward the trade's annual mean
+ * before it is fed into the dollar-value model, so a niche validated during
+ * its peak month isn't overvalued relative to its true annual average.
+ */
+export const SEASONALITY_DAMPENING_THRESHOLD = 0.35;
+
+// ── Approval-time diversity warning: pure trigger logic ─────────────────────
+
+export interface ApprovalDiversityInput {
+  /** Trade + state of the niche about to be approved. */
+  trade: string;
+  state: string;
+  /** trade/state of every currently-approved niche (decision='approved'). */
+  approvedRows: Array<{ trade: string; state: string }>;
+  /** NULL/undefined = code default (DEFAULT_APPROVE_MAX_PER_STATE_SHARE). */
+  maxPerStateShare?: number | null;
+}
+
+export interface ApprovalDiversityResult {
+  shouldWarn: boolean;
+  sameTradeApprovedCount: number;
+  sameStateApprovedCount: number;
+  totalApprovedCount: number;
+  /** Share the approved set's target state WOULD have after this approval. */
+  sameStateShare: number;
+  maxPerStateShare: number;
+  tradeTriggered: boolean;
+  stateTriggered: boolean;
+}
+
+/**
+ * Minimum prior-approved-count before the per-state share trigger is even
+ * evaluated. Without this floor, the very first approval in an empty (or
+ * near-empty) portfolio is mechanically "100% of one state" and would warn
+ * every single time — noise, not signal. Chosen to match
+ * APPROVE_SAME_TRADE_WARNING_COUNT (3): a portfolio needs at least a handful
+ * of approved niches before "concentration" is a meaningful concept.
+ */
+const APPROVE_STATE_SHARE_MIN_SAMPLE = APPROVE_SAME_TRADE_WARNING_COUNT;
+
+/**
+ * Pure trigger-condition evaluation for the operator approve-flow's
+ * non-blocking diversity warning (apps/operator/app/operator/niches/actions.ts
+ * getNicheApprovalWarning). Extracted here (not inlined in the operator app,
+ * which has no test runner) so the logic is unit-testable under vitest.
+ *
+ * Two independent triggers, either sets shouldWarn — approval is NEVER
+ * blocked by this, callers only use it to inform confirm-dialog copy:
+ *   - the trade already has >= APPROVE_SAME_TRADE_WARNING_COUNT (3) approved
+ *     niches.
+ *   - approving this niche's state would make that state's share of the
+ *     approved set exceed maxPerStateShare (default 0.40) — only evaluated
+ *     once at least APPROVE_STATE_SHARE_MIN_SAMPLE niches are already
+ *     approved (see constant doc above).
+ */
+export function evaluateApprovalDiversity(input: ApprovalDiversityInput): ApprovalDiversityResult {
+  const maxPerStateShare = input.maxPerStateShare ?? DEFAULT_APPROVE_MAX_PER_STATE_SHARE;
+  const trade = input.trade.toLowerCase();
+  const state = input.state.toUpperCase();
+
+  const totalApprovedCount = input.approvedRows.length;
+  const sameTradeApprovedCount = input.approvedRows.filter(
+    (r) => r.trade.toLowerCase() === trade,
+  ).length;
+  const sameStateApprovedCount = input.approvedRows.filter(
+    (r) => r.state.toUpperCase() === state,
+  ).length;
+
+  // Share this approval WOULD produce (numerator/denominator both +1) — the
+  // check is forward-looking ("would approving this push us over the line?"),
+  // not just a snapshot of the set before this decision.
+  const sameStateShare = (sameStateApprovedCount + 1) / (totalApprovedCount + 1);
+
+  const tradeTriggered = sameTradeApprovedCount >= APPROVE_SAME_TRADE_WARNING_COUNT;
+  const stateTriggered =
+    totalApprovedCount >= APPROVE_STATE_SHARE_MIN_SAMPLE && sameStateShare > maxPerStateShare;
+
+  return {
+    shouldWarn: tradeTriggered || stateTriggered,
+    sameTradeApprovedCount,
+    sameStateApprovedCount,
+    totalApprovedCount,
+    sameStateShare,
+    maxPerStateShare,
+    tradeTriggered,
+    stateTriggered,
+  };
 }

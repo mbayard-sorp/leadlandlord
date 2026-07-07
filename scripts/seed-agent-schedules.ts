@@ -46,6 +46,10 @@ const SEED: SeedRow[] = [
   { schedulerName: 'billing-dunning', targetAgent: 'billing-dunning', cadenceKind: 'cron', cronExpr: '0 17 * * *' },
   { schedulerName: 'churn-recovery', targetAgent: 'churn-recovery', cadenceKind: 'cron', cronExpr: '30 17 * * *' },
   { schedulerName: 'portfolio-analyst', targetAgent: 'portfolio-analyst', cadenceKind: 'cron', cronExpr: '0 18 * * *' },
+  // Niche calibration feedback loop (Phase 2): calibrator Monday, suggester
+  // Tuesday (a day later so a full week of fresh snapshots exists to pool).
+  { schedulerName: 'niche-calibrator', targetAgent: 'niche-calibrator', cadenceKind: 'cron', cronExpr: '0 9 * * 1' },
+  { schedulerName: 'niche-prior-suggester', targetAgent: 'niche-prior-suggester', cadenceKind: 'cron', cronExpr: '0 9 * * 2' },
   { schedulerName: 'network-metrics-aggregator', targetAgent: 'network-metrics-aggregator', cadenceKind: 'cron', cronExpr: '0 4 * * *' },
   // network-link-requests seeds network-linker runs (siteId-mode) on a daily
   // off-peak slot; per-site weekly day-of-week staggering happens in-scheduler.

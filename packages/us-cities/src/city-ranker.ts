@@ -222,18 +222,24 @@ function passesHardFilters(c: UsCityEnriched): boolean {
 export function rankCities(opts: RankCitiesOpts = {}): RankedCity[] {
   const { limit = 150, perStateCap = 12, states } = opts;
 
-  // Load all cities (no population filter — hard filter handles bounds).
+  // Build the spatial index over ALL cities (unfiltered, all states) so cross-
+  // state metro mass still counts toward nearby population. A state-filtered
+  // grid would blind the S6 lookup to adjacent-state metros near border
+  // cities, letting them score as if no nearby metro existed. The state
+  // filter is applied below when selecting the candidate list to score.
   const all = listCitiesEnriched({
     populationMin: 1,
     populationMax: 999_999_999,
-    states,
   });
 
   // Build spatial index over ALL cities (not just candidates) so metro
   // population from cities that fail our hard filters still contributes.
   const gridBuckets = buildGridBuckets(all);
 
-  const candidates = all.filter(passesHardFilters);
+  const stateSet = states?.length ? new Set(states.map((s) => s.toUpperCase())) : null;
+  const candidates = all.filter(
+    (c) => (!stateSet || stateSet.has(c.state)) && passesHardFilters(c),
+  );
 
   const scored: RankedCity[] = candidates.map((c) => {
     const missingCount = countMissingCensusFields(c);

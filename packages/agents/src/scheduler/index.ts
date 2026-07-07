@@ -10,6 +10,8 @@ import { scheduleSeoIngestGa4 } from './seo-ingest-ga4';
 import { scheduleLighthouseAudit } from './lighthouse-audit';
 import { scheduleMaintenance } from './maintenance';
 import { schedulePortfolioAnalyst } from './portfolio-analyst';
+import { scheduleNicheCalibrator } from './niche-calibrator';
+import { scheduleNichePriorSuggester } from './niche-prior-suggester';
 import { scheduleOperator } from './operator';
 import { scheduleMollyDigest } from './molly-digest';
 import { scheduleMollyInbox } from './molly-inbox';
@@ -44,6 +46,8 @@ export const schedulers: Record<string, Scheduler> = {
   'lighthouse-audit': scheduleLighthouseAudit,
   maintenance: scheduleMaintenance,
   'portfolio-analyst': schedulePortfolioAnalyst,
+  'niche-calibrator': scheduleNicheCalibrator,
+  'niche-prior-suggester': scheduleNichePriorSuggester,
   operator: scheduleOperator,
   'molly-digest': scheduleMollyDigest,
   'molly-inbox': scheduleMollyInbox,

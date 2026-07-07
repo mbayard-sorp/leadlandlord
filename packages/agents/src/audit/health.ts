@@ -61,6 +61,8 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   ],
   'churn-recovery': [], // DB + queueing; prospect top-up is best-effort.
   'portfolio-analyst': [], // Digest delivery is opt-in; analysis needs no cred.
+  'niche-calibrator': [], // Owned-asset DB aggregation (GSC + portfolio_snapshots reads only).
+  'niche-prior-suggester': [], // Owned-asset pure computation; DB only.
   maintenance: [['VERCEL_TOKEN']],
   'compliance-guard': [], // Rules + Anthropic.
   'call-classifier': [], // Anthropic-only.

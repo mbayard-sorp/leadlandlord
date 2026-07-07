@@ -228,6 +228,64 @@ describe('rankCities — metro density multiplier (S6 v2)', () => {
     expect(remote.score).toBeGreaterThan(metro.score);
   });
 
+  it('cross-state: a border city scored via states filter still gets metro dampening from an adjacent, non-scouted state', () => {
+    // BorderTown sits in state ZY, ~25 km from BigNeighborMetro in state ZX
+    // (900k pop, well out of range and never requested via `states`). If the
+    // grid-source city list were filtered by `states` before building the
+    // spatial index (the bug), BigNeighborMetro would never enter the grid and
+    // BorderTown would incorrectly get metroDensityMult 1.0 — the same result
+    // a totally isolated city would get. After the fix, the grid is built from
+    // the UNFILTERED city list, so BigNeighborMetro's population still
+    // suppresses BorderTown's multiplier even though only ZY was requested.
+    const cache: Record<string, object> = {
+      'ZY|bordertown': {
+        medianIncome: 60_000,
+        medianHomeValue: 200_000,
+        ownerOccupiedPct: 0.65,
+        totalHousingUnits: 20_000,
+        medianAge: 42,
+        populationCensus: 50_000,
+      },
+    };
+    const crossStateCSV = [
+      CSV_HEADER,
+      makeCSVLine('BorderTown', 'ZY', 'ZYState', 39.0, -95.0, 50_000),
+      // ~24 km away (0.22 deg lat), in adjacent state ZX, 900k pop — never
+      // requested via the `states` filter passed to rankCities().
+      makeCSVLine('BigNeighborMetro', 'ZX', 'ZXState', 39.22, -95.0, 900_000),
+    ].join('\n');
+
+    _resetCensusCache();
+    _resetCitiesCache();
+    mockExistsSync.mockImplementation((p) => {
+      const s = String(p);
+      if (s.includes('census-enrichment')) return true;
+      return existsSync(p);
+    });
+    mockReadFileSync.mockImplementation((p, ...args) => {
+      const s = String(p);
+      if (s.includes('census-enrichment')) return JSON.stringify(cache);
+      if (s.includes('uscities.csv')) return crossStateCSV;
+      return (readFileSync as (...a: Parameters<typeof readFileSync>) => ReturnType<typeof readFileSync>)(p, ...args);
+    });
+
+    // Request only ZY — BorderTown must still appear, and BigNeighborMetro
+    // (ZX, out of the requested states) must still suppress its multiplier.
+    const results = rankCities({ states: ['ZY'] });
+    const border = results.find((c) => c.city === 'BorderTown');
+    expect(border).toBeDefined();
+    // 900k nearby pop => [500k, 1M) => 0.4. A state-filtered grid would have
+    // seen zero neighbors (BigNeighborMetro excluded) and produced 1.0 instead.
+    expect(border!.metroDensityMult).toBe(0.4);
+    expect(border!.metroDensityMult).not.toBe(1.0);
+
+    // BigNeighborMetro itself is out of the requested states — not returned.
+    expect(results.some((c) => c.city === 'BigNeighborMetro')).toBe(false);
+
+    _resetCitiesCache();
+    vi.restoreAllMocks();
+  });
+
   it('grid bucket math: city at lat=40.5, lng=-80.5 looks at all 9 surrounding cells', () => {
     // Build a minimal dataset with the candidate at (40.5, -80.5) and one
     // neighbor in each of the 9 expected cells. All neighbors are within 50 km.

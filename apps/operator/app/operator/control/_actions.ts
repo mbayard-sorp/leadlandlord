@@ -162,7 +162,8 @@ export async function updateScoringPriors(formData: FormData): Promise<ActionRes
  * Scout geographic-targeting and refinement knobs (ADR 0022). All nullable —
  * blank stores NULL, which the scout reads as "use the code default".
  *
- * Blend strengths (0–1): 0 = inert (default); suggested starting values 0.3–0.5.
+ * Blend strengths (0–1): code default is 0.25 (active); blank resets to the
+ * code default; 0 fully disables the fold.
  * Per-state cap (int > 0): NULL = no cap (current behavior).
  * Refine top-K (int >= 0): 0 or NULL = Stage-3 disabled (default).
  * Refine budget (USD): NULL = code default ($3.00).

@@ -56,6 +56,8 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   'network-metrics-aggregator': ON(2),
   'competitor-analyzer': ON(4),
   'portfolio-analyst': ON(3),
+  'niche-calibrator': ON(1), // pure aggregation, no LLM/API calls — GSC + portfolio_snapshots reads only
+  'niche-prior-suggester': ON(1), // pure computation, no LLM/API calls
   maintenance: ON(2),
   'compliance-guard': ON(2),
   'call-classifier': ON(2),

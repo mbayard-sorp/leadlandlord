@@ -1,3 +1,5 @@
+import type { OutcomeWeekRow } from './niche-outcomes';
+
 interface Props {
   /** Claude brainstorm-time estimate (estSearchVolume, falls back to searchVolume). */
   claudeEstimate: number | null;
@@ -88,6 +90,75 @@ export function CalibrationContent({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+interface OutcomesProps {
+  weeks: OutcomeWeekRow[];
+  /** Scout/validate predicted monthly value (niches.est_monthly_value_usd), for the note line. */
+  estMonthlyValueUsd: string | null;
+}
+
+/**
+ * Predicted-vs-actual outcomes section (Phase 2 calibration feedback loop).
+ * Up to 8 weeks of niche_outcome_snapshots for the niche's linked site,
+ * newest first. Purely presentational — `weeks` is fetched server-side
+ * (page.tsx via loadOutcomeWeeksForSite) and passed down as a prop so this
+ * stays renderable from the client-component NicheRow without a client-side
+ * DB fetch.
+ */
+export function OutcomesContent({ weeks, estMonthlyValueUsd }: OutcomesProps) {
+  if (weeks.length === 0) return null;
+
+  return (
+    <div className="rounded border border-slate-700 bg-slate-950 p-3 text-xs text-slate-300">
+      <div className="font-medium text-slate-400 mb-2">
+        Outcomes — predicted vs. actual (last {weeks.length} week{weeks.length === 1 ? '' : 's'})
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-slate-500 border-b border-slate-800">
+              <th className="pr-3 py-1 font-normal">Week</th>
+              <th className="pr-3 py-1 font-normal">Money-kw rank</th>
+              <th className="pr-3 py-1 font-normal">Overall rank</th>
+              <th className="pr-3 py-1 font-normal">Observed CTR</th>
+              <th className="pr-3 py-1 font-normal">Observed call rate</th>
+              <th className="pr-3 py-1 font-normal">Impressions / clicks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weeks.map((w) => (
+              <tr key={w.weekStart} className="border-b border-slate-900 last:border-0">
+                <td className="pr-3 py-1 tabular-nums">{w.weekStart}</td>
+                <td className="pr-3 py-1 tabular-nums">
+                  {w.moneyKwPosition !== null ? `#${w.moneyKwPosition.toFixed(1)}` : '—'}
+                </td>
+                <td className="pr-3 py-1 tabular-nums text-slate-500">
+                  {w.overallPosition !== null ? `#${w.overallPosition.toFixed(1)}` : '—'}
+                </td>
+                <td className="pr-3 py-1 tabular-nums text-sky-300">
+                  {w.observedCtr !== null ? `${(w.observedCtr * 100).toFixed(1)}%` : '—'}
+                </td>
+                <td className="pr-3 py-1 tabular-nums text-sky-300">
+                  {w.observedCallRate !== null ? `${(w.observedCallRate * 100).toFixed(1)}%` : '—'}
+                </td>
+                <td className="pr-3 py-1 tabular-nums text-slate-500">
+                  {w.impressions.toLocaleString()} / {w.clicks.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {estMonthlyValueUsd !== null && (
+        <p className="mt-2 text-slate-500">
+          Predicted monthly value: <span className="text-slate-300">${Number(estMonthlyValueUsd).toFixed(0)}/mo</span>.
+          Compare against observed CTR/call-rate above — the scout-time priors that fed this prediction are
+          scout_ctr_at_rank/scout_call_rate (see the Suggestions panel above for data-derived adjustments).
+        </p>
+      )}
     </div>
   );
 }

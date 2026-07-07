@@ -51,12 +51,16 @@ vi.mock('@leadlandlord/db', () => ({
     scoutCtrAtRank: null,
     scoutCallRate: null,
   })),
-  niches: { __name: 'niches', id: 'id', niche: 'niche', city: 'city', state: 'state' },
+  niches: { __name: 'niches', id: 'id', niche: 'niche', city: 'city', state: 'state', annotations: 'annotations' },
   nicheCandidates: { __name: 'niche_candidates', id: 'id', scoutRunId: 'scout_run_id', rank: 'rank' },
   eq: (a: unknown, b: unknown) => ({ type: 'eq', a, b }),
   and: (...args: unknown[]) => ({ type: 'and', args }),
   inArray: (a: unknown, b: unknown) => ({ type: 'inArray', a, b }),
   asc: (a: unknown) => ({ type: 'asc', a }),
+  // Minimal tagged-template stub — annotate() merges annotations via
+  // sql`COALESCE(...) || ...::jsonb` so a prior deterministic seasonality
+  // note (validateNicheCore) is never clobbered by the Claude pass.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values }),
 }));
 
 // ---- validateNicheCore mock ---------------------------------------------------
@@ -180,10 +184,18 @@ describe('NicheValidator', () => {
     expect(validatedUpdates).toHaveLength(3);
     expect(validatedUpdates[0]!.values.validatedValueUsd).toBe('123.45');
 
-    // Annotation pass wrote niches.annotations for each promoted row.
+    // Annotation pass wrote niches.annotations for each promoted row, merged
+    // (not overwritten) via sql`COALESCE(...) || ...::jsonb` so it never
+    // clobbers a deterministic seasonality note validateNicheCore may have
+    // already written in this same run (Phase 5).
     const annotationWrites = nicheUpdates.filter((u) => 'annotations' in u.values);
     expect(annotationWrites).toHaveLength(3);
-    expect(annotationWrites[0]!.values.annotations).toMatchObject({ seasonality: 'summer-peaked' });
+    const firstPatch = annotationWrites[0]!.values.annotations as { type: string; values: unknown[] };
+    expect(firstPatch.type).toBe('sql');
+    const patchJson = firstPatch.values.find(
+      (v) => typeof v === 'string' && v.includes('seasonality'),
+    ) as string;
+    expect(JSON.parse(patchJson)).toMatchObject({ seasonality: 'summer-peaked' });
 
     // DFS spend recorded.
     expect(out.total_cost_usd).toBeCloseTo(3 * 0.242, 4);

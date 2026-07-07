@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { DecisionButtons } from './DecisionButtons';
 import { BuildLink } from './BuildLink';
 import { ValidateButton } from './ValidateButton';
-import { CalibrationContent } from './CalibrationDrawer';
+import { CalibrationContent, OutcomesContent } from './CalibrationDrawer';
 import { DeleteNicheButton } from './DeleteNicheButton';
 import { type NicheBuildStatus } from './actions';
+import type { NicheActuals, OutcomeWeekRow } from './niche-outcomes';
 
 // flip to true to revisit the scoring algorithm calibration view
 const SHOW_CALIBRATION = false;
@@ -72,6 +73,30 @@ function ValueCell({ row }: { row: NicheRowData }) {
 
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-2 py-2 ${className}`}>{children}</td>;
+}
+
+function ActualRankCell({ actuals }: { actuals: NicheActuals }) {
+  if (actuals.actualRank === null) return <span className="text-slate-600">—</span>;
+  return <span className="font-medium text-sky-300">#{actuals.actualRank}</span>;
+}
+
+function ActualCtrCell({ actuals }: { actuals: NicheActuals }) {
+  if (actuals.actualCtr === null) return <span className="text-slate-600">—</span>;
+  return <span className="font-medium text-sky-300">{(actuals.actualCtr * 100).toFixed(1)}%</span>;
+}
+
+function ActualCallsCell({ actuals }: { actuals: NicheActuals }) {
+  if (actuals.actualWeekStart === null && actuals.actualCalls4wk === 0) {
+    return <span className="text-slate-600">—</span>;
+  }
+  return <span className="font-medium text-sky-300">{actuals.actualCalls4wk}</span>;
+}
+
+function ActualMrrCell({ actuals }: { actuals: NicheActuals }) {
+  if (actuals.actualWeekStart === null && actuals.actualMrrUsd === 0) {
+    return <span className="text-slate-600">—</span>;
+  }
+  return <span className="font-medium text-sky-300">${actuals.actualMrrUsd.toFixed(2)}</span>;
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -167,6 +192,8 @@ export function NicheRow({
   siteId,
   initialBuildStatus,
   colSpan,
+  actuals,
+  outcomeWeeks,
   demandUsed,
   demandSource,
 }: {
@@ -177,12 +204,17 @@ export function NicheRow({
   siteId?: string | null;
   initialBuildStatus?: NicheBuildStatus | null;
   colSpan: number;
+  actuals: NicheActuals;
+  /** Up to 8 weeks of predicted-vs-actual, fetched server-side (page.tsx). Empty when the niche has no site yet. */
+  outcomeWeeks: OutcomeWeekRow[];
   demandUsed: number;
   demandSource: 'dataforseo' | 'claude_estimate';
 }) {
   const [calOpen, setCalOpen] = useState(false);
+  const [outcomesOpen, setOutcomesOpen] = useState(false);
   const [rationaleOpen, setRationaleOpen] = useState(false);
   const hasCalibration = row.dfsClusterVolume !== null;
+  const hasOutcomes = outcomeWeeks.length > 0;
   const isValidated = row.validatedAt !== null;
   const annotations = parseAnnotations(row.annotations);
 
@@ -260,12 +292,33 @@ export function NicheRow({
               {calOpen ? 'Hide calibration' : 'View calibration'}
             </button>
           )}
+          {hasOutcomes && (
+            <button
+              type="button"
+              onClick={() => setOutcomesOpen((v) => !v)}
+              className="mt-1 block text-xs text-sky-400 hover:text-sky-300 underline-offset-2 hover:underline"
+            >
+              {outcomesOpen ? 'Hide outcomes' : 'View outcomes'}
+            </button>
+          )}
         </Td>
         <Td>
           <div className="flex flex-col gap-1">
             <ValidateButton nicheId={row.id} alreadyValidated={row.validatedAt !== null} />
             {showDelete && <DeleteNicheButton id={row.id} />}
           </div>
+        </Td>
+        <Td className="hidden xl:table-cell align-middle whitespace-nowrap">
+          <ActualRankCell actuals={actuals} />
+        </Td>
+        <Td className="hidden xl:table-cell align-middle whitespace-nowrap">
+          <ActualCtrCell actuals={actuals} />
+        </Td>
+        <Td className="hidden xl:table-cell align-middle whitespace-nowrap">
+          <ActualCallsCell actuals={actuals} />
+        </Td>
+        <Td className="hidden xl:table-cell align-middle whitespace-nowrap">
+          <ActualMrrCell actuals={actuals} />
         </Td>
         {showButtons && (
           <Td>
@@ -282,6 +335,13 @@ export function NicheRow({
           </Td>
         )}
       </tr>
+      {outcomesOpen && hasOutcomes && (
+        <tr className="border-b border-slate-800/60 bg-slate-950/40">
+          <td colSpan={colSpan} className="px-3 pb-3 pt-0">
+            <OutcomesContent weeks={outcomeWeeks} estMonthlyValueUsd={row.estMonthlyValueUsd} />
+          </td>
+        </tr>
+      )}
       {calOpen && hasCalibration && (
         <tr className="border-b border-slate-800/60 bg-slate-950/40">
           <td colSpan={colSpan} className="px-3 pb-3 pt-0">

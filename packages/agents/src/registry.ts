@@ -17,6 +17,8 @@ import { CloserAgent } from './closer-agent/index';
 import { BillingDunning } from './billing-dunning/index';
 import { ChurnRecovery } from './churn-recovery/index';
 import { PortfolioAnalyst } from './portfolio-analyst/index';
+import { NicheCalibrator } from './niche-calibrator/index';
+import { NichePriorSuggester } from './niche-prior-suggester/index';
 import { MaintenanceAgent } from './maintenance/index';
 import { ComplianceGuard } from './compliance-guard/index';
 import { CallClassifier } from './call-classifier/index';
@@ -65,6 +67,11 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'billing-dunning': () => new BillingDunning(),
   'churn-recovery': () => new ChurnRecovery(),
   'portfolio-analyst': () => new PortfolioAnalyst(),
+  // Niche calibration feedback loop (Phase 2): measures GSC/portfolio outcomes
+  // against scout/validate predictions, then surfaces data-derived prior
+  // suggestions. See docs/adr/0027-niche-calibration-feedback-loop.md.
+  'niche-calibrator': () => new NicheCalibrator(),
+  'niche-prior-suggester': () => new NichePriorSuggester(),
   maintenance: () => new MaintenanceAgent(),
   'compliance-guard': () => new ComplianceGuard(),
   'call-classifier': () => new CallClassifier(),

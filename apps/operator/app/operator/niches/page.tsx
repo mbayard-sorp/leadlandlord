@@ -9,7 +9,15 @@ import { DrainNowButton } from './DrainNowButton';
 import { NicheRow, type NicheRowData } from './NicheRow';
 import { CategoryFilter } from './CategoryFilter';
 import { CollapsibleSection } from './CollapsibleSection';
+import { SuggestionsPanel } from './SuggestionsPanel';
 import { getNicheBuildStatus, type NicheBuildStatus } from './actions';
+import {
+  loadNicheActuals,
+  getNicheActuals,
+  loadOutcomeWeeksForSite,
+  type NicheActuals,
+  type OutcomeWeekRow,
+} from './niche-outcomes';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +112,25 @@ export default async function NichesPage({
     }
   }
 
+  // Actual (measured) outcomes: latest niche_outcome_snapshots row + trailing
+  // 4-week portfolio_snapshots aggregate per niche's linked site. Fetched for
+  // every row on the page (pending/approved/rejected) so an approved niche
+  // that's now live shows real rank/CTR/calls/MRR alongside the prediction.
+  const actualsByNiche = await loadNicheActuals(rows.map((r) => r.id));
+
+  // Up to 8 weeks of predicted-vs-actual detail per approved niche's site
+  // (CalibrationDrawer's Outcomes section). Only approved niches can have a
+  // site, so this only needs siteByNiche's entries.
+  const outcomeWeeksByNiche = new Map<string, OutcomeWeekRow[]>();
+  const outcomeWeekEntries = await Promise.all(
+    [...siteByNiche.entries()].map(
+      async ([nicheId, siteId]) => [nicheId, await loadOutcomeWeeksForSite(siteId)] as const,
+    ),
+  );
+  for (const [nicheId, weeks] of outcomeWeekEntries) {
+    outcomeWeeksByNiche.set(nicheId, weeks);
+  }
+
   // Pre-fetch build statuses for approved niches that don't yet have a site,
   // so BuildLink can render the correct badge immediately without a loading flash.
   // Only fetched for niches without a live site (the happy path is the siteId link).
@@ -136,6 +163,8 @@ export default async function NichesPage({
 
       {scoutRunData && <ScoutReport run={scoutRunData} candidates={scoutCandidates} />}
 
+      <SuggestionsPanel />
+
       <SeedNicheForm />
 
       <div className="flex items-center gap-4">
@@ -152,7 +181,12 @@ export default async function NichesPage({
         {pending.length === 0 ? (
           <Empty>Nothing pending. Run a scout above, then validate top candidates to populate.</Empty>
         ) : (
-          <Table rows={pending} showButtons />
+          <Table
+            rows={pending}
+            showButtons
+            actualsByNiche={actualsByNiche}
+            outcomeWeeksByNiche={outcomeWeeksByNiche}
+          />
         )}
         <p className="mt-2 text-[11px] text-slate-600">
           $/mo value and rentability use uncalibrated market priors (lead-benchmarks.ts) — treat as order-of-magnitude until calibrated against live results.
@@ -163,7 +197,14 @@ export default async function NichesPage({
         {approved.length === 0 ? (
           <Empty>No approved niches yet.</Empty>
         ) : (
-          <Table rows={approved} showBuildLink siteByNiche={siteByNiche} buildStatusByNiche={buildStatusByNiche} />
+          <Table
+            rows={approved}
+            showBuildLink
+            siteByNiche={siteByNiche}
+            buildStatusByNiche={buildStatusByNiche}
+            actualsByNiche={actualsByNiche}
+            outcomeWeeksByNiche={outcomeWeeksByNiche}
+          />
         )}
       </CollapsibleSection>
 
@@ -171,7 +212,7 @@ export default async function NichesPage({
         {rejected.length === 0 ? (
           <Empty>No rejected niches yet.</Empty>
         ) : (
-          <Table rows={rejected} showDelete />
+          <Table rows={rejected} showDelete actualsByNiche={actualsByNiche} outcomeWeeksByNiche={outcomeWeeksByNiche} />
         )}
       </CollapsibleSection>
     </div>
@@ -212,6 +253,8 @@ function Table({
   showDelete = false,
   siteByNiche,
   buildStatusByNiche,
+  actualsByNiche,
+  outcomeWeeksByNiche,
 }: {
   rows: NicheRowData[];
   showButtons?: boolean;
@@ -219,10 +262,12 @@ function Table({
   showDelete?: boolean;
   siteByNiche?: Map<string, string>;
   buildStatusByNiche?: Map<string, NicheBuildStatus>;
+  actualsByNiche: Map<string, NicheActuals>;
+  outcomeWeeksByNiche: Map<string, OutcomeWeekRow[]>;
 }) {
-  // Base columns + the optional Decision / Build columns; used for the
-  // full-width calibration detail row's colSpan.
-  const colSpan = 11 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
+  // Base columns + the 4 actual-outcome columns + the optional Decision /
+  // Build columns; used for the full-width calibration detail row's colSpan.
+  const colSpan = 11 + 4 + (showButtons ? 1 : 0) + (showBuildLink ? 1 : 0);
   return (
     <div className="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-slate-800 bg-slate-900/40">
       <table className="w-full text-sm">
@@ -239,6 +284,10 @@ function Table({
             <Th className="hidden lg:table-cell">Job $</Th>
             <Th className="hidden lg:table-cell">Rationale</Th>
             <Th>Validate</Th>
+            <Th className="hidden xl:table-cell" title="Measured GSC position (last calibrated week)">Actual Rank</Th>
+            <Th className="hidden xl:table-cell" title="Measured money-keyword CTR (last calibrated week)">Actual CTR</Th>
+            <Th className="hidden xl:table-cell" title="Calls, trailing 4 weeks (portfolio_snapshots)">Actual Calls</Th>
+            <Th className="hidden xl:table-cell" title="Avg daily MRR, trailing 4 weeks (portfolio_snapshots)">Actual MRR</Th>
             {showButtons && <Th>Decision</Th>}
             {showBuildLink && <Th>Build</Th>}
           </tr>
@@ -263,6 +312,8 @@ function Table({
               siteId={siteByNiche?.get(r.id) ?? null}
               initialBuildStatus={buildStatusByNiche?.get(r.id) ?? null}
               colSpan={colSpan}
+              actuals={getNicheActuals(actualsByNiche, r.id)}
+              outcomeWeeks={outcomeWeeksByNiche.get(r.id) ?? []}
               demandUsed={demandUsed}
               demandSource={demandSource}
             />
@@ -274,6 +325,18 @@ function Table({
   );
 }
 
-function Th({ children, className = '' }: { children?: React.ReactNode; className?: string }) {
-  return <th className={`px-2 py-2 font-medium ${className}`}>{children}</th>;
+function Th({
+  children,
+  className = '',
+  title,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <th className={`px-2 py-2 font-medium ${className}`} title={title}>
+      {children}
+    </th>
+  );
 }

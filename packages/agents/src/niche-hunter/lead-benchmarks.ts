@@ -1438,6 +1438,35 @@ const DEFAULT_RENTABILITY_PRIOR = 0.5;
  */
 const DEFAULT_LEAD_BENCHMARK_PRICE = 45;
 
+interface BenchmarkMatch {
+  keyword: string;
+  keywordLength: number;
+  benchmark: TradeBenchmark;
+}
+
+/**
+ * Shared substring matcher backing getRentabilityPrior, getLeadBenchmarkPrice,
+ * and matchesTradeQuery. Case-insensitive substring match against `lower`;
+ * when multiple benchmark entries match, the one with the longest matching
+ * keyword wins, giving more specific entries precedence over broad ones
+ * (e.g. "foundation repair" over "repair"). Returns null when nothing matches.
+ */
+function findBestBenchmarkMatch(lower: string): BenchmarkMatch | null {
+  let best: BenchmarkMatch | null = null;
+
+  for (const benchmark of TRADE_BENCHMARKS) {
+    for (const keyword of benchmark.keywords) {
+      if (lower.includes(keyword)) {
+        if (best === null || keyword.length > best.keywordLength) {
+          best = { keyword, keywordLength: keyword.length, benchmark };
+        }
+      }
+    }
+  }
+
+  return best;
+}
+
 /**
  * Return a rentability prior (0..1) for the given niche string.
  *
@@ -1448,21 +1477,8 @@ const DEFAULT_LEAD_BENCHMARK_PRICE = 45;
  * Returns DEFAULT_RENTABILITY_PRIOR (0.5) when no trade matches.
  */
 export function getRentabilityPrior(niche: string): number {
-  const lower = niche.toLowerCase();
-
-  let best: { keywordLength: number; prior: number } | null = null;
-
-  for (const benchmark of TRADE_BENCHMARKS) {
-    for (const keyword of benchmark.keywords) {
-      if (lower.includes(keyword)) {
-        if (best === null || keyword.length > best.keywordLength) {
-          best = { keywordLength: keyword.length, prior: benchmark.rentabilityPrior };
-        }
-      }
-    }
-  }
-
-  return best?.prior ?? DEFAULT_RENTABILITY_PRIOR;
+  const match = findBestBenchmarkMatch(niche.toLowerCase());
+  return match?.benchmark.rentabilityPrior ?? DEFAULT_RENTABILITY_PRIOR;
 }
 
 /**
@@ -1473,22 +1489,96 @@ export function getRentabilityPrior(niche: string): number {
  * matches — a neutral midpoint representative of the broader home-services market.
  */
 export function getLeadBenchmarkPrice(niche: string): number {
-  const lower = niche.toLowerCase();
+  const match = findBestBenchmarkMatch(niche.toLowerCase());
+  if (!match) return DEFAULT_LEAD_BENCHMARK_PRICE;
+  return (match.benchmark.leadPriceRangeLow + match.benchmark.leadPriceRangeHigh) / 2;
+}
 
-  let best: { keywordLength: number; price: number } | null = null;
+/**
+ * Return the matched trade keyword(s) for a niche string, via the same
+ * longest-substring-wins matcher used by getRentabilityPrior/getLeadBenchmarkPrice.
+ * Returns null when the niche doesn't match any TRADE_BENCHMARKS entry (e.g. it
+ * fell through to the $45/0.5 default bucket).
+ *
+ * Exposed for niche-calibrator's matchesTradeQuery — resolving the matched
+ * trade once per niche avoids re-scanning TRADE_BENCHMARKS per GSC query row.
+ */
+export function resolveMatchedTradeKeywords(niche: string): string[] | null {
+  const match = findBestBenchmarkMatch(niche.toLowerCase());
+  return match ? match.benchmark.keywords : null;
+}
 
-  for (const benchmark of TRADE_BENCHMARKS) {
-    for (const keyword of benchmark.keywords) {
-      if (lower.includes(keyword)) {
-        const midpoint = (benchmark.leadPriceRangeLow + benchmark.leadPriceRangeHigh) / 2;
-        if (best === null || keyword.length > best.keywordLength) {
-          best = { keywordLength: keyword.length, price: midpoint };
-        }
-      }
-    }
+/**
+ * Canonical trade label for grouping (niche-prior-suggester). A TRADE_BENCHMARKS
+ * entry's first keyword is its most stable, human-readable identifier — used as
+ * the `trade` column value in calibration_suggestions so a scattering of niche
+ * variants ("residential roofing", "commercial roofing repair") all pool under
+ * one canonical label ("roof"). Returns null for the unmapped default bucket.
+ */
+export function resolveCanonicalTrade(niche: string): string | null {
+  const match = findBestBenchmarkMatch(niche.toLowerCase());
+  return match ? match.benchmark.keywords[0]! : null;
+}
+
+/**
+ * Stopwords stripped before token-overlap comparison in matchesTradeQuery.
+ * GSC local queries are dominated by these filler/geo words ("near me", "in",
+ * city/state names) which would otherwise inflate overlap scores for
+ * completely unrelated queries that happen to share a city name token.
+ */
+const QUERY_STOPWORDS = new Set([
+  'near', 'me', 'in', 'the', 'a', 'an', 'for', 'of', 'and', 'my', 'to', 'best',
+  'top', 'cheap', 'affordable', 'local', 'find', 'hire',
+]);
+
+function tokenize(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 0 && !QUERY_STOPWORDS.has(t));
+}
+
+/**
+ * Does a GSC query string represent a "money keyword" for this niche?
+ *
+ * GSC queries are often multi-word local variants ("roof repair phoenix az",
+ * "emergency roofer near me 85001") rather than exact trade-keyword matches,
+ * so a plain substring check against the query is too strict. Resolves the
+ * niche's matched trade keyword(s) via the existing longest-substring matcher
+ * (resolveMatchedTradeKeywords — no TRADE_BENCHMARKS duplication), then
+ * accepts the query when either:
+ *   1. The query contains one of the matched keywords as a substring
+ *      (handles single-word keywords like "roof" matching "roof repair phoenix"), or
+ *   2. Token overlap: every non-stopword token of the SHORTER of
+ *      {query, keyword} appears in the other, after stripping stopwords/geo
+ *      filler. Handles reordered multi-word keywords ("water heater" vs
+ *      "heater water repair") without requiring exact substring alignment.
+ *
+ * Niches with no TRADE_BENCHMARKS match (fell through to the default bucket)
+ * return false for every query — there's no trade keyword to check against.
+ */
+export function matchesTradeQuery(query: string, niche: string): boolean {
+  const keywords = resolveMatchedTradeKeywords(niche);
+  if (!keywords || keywords.length === 0) return false;
+
+  const lowerQuery = query.toLowerCase();
+  const queryTokens = new Set(tokenize(query));
+  if (queryTokens.size === 0) return false;
+
+  for (const keyword of keywords) {
+    if (lowerQuery.includes(keyword)) return true;
+
+    const keywordTokens = tokenize(keyword).filter((t) => !QUERY_STOPWORDS.has(t));
+    if (keywordTokens.length === 0) continue;
+
+    const overlapCount = keywordTokens.filter((t) => queryTokens.has(t)).length;
+    // Require every keyword token present in the query (handles reordering);
+    // this is intentionally strict for multi-word keywords to avoid false
+    // positives on unrelated queries that share only one common word.
+    if (overlapCount === keywordTokens.length) return true;
   }
 
-  return best?.price ?? DEFAULT_LEAD_BENCHMARK_PRICE;
+  return false;
 }
 
 /**
@@ -1520,16 +1610,36 @@ export interface RentabilityScoreInputs {
    * DEFAULT_RENTABILITY_LEAD_PRICE_CEILING (100). Operator-overridable (Task B).
    */
   lead_price_ceiling?: number;
+  /**
+   * Places Phase 4a supply signal (ADR 0029): of the `contractor_count`
+   * results, how many have NO `websiteUri`. A high share without a website is
+   * a *weakness* signal — those contractors are easier to rent a site+leads
+   * to than ones who already have a web presence. Undefined (together with
+   * `median_review_count`) means "no supply-quality data available" and
+   * selects the byte-identical v1 formula (see below) — this is NOT a
+   * neutral-default reweight, it is an explicit branch.
+   */
+  contractors_without_website?: number;
+  /**
+   * Places Phase 4a supply signal (ADR 0029): median Google review count
+   * across the `contractor_count` results. Low median reviews alongside a
+   * high no-website share reinforces the weakness signal (a market of
+   * under-marketed contractors). Optional refinement to `weaknessSub`; has no
+   * effect unless `contractors_without_website` is also present.
+   */
+  median_review_count?: number;
 }
 
 /**
  * Compute a 0..100 rentability score independently of the SEO winnability score.
  *
- * ADR 0009 Phase 2 / C1. This score is stored in `niches.rentability_score`
+ * ADR 0009 Phase 2 / C1, extended by ADR 0029 (rentability scoring v2 /
+ * Places supply signal). This score is stored in `niches.rentability_score`
  * and displayed alongside `score` (SEO winnability) so operators can evaluate
  * both dimensions independently.
  *
- * Formula rationale (v1 heuristic, tunable):
+ * ── v1 formula (unchanged; used when contractors_without_website AND
+ *    median_review_count are BOTH undefined) ──────────────────────────────
  *
  * 1. Supply sub-score (weight 0.50): rewards a healthy-but-not-saturated
  *    contractor market. Too few contractors (<3) means almost no one to rent to;
@@ -1552,6 +1662,34 @@ export interface RentabilityScoreInputs {
  *    Formula: min(1, lead_benchmark_price / lead_price_ceiling).
  *
  * All three sub-scores are in [0, 1]; the weighted sum is multiplied by 100.
+ *
+ * ── v2 formula (ADR 0029; used when EITHER supply-signal input is present) ──
+ *
+ * IMPORTANT: v2 is NOT derived by adding a 4th term with a "neutral default"
+ * to the v1 weights. That is mathematically impossible with a straight
+ * reweight — 0.40/0.15/0.25/0.20 can never equal 0.50/0.25/0.25 for any value
+ * of the 4th term, because the *other three* weights also changed. Instead
+ * this is an EXPLICIT BRANCH: v1 stays byte-identical when its inputs are
+ * absent (see the regression test `undefined inputs -> byte-identical v1
+ * formula` in lead-benchmarks.test.ts), and v2 only activates when the new
+ * Places supply-quality data is actually available.
+ *
+ * v2 weights: supply*0.45 + weakness*0.15 + cpc*0.20 + leadPrice*0.20.
+ *
+ * 4. Weakness sub-score (weight 0.15): a HIGH share of contractors without a
+ *    website is a signal the market is under-marketed and easier to rent
+ *    to — this is a "weakness in the field" signal, so higher weakness raises
+ *    the rentability score. `noWebsiteShare = contractors_without_website /
+ *    contractor_count` (0 when contractor_count is 0). We optionally refine
+ *    with `median_review_count`: a low median review count (thin social
+ *    proof) reinforces weakness; a high one dampens it slightly. Formula:
+ *      reviewFactor = 1 - min(1, median_review_count / 50)   // 0 reviews -> 1.0 (max weakness bonus), 50+ -> 0.0
+ *      weaknessSub  = median_review_count is undefined
+ *                       ? noWebsiteShare
+ *                       : noWebsiteShare * 0.7 + (noWebsiteShare * reviewFactor) * 0.3
+ *    i.e. the base signal is the no-website share; when review data is also
+ *    available it can add up to a further 30% relative boost when reviews are
+ *    thin, tapering to no boost as reviews approach 50 (a healthy count).
  */
 export function computeRentabilityScore(inputs: RentabilityScoreInputs): number {
   const {
@@ -1560,9 +1698,11 @@ export function computeRentabilityScore(inputs: RentabilityScoreInputs): number 
     lead_benchmark_price,
     cpc_ceiling = DEFAULT_RENTABILITY_CPC_CEILING,
     lead_price_ceiling = DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
+    contractors_without_website,
+    median_review_count,
   } = inputs;
 
-  // Sub-score 1: supply curve (tent, peaks at count=14, weight 0.50)
+  // Sub-score 1: supply curve (tent, peaks at count=14) — shared by v1 and v2.
   const count = Math.max(0, Math.min(20, contractor_count));
   let supplySub: number;
   if (count <= 2) {
@@ -1576,15 +1716,34 @@ export function computeRentabilityScore(inputs: RentabilityScoreInputs): number 
     supplySub = 1.0 - ((count - 14) / 6) * 0.7;
   }
 
-  // Sub-score 2: CPC willingness-to-pay signal (weight 0.25)
+  // Sub-score 2: CPC willingness-to-pay signal — shared by v1 and v2.
   // CPCs at/above the ceiling are treated as max signal.
   const cpcSub = cpc_ceiling > 0 ? Math.min(1, avg_cpc / cpc_ceiling) : 0;
 
-  // Sub-score 3: static lead-price benchmark (weight 0.25)
+  // Sub-score 3: static lead-price benchmark — shared by v1 and v2.
   // Lead prices at/above the ceiling get max signal.
   const leadPriceSub =
     lead_price_ceiling > 0 ? Math.min(1, lead_benchmark_price / lead_price_ceiling) : 0;
 
-  const raw = supplySub * 0.5 + cpcSub * 0.25 + leadPriceSub * 0.25;
+  // EXPLICIT BRANCH: no algebraic collapse. v1 runs untouched when neither
+  // new supply-signal input is present.
+  if (contractors_without_website === undefined && median_review_count === undefined) {
+    const raw = supplySub * 0.5 + cpcSub * 0.25 + leadPriceSub * 0.25;
+    return Math.min(100, Math.max(0, raw * 100));
+  }
+
+  // v2: at least one supply-signal input is present.
+  const noWebsiteShare =
+    contractor_count > 0 ? Math.max(0, Math.min(1, (contractors_without_website ?? 0) / contractor_count)) : 0;
+
+  let weaknessSub: number;
+  if (median_review_count === undefined) {
+    weaknessSub = noWebsiteShare;
+  } else {
+    const reviewFactor = 1 - Math.min(1, Math.max(0, median_review_count) / 50);
+    weaknessSub = noWebsiteShare * 0.7 + noWebsiteShare * reviewFactor * 0.3;
+  }
+
+  const raw = supplySub * 0.45 + weaknessSub * 0.15 + cpcSub * 0.2 + leadPriceSub * 0.2;
   return Math.min(100, Math.max(0, raw * 100));
 }

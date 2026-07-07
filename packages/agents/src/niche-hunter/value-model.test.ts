@@ -260,6 +260,23 @@ describe('estimateScoutValue — geo modifiers (ADR 0022)', () => {
     expect(withGeo.demandQuality).toBe(0.2);
   });
 
+  it('calibrated default (α=0.25, no explicit blend args): a real geo signal now perturbs the ADR 0021 value', () => {
+    // Neither compBlendStrength nor demandBlendStrength is passed here — this
+    // exercises DEFAULT_GEO_COMP_BLEND / DEFAULT_GEO_DEMAND_BLEND directly at
+    // their shipped 0.25 value (scoring-config.ts). A weak geo signal must now
+    // pull the value below the pre-geo ADR 0021 baseline.
+    const withDefaultGeo = estimateScoutValue({
+      ...refArgs,
+      metroDensityMult: 0.15, // dense metro, most aggressive competition signal
+      demandQuality: 0.2, // weak Census demand
+    });
+    // localRankMult = 1 - 0.25*(1 - 0.15) = 0.7875
+    expect(withDefaultGeo.localRankMult).toBeCloseTo(0.7875, 5);
+    // demandMult = 1 - 0.25*(1 - 0.2) = 0.8
+    expect(withDefaultGeo.demandMult).toBeCloseTo(0.8, 5);
+    expect(withDefaultGeo.estMonthlyValueUsd).toBeLessThan(ref0021());
+  });
+
   it('absent geo args emit 1.0 audit multipliers and match ADR 0021', () => {
     const v = estimateScoutValue(refArgs);
     expect(v.metroDensityMult).toBe(1.0);
