@@ -414,6 +414,13 @@
       "when": 1783387766900,
       "tag": "0059_buildsell_custom_domain",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1783387766901,
+      "tag": "0060_niche_scout_pop_band_cap",
+      "breakpoints": true
     }
   ]
 }

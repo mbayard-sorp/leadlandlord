@@ -258,6 +258,25 @@ const AGGREGATOR_DOMAINS = [
   'facebook.com',
   'reddit.com',
   'merchantcircle.com',
+  // Legal directories — dominate "<practice> lawyer <city>" SERPs and outrank
+  // a brand-new local firm site on domain age alone.
+  'justia.com',
+  'avvo.com',
+  'findlaw.com',
+  'superlawyers.com',
+  'lawyers.com',
+  'nolo.com',
+  'martindale.com',
+  'lawinfo.com',
+  'legalmatch.com',
+  // Medical / dental directories — same structural dominance for
+  // "<procedure> <city>" and "<specialty> near me" queries.
+  'healthgrades.com',
+  'zocdoc.com',
+  'vitals.com',
+  'webmd.com',
+  'realself.com',
+  'ratemds.com',
 ];
 
 function isAggregator(domain: string): boolean {
@@ -309,11 +328,14 @@ interface SerpCompositionItemRaw extends SerpItemRaw {
 
 /**
  * Fetch SERP composition for a keyword in a location. Single call to the
- * organic SERP endpoint — returns aggregator share, local pack presence,
- * and a derived 0-100 difficulty score that replaces the old DataForSEO KD.
+ * organic `advanced` SERP endpoint — returns aggregator share, local pack
+ * presence, and a derived 0-100 difficulty score that replaces the old
+ * DataForSEO KD.
  *
- * Cost: ~$0.075/call. Replaces the equivalent KD lookup at the same price
- * with much sharper, query-specific signal.
+ * Cost: ~$0.075/call (the constant carries buffer; `advanced` is marginally
+ * pricier than `regular` but stays well under this ceiling, so the refine
+ * budget guard remains conservative). Replaces the equivalent KD lookup with
+ * much sharper, query-specific signal.
  *
  * Returns a "no local SERP found" composition on any failure (difficulty=50)
  * so the caller's scoring path stays unblocked.
@@ -366,14 +388,19 @@ async function fetchSerpCompositionFromApi(
   language: string,
 ): Promise<SerpComposition> {
   try {
+    // `advanced` (not `regular`) is required to get SERP-feature items —
+    // notably `local_pack`. `regular` only returns organic results, so
+    // `has_local_pack` was always false and the difficulty formula collapsed
+    // to a near-constant value. depth 20 so ~10 organic results survive after
+    // features (local_pack, ads) consume slots on the first page.
     const rows = await dfsPost<{ items: SerpCompositionItemRaw[] | null }>(
-      '/serp/google/organic/live/regular',
+      '/serp/google/organic/live/advanced',
       [
         {
           keyword,
           location_name: location,
           language_code: language,
-          depth: 10,
+          depth: 20,
           device: 'desktop',
         },
       ],

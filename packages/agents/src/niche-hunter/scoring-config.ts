@@ -153,6 +153,19 @@ export const SCOUT_MAX_PER_TRADE = 8;
  */
 export const SCOUT_MAX_CATEGORY_SHARE = 0.30;
 
+/**
+ * Max fraction of the persisted set any single population band (<25k, 25-50k,
+ * 50-100k, 100k+) may occupy (F4). est value is monotonic in population, so
+ * without this the 100k+ band takes almost the whole set (98% of top-100 value
+ * in run 5d1ec782) and only a handful of large cities ever surface. 0.40 lets
+ * the strongest band keep a plurality while freeing ~60% of slots for smaller
+ * cities, which fill by score-desc. Resolved to an absolute per-band count
+ * against persist_top at selection time. Operator-overridable via
+ * system_state.scout_max_pop_band_share; NULL = this default. Set to >=1.0 to
+ * disable (any single band may fill the whole set).
+ */
+export const SCOUT_MAX_POP_BAND_SHARE = 0.40;
+
 export const DEFAULT_WEIGHTS = {
   demand: 0.30,
   serp_difficulty: 0.30,
@@ -200,6 +213,28 @@ export function resolveDemandVolume(
     return { volume: dfsVolume, source: 'dataforseo' };
   }
   return { volume: claudeMid, source: 'claude_estimate' };
+}
+
+/**
+ * Scout-only demand resolution for a Stage-3 refined cell that has a measured
+ * local volume AND a population-scaled proxy (F3).
+ *
+ * - Measured clears the trust floor → trust it.
+ * - Measured is present but below the floor → we don't trust the exact sub-100
+ *   number (DFS buckets hyperlocal queries to ~10), but a sub-floor reading is
+ *   still evidence the market is small, so the inflated proxy must NOT be kept.
+ *   Clamp the proxy down to the floor. This is what stops the ~10x scout-value
+ *   inflation seen in run 5d1ec782 (e.g. Logan personal-injury proxy $10.3k vs
+ *   real ~$925).
+ *
+ * Deliberately scout-local: the shared `resolveDemandVolume` (used by the
+ * validate path + operator UI) keeps its "measured-or-proxy" contract. Only the
+ * scout, which has both a concrete proxy and a fresh measurement in hand, applies
+ * the clamp.
+ */
+export function resolveRefinedCityVolume(measuredVolume: number, proxyVolume: number): number {
+  if (measuredVolume >= DFS_TRUST_FLOOR) return measuredVolume;
+  return Math.min(proxyVolume, DFS_TRUST_FLOOR);
 }
 
 // ── Seasonality dampening (Phase 5, Niche Algorithm Accuracy plan) ──────────

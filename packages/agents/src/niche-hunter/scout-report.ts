@@ -139,12 +139,19 @@ export interface ScoredCell {
   localMeasuredVolume?: number;
 }
 
-const POPULATION_BANDS: Array<{ band: string; min: number; max: number }> = [
+export const POPULATION_BANDS: Array<{ band: string; min: number; max: number }> = [
   { band: '<25k', min: 0, max: 25_000 },
   { band: '25k-50k', min: 25_000, max: 50_000 },
   { band: '50k-100k', min: 50_000, max: 100_000 },
   { band: '100k+', min: 100_000, max: Number.POSITIVE_INFINITY },
 ];
+
+/** Population-band label for a city population. Single source of truth for the
+ *  report's band breakdown and the scout's per-band diversity cap (F4). */
+export function populationBandOf(population: number): string {
+  const match = POPULATION_BANDS.find(({ min, max }) => population >= min && population < max);
+  return (match ?? POPULATION_BANDS[POPULATION_BANDS.length - 1]!).band;
+}
 
 export interface BuildScoutReportArgs {
   /** All scored cells, sorted by scoutScore desc (rank order). */
