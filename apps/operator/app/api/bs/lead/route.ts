@@ -88,7 +88,10 @@ const Body = z.object({
   buildsell_site_id: z.string().uuid(),
   name: z.string().max(120).optional(),
   phone: z.string().max(40).optional(),
-  email: z.string().email().max(160).optional(),
+  email: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().email().max(160).optional(),
+  ),
   message: z.string().max(2000).optional(),
   /** Honeypot — non-empty means bot. */
   website: z.string().nullish(),
