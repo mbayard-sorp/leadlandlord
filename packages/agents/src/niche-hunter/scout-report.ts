@@ -90,6 +90,8 @@ export const ScoutReport = z.object({
     refined_count: z.number(),
     refine_spend_usd: z.number(),
     refine_budget_exhausted: z.boolean(),
+    /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). Default 0 on older reports. */
+    sampled_count: z.number().default(0),
   }),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
@@ -163,6 +165,8 @@ export interface BuildScoutReportArgs {
     refined_count: number;
     refine_spend_usd: number;
     refine_budget_exhausted: boolean;
+    /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). */
+    sampled_count?: number;
   };
 }
 
@@ -172,6 +176,7 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
     refined_count: 0,
     refine_spend_usd: 0,
     refine_budget_exhausted: false,
+    sampled_count: 0,
   };
   const savings = Math.max(0, Math.min(1, args.expectedCacheSavingsRate ?? 0));
   const costForN = (n: number) =>

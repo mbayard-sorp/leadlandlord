@@ -10,6 +10,7 @@ import {
   and,
   inArray,
   asc,
+  sql,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
 import {
@@ -312,14 +313,22 @@ export class NicheValidator extends BaseAgent<typeof NicheValidatorInput, typeof
     const db = getDb();
     for (const a of annotations) {
       if (!a.niche_id || !validIds.has(a.niche_id)) continue;
+      // Merge (not overwrite): validateNicheCore may have already written a
+      // deterministic seasonality note (Phase 5 seasonality dampening) into
+      // this same jsonb column moments earlier in this run. COALESCE(...) ||
+      // only replaces the keys included below — `seasonality` is deliberately
+      // omitted when Claude returned null so the deterministic flag survives;
+      // licensing_concern/caution keep their prior overwrite-with-null semantics
+      // since validateNicheCore never writes those two keys.
+      const patch: Record<string, string | null> = {
+        licensing_concern: a.licensing_concern ?? null,
+        caution: a.caution ?? null,
+      };
+      if (a.seasonality != null) patch.seasonality = a.seasonality;
       await db
         .update(niches)
         .set({
-          annotations: {
-            seasonality: a.seasonality ?? null,
-            licensing_concern: a.licensing_concern ?? null,
-            caution: a.caution ?? null,
-          },
+          annotations: sql`COALESCE(${niches.annotations}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
         })
         .where(eq(niches.id, a.niche_id));
     }

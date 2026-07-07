@@ -187,6 +187,21 @@ export const niches = pgTable(
     // ADR 0009 Phase 2 / C1: rentability score (0-100), separate from SEO
     // winnability score. Computed from contractor_count + avg_cpc + lead price.
     rentabilityScore: numeric('rentability_score', { precision: 6, scale: 2 }),
+    // ADR 0029 (rentability scoring v2 / Places supply signal, migration 0057):
+    // of `contractorCount` results, how many have no `websiteUri`. Null until
+    // re-validated post-deploy (old rows keep the v1 rentability formula).
+    contractorsWithoutWebsite: integer('contractors_without_website'),
+    // ADR 0029: median Google review count across `contractorCount` results.
+    // Null until re-validated post-deploy.
+    contractorMedianReviews: integer('contractor_median_reviews'),
+    // Phase 5 (Niche Algorithm Accuracy plan, migration 0058): trough/peak of
+    // the trailing ~12mo monthly_searches from validateNicheCore, 0-1. Near 1
+    // = flat demand year-round; near 0 = highly seasonal (e.g. snow removal).
+    // Null until re-validated post-deploy, or when DFS returned no monthly
+    // history. Below SEASONALITY_DAMPENING_THRESHOLD (0.35), validateNicheCore
+    // dampens the measured volume toward the annual mean before it reaches the
+    // dollar-value model — see scoring-config.ts.
+    seasonalityIndex: numeric('seasonality_index', { precision: 4, scale: 3 }),
     // Scout/validate engine (migration 0043). Scout-time expected monthly
     // value (population-proportional, cached/static inputs) and the measured
     // validation-time value. Both persisted, never overwritten, so predicted
@@ -1173,7 +1188,9 @@ export const systemState = pgTable('system_state', {
   // fall back to the defaults in packages/agents/src/niche-hunter/
   // {value-model,scoring-config}.ts. Set via /operator/control.
   //   scoutGeoCompBlend / scoutGeoDemandBlend: α-blend strengths for the
-  //     multiplicative geo competition + demand levers (0 = inert, today's output).
+  //     multiplicative geo competition + demand levers. NULL falls back to the
+  //     code default (0.25, active) in scoring-config.ts; 0 fully disables the
+  //     fold.
   //   scoutPerStateCap: per-state/metro diversity cap on the persisted set.
   //   scoutRefineTopK: top-K cells fed to the bounded local-SERP refine pass
   //     (0 = refinement off).
@@ -1185,12 +1202,23 @@ export const systemState = pgTable('system_state', {
   scoutRefineTopK: integer('scout_refine_top_k'),
   scoutRefineBudgetUsd: numeric('scout_refine_budget_usd', { precision: 8, scale: 2 }),
   scoutRefineMeasureVolume: boolean('scout_refine_measure_volume'),
+  // Below-top-K sampling (migration 0058, Phase 5 follow-up to ADR 0024). NULL
+  // = fall back to DEFAULT_SCOUT_BELOW_TOPK_SAMPLE_COUNT (10) in
+  // scoring-config.ts. 0 disables the sampling pass entirely.
+  scoutBelowTopkSampleCount: integer('scout_below_topk_sample_count'),
   // Candidate diversity caps (migration 0046, ADR 0023). NULL = fall back to
   // SCOUT_MAX_PER_TRADE (8) and SCOUT_MAX_CATEGORY_SHARE (0.30) in
   // scoring-config.ts. Bound how much of a scout run any single trade /
   // category may occupy so a high-ticket category can't sweep the list.
   scoutMaxPerTrade: integer('scout_max_per_trade'),
   scoutMaxCategoryShare: numeric('scout_max_category_share', { precision: 4, scale: 3 }),
+  // Approval-time diversity warning (migration 0058, Phase 5). NULL = fall
+  // back to DEFAULT_APPROVE_MAX_PER_STATE_SHARE (0.40) in scoring-config.ts.
+  // Non-blocking: crossing this share (or the >=3-per-trade threshold) only
+  // surfaces a warning in the operator approve flow — it never blocks the
+  // decision. DB-only knob (no Control-panel field yet), matching the
+  // scoutMaxPerTrade / scoutMaxCategoryShare precedent above.
+  approveMaxPerStateShare: numeric('approve_max_per_state_share', { precision: 4, scale: 3 }),
   // ──────────────────────────────────────────────────────────
   // Portfolio-wide daily spend ceiling (orchestrator Phase 2).
   // Enforced in BaseAgent.assertBudgetAvailable BEFORE the per-agent
@@ -1439,6 +1467,100 @@ export const maintenanceFindings = pgTable(
   (t) => ({
     siteCategoryIdx: index('maintenance_findings_site_category_idx').on(t.siteId, t.category),
     statusIdx: index('maintenance_findings_status_idx').on(t.status),
+  }),
+);
+
+// ────────────────────────────────────────────────────────────
+// Niche calibration feedback loop (migration 0056, Phase 2 of the Niche
+// Algorithm Accuracy plan). Compares scout/validate predictions (niches.
+// est_monthly_value_usd, scoutCtrAtRank/scoutCallRate priors) against
+// measured outcomes so the static lead-benchmarks.ts priors can eventually
+// be tuned from data instead of market intuition alone.
+// ────────────────────────────────────────────────────────────
+
+/**
+ * One row per (site, ISO week) — the measured GSC-derived outcome for that
+ * site's money keywords vs its overall query set. Deliberately does NOT
+ * duplicate calls/leads/tenants/mrr — those already live in
+ * `portfolio_snapshots` (daily, per-site) and are joined by (siteId, date)
+ * at read time. This table is GSC-only.
+ */
+export const nicheOutcomeSnapshots = pgTable(
+  'niche_outcome_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    nicheId: uuid('niche_id').references(() => niches.id, { onDelete: 'set null' }),
+    /** Monday of the ISO week this snapshot summarizes (YYYY-MM-DD). */
+    weekStart: text('week_start').notNull(),
+    /** Weighted-avg GSC position across money-keyword rows for the week. Null if no money-keyword rows matched. */
+    moneyKwPosition: numeric('money_kw_position', { precision: 6, scale: 2 }),
+    /** Weighted-avg GSC position across ALL query rows for the week. */
+    overallPosition: numeric('overall_position', { precision: 6, scale: 2 }),
+    /** Sum of impressions across all query rows for the week. */
+    impressions: integer('impressions').notNull().default(0),
+    /** Sum of clicks across all query rows for the week. */
+    clicks: integer('clicks').notNull().default(0),
+    /** Sum of impressions across money-keyword rows only. */
+    moneyKwImpressions: integer('money_kw_impressions').notNull().default(0),
+    /** Sum of clicks across money-keyword rows only. */
+    moneyKwClicks: integer('money_kw_clicks').notNull().default(0),
+    /** moneyKwClicks / moneyKwImpressions. Null (not 0) when impressions are 0 — "no data" must never look like "0% CTR". */
+    observedCtr: numeric('observed_ctr', { precision: 6, scale: 4 }),
+    /** portfolio_snapshots calls (that week, summed) / moneyKwClicks. Null when moneyKwClicks is 0. */
+    observedCallRate: numeric('observed_call_rate', { precision: 6, scale: 4 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    siteWeekUniq: uniqueIndex('niche_outcome_snapshots_site_week_uniq').on(t.siteId, t.weekStart),
+    siteIdx: index('niche_outcome_snapshots_site_idx').on(t.siteId),
+    weekIdx: index('niche_outcome_snapshots_week_idx').on(t.weekStart),
+  }),
+);
+
+/**
+ * Data-derived suggestions for the scout's static priors (scout_ctr_at_rank,
+ * scout_call_rate). Pooled (sum of clicks/calls, not average-of-ratios) across
+ * niche_outcome_snapshots, grouped at 'global' | 'trade' | 'trade_state' scope.
+ *
+ * ONLY scope='global' rows may be applied directly to a system_state knob —
+ * see /operator/niches SuggestionsPanel + actions.applyCalibrationSuggestion,
+ * which validates scope server-side regardless of what the client sent.
+ * 'trade' / 'trade_state' rows are informational only, meant to guide manual
+ * hand-tuning of TRADE_BENCHMARKS entries in lead-benchmarks.ts.
+ */
+export const calibrationSuggestions = pgTable(
+  'calibration_suggestions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** 'global' | 'trade' | 'trade_state' */
+    scope: text('scope').notNull(),
+    /** Matched trade keyword (lead-benchmarks.ts). Null for scope='global'. */
+    trade: text('trade'),
+    /** Two-letter state code. Only set for scope='trade_state'. */
+    state: text('state'),
+    /** 'scout_ctr_at_rank' | 'scout_call_rate' */
+    knob: text('knob').notNull(),
+    suggestedValue: numeric('suggested_value', { precision: 8, scale: 4 }).notNull(),
+    sampleSize: integer('sample_size').notNull(),
+    /** Pooled observed value, current prior, shrinkage weight, etc — audit trail for the suggestion. */
+    evidence: jsonb('evidence').notNull(),
+    /** 'open' | 'applied' | 'dismissed' | 'superseded' */
+    status: text('status').notNull().default('open'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Partial unique index: only one OPEN suggestion per (scope, trade, state, knob)
+    // tuple at a time. The suggester marks prior open rows 'superseded' before
+    // inserting a new open one for the same tuple (see niche-prior-suggester).
+    openScopeTradeStateKnobUniq: uniqueIndex('calibration_suggestions_open_scope_trade_state_knob_uniq')
+      .on(t.scope, t.trade, t.state, t.knob)
+      .where(sql`${t.status} = 'open'`),
+    scopeIdx: index('calibration_suggestions_scope_idx').on(t.scope),
+    statusIdx: index('calibration_suggestions_status_idx').on(t.status),
   }),
 );
 
@@ -1858,6 +1980,10 @@ export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
 export type NewPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
 export type MaintenanceFinding = typeof maintenanceFindings.$inferSelect;
 export type NewMaintenanceFinding = typeof maintenanceFindings.$inferInsert;
+export type NicheOutcomeSnapshot = typeof nicheOutcomeSnapshots.$inferSelect;
+export type NewNicheOutcomeSnapshot = typeof nicheOutcomeSnapshots.$inferInsert;
+export type CalibrationSuggestion = typeof calibrationSuggestions.$inferSelect;
+export type NewCalibrationSuggestion = typeof calibrationSuggestions.$inferInsert;
 export type EmailSend = typeof emailSends.$inferSelect;
 export type NewEmailSend = typeof emailSends.$inferInsert;
 export type PhoneProvision = typeof phoneProvisions.$inferSelect;

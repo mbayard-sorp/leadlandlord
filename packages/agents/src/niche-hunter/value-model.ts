@@ -162,12 +162,16 @@ export interface ScoutValueArgs {
   demandQuality?: number;
   /**
    * α_comp blend strength folding metroDensityMult into winnability.
-   * Undefined → DEFAULT_GEO_COMP_BLEND (0.0 → inert).
+   * Undefined → DEFAULT_GEO_COMP_BLEND (0.25 by default; operator override
+   * via system_state.scout_geo_comp_blend takes precedence over the code
+   * default). 0 fully disables the geo-competition fold.
    */
   compBlendStrength?: number;
   /**
    * α_dem blend strength folding demandQuality into estimated value.
-   * Undefined → DEFAULT_GEO_DEMAND_BLEND (0.0 → inert).
+   * Undefined → DEFAULT_GEO_DEMAND_BLEND (0.25 by default; operator override
+   * via system_state.scout_geo_demand_blend takes precedence over the code
+   * default). 0 fully disables the geo-demand fold.
    */
   demandBlendStrength?: number;
   /**
@@ -201,7 +205,9 @@ export interface ScoutValue {
   dataConfidence: 'cluster' | 'benchmark_only';
   /**
    * Geo audit fields (ADR 0022) — always emitted; 1.0 when the geo signal is
-   * absent or the blend strength is 0 (the inert default).
+   * absent or the effective blend strength is 0 (blend strength defaults to
+   * 0.25, so the fold is active unless the geo signal itself is missing or
+   * an operator override sets the blend to 0).
    */
   localRankMult: number;
   demandMult: number;

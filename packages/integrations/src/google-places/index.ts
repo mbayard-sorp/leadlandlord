@@ -265,30 +265,54 @@ export interface ContractorCountArgs {
   onCost?: (costUsd: number) => void;
 }
 
+/** Median of a pre-sorted ascending number array. Returns 0 for an empty array. */
+function computeMedian(sorted: number[]): number {
+  const n = sorted.length;
+  if (n === 0) return 0;
+  const mid = Math.floor(n / 2);
+  if (n % 2 === 1) return sorted[mid] ?? 0;
+  return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+}
+
+export interface ContractorSupply {
+  /** Total contractors returned (first-page Places results, capped at 20). */
+  count: number;
+  /** How many of those `count` results have a `websiteUri`. */
+  withWebsite: number;
+  /** `count - withWebsite`. */
+  withoutWebsite: number;
+  /** Average Google star rating across results that report one. 0 when none do. */
+  avgRating: number;
+  /** Median Google review count across results that report one. 0 when none do. */
+  medianReviewCount: number;
+}
+
 /**
- * Return the number of contractors (first-page Places results, capped at 20)
- * for a given niche + city + state. Intended for rentability scoring in the
- * operator `validateNiche` action — NEVER call this at niche-hunter generation
- * time; it costs ~$0.017/call and must be operator-gated.
+ * Same Text Search call as `getContractorCount` (same field mask, same cost),
+ * but computes supply-side aggregates over the full result set rather than
+ * just the length. Rentability v2 (ADR 0029) input.
  *
- * Caching: responses are stored for 30 days via the shared external-API cache
- * (endpoint namespace 'places-contractor-count'). A re-validation within 30
- * days costs nothing.
+ * Caching: a DEDICATED endpoint namespace ('places-contractor-supply'), 30-day
+ * TTL. Deliberately NOT the same cache endpoint as `getContractorCount`
+ * ('places-contractor-count') — that endpoint's cached rows are bare numbers;
+ * this one returns an object, and reusing the key would risk a cache hit
+ * deserializing a number where an object is expected. The old cached numbers
+ * simply expire on their existing TTL; no migration needed for the cache table.
  *
- * MOCK_AI bypass: returns 7 (a plausible mid-market count) so test/mock paths
- * never hit the network. The cache layer itself also bypasses when MOCK_AI=true.
+ * MOCK_AI bypass: returns a deterministic object (count=7, mixed website
+ * coverage) so test/mock paths never hit the network.
  */
-export async function getContractorCount(args: ContractorCountArgs): Promise<number> {
+export async function getContractorSupply(args: ContractorCountArgs): Promise<ContractorSupply> {
   if (process.env.MOCK_AI === 'true') {
-    log.info({ args }, 'google-places getContractorCount: MOCK_AI bypass, returning 7');
-    return 7;
+    log.info({ args }, 'google-places getContractorSupply: MOCK_AI bypass, returning mock supply');
+    return { count: 7, withWebsite: 4, withoutWebsite: 3, avgRating: 4.5, medianReviewCount: 22 };
   }
 
   const query = `${args.niche} in ${args.city}, ${args.state}`;
   const cacheKey = stableKey([args.niche.toLowerCase(), args.city.toLowerCase(), args.state.toLowerCase()]);
 
-  const { value: count, costUsd } = await withDataForSeoCache<number>({
-    endpoint: 'places-contractor-count',
+  const { value: supply, costUsd } = await withDataForSeoCache<ContractorSupply>({
+    endpoint: 'places-contractor-supply',
     key: cacheKey,
     ttlDays: 30,
     costUsd: 0.017,
@@ -299,12 +323,41 @@ export async function getContractorCount(args: ContractorCountArgs): Promise<num
         pageSize: 20,
         excludeClosed: true,
       });
-      log.info({ query, count: places.length }, 'google-places contractor count fetched');
-      return places.length;
+      const withWebsite = places.filter((p) => p.websiteUri != null).length;
+      const ratings = places.map((p) => p.rating).filter((r): r is number => r != null);
+      const avgRating = ratings.length > 0 ? ratings.reduce((s, r) => s + r, 0) / ratings.length : 0;
+      const reviewCounts = places
+        .map((p) => p.userRatingCount)
+        .filter((c): c is number => c != null)
+        .sort((a, b) => a - b);
+      const medianReviewCount = computeMedian(reviewCounts);
+      const result: ContractorSupply = {
+        count: places.length,
+        withWebsite,
+        withoutWebsite: places.length - withWebsite,
+        avgRating,
+        medianReviewCount,
+      };
+      log.info({ query, ...result }, 'google-places contractor supply fetched');
+      return result;
     },
   });
 
   args.onCost?.(costUsd);
+  return supply;
+}
+
+/**
+ * Return the number of contractors (first-page Places results, capped at 20)
+ * for a given niche + city + state. Intended for rentability scoring in the
+ * operator `validateNiche` action — NEVER call this at niche-hunter generation
+ * time; it costs ~$0.017/call and must be operator-gated.
+ *
+ * Thin wrapper over `getContractorSupply` — kept for callers that only need
+ * the count (and as the historical entry point / test surface).
+ */
+export async function getContractorCount(args: ContractorCountArgs): Promise<number> {
+  const { count } = await getContractorSupply(args);
   return count;
 }
 

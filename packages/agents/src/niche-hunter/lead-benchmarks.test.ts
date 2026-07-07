@@ -3,6 +3,10 @@ import {
   getRentabilityPrior,
   getLeadBenchmarkPrice,
   computeRentabilityScore,
+  matchesTradeQuery,
+  resolveMatchedTradeKeywords,
+  DEFAULT_RENTABILITY_CPC_CEILING,
+  DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
 } from './lead-benchmarks';
 import { MIN_LEAD_BENCHMARK_PRICE, MIN_RENTABILITY_PRIOR } from './scoring-config';
 import { SERVICE_TAXONOMY } from './service-taxonomy';
@@ -177,6 +181,112 @@ describe('computeRentabilityScore', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// computeRentabilityScore v2 — Places supply signal (ADR 0029)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('computeRentabilityScore v2 (ADR 0029) — explicit branch, not algebraic collapse', () => {
+  // Reference (pre-v2) score computed by hand from the documented v1 weights,
+  // used to prove the branch is byte-identical — NOT "close enough".
+  function ref_v1(contractor_count: number, avg_cpc: number, lead_benchmark_price: number): number {
+    const count = Math.max(0, Math.min(20, contractor_count));
+    let supplySub: number;
+    if (count <= 2) {
+      supplySub = (count / 2) * 0.4;
+    } else if (count <= 14) {
+      supplySub = 0.4 + ((count - 2) / 12) * 0.6;
+    } else {
+      supplySub = 1.0 - ((count - 14) / 6) * 0.7;
+    }
+    const cpcSub = Math.min(1, avg_cpc / DEFAULT_RENTABILITY_CPC_CEILING);
+    const leadPriceSub = Math.min(1, lead_benchmark_price / DEFAULT_RENTABILITY_LEAD_PRICE_CEILING);
+    const raw = supplySub * 0.5 + cpcSub * 0.25 + leadPriceSub * 0.25;
+    return Math.min(100, Math.max(0, raw * 100));
+  }
+
+  it('undefined inputs -> byte-identical v1 formula (regression, exact equality)', () => {
+    const cases: Array<{ contractor_count: number; avg_cpc: number; lead_benchmark_price: number }> = [
+      { contractor_count: 0, avg_cpc: 0, lead_benchmark_price: 0 },
+      { contractor_count: 1, avg_cpc: 3, lead_benchmark_price: 45 },
+      { contractor_count: 8, avg_cpc: 6, lead_benchmark_price: 60 },
+      { contractor_count: 14, avg_cpc: 12, lead_benchmark_price: 100 },
+      { contractor_count: 20, avg_cpc: 25, lead_benchmark_price: 200 },
+    ];
+    for (const c of cases) {
+      const actual = computeRentabilityScore(c);
+      const expected = ref_v1(c.contractor_count, c.avg_cpc, c.lead_benchmark_price);
+      // Exact equality (toBe), not toBeCloseTo — proves the branch is truly
+      // byte-identical to the pre-change formula when the new inputs are absent.
+      expect(actual).toBe(expected);
+    }
+  });
+
+  it('a real value with only contractors_without_website present activates v2 (diverges from v1 in general)', () => {
+    const base = { contractor_count: 10, avg_cpc: 6, lead_benchmark_price: 60 };
+    const v1 = computeRentabilityScore(base);
+    const v2 = computeRentabilityScore({ ...base, contractors_without_website: 8 });
+    // v1 formula must not silently apply once the new field is present.
+    expect(v2).not.toBe(v1);
+  });
+
+  it('higher no-website share raises the score (holding contractor_count and other inputs constant)', () => {
+    const base = { contractor_count: 10, avg_cpc: 6, lead_benchmark_price: 60 };
+    const lowWeakness = computeRentabilityScore({ ...base, contractors_without_website: 1 });
+    const highWeakness = computeRentabilityScore({ ...base, contractors_without_website: 9 });
+    expect(highWeakness).toBeGreaterThan(lowWeakness);
+  });
+
+  it('contractors_without_website=0 (every contractor already has a site) scores at or below the v1 supply/cpc/leadPrice-only weighting', () => {
+    const base = { contractor_count: 10, avg_cpc: 6, lead_benchmark_price: 60 };
+    const zeroWeakness = computeRentabilityScore({ ...base, contractors_without_website: 0 });
+    const someWeakness = computeRentabilityScore({ ...base, contractors_without_website: 5 });
+    expect(zeroWeakness).toBeLessThan(someWeakness);
+  });
+
+  it('median_review_count refines weakness: thin reviews (low median) alongside high no-website share raises score further than a high median', () => {
+    const base = { contractor_count: 10, avg_cpc: 6, lead_benchmark_price: 60, contractors_without_website: 8 };
+    const thinReviews = computeRentabilityScore({ ...base, median_review_count: 2 });
+    const healthyReviews = computeRentabilityScore({ ...base, median_review_count: 80 });
+    expect(thinReviews).toBeGreaterThan(healthyReviews);
+  });
+
+  it('median_review_count alone (contractors_without_website undefined) still activates v2 branch', () => {
+    const base = { contractor_count: 10, avg_cpc: 6, lead_benchmark_price: 60 };
+    const v1 = computeRentabilityScore(base);
+    const v2 = computeRentabilityScore({ ...base, median_review_count: 5 });
+    // noWebsiteShare defaults to 0 when contractors_without_website is absent,
+    // so this exercises the v2 weight redistribution (0.45/0.15/0.2/0.2) with
+    // weaknessSub=0, which is NOT the same as the v1 weights (0.5/0.25/0.25).
+    expect(v2).not.toBe(v1);
+  });
+
+  it('contractor_count=0 with contractors_without_website present does not divide by zero', () => {
+    const s = computeRentabilityScore({
+      contractor_count: 0,
+      avg_cpc: 6,
+      lead_benchmark_price: 60,
+      contractors_without_website: 0,
+      median_review_count: 0,
+    });
+    expect(Number.isFinite(s)).toBe(true);
+    expect(s).toBeGreaterThanOrEqual(0);
+  });
+
+  it('score stays in [0, 100] across a spread of v2 inputs', () => {
+    const combos = [
+      { contractor_count: 0, avg_cpc: 0, lead_benchmark_price: 0, contractors_without_website: 0, median_review_count: 0 },
+      { contractor_count: 20, avg_cpc: 30, lead_benchmark_price: 300, contractors_without_website: 20, median_review_count: 0 },
+      { contractor_count: 14, avg_cpc: 12, lead_benchmark_price: 100, contractors_without_website: 7, median_review_count: 25 },
+      { contractor_count: 5, avg_cpc: 3, lead_benchmark_price: 40, contractors_without_website: 1, median_review_count: 120 },
+    ];
+    for (const c of combos) {
+      const s = computeRentabilityScore(c);
+      expect(s).toBeGreaterThanOrEqual(0);
+      expect(s).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // getRentabilityPrior — existing tests (unchanged, verifying no regression)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -296,4 +406,72 @@ describe('medical trade benchmarks — mapped and above floor', () => {
       expect(prior).toBeGreaterThanOrEqual(MIN_RENTABILITY_PRIOR);
     });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveMatchedTradeKeywords
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('resolveMatchedTradeKeywords', () => {
+  it('returns the matched benchmark keyword list for a mapped trade', () => {
+    const keywords = resolveMatchedTradeKeywords('residential roofing');
+    expect(keywords).not.toBeNull();
+    expect(keywords).toContain('roofing');
+  });
+
+  it('returns null for an unmapped niche (falls to default bucket)', () => {
+    expect(resolveMatchedTradeKeywords('totally unknown exotic trade xyz')).toBeNull();
+  });
+
+  it('longest-keyword-wins is preserved (foundation repair over repair)', () => {
+    const keywords = resolveMatchedTradeKeywords('foundation repair services');
+    expect(keywords).toContain('foundation repair');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// matchesTradeQuery
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('matchesTradeQuery', () => {
+  it('matches a GSC query containing the trade keyword as a substring', () => {
+    expect(matchesTradeQuery('roof repair phoenix az', 'residential roofing')).toBe(true);
+  });
+
+  it('matches a single-word keyword embedded in a longer local query', () => {
+    expect(matchesTradeQuery('emergency roofer near me 85001', 'residential roofing')).toBe(true);
+  });
+
+  it('matches a multi-word keyword reordered in the query (token overlap)', () => {
+    // keyword "water heater" — query has both tokens but reordered + extra words.
+    expect(matchesTradeQuery('heater water repair service tucson', 'water heater repair')).toBe(true);
+  });
+
+  it('does not match an unrelated query for a mapped trade', () => {
+    expect(matchesTradeQuery('best pizza delivery near me', 'residential roofing')).toBe(false);
+  });
+
+  it('does not match when only one token of a multi-word keyword overlaps', () => {
+    // "foundation repair" keyword — query shares only "repair", not "foundation".
+    expect(matchesTradeQuery('garage door repair services', 'foundation repair contractor')).toBe(false);
+  });
+
+  it('returns false for a niche with no benchmark match (default bucket)', () => {
+    expect(matchesTradeQuery('anything at all', 'totally unknown exotic trade xyz')).toBe(false);
+  });
+
+  it('is case-insensitive on both query and niche', () => {
+    expect(matchesTradeQuery('ROOF REPAIR PHOENIX', 'RESIDENTIAL ROOFING')).toBe(true);
+  });
+
+  it('strips geo/stopword filler without producing false positives', () => {
+    // "near me" and city/state tokens shouldn't cause spurious overlap for an
+    // unrelated trade that happens to share only stopwords with the query.
+    expect(matchesTradeQuery('best hvac company near me in tucson az', 'plumbing repair')).toBe(false);
+    expect(matchesTradeQuery('best hvac company near me in tucson az', 'hvac installation')).toBe(true);
+  });
+
+  it('empty query never matches', () => {
+    expect(matchesTradeQuery('', 'residential roofing')).toBe(false);
+  });
 });

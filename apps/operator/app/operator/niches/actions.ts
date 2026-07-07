@@ -2,13 +2,28 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq, and, desc } from 'drizzle-orm';
-import { getDb, niches, agentEvents, agentRuns, sites, getSystemState, requeueDeadLetter, sql } from '@leadlandlord/db';
+import {
+  getDb,
+  niches,
+  agentEvents,
+  agentRuns,
+  sites,
+  calibrationSuggestions,
+  systemState,
+  getSystemState,
+  requeueDeadLetter,
+  sql,
+} from '@leadlandlord/db';
 import { NicheScoutInput } from '@leadlandlord/agents/niche-hunter/scout';
 import { validateNicheCore } from '@leadlandlord/agents/niche-hunter/validate';
 import {
   DEFAULT_RENTABILITY_CPC_CEILING,
   DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
 } from '@leadlandlord/agents/niche-hunter/lead-benchmarks';
+import {
+  DEFAULT_APPROVE_MAX_PER_STATE_SHARE,
+  evaluateApprovalDiversity,
+} from '@leadlandlord/agents/niche-hunter/scoring-config';
 import { log } from '@leadlandlord/shared/log';
 import { requireOperatorSession } from '@/lib/auth';
 
@@ -169,6 +184,94 @@ export async function runNicheValidationForCandidates(
   return {
     ok: true,
     message: `Validation of ${ids.length} selected candidate(s) queued — the status bar tracks progress.`,
+  };
+}
+
+export interface NicheApprovalWarning {
+  /** True when either concentration threshold below is crossed. */
+  shouldWarn: boolean;
+  /** Count of already-approved niches sharing this trade (before this approval). */
+  sameTradeApprovedCount: number;
+  /** Count of already-approved niches sharing this state (before this approval). */
+  sameStateApprovedCount: number;
+  /** Total approved niches (before this approval). */
+  totalApprovedCount: number;
+  /** sameStateApprovedCount / totalApprovedCount, or 0 when totalApprovedCount is 0. */
+  sameStateShare: number;
+  /** Threshold actually applied (system_state override or code default). */
+  maxPerStateShare: number;
+  message: string;
+}
+
+/**
+ * Non-blocking diversity check surfaced right before an operator approves a
+ * pending niche (Phase 5, Niche Algorithm Accuracy plan). Approval is never
+ * blocked by this — it only informs the confirm-dialog copy in
+ * DecisionButtons.tsx. Two independent triggers, either sets shouldWarn:
+ *   - the trade already has >= APPROVE_SAME_TRADE_WARNING_COUNT (3) approved
+ *     niches (a portfolio already leaning on one trade across cities/states).
+ *   - approving this niche's state would make that state >= 40% (default,
+ *     system_state.approve_max_per_state_share) of the whole approved set.
+ */
+export async function getNicheApprovalWarning(nicheId: string): Promise<NicheApprovalWarning> {
+  const empty: NicheApprovalWarning = {
+    shouldWarn: false,
+    sameTradeApprovedCount: 0,
+    sameStateApprovedCount: 0,
+    totalApprovedCount: 0,
+    sameStateShare: 0,
+    maxPerStateShare: DEFAULT_APPROVE_MAX_PER_STATE_SHARE,
+    message: '',
+  };
+  try { await requireOperatorSession(); } catch { return empty; }
+  if (!nicheId) return empty;
+
+  const db = getDb();
+  const [row] = await db
+    .select({ niche: niches.niche, state: niches.state })
+    .from(niches)
+    .where(eq(niches.id, nicheId))
+    .limit(1);
+  if (!row) return empty;
+
+  const sys = await getSystemState();
+  const maxPerStateShare =
+    sys.approveMaxPerStateShare != null ? parseFloat(sys.approveMaxPerStateShare) : undefined;
+
+  const approvedRows = await db
+    .select({ niche: niches.niche, state: niches.state })
+    .from(niches)
+    .where(eq(niches.decision, 'approved'));
+
+  // Trigger-condition math lives in the agents package (pure, unit-tested) —
+  // this action stays thin (auth + DB fetch + message copy only).
+  const evaluated = evaluateApprovalDiversity({
+    trade: row.niche,
+    state: row.state,
+    approvedRows: approvedRows.map((r) => ({ trade: r.niche, state: r.state })),
+    maxPerStateShare,
+  });
+
+  const parts: string[] = [];
+  if (evaluated.tradeTriggered) {
+    parts.push(`"${row.niche}" already has ${evaluated.sameTradeApprovedCount} approved niches`);
+  }
+  if (evaluated.stateTriggered) {
+    parts.push(
+      `${row.state} would be ${Math.round(evaluated.sameStateShare * 100)}% of the approved set (cap ${Math.round(evaluated.maxPerStateShare * 100)}%)`,
+    );
+  }
+
+  return {
+    shouldWarn: evaluated.shouldWarn,
+    sameTradeApprovedCount: evaluated.sameTradeApprovedCount,
+    sameStateApprovedCount: evaluated.sameStateApprovedCount,
+    totalApprovedCount: evaluated.totalApprovedCount,
+    sameStateShare: evaluated.sameStateShare,
+    maxPerStateShare: evaluated.maxPerStateShare,
+    message: evaluated.shouldWarn
+      ? `Portfolio concentration: ${parts.join('; ')}. You can still approve.`
+      : '',
   };
 }
 
@@ -660,4 +763,83 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
 
   revalidatePath('/operator/niches');
   return { ok: true, message: result.message };
+}
+
+/** Maps a calibration_suggestions.knob value to its system_state column. Exhaustive — any other value is rejected. */
+const KNOB_TO_SYSTEM_STATE_COLUMN = {
+  scout_ctr_at_rank: 'scoutCtrAtRank',
+  scout_call_rate: 'scoutCallRate',
+} as const;
+type ApplicableKnob = keyof typeof KNOB_TO_SYSTEM_STATE_COLUMN;
+
+/**
+ * Apply an OPEN calibration_suggestions row to its system_state knob.
+ *
+ * CRITICAL: only scope='global' rows are ever applicable — a single global
+ * knob (scout_ctr_at_rank / scout_call_rate) cannot represent a per-trade or
+ * per-trade-state value. SuggestionsPanel only renders the Apply button for
+ * scope='global' rows, but this action re-validates scope itself server-side
+ * — never trust the client to have honored the UI gate.
+ */
+export async function applyCalibrationSuggestion(id: string): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!id) return { ok: false, message: 'missing suggestion id' };
+
+  const db = getDb();
+  const [row] = await db.select().from(calibrationSuggestions).where(eq(calibrationSuggestions.id, id)).limit(1);
+  if (!row) return { ok: false, message: 'suggestion not found' };
+  if (row.status !== 'open') return { ok: false, message: `suggestion already ${row.status}` };
+
+  // Server-side scope gate — the ONLY enforcement point that matters. The
+  // client hides the Apply button for non-global rows, but that is a UX
+  // nicety; this check is what actually prevents a trade-scoped number from
+  // silently overwriting the global prior.
+  if (row.scope !== 'global') {
+    log.warn({ id, scope: row.scope }, 'applyCalibrationSuggestion: rejected non-global scope');
+    return {
+      ok: false,
+      message: `Only scope='global' suggestions can be applied directly (this row is scope='${row.scope}'). Use it to hand-tune the matching TRADE_BENCHMARKS entry instead.`,
+    };
+  }
+
+  if (!(row.knob in KNOB_TO_SYSTEM_STATE_COLUMN)) {
+    return { ok: false, message: `unknown knob '${row.knob}' — cannot apply` };
+  }
+  const column = KNOB_TO_SYSTEM_STATE_COLUMN[row.knob as ApplicableKnob];
+
+  await getSystemState(); // ensures the singleton row exists
+  await db
+    .update(systemState)
+    .set({ [column]: row.suggestedValue, updatedAt: new Date() })
+    .where(eq(systemState.id, 'global'));
+
+  await db
+    .update(calibrationSuggestions)
+    .set({ status: 'applied', appliedAt: new Date() })
+    .where(eq(calibrationSuggestions.id, id));
+
+  log.info({ id, knob: row.knob, value: row.suggestedValue }, 'calibration suggestion applied');
+  revalidatePath('/operator/niches');
+  return { ok: true, message: `Applied ${row.knob} = ${row.suggestedValue}.` };
+}
+
+/**
+ * Dismiss any OPEN calibration_suggestions row (any scope). Used both for
+ * trade/trade_state rows (which have no Apply path) and as a way to reject
+ * a global suggestion the operator doesn't want to act on.
+ */
+export async function dismissCalibrationSuggestion(id: string): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!id) return { ok: false, message: 'missing suggestion id' };
+
+  const db = getDb();
+  const [row] = await db
+    .update(calibrationSuggestions)
+    .set({ status: 'dismissed' })
+    .where(and(eq(calibrationSuggestions.id, id), eq(calibrationSuggestions.status, 'open')))
+    .returning();
+  if (!row) return { ok: false, message: 'suggestion not found or already decided' };
+
+  revalidatePath('/operator/niches');
+  return { ok: true, message: 'Dismissed.' };
 }

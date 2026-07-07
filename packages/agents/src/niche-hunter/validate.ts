@@ -1,4 +1,4 @@
-import { getDb, niches, eq } from '@leadlandlord/db';
+import { getDb, niches, eq, sql } from '@leadlandlord/db';
 import {
   getLocalKeywordMetrics,
   getSerpComposition,
@@ -6,9 +6,13 @@ import {
   getKeywordCandidates,
   dfsLocationName,
 } from '@leadlandlord/integrations/dataforseo';
-import { getContractorCount } from '@leadlandlord/integrations/google-places';
+import { getContractorSupply } from '@leadlandlord/integrations/google-places';
 import { computeScore } from './index';
-import { DEFAULT_WEIGHTS, resolveDemandVolume } from './scoring-config';
+import {
+  DEFAULT_WEIGHTS,
+  resolveDemandVolume,
+  SEASONALITY_DAMPENING_THRESHOLD,
+} from './scoring-config';
 import {
   getRentabilityPrior,
   getLeadBenchmarkPrice,
@@ -53,9 +57,13 @@ export interface ValidateNicheCoreResult {
   kd?: number;
   score?: number;
   contractorCount?: number;
+  contractorsWithoutWebsite?: number;
+  contractorMedianReviews?: number;
   rentabilityScore?: number;
   validatedMonthlyValueUsd?: number;
   validatedScore?: number;
+  /** trough/peak of the trailing ~12mo volume, 0-1. Null when no monthly history. */
+  seasonalityIndex?: number | null;
   /** Total cold-miss API spend incurred by this call. */
   costUsd: number;
 }
@@ -90,17 +98,19 @@ export async function validateNicheCore(
 
   try {
     // getKeywordCandidates is city-independent with 90-day cache (~$0.028
-    // cold-miss per distinct niche). getContractorCount is a single Places
-    // Text Search call (~$0.017), cached 30 days. All 5 run in parallel.
-    // getPaidAdCount is city-scoped via location_name (40501 fallback to
-    // national inside the integration).
-    const [metrics, serpComposition, paidAdCount, clusterCandidates, contractor_count] = await Promise.all([
+    // cold-miss per distinct niche). getContractorSupply is a single Places
+    // Text Search call (~$0.017), cached 30 days (dedicated 'places-contractor-
+    // supply' endpoint — see ADR 0029). All 5 run in parallel. getPaidAdCount
+    // is city-scoped via location_name (40501 fallback to national inside the
+    // integration).
+    const [metrics, serpComposition, paidAdCount, clusterCandidates, contractorSupply] = await Promise.all([
       getLocalKeywordMetrics({ keywords: seeds, location, forceRefresh: false, onCost }),
       getSerpComposition({ keyword: primaryKeyword, location, forceRefresh: false, onCost }),
       getPaidAdCount({ keyword: primaryKeyword, location, onCost }),
       getKeywordCandidates({ seed: row.niche, onCost }),
-      getContractorCount({ niche: row.niche, city: row.city, state: row.state, onCost }),
+      getContractorSupply({ niche: row.niche, city: row.city, state: row.state, onCost }),
     ]);
+    const contractor_count = contractorSupply.count;
 
     // Aggregate seed metrics the same way scoreCandidate() does.
     const search_volume = metrics.reduce((s, m) => s + m.search_volume, 0);
@@ -114,13 +124,23 @@ export async function validateNicheCore(
     const avg_cpc =
       metrics.length > 0 ? metrics.reduce((s, m) => s + m.cpc, 0) / metrics.length : 0;
     const monthly = metrics.flatMap((m) => m.monthly_searches ?? []);
+    const monthlyValues = monthly.map((x) => x.search_volume);
+    const seasonalityPeak = monthlyValues.length > 0 ? Math.max(...monthlyValues) : null;
+    const seasonalityTrough = monthlyValues.length > 0 ? Math.min(...monthlyValues) : null;
     const seasonality =
-      monthly.length > 0
-        ? {
-            peak: Math.max(...monthly.map((x) => x.search_volume)),
-            trough: Math.min(...monthly.map((x) => x.search_volume)),
-          }
+      seasonalityPeak !== null && seasonalityTrough !== null
+        ? { peak: seasonalityPeak, trough: seasonalityTrough }
         : null;
+    // seasonalityIndex: trough/peak on a 0-1 scale. Near 1 = flat demand
+    // year-round; near 0 = highly seasonal (e.g. snow removal). Null when we
+    // have no monthly history (metrics.monthly_searches empty) — never
+    // dampens in that case, matching prior behavior exactly.
+    const seasonalityIndex =
+      seasonalityPeak !== null && seasonalityPeak > 0 ? seasonalityTrough! / seasonalityPeak : null;
+    const isHighlySeasonal = seasonalityIndex !== null && seasonalityIndex < SEASONALITY_DAMPENING_THRESHOLD;
+    // Annual mean across the trailing ~12 months (same window DFS returns).
+    const seasonalityAnnualMean =
+      monthlyValues.length > 0 ? monthlyValues.reduce((s, v) => s + v, 0) / monthlyValues.length : null;
 
     // Sum search_volume across commercial/transactional-intent phrases.
     const clusterVolume = clusterCandidates
@@ -134,7 +154,17 @@ export async function validateNicheCore(
     const claudeMid = row.estSearchVolume ?? row.searchVolume ?? 0;
     const { volume: demandVolume, source: demandSource } = resolveDemandVolume(search_volume, claudeMid);
 
-    const dfsRaw = { metrics, serpComposition, paidAdCount, avg_cpc, seasonality, clusterVolume, contractor_count };
+    const dfsRaw = {
+      metrics,
+      serpComposition,
+      paidAdCount,
+      avg_cpc,
+      seasonality,
+      seasonalityIndex,
+      clusterVolume,
+      contractor_count,
+      contractorSupply,
+    };
 
     // Recompute legacy score using measured inputs and DEFAULT_WEIGHTS.
     // Kept alongside the dollar value for one release while the UI migrates.
@@ -154,7 +184,8 @@ export async function validateNicheCore(
       rentability_prior,
     });
 
-    // Rentability score — separate from SEO winnability score.
+    // Rentability score — separate from SEO winnability score. Phase 4b
+    // (ADR 0029): the new Places supply fields feed the v2 weighting.
     const lead_benchmark_price = getLeadBenchmarkPrice(row.niche);
     const rentability_score = computeRentabilityScore({
       contractor_count,
@@ -162,20 +193,48 @@ export async function validateNicheCore(
       lead_benchmark_price,
       cpc_ceiling: cpcCeiling,
       lead_price_ceiling: leadPriceCeiling,
+      contractors_without_website: contractorSupply.withoutWebsite,
+      median_review_count: contractorSupply.medianReviewCount,
     });
 
     // Dollar-denominated expected value (value-model.ts). Measured volume
     // swaps in when it clears the trust floor; the scout/legacy estimate
     // backstops below it.
+    //
+    // Seasonality dampening: for a highly seasonal trade (seasonalityIndex <
+    // SEASONALITY_DAMPENING_THRESHOLD), the current-month-driven measured
+    // volume can badly over- or under-state the trade's true annual average
+    // (e.g. validating "snow removal" in January). Dampen search_volume
+    // toward the annual mean before it reaches the dollar-value model — this
+    // is the ONLY place seasonality touches the pipeline; the legacy 0-100
+    // `score` above deliberately still uses the raw (undampened) demandVolume
+    // so the two paths never double-count the adjustment.
+    const dampenedCityVolume =
+      isHighlySeasonal && seasonalityAnnualMean !== null
+        ? (search_volume + seasonalityAnnualMean) / 2
+        : search_volume;
+
     const validated = estimateValidatedValue({
       trade: row.niche,
-      measuredCityVolume: search_volume,
+      measuredCityVolume: dampenedCityVolume,
       estCityVolume: claudeMid,
       serpDifficulty: kd,
       rentabilityScore: rentability_score,
       ctrAtRank: opts.ctrAtRank,
       callRate: opts.callRate,
     });
+
+    // Deterministic seasonality caution, merged (not overwritten) into the
+    // existing `annotations` jsonb via the same COALESCE(...) || pattern used
+    // elsewhere (site-builder, citation-runner) — so this never clobbers a
+    // licensing_concern/caution the Claude annotation pass (validator.ts)
+    // already wrote, and so a later Claude pass merging the same way doesn't
+    // erase this deterministic flag either.
+    const annotationsMerge = isHighlySeasonal
+      ? sql`COALESCE(${niches.annotations}, '{}'::jsonb) || ${JSON.stringify({
+          seasonality: `Highly seasonal demand (trough/peak ratio ${seasonalityIndex!.toFixed(2)}) — validated volume dampened toward the annual mean.`,
+        })}::jsonb`
+      : undefined;
 
     await db
       .update(niches)
@@ -189,9 +248,13 @@ export async function validateNicheCore(
         volumeSource: demandSource,
         score: score.toFixed(2),
         contractorCount: contractor_count,
+        contractorsWithoutWebsite: contractorSupply.withoutWebsite,
+        contractorMedianReviews: Math.round(contractorSupply.medianReviewCount),
         rentabilityScore: rentability_score.toFixed(2),
         validatedMonthlyValueUsd: validated.validatedValueUsd.toFixed(2),
         validatedScore: validated.validatedScore.toFixed(2),
+        seasonalityIndex: seasonalityIndex !== null ? seasonalityIndex.toFixed(3) : null,
+        ...(annotationsMerge !== undefined ? { annotations: annotationsMerge } : {}),
       })
       .where(eq(niches.id, nicheId));
 
@@ -203,9 +266,12 @@ export async function validateNicheCore(
       kd,
       score,
       contractorCount: contractor_count,
+      contractorsWithoutWebsite: contractorSupply.withoutWebsite,
+      contractorMedianReviews: Math.round(contractorSupply.medianReviewCount),
       rentabilityScore: rentability_score,
       validatedMonthlyValueUsd: validated.validatedValueUsd,
       validatedScore: validated.validatedScore,
+      seasonalityIndex,
       costUsd,
     };
   } catch (err) {

@@ -211,7 +211,7 @@ function ModeSection({ state }: Props) {
 /**
  * Scout geographic-targeting and Stage-3 refinement global knobs (ADR 0022).
  * All fields are nullable — blank resets to the code default (NULL in DB).
- * Blend strengths default to 0.0 (inert); set to 0.3–0.5 to activate.
+ * Blend strengths default to 0.25 (active); set to 0 to disable the geo fold.
  * Refine top-K defaults to 0 (Stage 3 disabled).
  */
 function ScoutGeoTargetingSection({ state }: Props) {
@@ -243,7 +243,7 @@ function ScoutGeoTargetingSection({ state }: Props) {
       </header>
       <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <label className="text-xs text-slate-400">
-          Geo comp blend α (0–1, default 0 = off)
+          Geo comp blend α (0–1, default 0.25)
           <input
             type="number"
             min="0"
@@ -251,15 +251,16 @@ function ScoutGeoTargetingSection({ state }: Props) {
             step="0.001"
             name="scoutGeoCompBlend"
             defaultValue={state.scoutGeoCompBlend ?? ''}
-            placeholder="0 (off)"
+            placeholder="0.25 (code default)"
             className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           />
           <span className="block mt-1 text-slate-500">
-            Folds metro competition density into winnability. Suggested start: 0.3–0.5.
+            Folds metro competition density into winnability. Blank uses the code default (0.25,
+            active); set to 0 to disable the fold entirely.
           </span>
         </label>
         <label className="text-xs text-slate-400">
-          Geo demand blend α (0–1, default 0 = off)
+          Geo demand blend α (0–1, default 0.25)
           <input
             type="number"
             min="0"
@@ -267,12 +268,12 @@ function ScoutGeoTargetingSection({ state }: Props) {
             step="0.001"
             name="scoutGeoDemandBlend"
             defaultValue={state.scoutGeoDemandBlend ?? ''}
-            placeholder="0 (off)"
+            placeholder="0.25 (code default)"
             className="mt-1 w-full rounded bg-slate-950 border border-slate-700 min-h-[44px] px-3 text-sm text-slate-100"
           />
           <span className="block mt-1 text-slate-500">
             Folds Census demand quality (owner-occ, income, home value) into value estimate.
-            Suggested start: 0.3–0.5.
+            Blank uses the code default (0.25, active); set to 0 to disable the fold entirely.
           </span>
         </label>
         <label className="text-xs text-slate-400">

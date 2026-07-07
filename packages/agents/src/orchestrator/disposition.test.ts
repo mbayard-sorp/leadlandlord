@@ -26,8 +26,8 @@ describe('FLEET_DISPOSITION coverage', () => {
 describe('summarizeDisposition (the intended split)', () => {
   const s = summarizeDisposition();
 
-  it('matches the agreed disposition: 29 ON, 7 armed, 9 disabled', () => {
-    expect(s.enabled).toHaveLength(29); // +buildsell-review-refresh (Build & Sell monthly rating refresh)
+  it('matches the agreed disposition: 31 ON, 7 armed, 9 disabled', () => {
+    expect(s.enabled).toHaveLength(31); // +buildsell-review-refresh (Build & Sell monthly rating refresh); +niche-calibrator, +niche-prior-suggester (Phase 2 calibration feedback loop)
     expect(s.armed).toHaveLength(7); // +spec-site-builder, +content-migrator (Build & Sell)
     expect(s.disabled).toHaveLength(9);
     expect(s.enabled.length + s.armed.length + s.disabled.length).toBe(
