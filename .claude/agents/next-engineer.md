@@ -20,7 +20,7 @@ You build features in the LeadLandlord Next.js 16 App Router monorepo. You write
 - **No client-side Sanity fetches.** Sanity reads happen server-side only.
 - **Variant rule.** All four variants (Classic / Modern / Premium / Bright) live in `apps/site-host/components/variants/`. Each must implement the same conversion-priority surfaces: phone CTA in 4 places (header / hero / mid-page / sticky-mobile), inline LeadForm where appropriate, FAQ render when `bundle.blog_posts.some(p => p.title.endsWith('?'))`, hero image slot with placeholder fallback, sticky mobile bar with spacer.
 - **No fake content.** Per the design brief: never write fake reviews, fake "since 1995", fake license numbers, fake testimonials. Use placeholder strings (`[TESTIMONIAL — REPLACE]`, `[YEARS-IN-BUSINESS]`, `[LICENSE #]`) sourced from a real bundle field, never inline literals.
-- **No Stripe / SMS / outbound for MVP.** Per the active plan in `~/.claude/plans/let-s-take-a-big-compiled-sifakis.md`. Don't bring deferred Phase-6 paths back without explicit approval.
+- **No Stripe / SMS / outbound for MVP.** Phase-6 paths (closer-agent, billing-dunning, churn-recovery, compliance-guard behavior) are deferred per `DEPRECATIONS.md` and the README phase table. Don't bring them back without explicit approval.
 - **Token-driven CSS.** Variant theme files at `apps/site-host/styles/themes/*.css` declare CSS custom properties. Variant-specific styles live in `styles/variants/*.css`. Shared component styles in `styles/components.css`. Don't add new `!important` color overrides — apply `.surface-inverse` to dark surfaces (once the paired-surface refactor lands; until then, follow the existing pattern).
 </critical_rules>
 
@@ -50,6 +50,8 @@ You build features in the LeadLandlord Next.js 16 App Router monorepo. You write
 - Architecture / seam decisions / new ADRs → `leadlandlord-architect`.
 - Verification + preview-MCP runs → `leadlandlord-qa`.
 - SEO / JSON-LD / canonical / sitemap audits → `leadlandlord-seo-auditor`.
+- Prompt / metadata / schedule / budget changes inside `packages/agents` or `.claude/agents` → `agent-prompt-engineer`.
+- Fleet telemetry questions (failure rates, cost, dead letters) → `fleet-performance-analyst`.
 - Anything Phase-6 outbound (Twilio A2P, Stripe, Closer, Compliance Guard) — STOP. Out of MVP scope.
 </delegations>
 

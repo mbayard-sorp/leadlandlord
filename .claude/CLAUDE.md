@@ -29,6 +29,7 @@ Treat moves between these as context switches (prompt for /clear):
 - Niche hunting (niche-hunter, scoring, DataForSEO integrations)
 - Tenant pipeline (tenant-prospector, outreach, trial, closer, billing)
 - Portfolio ops (portfolio-analyst, compliance-guard, churn-recovery)
+- Improvement loop (fleet-metrics, improvement backlog, .claude/skills, agent prompt tuning)
 
 NOT a switch:
 - Iterating within the same workstream
@@ -59,6 +60,13 @@ NOT a switch:
 - Vercel multi-tenant routing keys off the `Host` header in apps/site-host/proxy.ts; new domain attachment requires DNS + Vercel domain registration.
 - GBP (Google Business Profile) is NOT registered by us. We use the partner-contractor's real GBP. Do not implement fake-GBP automation.
 - network-linker records cross-site placements directly in `crossSiteLinks` (status `active`) and reads Sanity read-only; it does NOT auto-patch Sanity mdx. (The old `cross_link_placement` approval gate was removed 2026-06-09; if operator-gated mdx injection is ever wanted, it must be rebuilt against a real consumer.)
+
+## Improvement loop rules
+
+- The agent improvement loop (docs/agent-improvement-loop.md, ADR 0027) ships **draft PRs only** on `improve/*` branches — never push `main`.
+- `READONLY_DATABASE_URL` is read-only telemetry for `scripts/fleet-metrics.ts` — never use it (or any DB path) for writes from the loop.
+- The loop's durable memory is `docs/improvement-backlog.md`; keep item IDs stable and dedupe before adding.
+- Human approval gates may be *proposed* for change via decision PRs only (`GATE CHANGE` in title); the niche approval gate is permanently human.
 
 ## Token-heavy operations to delegate
 

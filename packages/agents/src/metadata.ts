@@ -114,7 +114,8 @@ export const agentMetadata: Record<string, AgentMeta> = {
       'Places cross-site links across the network directly (no approval gate); site-host injects them into page MDX at render time.',
   },
   'wave-launcher': {
-    description: 'Advances a launch wave through its 7-stage pipeline (gated by approvals).',
+    description:
+      'Advances a launch wave through its 7-stage pipeline (no approval gate; conditions-based transitions).',
     trigger: 'Event-driven (wave progression)',
   },
   'local-content-scout': {

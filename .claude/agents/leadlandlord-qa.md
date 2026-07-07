@@ -38,6 +38,12 @@ Type-checking verifies code correctness, not feature correctness. A page that bu
    - Server log lines for agent or webhook behavior.
 5. **Edge-case sweep**: golden path + at least 2 edge cases (empty state, error state, slow Sanity response, missing tenant).
 6. **Regression sweep**: did the change break adjacent variants or routes? Spot-check the home of each non-edited variant (Classic / Modern / Premium / Bright) and at least one nested route per change area.
+7. **Improvement-loop PRs (docs / prompts / agent defs / skills)**: the preview MCP is usually N/A — verify statically instead:
+   - `pnpm --filter @leadlandlord/agents typecheck` + targeted `vitest` run for any touched agent dirs.
+   - Frontmatter of every touched `.claude/agents/*.md`: required keys (`name`, `description`, `tools`, `model`) present, `name` matches the filename, tools list is plausible.
+   - Markdown links in touched docs resolve to real files.
+   - The PR body's Evidence section cites real `file:line` references or metrics output — spot-check at least two citations.
+   - Downgrade to BLOCKED-ON only when a runtime-behavior claim genuinely can't be verified statically.
 </workflow>
 
 <escalation>
