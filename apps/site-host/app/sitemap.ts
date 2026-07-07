@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../lib/site-context';
+import { resolveCurrentBuildSellSite } from '../lib/buildsell-context';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { fetchCorporatePageList, fetchBuildSellSitemapEntries } from '../lib/sanity';
 import type { Page } from '../lib/content';
@@ -93,7 +94,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const site = await resolveCurrentSite();
-  if (!site) return [];
+  if (!site) {
+    // No R&R site on this host — check whether it's a custom domain attached
+    // to a sold B&S spec site. Only the domain root exists there today (no
+    // subpages), so a single-entry sitemap or none at all.
+    const bsSite = await resolveCurrentBuildSellSite();
+    if (!bsSite || bsSite.robotsDisallow) return [];
+    return [{ url: `${base}/`, lastModified: new Date(), changeFrequency: 'weekly', priority: 1 }];
+  }
 
   // Warming sites should not advertise a populated sitemap — Googlebot
   // must not crawl them until the tenant is live.

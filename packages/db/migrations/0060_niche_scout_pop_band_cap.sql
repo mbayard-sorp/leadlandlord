@@ -1,4 +1,4 @@
--- Migration 0059: Niche scout population-band diversity cap (F4).
+-- Migration 0060: Niche scout population-band diversity cap (F4).
 --
 -- est value is monotonic in population, so the persisted scout set collapsed
 -- onto the largest cities (run 5d1ec782: 98% of top-100 value in the 100k+

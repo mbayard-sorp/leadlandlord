@@ -229,8 +229,10 @@ export function HeroBlock({
     );
   }
 
-  // ---- TRUST variant: rating leads, centered, then a wide 3-image strip ----
+  // ---- TRUST variant: rating leads, centered, then an image strip ----
   if (isTrust) {
+    const hasLeadImage = Boolean(section.imageIsLead && section.imageUrl);
+
     return (
       <section className="bs-hero bs-reveal" id="home">
         <div className="bs-container">
@@ -248,30 +250,70 @@ export function HeroBlock({
             <ActionRow />
           </div>
 
-          {/* 3-image strip — each tile uses its own image when present (auto-filled
-              from the hero prompt by the builder / operator), else a gradient. */}
-          <div className="bs-hero-trust-strip">
-            {[
-              { url: section.imageUrl, gradient: 'bs-hero-trust-tile--gradient-a' },
-              { url: section.imageUrlB, gradient: 'bs-hero-trust-tile--gradient-b' },
-              { url: section.imageUrlC, gradient: 'bs-hero-trust-tile--gradient-c' },
-            ].map((tile, i) =>
-              tile.url ? (
-                <div key={i} className="bs-hero-trust-tile" style={{ position: 'relative' }}>
-                  <Image
-                    src={tile.url}
-                    alt={i === 0 ? heroAlt : ''}
-                    fill
-                    priority={i === 0}
-                    sizes="(max-width: 767px) 100vw, 33vw"
-                    style={{ objectFit: 'cover' }}
-                  />
+          {hasLeadImage ? (
+            <>
+              {/* Lead image — uncropped, full width, above the other two. */}
+              <div className="bs-hero-trust-lead">
+                <Image
+                  src={section.imageUrl!}
+                  alt={heroAlt}
+                  fill
+                  priority
+                  sizes="(max-width: 767px) 100vw, 900px"
+                  style={{ objectFit: 'contain' }}
+                />
+              </div>
+
+              {/* Supporting tiles — centered below the lead image. */}
+              {(section.imageUrlB || section.imageUrlC) && (
+                <div className="bs-hero-trust-strip bs-hero-trust-strip--sub">
+                  {[
+                    { url: section.imageUrlB, gradient: 'bs-hero-trust-tile--gradient-b' },
+                    { url: section.imageUrlC, gradient: 'bs-hero-trust-tile--gradient-c' },
+                  ].map((tile, i) =>
+                    tile.url ? (
+                      <div key={i} className="bs-hero-trust-tile" style={{ position: 'relative' }}>
+                        <Image
+                          src={tile.url}
+                          alt=""
+                          fill
+                          sizes="(max-width: 767px) 100vw, 33vw"
+                          style={{ objectFit: 'cover' }}
+                        />
+                      </div>
+                    ) : (
+                      <div key={i} className={`bs-hero-trust-tile ${tile.gradient}`} aria-hidden="true" />
+                    ),
+                  )}
                 </div>
-              ) : (
-                <div key={i} className={`bs-hero-trust-tile ${tile.gradient}`} aria-hidden="true" />
-              ),
-            )}
-          </div>
+              )}
+            </>
+          ) : (
+            /* 3-image strip — each tile uses its own image when present (auto-filled
+               from the hero prompt by the builder / operator), else a gradient. */
+            <div className="bs-hero-trust-strip">
+              {[
+                { url: section.imageUrl, gradient: 'bs-hero-trust-tile--gradient-a' },
+                { url: section.imageUrlB, gradient: 'bs-hero-trust-tile--gradient-b' },
+                { url: section.imageUrlC, gradient: 'bs-hero-trust-tile--gradient-c' },
+              ].map((tile, i) =>
+                tile.url ? (
+                  <div key={i} className="bs-hero-trust-tile" style={{ position: 'relative' }}>
+                    <Image
+                      src={tile.url}
+                      alt={i === 0 ? heroAlt : ''}
+                      fill
+                      priority={i === 0}
+                      sizes="(max-width: 767px) 100vw, 33vw"
+                      style={{ objectFit: 'cover' }}
+                    />
+                  </div>
+                ) : (
+                  <div key={i} className={`bs-hero-trust-tile ${tile.gradient}`} aria-hidden="true" />
+                ),
+              )}
+            </div>
+          )}
         </div>
       </section>
     );
