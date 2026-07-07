@@ -411,8 +411,22 @@
     {
       "idx": 58,
       "version": "7",
-      "when": 1783443988752,
-      "tag": "0058_slim_the_fury",
+      "when": 1783387766900,
+      "tag": "0059_buildsell_custom_domain",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1783387766901,
+      "tag": "0060_niche_scout_pop_band_cap",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1783446286229,
+      "tag": "0061_buildsell_klaviyo_columns",
       "breakpoints": true
     }
   ]

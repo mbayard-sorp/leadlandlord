@@ -1212,6 +1212,12 @@ export const systemState = pgTable('system_state', {
   // category may occupy so a high-ticket category can't sweep the list.
   scoutMaxPerTrade: integer('scout_max_per_trade'),
   scoutMaxCategoryShare: numeric('scout_max_category_share', { precision: 4, scale: 3 }),
+  // Per-population-band diversity cap (migration 0060, F4). NULL = fall back to
+  // SCOUT_MAX_POP_BAND_SHARE (0.40) in scoring-config.ts. Max share of the
+  // persisted set any single population band (<25k / 25-50k / 50-100k / 100k+)
+  // may occupy; est value is monotonic in population, so without it the 100k+
+  // band sweeps the list. >= 1.0 disables the cap.
+  scoutMaxPopBandShare: numeric('scout_max_pop_band_share', { precision: 4, scale: 3 }),
   // Approval-time diversity warning (migration 0058, Phase 5). NULL = fall
   // back to DEFAULT_APPROVE_MAX_PER_STATE_SHARE (0.40) in scoring-config.ts.
   // Non-blocking: crossing this share (or the >=3-per-trade threshold) only
@@ -2150,6 +2156,19 @@ export const buildsellStatusEnum = pgEnum('buildsell_status', [
 ]);
 
 /**
+ * Custom-domain attach lifecycle for a B&S site (separate from `status`,
+ * which tracks the sale). 'none' until the operator attaches a domain;
+ * 'pending' once attachDomain() has been called on Vercel but DNS/cert
+ * verification hasn't completed; 'verified' once the domain-verifier cron
+ * (or a manual check) confirms Vercel reports it verified.
+ */
+export const buildsellDomainStatusEnum = pgEnum('buildsell_domain_status', [
+  'none',
+  'pending',
+  'verified',
+]);
+
+/**
  * Ephemeral Google Places store + B&S lead source of truth.
  *
  * ToS guard: `place_id` is the ONLY field persisted indefinitely. Every
@@ -2217,6 +2236,13 @@ export const buildsellSites = pgTable(
     // the Sanity doc for visibility. See ensureKlaviyoListForBuildSell.
     klaviyoListId: text('klaviyo_list_id'),
     status: buildsellStatusEnum('status').notNull().default('draft'),
+    // Bare apex (e.g. "tesshauling.com"), no scheme/www. Set by
+    // attachBuildSellDomain; mirrored onto the Sanity doc's customDomain
+    // field so the renderer can resolve Host -> site without a DB round trip.
+    customDomain: text('custom_domain').unique(),
+    domainStatus: buildsellDomainStatusEnum('domain_status').notNull().default('none'),
+    domainAttachedAt: timestamp('domain_attached_at', { withTimezone: true }),
+    domainVerifiedAt: timestamp('domain_verified_at', { withTimezone: true }),
     // The palette preset name chosen (e.g. "Aqua Slate"); full theme in Sanity.
     themePreset: text('theme_preset'),
     // Invoice fields — operator-driven, out-of-band payment.

@@ -112,6 +112,74 @@ describe('isAggregator — new domains', () => {
     const r = await serpWithSingleDomain('tucsonplumber.com');
     expect(r.aggregator_share).toBe(0);
   });
+
+  it('justia.com (legal directory) is recognized as an aggregator', async () => {
+    const r = await serpWithSingleDomain('justia.com');
+    expect(r.aggregator_share).toBe(1);
+  });
+
+  it('avvo.com (legal directory) is recognized as an aggregator', async () => {
+    const r = await serpWithSingleDomain('avvo.com');
+    expect(r.aggregator_share).toBe(1);
+  });
+
+  it('healthgrades.com (medical directory) is recognized as an aggregator', async () => {
+    const r = await serpWithSingleDomain('healthgrades.com');
+    expect(r.aggregator_share).toBe(1);
+  });
+
+  it('zocdoc.com (medical directory) is recognized as an aggregator', async () => {
+    const r = await serpWithSingleDomain('zocdoc.com');
+    expect(r.aggregator_share).toBe(1);
+  });
+
+  it('a legal SERP with Justia at rank 5 reports non-zero aggregator share', async () => {
+    // Regression for run 5d1ec782: legal SERPs reported 0 aggregator share
+    // because the directory domains were not in AGGREGATOR_DOMAINS.
+    const domains = [
+      'brylaklaw.com',
+      'mcdivittlaw.com',
+      'glenlarsonlaw.com',
+      'heuserlaw.com',
+      'justia.com', // rank 5
+      'springslawgroup.com',
+      'mintzlawfirm.com',
+      'cookinjurylaw.com',
+    ];
+    mockDfsPost.mockResolvedValueOnce(makeSerpResponse(domains, false));
+    const r = await getSerpComposition({
+      keyword: 'personal injury lawyer pueblo',
+      location: 'Pueblo,Colorado,United States',
+    });
+    expect(r.aggregator_share).toBeGreaterThan(0);
+    expect(r.aggregator_share).toBeCloseTo(1 / 8, 4);
+  });
+});
+
+describe('SERP endpoint — advanced (local_pack coverage)', () => {
+  beforeEach(() => {
+    mockDfsPost.mockReset();
+  });
+
+  it('calls the advanced endpoint so SERP-feature items (local_pack) are returned', async () => {
+    // The `regular` endpoint never returns local_pack items, which zeroed out
+    // has_local_pack across every refined cell in run 5d1ec782. Pin the fix.
+    mockDfsPost.mockResolvedValueOnce(makeSerpResponse(['local-firm.com'], true));
+    await getSerpComposition({ keyword: 'roofing tucson', location: 'Tucson,Arizona,United States' });
+    expect(mockDfsPost).toHaveBeenCalledWith(
+      '/serp/google/organic/live/advanced',
+      expect.any(Array),
+    );
+  });
+
+  it('detects the local pack and drops the no-local-pack difficulty boost', async () => {
+    mockDfsPost.mockResolvedValueOnce(makeSerpResponse(['local-firm.com', 'another-local.com'], true));
+    const r = await getSerpComposition({ keyword: 'plumber denver', location: 'Denver,Colorado,United States' });
+    expect(r.has_local_pack).toBe(true);
+    // 0 aggregators + local pack present → difficulty = round(0*70 + 0) = 0,
+    // i.e. no +30 boost (the boost only applies when has_local_pack is false).
+    expect(r.difficulty).toBe(0);
+  });
 });
 
 describe('difficulty formula', () => {

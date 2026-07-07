@@ -69,6 +69,13 @@ export const buildsellSite = defineType({
     defineField({ name: 'ownerEmail', title: 'Owner Email', type: 'string', hidden: true, description: 'Mirror of buildsell_sites.owner_email. Edit on the site\'s operator page (/operator/buildsell/[id]), not here — Studio edits do not sync back.' }),
     defineField({ name: 'klaviyoListId', title: 'Klaviyo List ID', type: 'string', hidden: true, description: 'Mirror of buildsell_sites.klaviyo_list_id, set automatically when the site is first built. Read-only reference — manage via the operator page.' }),
     defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'businessName' } }),
+    defineField({
+      name: 'customDomain',
+      title: 'Custom Domain',
+      type: 'string',
+      group: 'seo',
+      description: 'Bare apex the customer bought (e.g. "tesshauling.com"), no scheme/www. Set by the operator "Attach domain" action; mirrors buildsell_sites.custom_domain. Powers Host-header resolution once the domain is attached to Vercel.',
+    }),
     defineField({ name: 'navigation', title: 'Navigation', type: 'array', of: [{ type: 'bsNavLink' }] }),
     defineField({ name: 'navShowPhone', title: 'Nav: Show Phone', type: 'boolean', initialValue: true, description: 'Show the click-to-call phone in the sticky nav.' }),
     defineField({ name: 'navCta', title: 'Nav: CTA Button', type: 'bsCtaButton', description: 'The nav action button (defaults to a "Get a Free Quote" → #contact button when empty).' }),

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { selectValidationSet, selectDiversified } from './selection';
+import { populationBandOf } from './scout-report';
 
 interface C {
   trade: string;
@@ -89,8 +90,15 @@ interface D {
   trade: string;
   category: string;
   rank: number;
+  population: number;
 }
-const d = (trade: string, category: string, rank: number): D => ({ trade, category, rank });
+// population defaults to a 50-100k value; band-cap tests pass it explicitly.
+const d = (trade: string, category: string, rank: number, population = 60_000): D => ({
+  trade,
+  category,
+  rank,
+  population,
+});
 
 describe('selectDiversified', () => {
   it('caps how many candidates a single trade contributes', () => {
@@ -174,5 +182,78 @@ describe('selectDiversified', () => {
     expect(
       selectDiversified([d('a', 'legal', 1)], 0, { maxPerTrade: 2, maxPerCategory: 2 }).selected,
     ).toEqual([]);
+  });
+
+  describe('population-band cap (F4)', () => {
+    const bandOf = (c: { population: number }) => populationBandOf(c.population);
+
+    it('caps the dominant 100k+ band so mid-size cities surface', () => {
+      // Value is monotonic in population, so the four highest-ranked cells are
+      // all 100k+ metros. A band cap of 2 must let smaller-city cells into the
+      // cut instead of the big band sweeping it.
+      const ranked = [
+        d('pi lawyer', 'legal', 1, 140_000),
+        d('pi lawyer', 'legal', 2, 130_000),
+        d('pi lawyer', 'legal', 3, 120_000),
+        d('pi lawyer', 'legal', 4, 110_000),
+        d('pi lawyer', 'legal', 5, 60_000), // 50-100k band
+        d('pi lawyer', 'legal', 6, 30_000), // 25-50k band
+      ];
+      const { selected } = selectDiversified(ranked, 4, {
+        maxPerTrade: 99,
+        maxPerCategory: 99,
+        maxPerBand: 2,
+        bandOf,
+      });
+      // Top two 100k+ cells, then the two smaller-band cells surface.
+      expect(selected.map((s) => s.rank)).toEqual([1, 2, 5, 6]);
+    });
+
+    it('composes with the per-trade cap (both dimensions apply)', () => {
+      const ranked = [
+        d('pi lawyer', 'legal', 1, 140_000),
+        d('pi lawyer', 'legal', 2, 130_000), // dropped by per-trade cap (2 already? no, this is 2nd)
+        d('car accident', 'legal', 3, 120_000),
+        d('divorce', 'legal', 4, 55_000),
+        d('dui', 'legal', 5, 30_000),
+      ];
+      // Band cap 2 on 100k+ (ranks 1,2,3 are 100k+) → admit 1,2, drop 3 to band;
+      // per-trade cap 1 → 'pi lawyer' admits rank 1 only, rank 2 drops to trade.
+      // Net: rank 1 (pi/100k+), rank 4 (divorce/50-100k), rank 5 (dui/25-50k),
+      // then backfill restores rank 2 or 3 to reach target 4 in score order.
+      const { selected } = selectDiversified(ranked, 4, {
+        maxPerTrade: 1,
+        maxPerCategory: 99,
+        maxPerBand: 2,
+        bandOf,
+      });
+      expect(selected).toHaveLength(4);
+      // rank 1 always in; ranks 4 and 5 (distinct trades, smaller bands) admitted.
+      const ranks = selected.map((s) => s.rank);
+      expect(ranks).toContain(1);
+      expect(ranks).toContain(4);
+      expect(ranks).toContain(5);
+      // score-desc order preserved.
+      expect([...ranks].sort((x, y) => x - y)).toEqual(ranks);
+    });
+
+    it('backfills capped-out big-band cells rather than persisting fewer than target', () => {
+      // All cells are 100k+ and target 4 with band cap 2: the cap alone yields 2,
+      // backfill must restore to 4 (a tight cap never starves the pool).
+      const ranked = [
+        d('a', 'legal', 1, 140_000),
+        d('b', 'home_services', 2, 130_000),
+        d('c', 'auto', 3, 120_000),
+        d('e', 'medical', 4, 110_000),
+      ];
+      const { selected, excludedByCap } = selectDiversified(ranked, 4, {
+        maxPerTrade: 99,
+        maxPerCategory: 99,
+        maxPerBand: 2,
+        bandOf,
+      });
+      expect(selected.map((s) => s.rank)).toEqual([1, 2, 3, 4]);
+      expect(excludedByCap).toBe(0);
+    });
   });
 });

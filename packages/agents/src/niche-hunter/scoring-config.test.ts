@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateApprovalDiversity, DEFAULT_APPROVE_MAX_PER_STATE_SHARE } from './scoring-config';
+import {
+  evaluateApprovalDiversity,
+  DEFAULT_APPROVE_MAX_PER_STATE_SHARE,
+  resolveRefinedCityVolume,
+  DFS_TRUST_FLOOR,
+} from './scoring-config';
 
 describe('evaluateApprovalDiversity', () => {
   it('does not warn on an empty approved set (min-sample floor suppresses the state-share noise)', () => {
@@ -176,5 +181,24 @@ describe('evaluateApprovalDiversity', () => {
     expect(result.tradeTriggered).toBe(true);
     expect(result.stateTriggered).toBe(true);
     expect(result.shouldWarn).toBe(true);
+  });
+});
+
+describe('resolveRefinedCityVolume (F3)', () => {
+  it('trusts the measured volume when it clears the trust floor', () => {
+    expect(resolveRefinedCityVolume(1000, 4000)).toBe(1000);
+    expect(resolveRefinedCityVolume(DFS_TRUST_FLOOR, 4000)).toBe(DFS_TRUST_FLOOR);
+  });
+
+  it('clamps an inflated proxy to the floor when measured is sub-floor', () => {
+    // The run 5d1ec782 pathology: proxy $-value from a 5000-ish volume vs a real
+    // sub-100 market. The proxy must be clamped, not kept.
+    expect(resolveRefinedCityVolume(40, 5000)).toBe(DFS_TRUST_FLOOR);
+    expect(resolveRefinedCityVolume(90, 300)).toBe(DFS_TRUST_FLOOR);
+  });
+
+  it('keeps a proxy already at or below the floor (clamp never inflates)', () => {
+    expect(resolveRefinedCityVolume(40, 60)).toBe(60);
+    expect(resolveRefinedCityVolume(0, 25)).toBe(25);
   });
 });

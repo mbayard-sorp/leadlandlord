@@ -1158,6 +1158,34 @@
   }
 }
 
+/* -- TRUST: lead image variant (hero image uncropped above two centered tiles) -- */
+.bs-hero-trust-lead {
+  position: relative;
+  margin-top: 2.5rem;
+  border-radius: var(--bs-radius-card);
+  overflow: hidden;
+  background-color: var(--bs-surface);
+  height: clamp(220px, 32vw, 420px);
+}
+
+.bs-hero-trust-strip--sub {
+  grid-template-columns: repeat(2, minmax(0, 280px));
+  justify-content: center;
+  margin-top: 0.75rem;
+  height: clamp(120px, 16vw, 180px);
+}
+
+@media (max-width: 599px) {
+  .bs-hero-trust-strip--sub {
+    grid-template-columns: repeat(2, 1fr);
+    height: clamp(90px, 28vw, 140px);
+  }
+
+  .bs-hero-trust-strip--sub .bs-hero-trust-tile:not(:first-child) {
+    display: block;
+  }
+}
+
 /* ====================================================================
    SERVICES BLOCK — per-variant layouts
    ====================================================================== */

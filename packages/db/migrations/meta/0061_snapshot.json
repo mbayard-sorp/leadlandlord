@@ -1,5 +1,5 @@
 {
-  "id": "f878b1e5-a9ce-4c2b-a95a-deebd1e8c04b",
+  "id": "d1e5305e-7151-43bf-b098-b482767718c3",
   "prevId": "19f497cb-aeee-4d3d-9d3e-b29dbba05488",
   "version": "7",
   "dialect": "postgresql",
@@ -1895,6 +1895,32 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "custom_domain": {
+          "name": "custom_domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "domain_status": {
+          "name": "domain_status",
+          "type": "buildsell_domain_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'none'"
+        },
+        "domain_attached_at": {
+          "name": "domain_attached_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "domain_verified_at": {
+          "name": "domain_verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "theme_preset": {
           "name": "theme_preset",
           "type": "text",
@@ -1995,6 +2021,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "slug"
+          ]
+        },
+        "buildsell_sites_custom_domain_unique": {
+          "name": "buildsell_sites_custom_domain_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "custom_domain"
           ]
         },
         "buildsell_sites_invoice_number_unique": {
@@ -7124,6 +7157,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "scout_max_pop_band_share": {
+          "name": "scout_max_pop_band_share",
+          "type": "numeric(4, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "approve_max_per_state_share": {
           "name": "approve_max_per_state_share",
           "type": "numeric(4, 3)",
@@ -7604,6 +7643,15 @@
         "guest_post",
         "pbn",
         "other"
+      ]
+    },
+    "public.buildsell_domain_status": {
+      "name": "buildsell_domain_status",
+      "schema": "public",
+      "values": [
+        "none",
+        "pending",
+        "verified"
       ]
     },
     "public.buildsell_status": {
