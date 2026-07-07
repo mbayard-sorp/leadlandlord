@@ -32,7 +32,7 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
   const labels = section.formLabels ?? {};
 
   // Resolve the lead endpoint: a relative path is prefixed with the operator URL.
-  const operatorBase = process.env.NEXT_PUBLIC_OPERATOR_URL ?? 'https://app.leadslandlord.com';
+  const operatorBase = process.env.NEXT_PUBLIC_OPERATOR_URL ?? 'https://leadlandlord-operator.vercel.app';
   const endpoint = section.formEndpoint?.trim() || '/api/bs/lead';
   const postUrl = endpoint.startsWith('http') ? endpoint : `${operatorBase}${endpoint}`;
 
