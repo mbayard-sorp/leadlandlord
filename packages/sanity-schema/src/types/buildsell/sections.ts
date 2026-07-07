@@ -35,6 +35,14 @@ export const bsHeroSection = defineType({
       options: { hotspot: true },
       description: 'Third tile of the Trust-layout hero strip. Auto-filled from the hero prompt; ignored by other layouts.',
     }),
+    defineField({
+      name: 'imageIsLead',
+      title: 'Hero Image Is Lead (Trust layout)',
+      type: 'boolean',
+      initialValue: false,
+      description:
+        'Trust layout only. When enabled, the Hero Image renders uncropped above Hero Images B & C, which center below it. When disabled, all three images render as an equal 3-across strip.',
+    }),
     defineField({ name: 'showRating', title: 'Show Rating', type: 'boolean', initialValue: true }),
     defineField({ name: 'badges', title: 'Trust Badges', type: 'array', of: [{ type: 'bsTrustBadge' }] }),
     defineField({ name: 'primaryCta', title: 'Primary CTA', type: 'bsCtaButton' }),
