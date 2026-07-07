@@ -407,6 +407,13 @@
       "when": 1783387766899,
       "tag": "0058_niche_seasonality_index",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1783443988752,
+      "tag": "0058_slim_the_fury",
+      "breakpoints": true
     }
   ]
 }

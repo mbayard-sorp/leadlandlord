@@ -2213,6 +2213,9 @@ export const buildsellSites = pgTable(
     // Set at build; powers the /buildsell/{slug} live URL.
     slug: text('slug').unique(),
     ownerEmail: text('owner_email'),
+    // Set eagerly by spec-site-builder during the first build; mirrored into
+    // the Sanity doc for visibility. See ensureKlaviyoListForBuildSell.
+    klaviyoListId: text('klaviyo_list_id'),
     status: buildsellStatusEnum('status').notNull().default('draft'),
     // The palette preset name chosen (e.g. "Aqua Slate"); full theme in Sanity.
     themePreset: text('theme_preset'),
@@ -2253,6 +2256,9 @@ export const buildsellSiteLeads = pgTable(
     source: text('source').default('contact'),
     // pending | sent | skipped | failed
     forwardStatus: text('forward_status'),
+    // pending | sent | skipped | failed — mirrors forwardStatus for the Klaviyo push.
+    klaviyoStatus: text('klaviyo_status'),
+    klaviyoProfileId: text('klaviyo_profile_id'),
     metadata: jsonb('metadata'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

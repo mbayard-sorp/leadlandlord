@@ -26,6 +26,7 @@ import {
 } from './persist-sanity';
 import { createWriteClient } from '@leadlandlord/integrations/sanity';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
+import { ensureKlaviyoListForBuildSell } from './klaviyo';
 import {
   pick,
   rotationSeed,
@@ -427,6 +428,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
           robotsDisallow: typeof existing['robotsDisallow'] === 'boolean' ? existing['robotsDisallow'] : null,
           purchaseUrl: typeof existing['purchaseUrl'] === 'string' ? existing['purchaseUrl'] : null,
           ownerEmail: typeof existing['ownerEmail'] === 'string' ? existing['ownerEmail'] : null,
+          klaviyoListId: typeof existing['klaviyoListId'] === 'string' ? existing['klaviyoListId'] : null,
           existingStreet: typeof addr?.['street'] === 'string' ? addr['street'] : null,
           // Preserve NAP phone on rebuild/revise when the payload carries none,
           // so createOrReplace doesn't blank a previously-set number.
@@ -648,6 +650,16 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       }
     }
 
+    // ── Step 2f: Klaviyo list (idempotent — skips when already provisioned or
+    //     when Klaviyo creds aren't set). Non-fatal; mirrored into Sanity below. ──
+    const klaviyoListId = await ensureKlaviyoListForBuildSell(
+      site.id,
+      site.businessName,
+      site.city,
+      site.state,
+      ctx.log,
+    );
+
     // ── Step 3: persist watermarked draft to Sanity ──
     const slug = `${slugify(site.businessName)}-${slugify(site.city)}-${site.state.toLowerCase()}-${site.id.slice(0, 6)}`;
     const generatedAt = new Date().toISOString();
@@ -659,6 +671,7 @@ export class SpecSiteBuilder extends BaseAgent<typeof SpecSiteBuilderInput, type
       city: site.city,
       state: site.state,
       ownerEmail: site.ownerEmail,
+      klaviyoListId,
       placeId: site.placeId,
       slug,
       content: finalContent,

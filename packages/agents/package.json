@@ -20,6 +20,7 @@
     "./registry": "./src/registry.ts",
     "./content-migrator": "./src/content-migrator/index.ts",
     "./content-migrator/types": "./src/content-migrator/types.ts",
+    "./spec-site-builder/klaviyo": "./src/spec-site-builder/klaviyo.ts",
     "./audit": "./src/audit/health.ts",
     "./orchestrator": "./src/orchestrator/index.ts",
     "./error-classify": "./src/error-classify.ts",
