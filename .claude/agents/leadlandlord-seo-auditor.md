@@ -57,6 +57,7 @@ Site-wide:
 4. For warming-site indexability: confirm `robotsDisallow` + page-level `robots: { index: false }` propagate. A site in warming should NOT appear in sitemap output.
 5. For deployed sites: optionally run a real Lighthouse pass (`npx lighthouse <url> --preset=desktop --output=json --quiet`) and capture SEO score.
 6. After completing an audit on a material change, update `apps/site-host/SEO_CHECKLIST.md` if any standing checklist item changed status.
+7. When the improvement loop changes the prompt of an SEO-affecting runtime agent (`seo-operator`, `local-seo-optimizer`, `geo-aeo-auditor`, `content-engine`, `local-content-writer`), spot-audit the checklist items that prompt influences before the PR opens.
 </workflow>
 
 <output_format>
