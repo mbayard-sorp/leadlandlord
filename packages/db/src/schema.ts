@@ -2150,6 +2150,19 @@ export const buildsellStatusEnum = pgEnum('buildsell_status', [
 ]);
 
 /**
+ * Custom-domain attach lifecycle for a B&S site (separate from `status`,
+ * which tracks the sale). 'none' until the operator attaches a domain;
+ * 'pending' once attachDomain() has been called on Vercel but DNS/cert
+ * verification hasn't completed; 'verified' once the domain-verifier cron
+ * (or a manual check) confirms Vercel reports it verified.
+ */
+export const buildsellDomainStatusEnum = pgEnum('buildsell_domain_status', [
+  'none',
+  'pending',
+  'verified',
+]);
+
+/**
  * Ephemeral Google Places store + B&S lead source of truth.
  *
  * ToS guard: `place_id` is the ONLY field persisted indefinitely. Every
@@ -2214,6 +2227,13 @@ export const buildsellSites = pgTable(
     slug: text('slug').unique(),
     ownerEmail: text('owner_email'),
     status: buildsellStatusEnum('status').notNull().default('draft'),
+    // Bare apex (e.g. "tesshauling.com"), no scheme/www. Set by
+    // attachBuildSellDomain; mirrored onto the Sanity doc's customDomain
+    // field so the renderer can resolve Host -> site without a DB round trip.
+    customDomain: text('custom_domain').unique(),
+    domainStatus: buildsellDomainStatusEnum('domain_status').notNull().default('none'),
+    domainAttachedAt: timestamp('domain_attached_at', { withTimezone: true }),
+    domainVerifiedAt: timestamp('domain_verified_at', { withTimezone: true }),
     // The palette preset name chosen (e.g. "Aqua Slate"); full theme in Sanity.
     themePreset: text('theme_preset'),
     // Invoice fields — operator-driven, out-of-band payment.

@@ -68,6 +68,13 @@ export const buildsellSite = defineType({
     defineField({ name: 'ogImagePrompt', title: 'OG Image Prompt', type: 'text', rows: 3, group: 'images', description: 'Imagen prompt for the Open Graph (1:1) share image. The rendered image is under SEO → OG Image (SEO & Visibility tab).' }),
     defineField({ name: 'ownerEmail', title: 'Owner Email', type: 'string', hidden: true, description: 'Operator-entered outreach target. Hidden from public rendering.' }),
     defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'businessName' } }),
+    defineField({
+      name: 'customDomain',
+      title: 'Custom Domain',
+      type: 'string',
+      group: 'seo',
+      description: 'Bare apex the customer bought (e.g. "tesshauling.com"), no scheme/www. Set by the operator "Attach domain" action; mirrors buildsell_sites.custom_domain. Powers Host-header resolution once the domain is attached to Vercel.',
+    }),
     defineField({ name: 'navigation', title: 'Navigation', type: 'array', of: [{ type: 'bsNavLink' }] }),
     defineField({ name: 'navShowPhone', title: 'Nav: Show Phone', type: 'boolean', initialValue: true, description: 'Show the click-to-call phone in the sticky nav.' }),
     defineField({ name: 'navCta', title: 'Nav: CTA Button', type: 'bsCtaButton', description: 'The nav action button (defaults to a "Get a Free Quote" → #contact button when empty).' }),
