@@ -62,6 +62,9 @@ const config: NextConfig = {
     // The agents dashboard imports the agent registry, which loads each
     // agent's index.ts (system.md read at module init).
     '/operator/agents': [AGENT_PROMPT_GLOB],
+    // The niches page's runNicheScout server action loads the us-cities data
+    // files directly (not via the cron routes above) — trace them here too.
+    '/operator/niches': [AGENT_PROMPT_GLOB, US_CITIES_DATA_GLOB],
   },
 };
 
