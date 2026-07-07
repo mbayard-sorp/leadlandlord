@@ -473,10 +473,76 @@ interface MarkPaidResult {
 }
 
 /**
- * Mark a site as paid + live. Patches the Sanity doc to clear draftMode and
- * robotsDisallow so the public site becomes crawlable.
+ * Shared go-live routine: patches the Sanity doc to clear draftMode and
+ * robotsDisallow so the public site becomes crawlable, flips the Postgres row
+ * to 'live', and (best-effort) provisions customer portal access.
  *
- * Guard: only proceeds when status is 'invoiced' or 'paid' (idempotent re-run).
+ * Sanity is patched FIRST since it's the less-reliable write; if it fails the
+ * DB row is left unchanged so the operator can retry — never a 'live' row
+ * pointing at a still-watermarked, noindexed Sanity doc.
+ */
+async function goLiveSite(
+  existing: typeof buildsellSites.$inferSelect,
+  grantedBy: 'operator' | 'auto-markpaid',
+  logTag: string,
+): Promise<MarkPaidResult> {
+  const db = getDb();
+  const id = existing.id;
+
+  const docId = buildsellSiteDocId(id);
+  try {
+    await createWriteClient()
+      .patch(docId)
+      .set({ draftMode: false, robotsDisallow: false })
+      .commit({ visibility: 'sync' });
+  } catch (err) {
+    log.error({ id, docId, err }, `${logTag}: Sanity patch failed — leaving status unchanged`);
+    revalidatePath('/operator/buildsell');
+    return {
+      ok: false,
+      message: `Sanity patch failed (site NOT marked live — safe to retry): ${err instanceof Error ? err.message : String(err)}`,
+      slug: existing.slug,
+    };
+  }
+
+  // Sanity is now indexable — commit the DB go-live.
+  const now = new Date();
+  await db
+    .update(buildsellSites)
+    .set({ status: 'live', paidAt: now, liveAt: now })
+    .where(eq(buildsellSites.id, id));
+
+  log.info({ id, slug: existing.slug }, `${logTag}: site marked live`);
+
+  // Non-fatal: provision customer portal access. A failure here MUST NOT
+  // change the return value or block go-live. The operator can manually grant
+  // access via the CustomerAccessPanel if this fails.
+  try {
+    if (existing.ownerEmail) {
+      const { provisionCustomerAccess } = await import('@leadlandlord/integrations/neon-auth');
+      await provisionCustomerAccess({
+        ownerEmail: existing.ownerEmail,
+        businessName: existing.businessName,
+        siteId: id,
+        grantedBy,
+      });
+    }
+  } catch (err) {
+    log.warn({ id, err }, `${logTag}: customer access provisioning failed (non-fatal)`);
+  }
+
+  revalidatePath('/operator/buildsell');
+
+  return {
+    ok: true,
+    message: `Site is now live${existing.slug ? ` at /buildsell/${existing.slug}` : ''}.`,
+    slug: existing.slug,
+  };
+}
+
+/**
+ * Mark a site as paid + live. Guard: only proceeds when status is 'invoiced'
+ * or 'paid' (idempotent re-run) — i.e. an invoice has already gone out.
  */
 export async function markPaid(formData: FormData): Promise<MarkPaidResult> {
   try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
@@ -497,59 +563,38 @@ export async function markPaid(formData: FormData): Promise<MarkPaidResult> {
     return { ok: false, message: 'Send an invoice first.' };
   }
 
-  // Patch the SEO-critical Sanity flags FIRST. The Sanity network call is the
-  // less-reliable write; if it fails we leave the row at 'invoiced' so the
-  // operator can retry — never a 'live' DB row pointing at a still-watermarked,
-  // noindexed Sanity doc.
-  const docId = buildsellSiteDocId(id);
-  try {
-    await createWriteClient()
-      .patch(docId)
-      .set({ draftMode: false, robotsDisallow: false })
-      .commit({ visibility: 'sync' });
-  } catch (err) {
-    log.error({ id, docId, err }, 'markPaid: Sanity patch failed — leaving status unchanged');
-    revalidatePath('/operator/buildsell');
-    return {
-      ok: false,
-      message: `Sanity patch failed (site NOT marked live — safe to retry): ${err instanceof Error ? err.message : String(err)}`,
-      slug: existing.slug,
-    };
-  }
+  return goLiveSite(existing, 'auto-markpaid', 'markPaid');
+}
 
-  // Sanity is now indexable — commit the DB go-live.
-  const now = new Date();
-  await db
-    .update(buildsellSites)
-    .set({ status: 'live', paidAt: now, liveAt: now })
-    .where(eq(buildsellSites.id, id));
+/**
+ * Operator override: go live without sending an invoice first (no payment
+ * collected). For sites sold/handled outside the in-app invoice flow.
+ *
+ * Guard: only from 'draft', 'invoiced', or 'paid' — never mid-build
+ * ('building'), never a broken build ('failed'), and it's a no-op re-run
+ * guard against 'live' (use the domain/customer-access panels instead once
+ * a site is already live).
+ */
+export async function forceLiveBuildSellSite(formData: FormData): Promise<MarkPaidResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
 
-  log.info({ id, slug: existing.slug }, 'markPaid: site marked live');
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) return { ok: false, message: 'Missing site id.' };
 
-  // Non-fatal: provision customer portal access. A failure here MUST NOT
-  // change the return value or block go-live. The operator can manually grant
-  // access via the CustomerAccessPanel if this fails.
-  try {
-    if (existing.ownerEmail) {
-      const { provisionCustomerAccess } = await import('@leadlandlord/integrations/neon-auth');
-      await provisionCustomerAccess({
-        ownerEmail: existing.ownerEmail,
-        businessName: existing.businessName,
-        siteId: id,
-        grantedBy: 'auto-markpaid',
-      });
-    }
-  } catch (err) {
-    log.warn({ id, err }, 'markPaid: customer access provisioning failed (non-fatal)');
-  }
+  const db = getDb();
 
-  revalidatePath('/operator/buildsell');
+  const [existing] = await db
+    .select()
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, id))
+    .limit(1);
 
-  return {
-    ok: true,
-    message: `Site is now live${existing.slug ? ` at /buildsell/${existing.slug}` : ''}.`,
-    slug: existing.slug,
-  };
+  if (!existing) return { ok: false, message: 'Site not found.' };
+  if (existing.status === 'building') return { ok: false, message: 'Site is still building.' };
+  if (existing.status === 'failed') return { ok: false, message: 'Build failed — retry the build first.' };
+  if (existing.status === 'live') return { ok: false, message: 'Site is already live.' };
+
+  return goLiveSite(existing, 'operator', 'forceLiveBuildSellSite');
 }
 
 // ─── Custom domain attach ────────────────────────────────────────────────────
