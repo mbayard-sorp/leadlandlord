@@ -14,15 +14,17 @@ import { isDenylisted } from './denylist';
 import { computeClusterVolume, computeClusterDifficulty, estimateScoutValue, passesAbilityToPayFloor } from './value-model';
 import {
   resolveDemandVolume,
+  resolveRefinedCityVolume,
   DEFAULT_SCOUT_REFINE_BUDGET_USD,
   DEFAULT_SCOUT_REFINE_TOP_K,
   DEFAULT_SCOUT_BELOW_TOPK_SAMPLE_COUNT,
   BELOW_TOPK_TIER_MULTIPLIER,
   SCOUT_MAX_PER_TRADE,
   SCOUT_MAX_CATEGORY_SHARE,
+  SCOUT_MAX_POP_BAND_SHARE,
   MIN_WINNABILITY_FLOOR,
 } from './scoring-config';
-import { buildScoutReport, type ScoredCell } from './scout-report';
+import { buildScoutReport, populationBandOf, type ScoredCell } from './scout-report';
 import { selectDiversified } from './selection';
 import { seededRandom, sampleIndices } from './rng';
 
@@ -126,6 +128,12 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutMaxCategoryShare != null
         ? parseFloat(sys.scoutMaxCategoryShare)
         : SCOUT_MAX_CATEGORY_SHARE;
+    // Per-population-band diversity cap (F4) — NULL = code default. >= 1.0
+    // disables (a single band may fill the whole persisted set).
+    const maxPopBandShare =
+      sys.scoutMaxPopBandShare != null
+        ? parseFloat(sys.scoutMaxPopBandShare)
+        : SCOUT_MAX_POP_BAND_SHARE;
     // Winnability floor (ADR 0024) — NULL = code default (MIN_WINNABILITY_FLOOR).
     // Benchmark-only trades (clusterDifficulty null) are always exempt.
     const minWinnability =
@@ -402,8 +410,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
 
           let cityVolumeOverride: number | undefined;
           if (measuredCityVolume !== undefined && cell.estCityVolume != null) {
-            const resolved = resolveDemandVolume(measuredCityVolume, cell.estCityVolume);
-            cityVolumeOverride = resolved.volume;
+            // F3: measured clears the floor → trust it; sub-floor → clamp the
+            // inflated proxy to the floor rather than keeping it.
+            cityVolumeOverride = resolveRefinedCityVolume(measuredCityVolume, cell.estCityVolume);
           } else if (measuredCityVolume !== undefined) {
             // No proxy estCityVolume to backstop with (benchmark_only): trust the
             // measured figure only when it clears the floor, else leave unset so
@@ -536,9 +545,19 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     const capPerCategory = input.category_filter
       ? input.persist_top
       : Math.max(1, Math.ceil(input.persist_top * maxCategoryShare));
+    // Per-population-band cap (F4): resolve share → absolute count. >= 1.0
+    // disables (band may fill the whole set). Composes with trade/category caps
+    // inside the greedy walk so a capped 100k+ slot is backfilled by the next
+    // score-desc smaller-city cell rather than shrinking the persisted set.
+    const capPerBand =
+      maxPopBandShare >= 1
+        ? undefined
+        : Math.max(1, Math.ceil(input.persist_top * maxPopBandShare));
     const { selected: diversifiedCells, excludedByCap } = selectDiversified(cells, input.persist_top, {
       maxPerTrade: capPerTrade,
       maxPerCategory: capPerCategory,
+      maxPerBand: capPerBand,
+      bandOf: capPerBand != null ? (c) => populationBandOf(c.population) : undefined,
     });
     // Per-state diversity cap (ADR 0022 §4): when set, admit cells greedily in
     // score order (diversifiedCells is already sorted desc), skipping any whose

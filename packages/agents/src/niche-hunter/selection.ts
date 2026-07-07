@@ -43,6 +43,15 @@ export interface DiversityCaps {
   maxPerTrade: number;
   /** Max candidates persisted per category. */
   maxPerCategory: number;
+  /**
+   * Max candidates persisted per population band (F4). Omit to disable the
+   * band dimension. Requires `bandOf`. Because est value is monotonic in
+   * population, without this cap the 100k+ band takes almost the entire
+   * persisted set; capping it frees score-desc slots for smaller-city cells.
+   */
+  maxPerBand?: number;
+  /** Population-band key for a cell. Required when `maxPerBand` is set. */
+  bandOf?: (c: { population: number }) => string;
 }
 
 export interface DiversitySelection<T> {
@@ -64,14 +73,19 @@ export interface DiversitySelection<T> {
  * run is already scoped to one category via category_filter — capping it there
  * would just starve an intentionally single-category run).
  *
+ * An optional per-population-band cap (F4) composes as a third dimension: a
+ * cell is admitted only while its trade, category, AND band are all below cap.
+ * This is what lets mid-size cities into the persisted set — value is monotonic
+ * in population, so without it the 100k+ band sweeps the list.
+ *
  * Backfill guard: if the caps leave the set short of `target` (too few distinct
- * trades/categories clear the floor to fill it), capped-out cells are admitted
- * in score-desc order until `target` is reached. A tight cap thus never
+ * trades/categories/bands clear the floor to fill it), capped-out cells are
+ * admitted in score-desc order until `target` is reached. A tight cap thus never
  * persists fewer candidates than an uncapped run would — it only reorders which
  * cells fall inside the cut. `excludedByCap` counts cells the caps held back
  * that did NOT get backfilled (the true diversity effect).
  */
-export function selectDiversified<T extends { trade: string; category: string }>(
+export function selectDiversified<T extends { trade: string; category: string; population: number }>(
   ranked: T[],
   target: number,
   caps: DiversityCaps,
@@ -81,10 +95,13 @@ export function selectDiversified<T extends { trade: string; category: string }>
 
   const maxPerTrade = Math.max(1, caps.maxPerTrade);
   const maxPerCategory = Math.max(1, caps.maxPerCategory);
+  const bandOf = caps.maxPerBand != null ? caps.bandOf : undefined;
+  const maxPerBand = caps.maxPerBand != null ? Math.max(1, caps.maxPerBand) : undefined;
 
   const chosen = new Set<T>();
   const perTrade = new Map<string, number>();
   const perCategory = new Map<string, number>();
+  const perBand = new Map<string, number>();
   const cappedOut: T[] = [];
 
   for (const c of ranked) {
@@ -92,13 +109,20 @@ export function selectDiversified<T extends { trade: string; category: string }>
     const tradeKey = c.trade.toLowerCase();
     const tradeCount = perTrade.get(tradeKey) ?? 0;
     const catCount = perCategory.get(c.category) ?? 0;
-    if (tradeCount >= maxPerTrade || catCount >= maxPerCategory) {
+    const bandKey = bandOf ? bandOf(c) : undefined;
+    const bandCount = bandKey !== undefined ? (perBand.get(bandKey) ?? 0) : 0;
+    if (
+      tradeCount >= maxPerTrade ||
+      catCount >= maxPerCategory ||
+      (maxPerBand !== undefined && bandCount >= maxPerBand)
+    ) {
       cappedOut.push(c);
       continue;
     }
     chosen.add(c);
     perTrade.set(tradeKey, tradeCount + 1);
     perCategory.set(c.category, catCount + 1);
+    if (bandKey !== undefined) perBand.set(bandKey, bandCount + 1);
   }
 
   // Backfill from capped-out cells (still score-desc) so a tight cap never

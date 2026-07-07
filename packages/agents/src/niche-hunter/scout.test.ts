@@ -54,6 +54,10 @@ vi.mock('@leadlandlord/db', () => ({
     scoutBelowTopkSampleCount: null,
     scoutMaxPerTrade: null,
     scoutMaxCategoryShare: null,
+    // Disabled in the shared mock: the 3-city test grid is too small for the
+    // band cap (real runs span 335 cities across 4 bands). F4 band-cap behavior
+    // is covered precisely in selection.test.ts.
+    scoutMaxPopBandShare: '1.0',
   })),
   niches: { __name: 'niches', niche: 'niche', city: 'city', state: 'state' },
   nicheScoutRuns: { __name: 'niche_scout_runs', id: 'id', status: 'status', states: 'states' },
@@ -468,6 +472,28 @@ describe('NicheScout', () => {
       }
     });
 
+    it('sub-floor measured volume is persisted and caps est city volume to the floor (F3)', async () => {
+      // Two seeds × 20 = 40 measured, below DFS_TRUST_FLOOR (100). The refined
+      // cluster cells must persist the measurement AND have their inflated
+      // population proxy clamped to the floor rather than kept (the clamp math
+      // itself is pinned precisely in scoring-config resolveRefinedCityVolume).
+      refineMock.metricsVolume = 20;
+      await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_measure_volume: true,
+        refine_below_topk_sample_count: 0,
+      });
+      const refined = insertedCandidates.filter(
+        (c) => c.refinementSource === 'local_serp' && c.dataConfidence === 'cluster',
+      );
+      expect(refined.length).toBeGreaterThan(0);
+      for (const c of refined) {
+        expect(c.localMeasuredVolume).toBe(40);
+        expect(parseFloat(c.estCityVolume as string)).toBeLessThanOrEqual(100);
+      }
+    });
+
     it('budget cap: only M<N cold calls fit → exactly M refined, budget exhausted, spend <= budget', async () => {
       // SERP cold cost 0.075; budget 0.20 → only 2 cold calls fit (0.15), the 3rd
       // projection (0.225) exceeds 0.20 → abort.
@@ -663,6 +689,7 @@ describe('NicheScout', () => {
       scoutRefineMeasureVolume: null,
       scoutMaxPerTrade: 1,
       scoutMaxCategoryShare: null,
+      scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
     } as Awaited<ReturnType<typeof getSystemState>>);
     await runScout({ persist_top: 10 });
 
@@ -710,6 +737,7 @@ describe('NicheScout', () => {
       scoutBelowTopkSampleCount: null,
       scoutMaxPerTrade: null,
       scoutMaxCategoryShare: null,
+      scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
     } as Awaited<ReturnType<typeof getSystemState>>);
     await runScout({ warm_missing_clusters: true, refine_top_k: 0 });
     // The benchmark-only trade (kd null) must still appear in candidates.

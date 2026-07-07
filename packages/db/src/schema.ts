@@ -1212,6 +1212,12 @@ export const systemState = pgTable('system_state', {
   // category may occupy so a high-ticket category can't sweep the list.
   scoutMaxPerTrade: integer('scout_max_per_trade'),
   scoutMaxCategoryShare: numeric('scout_max_category_share', { precision: 4, scale: 3 }),
+  // Per-population-band diversity cap (migration 0059, F4). NULL = fall back to
+  // SCOUT_MAX_POP_BAND_SHARE (0.40) in scoring-config.ts. Max share of the
+  // persisted set any single population band (<25k / 25-50k / 50-100k / 100k+)
+  // may occupy; est value is monotonic in population, so without it the 100k+
+  // band sweeps the list. >= 1.0 disables the cap.
+  scoutMaxPopBandShare: numeric('scout_max_pop_band_share', { precision: 4, scale: 3 }),
   // Approval-time diversity warning (migration 0058, Phase 5). NULL = fall
   // back to DEFAULT_APPROVE_MAX_PER_STATE_SHARE (0.40) in scoring-config.ts.
   // Non-blocking: crossing this share (or the >=3-per-trade threshold) only
