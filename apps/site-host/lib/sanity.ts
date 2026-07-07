@@ -300,6 +300,7 @@ const BUILDSELL_PROJECTION = `{
     _key,
     ...,
     "imageUrl": image.asset->url,
+    "imageDims": image.asset->metadata.dimensions{ width, height },
     "imageUrlB": imageB.asset->url,
     "imageUrlC": imageC.asset->url,
     imageAlt,
@@ -367,6 +368,8 @@ export interface BuildSellSection {
   highlight?: string | null;
   subhead?: string | null;
   imageUrl?: string | null;
+  /** Intrinsic pixel size of the hero image, used to size the Trust lead-image box without letterboxing. */
+  imageDims?: { width?: number | null; height?: number | null } | null;
   /** Customer-supplied alt text for the hero / about image. */
   imageAlt?: string | null;
   /** Trust-variant hero strip tiles 2 & 3 (auto-filled from the hero prompt). */
