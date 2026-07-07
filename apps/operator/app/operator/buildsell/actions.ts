@@ -19,7 +19,9 @@ import { searchLeads } from '@leadlandlord/integrations/google-places';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import {
   attachDomain as vercelAttachDomain,
+  detachDomain as vercelDetachDomain,
   getDomainConfig,
+  getDomainStatus,
 } from '@leadlandlord/integrations/vercel';
 import { createWriteClient, uploadHeroImage } from '@leadlandlord/integrations/sanity';
 import { generateHeroImageBuffer } from '@leadlandlord/integrations/imagen';
@@ -683,6 +685,149 @@ export async function attachBuildSellDomain(formData: FormData): Promise<AttachD
   revalidatePath(`/operator/buildsell/${id}`);
 
   return { ok: true, dns };
+}
+
+interface DetachDomainResult {
+  ok: boolean;
+  message?: string;
+}
+
+/**
+ * Detach the site's custom domain. Always allowed (no status guard) — a
+ * customer switching or dropping a domain shouldn't be blocked by sale state.
+ *
+ * Fully nulls the Postgres row (customDomain/domainStatus/domainAttachedAt/
+ * domainVerifiedAt) — not just the Sanity mirror — because `custom_domain`
+ * is unique; leaving it set on this row would block a customer from
+ * re-attaching the same domain to a different site.
+ *
+ * The Sanity unset happens synchronously (not best-effort) since removing
+ * the mirror is what stops Host-header resolution from finding this site
+ * under the old domain.
+ */
+export async function detachBuildSellDomain(formData: FormData): Promise<DetachDomainResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, id))
+    .limit(1);
+
+  if (!existing) return { ok: false, message: 'Site not found.' };
+  if (!existing.customDomain) return { ok: false, message: 'No domain attached.' };
+
+  const domain = existing.customDomain;
+  const projectId = process.env.VERCEL_SITES_PROJECT_ID;
+
+  // 1. Detach from Vercel — best-effort (apex + www), same non-fatal pattern
+  // as attach's www leg. The Postgres/Sanity cleanup below must happen either way.
+  if (projectId) {
+    try {
+      await vercelDetachDomain(projectId, domain);
+    } catch (err) {
+      log.warn({ id, domain, err }, 'detachBuildSellDomain: vercel detach (apex) failed (non-fatal)');
+    }
+    try {
+      await vercelDetachDomain(projectId, `www.${domain}`);
+    } catch (err) {
+      log.warn({ id, domain, err }, 'detachBuildSellDomain: vercel detach (www) failed (non-fatal)');
+    }
+  } else {
+    log.warn({ id, domain }, 'detachBuildSellDomain: VERCEL_SITES_PROJECT_ID not set — skipping Vercel detach');
+  }
+
+  // 2. Unset on the Sanity doc synchronously — this is what stops Host-header
+  // resolution from serving this site under the old domain.
+  try {
+    await createWriteClient()
+      .patch(buildsellSiteDocId(id))
+      .unset(['customDomain'])
+      .commit({ visibility: 'sync' });
+  } catch (err) {
+    log.error({ id, domain, err }, 'detachBuildSellDomain: sanity unset failed');
+    return {
+      ok: false,
+      message: `Sanity update failed — the site may still resolve on ${domain}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // 3. Fully null the Postgres row (unique constraint on custom_domain).
+  try {
+    await db
+      .update(buildsellSites)
+      .set({ customDomain: null, domainStatus: 'none', domainAttachedAt: null, domainVerifiedAt: null })
+      .where(eq(buildsellSites.id, id));
+  } catch (err) {
+    log.error({ id, domain, err }, 'detachBuildSellDomain: db update failed');
+    return {
+      ok: false,
+      message: `Sanity was cleared, but the database update failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  log.info({ id, domain }, 'detachBuildSellDomain: domain detached');
+  revalidatePath('/operator/buildsell');
+  revalidatePath(`/operator/buildsell/${id}`);
+
+  return { ok: true };
+}
+
+interface VerifyDomainResult {
+  ok: boolean;
+  message?: string;
+  verified?: boolean;
+}
+
+/**
+ * Force-poll Vercel for the current verification status of this site's
+ * custom domain and flip Postgres to 'verified' if confirmed. Only
+ * meaningful while domainStatus is 'pending'. Does not touch Sanity —
+ * fetchBuildSellSiteByHost keys off customDomain presence, not
+ * verified-ness, so there's nothing to re-patch there.
+ */
+export async function verifyBuildSellDomainNow(formData: FormData): Promise<VerifyDomainResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+
+  const id = String(formData.get('id') ?? '').trim();
+  if (!id) return { ok: false, message: 'Missing site id.' };
+
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, id))
+    .limit(1);
+
+  if (!existing) return { ok: false, message: 'Site not found.' };
+  if (!existing.customDomain) return { ok: false, message: 'No domain attached.' };
+  if (existing.domainStatus === 'verified') return { ok: true, verified: true };
+
+  const projectId = process.env.VERCEL_SITES_PROJECT_ID;
+  if (!projectId) {
+    return { ok: false, message: 'VERCEL_SITES_PROJECT_ID is not set on this operator deploy.' };
+  }
+
+  try {
+    const status = await getDomainStatus(projectId, existing.customDomain);
+    if (status.verified) {
+      await db
+        .update(buildsellSites)
+        .set({ domainStatus: 'verified', domainVerifiedAt: new Date() })
+        .where(eq(buildsellSites.id, id));
+      revalidatePath('/operator/buildsell');
+      revalidatePath(`/operator/buildsell/${id}`);
+      return { ok: true, verified: true };
+    }
+    return { ok: true, verified: false, message: 'Still pending — check DNS.' };
+  } catch (err) {
+    log.warn({ id, domain: existing.customDomain, err }, 'verifyBuildSellDomainNow: poll failed');
+    return { ok: false, message: err instanceof Error ? err.message : 'Verification poll failed.' };
+  }
 }
 
 // ─── Image-prompt control ────────────────────────────────────────────────────
