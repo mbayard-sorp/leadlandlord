@@ -13,6 +13,7 @@ import { CustomerAccessPanel } from './CustomerAccessPanel';
 import { listSiteAccess } from './customer-access-actions';
 import { LeadForwardingPanel } from './LeadForwardingPanel';
 import { DomainAttachPanel } from './DomainAttachPanel';
+import { ForceLiveButton } from './ForceLiveButton';
 import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
@@ -237,6 +238,9 @@ export default async function BuildSellDetailPage({ params }: Params) {
 
       {/* Image prompt control panel */}
       <BuildSellImagePanel siteId={site.id} />
+
+      {/* Manual go-live override — skips the invoice flow entirely */}
+      <ForceLiveButton siteId={site.id} status={site.status} />
 
       {/* Lead forwarding: owner email + Klaviyo list */}
       <LeadForwardingPanel
