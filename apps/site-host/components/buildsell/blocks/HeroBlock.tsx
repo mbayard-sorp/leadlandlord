@@ -232,6 +232,12 @@ export function HeroBlock({
   // ---- TRUST variant: rating leads, centered, then an image strip ----
   if (isTrust) {
     const hasLeadImage = Boolean(section.imageIsLead && section.imageUrl);
+    // Size the lead-image box to the image's own aspect ratio so `contain` never has
+    // to letterbox — a letterboxed gap shows the box's background color, which reads
+    // as an unwanted border around the (intentionally uncropped) image.
+    const leadDims = section.imageDims;
+    const leadAspectRatio =
+      leadDims?.width && leadDims?.height ? `${leadDims.width} / ${leadDims.height}` : null;
 
     return (
       <section className="bs-hero bs-reveal" id="home">
@@ -252,8 +258,12 @@ export function HeroBlock({
 
           {hasLeadImage ? (
             <>
-              {/* Lead image — uncropped, full width, above the other two. */}
-              <div className="bs-hero-trust-lead">
+              {/* Lead image — uncropped, full width, above the other two. Box aspect
+                  ratio matches the image itself so there's no letterboxed border. */}
+              <div
+                className={`bs-hero-trust-lead${leadAspectRatio ? '' : ' bs-hero-trust-lead--fallback'}`}
+                style={leadAspectRatio ? { aspectRatio: leadAspectRatio } : undefined}
+              >
                 <Image
                   src={section.imageUrl!}
                   alt={heroAlt}

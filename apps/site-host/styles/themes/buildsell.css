@@ -1158,13 +1158,25 @@
   }
 }
 
-/* -- TRUST: lead image variant (hero image uncropped above two centered tiles) -- */
+/* -- TRUST: lead image variant (hero image uncropped above two centered tiles) --
+   The box is sized to the image's own aspect ratio (inline `aspect-ratio` style)
+   so `object-fit: contain` never has to letterbox — a letterboxed gap would show
+   this box's background color as a border around the image. `max-height` only
+   kicks in for extreme aspect ratios (e.g. a tall portrait image on a wide
+   desktop viewport), where a small amount of letterboxing is unavoidable. */
 .bs-hero-trust-lead {
   position: relative;
   margin-top: 2.5rem;
   border-radius: var(--bs-radius-card);
   overflow: hidden;
   background-color: var(--bs-surface);
+  width: 100%;
+  max-height: 480px;
+}
+
+/* Images without stored dimensions (older content) fall back to the old fixed
+   height band, since we can't compute an aspect ratio to size the box exactly. */
+.bs-hero-trust-lead--fallback {
   height: clamp(220px, 32vw, 420px);
 }
 
