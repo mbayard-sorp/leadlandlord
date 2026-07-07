@@ -12,6 +12,7 @@ import { BuildSellRegeneratePanel } from '../BuildSellRegeneratePanel';
 import { CustomerAccessPanel } from './CustomerAccessPanel';
 import { listSiteAccess } from './customer-access-actions';
 import { LeadForwardingPanel } from './LeadForwardingPanel';
+import { DomainAttachPanel } from './DomainAttachPanel';
 import { PENDING_MIGRATION_KEY, type PendingMigration } from '@leadlandlord/agents/content-migrator/types';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,8 @@ export default async function BuildSellDetailPage({ params }: Params) {
   if (!site) notFound();
 
   const isPaidOrLive = site.status === 'paid' || site.status === 'live';
+  const canAttachDomain =
+    site.status === 'invoiced' || site.status === 'paid' || site.status === 'live';
 
   // Load current access rows for the CustomerAccessPanel (non-fatal).
   let accessRows: Awaited<ReturnType<typeof listSiteAccess>> = [];
@@ -241,6 +244,16 @@ export default async function BuildSellDetailPage({ params }: Params) {
         initialOwnerEmail={site.ownerEmail}
         initialKlaviyoListId={site.klaviyoListId}
       />
+
+      {/* Custom domain attach — only once the sale is in flight */}
+      {canAttachDomain && (
+        <DomainAttachPanel
+          siteId={site.id}
+          customDomain={site.customDomain}
+          domainStatus={site.domainStatus}
+          domainVerifiedAt={site.domainVerifiedAt}
+        />
+      )}
 
       {/* Customer portal access grants */}
       <div className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-4">
