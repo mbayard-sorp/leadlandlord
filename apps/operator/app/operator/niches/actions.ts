@@ -15,6 +15,7 @@ import {
   sql,
 } from '@leadlandlord/db';
 import { NicheScoutInput } from '@leadlandlord/agents/niche-hunter/scout';
+import { CATEGORY_VALUES } from '@leadlandlord/agents/niche-hunter/service-taxonomy';
 import { validateNicheCore } from '@leadlandlord/agents/niche-hunter/validate';
 import {
   DEFAULT_RENTABILITY_CPC_CEILING,
@@ -51,7 +52,14 @@ export async function runNicheScout(formData: FormData): Promise<ActionResult> {
     .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter((s) => s.length === 2);
-  const categoryRaw = String(formData.get('category_filter') ?? '').trim();
+  const categoryFiltersRaw = formData
+    .getAll('category_filter')
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+  // All boxes checked == no filter — keeps dedupe key / persisted report
+  // identical to a genuinely unfiltered run instead of an equivalent-but-
+  // distinct 9-category list.
+  const categoryFilters = categoryFiltersRaw.length >= CATEGORY_VALUES.length ? [] : categoryFiltersRaw;
   const popMinRaw = formData.get('population_min');
   const popMaxRaw = formData.get('population_max');
 
@@ -61,7 +69,7 @@ export async function runNicheScout(formData: FormData): Promise<ActionResult> {
 
   const rawInput = {
     states,
-    ...(categoryRaw ? { category_filter: categoryRaw } : {}),
+    ...(categoryFilters.length > 0 ? { category_filter: categoryFilters } : {}),
     ...(popMinRaw !== null && popMinRaw !== '' ? { population_min: Number(popMinRaw) } : {}),
     ...(popMaxRaw !== null && popMaxRaw !== '' ? { population_max: Number(popMaxRaw) } : {}),
     warm_missing_clusters: formData.get('warm_missing_clusters') !== 'false',

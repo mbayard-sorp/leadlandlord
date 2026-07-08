@@ -60,21 +60,26 @@ export function ScoutForm() {
           className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
         />
       </label>
-      <label className="text-xs text-slate-400 flex flex-col gap-1">
-        Category (optional)
-        <select
-          name="category_filter"
-          defaultValue=""
-          className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
-        >
-          <option value="">All categories</option>
+      <fieldset className="md:col-span-2 flex flex-col gap-1">
+        <legend className="text-xs text-slate-400">Categories (all checked = no filter)</legend>
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
           {ALL_CATEGORIES.map(({ value, label }) => (
-            <option key={value} value={value}>
+            <label
+              key={value}
+              className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none"
+            >
+              <input
+                type="checkbox"
+                name="category_filter"
+                value={value}
+                defaultChecked
+                className="h-4 w-4 rounded border border-slate-600 bg-slate-950 accent-emerald-500"
+              />
               {label}
-            </option>
+            </label>
           ))}
-        </select>
-      </label>
+        </div>
+      </fieldset>
       <label className="text-xs text-slate-400 flex flex-col gap-1">
         City population min
         <input

@@ -152,7 +152,12 @@ export function ScoutReport({
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="text-sm font-semibold text-slate-200">
             Scout: {run.states.join(', ')}
-            {run.categoryFilter ? ` · ${CATEGORY_LABELS[run.categoryFilter] ?? run.categoryFilter}` : ''}
+            {run.categoryFilter
+              ? ` · ${run.categoryFilter
+                  .split(',')
+                  .map((c) => CATEGORY_LABELS[c] ?? c)
+                  .join(', ')}`
+              : ''}
           </h2>
           <span className="text-xs text-slate-500">
             <Timestamp value={run.createdAt} /> · {run.report.grid.trades} trades ×{' '}

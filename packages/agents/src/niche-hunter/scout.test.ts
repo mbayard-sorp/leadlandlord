@@ -179,7 +179,7 @@ const MOCK_CTX: AgentContext = {
 
 async function runScout(input: Partial<NicheScoutInput> = {}) {
   const scout = new NicheScout();
-  const parsed = NicheScoutInput.parse({ states: ['WY'], category_filter: 'home_services', ...input });
+  const parsed = NicheScoutInput.parse({ states: ['WY'], category_filter: ['home_services'], ...input });
   return (scout as unknown as {
     execute: (i: NicheScoutInput, c: AgentContext) => Promise<Record<string, unknown>>;
   }).execute(parsed, MOCK_CTX);
