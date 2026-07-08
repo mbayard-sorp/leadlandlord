@@ -48,7 +48,8 @@ export const NicheScoutInput = z.object({
     .array(z.string().length(2).transform((s) => s.toUpperCase()))
     .min(1)
     .max(10),
-  category_filter: CategoryEnum.optional(),
+  /** Empty/omitted = all categories. */
+  category_filter: z.array(CategoryEnum).min(1).optional(),
   population_min: z.number().int().nonnegative().default(15_000),
   population_max: z.number().int().positive().default(150_000),
   persist_top: z.number().int().positive().max(2000).default(500),
@@ -99,7 +100,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       outputSchema: NicheScoutOutput,
       defaultDailyCapUsd: 15,
       dedupeKeyFn: (input) =>
-        `niche-scout:${[...input.states].sort().join(',')}:${input.category_filter ?? 'all'}:${new Date().toISOString().slice(0, 10)}`,
+        `niche-scout:${[...input.states].sort().join(',')}:${input.category_filter ? [...input.category_filter].sort().join('+') : 'all'}:${new Date().toISOString().slice(0, 10)}`,
     });
   }
 
@@ -159,9 +160,10 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     const NEUTRAL_SIGNAL: MarketSignal = { metroDensityMult: 1.0, demandQuality: 1.0, hasCensus: false };
 
     // 2. Trade list — taxonomy filtered by category, minus denylist.
-    const categories: ServiceCategory[] = input.category_filter
-      ? [input.category_filter]
-      : [...CATEGORY_VALUES];
+    const categories: ServiceCategory[] =
+      input.category_filter && input.category_filter.length > 0
+        ? [...new Set(input.category_filter)]
+        : [...CATEGORY_VALUES];
     const allTrades: Array<{ trade: string; category: ServiceCategory }> = [];
     let excludedDenylist = 0;
     for (const category of categories) {
@@ -539,12 +541,15 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
 
     // Diversity caps (ADR 0023): bound how much of the persisted set any single
     // trade or category may occupy, so a high-ticket mono-category (e.g. legal)
-    // can't sweep the whole list. The per-category cap is disabled for runs
-    // already scoped to one category — capping there would starve the request.
+    // can't sweep the whole list. The per-category cap is disabled only when
+    // scoped to exactly one category — capping there would starve the request.
+    // A multi-category filter (e.g. everything but legal/medical) still needs
+    // the cap so one of the remaining categories can't sweep the list.
     const capPerTrade = Math.max(1, Math.floor(maxPerTrade));
-    const capPerCategory = input.category_filter
-      ? input.persist_top
-      : Math.max(1, Math.ceil(input.persist_top * maxCategoryShare));
+    const capPerCategory =
+      input.category_filter && input.category_filter.length === 1
+        ? input.persist_top
+        : Math.max(1, Math.ceil(input.persist_top * maxCategoryShare));
     // Per-population-band cap (F4): resolve share → absolute count. >= 1.0
     // disables (band may fill the whole set). Composes with trade/category caps
     // inside the greedy walk so a capped 100k+ slot is backfilled by the next
@@ -615,7 +620,9 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       .values({
         agentRunId: ctx.runId,
         states: statesSorted,
-        categoryFilter: input.category_filter ?? null,
+        // Column is a single text field; multiple categories are comma-joined
+        // (parsed back out by the operator UI). Null = all categories.
+        categoryFilter: input.category_filter ? input.category_filter.join(',') : null,
         populationMin: input.population_min,
         populationMax: input.population_max,
         gridCells: cells.length,
