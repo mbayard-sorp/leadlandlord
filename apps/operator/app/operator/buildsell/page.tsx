@@ -1,6 +1,7 @@
 import { desc } from 'drizzle-orm';
 import { getDb, buildsellSites, listWorkedLeads } from '@leadlandlord/db';
 import type { BuildsellLead } from '@leadlandlord/db';
+import { BuildSellTabs } from '@/components/BuildSellTabs';
 import { SearchPanel } from './SearchPanel';
 import { BuildSellButtons } from './BuildSellButtons';
 
@@ -39,6 +40,8 @@ export default async function BuildSellPage() {
           and flip it live once paid.
         </p>
       </header>
+
+      <BuildSellTabs />
 
       <SearchPanel />
 

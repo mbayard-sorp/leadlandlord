@@ -1,4 +1,5 @@
 import { createReadClient } from '@leadlandlord/integrations/sanity';
+import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
 
 /**
  * Operator-side Sanity read client. Singleton — created on first use,
@@ -83,6 +84,50 @@ export async function resolveSiteIdFromHost(host: string): Promise<string | null
 export function studioDeepLink(siteId: string, dataset: 'production' | 'development' = 'production'): string {
   const workspace = dataset === 'production' ? 'production' : 'development';
   return `https://leadlandlord.sanity.studio/${workspace}/structure/site;site-${siteId}`;
+}
+
+// ---- Build & Sell visibility ---------------------------------------------
+
+export interface BsSiteVisibility {
+  /** Postgres buildsell_sites.id (parsed from the `bs-site-<uuid>` doc _id). */
+  siteId: string;
+  /** true = watermarked/preview-only (default for drafts). */
+  draftMode: boolean | null;
+  /** true = noindex at the Sanity layer of the triple-defense noindex. */
+  robotsDisallow: boolean | null;
+  /** true once the buyer's theme is locked (live/sold sites). */
+  themeLocked: boolean | null;
+  /** The stored palette preset name (authoritative for render colors). */
+  preset: string | null;
+}
+
+// Query by `_id in $ids` rather than `_type` so the helper doesn't depend on
+// the exact B&S doc type name. Returns one row per existing doc; missing docs
+// simply don't appear (the caller falls back to inferring from status).
+const BS_VISIBILITY_QUERY = `*[_id in $ids]{
+  _id, draftMode, robotsDisallow, themeLocked,
+  "preset": theme.preset
+}`;
+
+/**
+ * Batched read of Build & Sell visibility/lock/preset state for many sites in
+ * ONE request. Feeds the portfolio dashboard's SEO-visibility toggle, the
+ * theme-preset dropdown's locked state, and the current live preset. Callers
+ * should wrap in `.catch(() => [])` so Sanity being down never breaks the page.
+ */
+export async function fetchBuildSellVisibility(
+  siteIds: string[],
+): Promise<BsSiteVisibility[]> {
+  if (siteIds.length === 0) return [];
+  const ids = siteIds.map(buildsellSiteDocId);
+  const rows = await getSanityReader().fetch<
+    Array<Omit<BsSiteVisibility, 'siteId'> & { _id: string }>
+  >(BS_VISIBILITY_QUERY, { ids });
+  return rows.map(({ _id, ...rest }) => ({
+    // Strip the deterministic `bs-site-` prefix to recover the Postgres uuid.
+    siteId: _id.replace(/^bs-site-/, ''),
+    ...rest,
+  }));
 }
 
 // ---- Keyword clusters -----------------------------------------------------
