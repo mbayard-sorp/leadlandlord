@@ -125,6 +125,10 @@ export const agentMetadata: Record<string, AgentMeta> = {
     description: 'Drafts and publishes an approved local content idea as an info page on the tenant site.',
     trigger: 'Event-driven (content idea approved)',
   },
+  'data-inputs-scaffolder': {
+    description:
+      'Auto-fills empty proprietary-data fields per site (illustrative seeds, DB-derived facts, team attribution); never touches operator-entered data or contrarian takes.',
+  },
   molly: {
     description: 'Guest-post outreach: prospects domains, sends pitches, nudges editors, delivers approved drafts.',
     trigger: 'Event-driven (operator scout button, prospect approval, nudge scheduler, draft approval)',

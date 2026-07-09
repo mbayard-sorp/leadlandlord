@@ -39,6 +39,9 @@ const SEED: SeedRow[] = [
   { schedulerName: 'seo-operator', targetAgent: 'seo-operator', cadenceKind: 'cron', cronExpr: '0 8 * * 1' },
   { schedulerName: 'local-content-scout', targetAgent: 'local-content-scout', cadenceKind: 'cron', cronExpr: '0 9 * * *' },
   { schedulerName: 'content-data-auditor', targetAgent: 'content-data-auditor', cadenceKind: 'cron', cronExpr: '0 10 * * 3' },
+  // data-inputs-scaffolder runs Tuesday, ahead of Wednesday's content-data-auditor,
+  // so freshly-scaffolded seeds are auditable the next day.
+  { schedulerName: 'data-inputs-scaffolder', targetAgent: 'data-inputs-scaffolder', cadenceKind: 'cron', cronExpr: '30 8 * * 2' },
   { schedulerName: 'tenant-prospector', targetAgent: 'tenant-prospector', cadenceKind: 'cron', cronExpr: '0 14 * * 1' },
   { schedulerName: 'molly-digest', targetAgent: 'molly-digest', cadenceKind: 'cron', cronExpr: '0 14 * * *' },
   { schedulerName: 'outreach-agent', targetAgent: 'outreach-agent', cadenceKind: 'cron', cronExpr: '0 15 * * *' },

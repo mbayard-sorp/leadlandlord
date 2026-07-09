@@ -16,6 +16,14 @@ vi.mock('@leadlandlord/db', () => ({
     publishedAt: 'published_at',
     writerRunId: 'writer_run_id',
   },
+  siteOriginalDataInputs: { id: 'id', siteId: 'site_id' },
+  siteNetworkMetrics: {
+    siteId: 'site_id',
+    metricKind: 'metric_kind',
+    value: 'value',
+    sampleSize: 'sample_size',
+    computedAt: 'computed_at',
+  },
   eq: (a: unknown, b: unknown) => ({ type: 'eq', a, b }),
 }));
 
@@ -112,6 +120,51 @@ function makeMockDb(ideaStatus = 'auto_approved', ideaOverrides: Record<string, 
     update: vi.fn().mockReturnValue(updateChain),
   };
 }
+
+/**
+ * Queue-based db mock for the grounded-drafting tests: each select() call
+ * consumes the next result set (idea → site → dataInputs row → metrics). The
+ * chain supports both .limit() and .orderBy() terminators.
+ */
+function makeQueueDb(results: unknown[][]) {
+  let i = 0;
+  const updateChain = {
+    set: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValue(undefined),
+  };
+  return {
+    _updateChain: updateChain,
+    select: vi.fn().mockImplementation(() => {
+      const rows = results[Math.min(i++, results.length - 1)];
+      return {
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(rows),
+            orderBy: vi.fn().mockResolvedValue(rows),
+          }),
+        }),
+      };
+    }),
+    update: vi.fn().mockReturnValue(updateChain),
+  };
+}
+
+const GROUNDED_IDEA = {
+  id: IDEA_ID,
+  siteId: SITE_ID,
+  topic: 'Tree removal case study in Tucson',
+  topicSlug: 'tree-removal-case-study-in-tucson',
+  targetKeyword: 'tree removal case study tucson',
+  archetype: 'case_study',
+  voiceSeed: 'voice-b',
+  status: 'approved',
+  scoutRunId: 'run-auditor-001',
+  angle: 'operator case-study seeds present',
+  rationale: 'grounded original content',
+  storyScaffold: null,
+};
+
+const GROUNDED_SITE = { id: SITE_ID, niche: 'tree removal', city: 'Tucson', state: 'AZ', status: 'live' };
 
 beforeAll(() => {
   process.env.MOCK_AI = '1';
@@ -269,6 +322,113 @@ describe('LocalContentWriter.execute (MOCK_AI=1)', () => {
     expect(pageDocArg!.jsonLd).toContain('Case Study');
     expect(pageDocArg!.jsonLd).not.toMatch(/"@type"\s*:\s*"Review"/);
     expect(pageDocArg!.jsonLd).not.toMatch(/aggregateRating/i);
+  });
+
+  it('grounds an original case_study draft in the proprietary seeds', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const dataRow = {
+      siteId: SITE_ID,
+      caseStudyInputs: [
+        { problem: 'Storm-split mesquite over a carport', solution: 'Crane-assisted sectional removal', outcome: 'No structural damage', city: 'Tucson', jobType: 'emergency' },
+      ],
+      firsthandInputs: [],
+      contrarianTakes: [],
+      proprietaryFacts: {},
+      expertiseProfile: { authorName: 'The Desert Tree Pros Team', authorTitle: 'Tree Removal professionals serving Tucson, AZ' },
+    };
+    const mockDb = makeQueueDb([[GROUNDED_IDEA], [GROUNDED_SITE], [dataRow]]);
+    vi.mocked(getDb).mockReturnValue(mockDb as never);
+
+    const { LocalContentWriter } = await import('./index');
+    const writer = new LocalContentWriter();
+    await (writer as unknown as {
+      execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
+    }).execute({ idea_id: IDEA_ID }, MOCK_CTX);
+
+    const pageDocArg = mockCreateOrReplace.mock.calls.find(
+      (args) => (args[0] as Record<string, unknown>)._type === 'page',
+    )?.[0] as Record<string, string> | undefined;
+    expect(pageDocArg).toBeDefined();
+    // The verbatim seed travels into the draft; the byline comes from expertiseProfile.
+    expect(pageDocArg!.mdx).toContain('Storm-split mesquite');
+    expect(pageDocArg!.mdx).toContain('By The Desert Tree Pros Team');
+    expect(pageDocArg!.jsonLd).toContain('The Desert Tree Pros Team');
+    // Operator-vouched seeds (no illustrative flag) → no composite disclosure forced.
+    expect(pageDocArg!.mdx).not.toMatch(/illustrative composites/i);
+  });
+
+  it('adds the illustrative disclosure when seeds are scaffolder-generated', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const dataRow = {
+      siteId: SITE_ID,
+      caseStudyInputs: [
+        { problem: 'A recurring issue', solution: 'The standard fix', outcome: 'Resolved', illustrative: true, source: 'data-inputs-scaffolder' },
+      ],
+      firsthandInputs: [],
+      contrarianTakes: [],
+      proprietaryFacts: {},
+      expertiseProfile: null,
+    };
+    const mockDb = makeQueueDb([[GROUNDED_IDEA], [GROUNDED_SITE], [dataRow]]);
+    vi.mocked(getDb).mockReturnValue(mockDb as never);
+
+    const { LocalContentWriter } = await import('./index');
+    const writer = new LocalContentWriter();
+    await (writer as unknown as {
+      execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
+    }).execute({ idea_id: IDEA_ID }, MOCK_CTX);
+
+    const pageDocArg = mockCreateOrReplace.mock.calls.find(
+      (args) => (args[0] as Record<string, unknown>)._type === 'page',
+    )?.[0] as Record<string, string> | undefined;
+    expect(pageDocArg!.mdx).toMatch(/illustrative composites/i);
+  });
+
+  it('REFUSES to draft an original archetype with no grounded seeds', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const mockDb = makeQueueDb([[GROUNDED_IDEA], [GROUNDED_SITE], []]);
+    vi.mocked(getDb).mockReturnValue(mockDb as never);
+
+    const { LocalContentWriter } = await import('./index');
+    const writer = new LocalContentWriter();
+    await expect(
+      (writer as unknown as {
+        execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
+      }).execute({ idea_id: IDEA_ID }, MOCK_CTX),
+    ).rejects.toThrow(/refusing to draft ungrounded/);
+    expect(mockCreateOrReplace).not.toHaveBeenCalled();
+  });
+
+  it('grounds a data_study in a qualifying metric and refuses under-sampled ones', async () => {
+    const { getDb } = await import('@leadlandlord/db');
+    const idea = { ...GROUNDED_IDEA, archetype: 'data_study', topic: 'Tree removal by the numbers' };
+    const metric = { metricKind: 'job_type_mix', value: { removals: 12, trims: 28 }, sampleSize: 40 };
+
+    const okDb = makeQueueDb([[idea], [GROUNDED_SITE], [], [metric]]);
+    vi.mocked(getDb).mockReturnValue(okDb as never);
+    const { LocalContentWriter } = await import('./index');
+    let writer = new LocalContentWriter();
+    await (writer as unknown as {
+      execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
+    }).execute({ idea_id: IDEA_ID }, MOCK_CTX);
+    const pageDocArg = mockCreateOrReplace.mock.calls.find(
+      (args) => (args[0] as Record<string, unknown>)._type === 'page',
+    )?.[0] as Record<string, string> | undefined;
+    // Verbatim metric + sample size reach the draft.
+    expect(pageDocArg!.mdx).toContain('40 observations');
+    expect(pageDocArg!.mdx).toContain('job_type_mix');
+
+    // Under-sampled metric → refuse.
+    vi.clearAllMocks();
+    const thinMetric = { ...metric, sampleSize: 5 };
+    const thinDb = makeQueueDb([[idea], [GROUNDED_SITE], [], [thinMetric]]);
+    vi.mocked(getDb).mockReturnValue(thinDb as never);
+    writer = new LocalContentWriter();
+    await expect(
+      (writer as unknown as {
+        execute: (i: { idea_id: string }, ctx: typeof MOCK_CTX) => Promise<unknown>;
+      }).execute({ idea_id: IDEA_ID }, MOCK_CTX),
+    ).rejects.toThrow(/refusing to draft ungrounded/);
   });
 
   it('throws when idea not found', async () => {

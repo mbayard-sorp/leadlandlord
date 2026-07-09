@@ -49,6 +49,7 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   'geo-aeo-auditor': ON(3),
   'local-seo-optimizer': ON(3),
   'content-data-auditor': ON(3),
+  'data-inputs-scaffolder': ON(2), // one-time illustrative-seed fill per site (~$0.05/site)
   'local-content-scout': ON(3),
   'local-content-writer': ON(5),
   'network-linker': ON(3),

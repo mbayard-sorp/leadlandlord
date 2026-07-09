@@ -40,7 +40,7 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
     setMsg(null);
     startTransition(async () => {
       const r = await saveProprietaryData(fd);
-      setMsg(r.ok ? { ok: true, text: 'Saved. Agents read these on the next content run.' } : { ok: false, text: r.message ?? 'save failed' });
+      setMsg(r.ok ? { ok: true, text: r.message ?? 'Saved. Agents read these on the next content run.' } : { ok: false, text: r.message ?? 'save failed' });
     });
   }
 
@@ -52,7 +52,7 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
       <header>
         <h3 className="text-sm font-semibold text-slate-200">Proprietary data</h3>
         <p className="text-xs text-slate-500 mt-1">
-          Stored in Postgres (off the public dataset). Grounds original content + E-E-A-T bylines. Generated copy still queues through the normal approval gate.
+          Stored in Postgres (off the public dataset). Grounds original content + E-E-A-T bylines. Empty fields are auto-filled weekly by the data-inputs-scaffolder (seeds tagged illustrative); anything entered here wins and is never overwritten. Generated copy still queues through the normal approval gate.
         </p>
         {updatedAt && (
           <p className="text-[11px] text-slate-600 mt-1">
@@ -78,7 +78,7 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
       <JsonField
         name="contrarian_takes"
         label="Contrarian takes"
-        hint='JSON array of { claim, reasoning, evidence } — never auto-generated'
+        hint='JSON array of { claim, reasoning, evidence } — human-only; the scaffolder never fills this'
         defaultValue={initial.contrarianTakes}
         rows={5}
       />

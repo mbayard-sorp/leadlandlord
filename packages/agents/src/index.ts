@@ -27,6 +27,7 @@ export { GeoAeoAuditor } from './geo-aeo-auditor/index';
 export { LocalSeoOptimizer } from './local-seo-optimizer/index';
 export { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
 export { ContentDataAuditor } from './content-data-auditor/index';
+export { DataInputsScaffolder } from './data-inputs-scaffolder/index';
 export { FleetDigest } from './fleet-digest/index';
 // Orchestrator chat brain (Phase 6). Exported for the operator server action;
 // deliberately NOT in the agent registry (see registry.ts / ADR 0019).
