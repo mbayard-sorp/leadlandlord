@@ -756,12 +756,22 @@ export async function validateNiche(nicheId: string): Promise<ActionResult> {
       : DEFAULT_RENTABILITY_LEAD_PRICE_CEILING;
   const ctrAtRank = sys.scoutCtrAtRank != null ? parseFloat(sys.scoutCtrAtRank) : undefined;
   const callRate = sys.scoutCallRate != null ? parseFloat(sys.scoutCallRate) : undefined;
+  // Local-SERP difficulty formula knobs (ADR 0030 Phase 3) — NULL = code
+  // defaults (AGGREGATOR_WEIGHT 70 / LOCAL_PACK_BOOST 30).
+  const aggregatorWeight = sys.scoutAggWeight != null ? parseFloat(sys.scoutAggWeight) : undefined;
+  const localPackBoost =
+    sys.scoutLocalPackBoost != null ? parseFloat(sys.scoutLocalPackBoost) : undefined;
+  const difficultyWeights =
+    aggregatorWeight !== undefined || localPackBoost !== undefined
+      ? { aggregatorWeight, localPackBoost }
+      : undefined;
 
   const result = await validateNicheCore(nicheId, {
     cpcCeiling,
     leadPriceCeiling,
     ctrAtRank,
     callRate,
+    difficultyWeights,
   });
 
   if (!result.ok) {

@@ -188,6 +188,10 @@ export interface ScoutValueArgs {
    * measured during refinement.
    */
   cityVolumeOverride?: number;
+  /** Local-pack presence measured at Stage-3; undefined on proxy cells (layout unknown). */
+  hasLocalPack?: boolean;
+  /** CTR multiplier applied only when hasLocalPack === true. Default 1.0 (no-op) — code param only until calibrated (ADR 0030). */
+  ctrLocalPackMult?: number;
 }
 
 export interface ScoutValue {
@@ -260,8 +264,14 @@ export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
   const demandMult = 1 - demandBlend * (1 - demandQuality);
   const winnabilityEff = Math.max(0, Math.min(1, winnability * localRankMult));
 
+  // Local-pack CTR discount (ADR 0030 Phase 3): a rendered local pack steals
+  // organic clicks, so the effective CTR of a won organic slot is lower. Only
+  // applies when local-pack presence was actually MEASURED true (Stage-3);
+  // unset/false → no-op. ctrLocalPackMult defaults to 1.0 until calibrated.
+  const effectiveCtr = ctr * (args.hasLocalPack === true ? (args.ctrLocalPackMult ?? 1.0) : 1);
+
   const estMonthlyValueUsd = round2(
-    cityVolume * ctr * winnabilityEff * callRate * leadBenchmarkPrice * demandMult,
+    cityVolume * effectiveCtr * winnabilityEff * callRate * leadBenchmarkPrice * demandMult,
   );
   const scoutScore = round2(estMonthlyValueUsd * rentabilityPrior);
 

@@ -304,14 +304,22 @@ export interface SerpComposition {
   top_local: Array<{ rank: number; domain: string; url: string }>;
   /**
    * Derived 0-100 difficulty score replacing the old DataForSEO KD value.
-   * Higher = harder. Stored in the `niches.kd` column so existing UI and
-   * filters keep working without a schema migration.
+   * Higher = harder.
+   *
+   * DERIVED AT READ TIME (ADR 0030 Phase 3): getSerpComposition recomputes
+   * this field from the raw aggregator_share / has_local_pack / organic_count
+   * fields via computeSerpDifficulty on every read, using operator-tunable
+   * weights (system_state scout_agg_weight / scout_local_pack_boost). The
+   * value persisted in the dataforseo_cache payload is advisory only — it is
+   * written with the code-default weights so old readers of the raw payload
+   * see a sane value, and it is overwritten on read.
    *
    * Formula: difficulty measures ORGANIC RANKABILITY. A local pack is treated
    * as mildly favorable (it tends to displace aggregators from organic results).
-   * Weights: aggregator_share * AGGREGATOR_WEIGHT + (no local pack ? LOCAL_PACK_BOOST : 0).
-   * Both weights are tunable named constants. NOTE: discounting the won slot's
-   * VALUE for local-pack click-theft is a separate follow-up, not handled here.
+   * NOTE: historical persisted difficulty values (niches.dfs_kd,
+   * niche_candidates.local_serp_difficulty) reflect the weights in force when
+   * they were written. Discounting the won slot's VALUE for local-pack
+   * click-theft is handled separately (ScoutValueArgs.ctrLocalPackMult).
    */
   difficulty: number;
   /**
@@ -324,6 +332,54 @@ export interface SerpComposition {
 
 interface SerpCompositionItemRaw extends SerpItemRaw {
   items?: Array<{ type?: string; domain?: string; url?: string }> | null;
+}
+
+/** Default weight applied to aggregator_share in the difficulty formula. */
+export const AGGREGATOR_WEIGHT = 70;
+/** Default boost applied when no local pack is present. */
+export const LOCAL_PACK_BOOST = 30;
+
+/**
+ * Operator-tunable weights for the local-SERP difficulty formula (ADR 0030
+ * Phase 3). Undefined fields fall back to the exported code defaults.
+ */
+export interface SerpDifficultyWeights {
+  /** Weight applied to aggregator_share. Default AGGREGATOR_WEIGHT (70). */
+  aggregatorWeight?: number;
+  /** Boost applied when no local pack is present. Default LOCAL_PACK_BOOST (30). */
+  localPackBoost?: number;
+  /**
+   * Per-missing-organic-slot difficulty reduction. A SERP with fewer than 10
+   * organic results has unfilled slots — arguably easier to enter. Default 0
+   * (no effect), pending the accuracy report; code-level param only, no
+   * system_state knob yet.
+   */
+  organicShortfallRelief?: number;
+}
+
+/**
+ * Pure local-SERP difficulty formula (ADR 0030 Phase 3):
+ *
+ *   round(aggregator_share * aggregatorWeight
+ *         + (has_local_pack ? 0 : localPackBoost)
+ *         - (10 - min(organic_count, 10)) * organicShortfallRelief)
+ *
+ * clamped to [0, 100]. With default weights (70 / 30 / 0) this is
+ * bit-identical to the legacy inline formula for any organic_count.
+ */
+export function computeSerpDifficulty(
+  comp: { aggregator_share: number; has_local_pack: boolean; organic_count: number },
+  weights?: SerpDifficultyWeights,
+): number {
+  const aggregatorWeight = weights?.aggregatorWeight ?? AGGREGATOR_WEIGHT;
+  const localPackBoost = weights?.localPackBoost ?? LOCAL_PACK_BOOST;
+  const relief = weights?.organicShortfallRelief ?? 0;
+  const raw = Math.round(
+    comp.aggregator_share * aggregatorWeight +
+      (comp.has_local_pack ? 0 : localPackBoost) -
+      (10 - Math.min(comp.organic_count, 10)) * relief,
+  );
+  return Math.max(0, Math.min(100, raw));
 }
 
 /**
@@ -347,10 +403,17 @@ export async function getSerpComposition(args: {
   forceRefresh?: boolean;
   /** Called with the cold-miss cost in USD (0 on cache hit). */
   onCost?: (costUsd: number) => void;
+  /**
+   * Operator-tunable difficulty-formula weights (ADR 0030 Phase 3). Applied at
+   * read time over the raw composition fields — both warm cache hits and cold
+   * fetches — so tuning a knob retroactively re-scores every cached SERP.
+   * Undefined = code defaults (bit-identical to the legacy formula).
+   */
+  difficultyWeights?: SerpDifficultyWeights;
 }): Promise<SerpComposition> {
-  const { keyword, location, language = 'en', forceRefresh, onCost } = args;
+  const { keyword, location, language = 'en', forceRefresh, onCost, difficultyWeights } = args;
   if (process.env.MOCK_AI === 'true') {
-    return {
+    const mock: SerpComposition = {
       aggregator_share: 0.3,
       organic_count: 10,
       has_local_pack: true,
@@ -363,6 +426,8 @@ export async function getSerpComposition(args: {
       difficulty: 21,
       fallback: false,
     };
+    mock.difficulty = computeSerpDifficulty(mock, difficultyWeights);
+    return mock;
   }
   const cacheKey = stableKey([language, location, keyword.toLowerCase()]);
   const { value, costUsd } = await withDataForSeoCache<SerpComposition>({
@@ -378,13 +443,15 @@ export async function getSerpComposition(args: {
     fetcher: () => fetchSerpCompositionFromApi(keyword, location, language),
   });
   onCost?.(costUsd);
+  // Difficulty is ALWAYS derived at read time from the raw composition fields
+  // (ADR 0030 Phase 3) — the payload's stored difficulty is advisory only.
+  // Fallback compositions are fabricated (no raw measurement to derive from);
+  // they keep their neutral difficulty=50 regardless of weights.
+  if (!value.fallback) {
+    value.difficulty = computeSerpDifficulty(value, difficultyWeights);
+  }
   return value;
 }
-
-/** Weight applied to aggregator_share in the difficulty formula. Tunable. */
-const AGGREGATOR_WEIGHT = 70;
-/** Boost applied when no local pack is present. Tunable. */
-const LOCAL_PACK_BOOST = 30;
 
 async function fetchSerpCompositionFromApi(
   keyword: string,
@@ -429,17 +496,22 @@ async function fetchSerpCompositionFromApi(
     const has_local_pack = Boolean(localPackItem);
     const local_pack_count = localPackChildren.length;
 
-    const difficulty = Math.round(aggregator_share * AGGREGATOR_WEIGHT + (has_local_pack ? 0 : LOCAL_PACK_BOOST));
-
-    return {
+    const composition = {
       aggregator_share,
       organic_count: organic.length,
       has_local_pack,
       local_pack_count,
       top_domains: topDomains,
       top_local,
-      difficulty,
       fallback: false,
+    };
+    return {
+      ...composition,
+      // Advisory only: persisted into the cache payload with the code-default
+      // weights so any old reader of the raw payload sees a sane value.
+      // getSerpComposition overwrites it at read time with the caller's
+      // (operator-tunable) weights — the read-time recompute is authoritative.
+      difficulty: computeSerpDifficulty(composition),
     };
   } catch (err) {
     // eslint-disable-next-line no-console

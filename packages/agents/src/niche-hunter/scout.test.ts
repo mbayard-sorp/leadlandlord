@@ -814,6 +814,60 @@ describe('NicheScout', () => {
     });
   });
 
+  // ── SERP difficulty weights (ADR 0030 Phase 3) ─────────────────────────────
+  describe('SERP difficulty weights (ADR 0030 Phase 3)', () => {
+    it('forwards system_state scout_agg_weight to getSerpComposition as difficultyWeights', async () => {
+      vi.mocked(getSystemState).mockResolvedValueOnce({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: null,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+        scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
+        scoutAggWeight: '55', // numeric columns come back as strings
+        scoutLocalPackBoost: null,
+        scoutDefaultBenchmarkWinnability: null,
+      } as Awaited<ReturnType<typeof getSystemState>>);
+      await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
+      for (const [args] of vi.mocked(getSerpComposition).mock.calls) {
+        expect(
+          (args as { difficultyWeights?: { aggregatorWeight?: number; localPackBoost?: number } })
+            .difficultyWeights,
+        ).toEqual({ aggregatorWeight: 55, localPackBoost: undefined });
+      }
+    });
+
+    it('all-null knobs → difficultyWeights is undefined (code defaults)', async () => {
+      // Default shared mock returns every knob null.
+      await runScout({
+        refine_top_k: 1,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
+      const [args] = vi.mocked(getSerpComposition).mock.calls[0]!;
+      expect(
+        (args as { difficultyWeights?: unknown }).difficultyWeights,
+      ).toBeUndefined();
+    });
+  });
+
   // ── Candidate diversity caps (ADR 0023) ───────────────────────────────────
   it('records the diversity caps applied to the persisted set', async () => {
     await runScout();

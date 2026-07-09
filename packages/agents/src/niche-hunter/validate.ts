@@ -45,6 +45,16 @@ export interface ValidateNicheCoreOpts {
   ctrAtRank?: number;
   /** Value-model call-rate override (system_state scout_call_rate). */
   callRate?: number;
+  /**
+   * Local-SERP difficulty formula weights (ADR 0030 Phase 3), passed through
+   * to getSerpComposition (system_state scout_agg_weight /
+   * scout_local_pack_boost). Undefined = code defaults.
+   */
+  difficultyWeights?: {
+    aggregatorWeight?: number;
+    localPackBoost?: number;
+    organicShortfallRelief?: number;
+  };
   /** Called with each cold-miss API cost in USD as it is incurred. */
   recordCost?: (usd: number) => void;
 }
@@ -106,7 +116,13 @@ export async function validateNicheCore(
     // integration).
     const [metrics, serpComposition, paidAdCount, clusterCandidates, contractorSupply] = await Promise.all([
       getLocalKeywordMetrics({ keywords: seeds, location, forceRefresh: false, onCost }),
-      getSerpComposition({ keyword: primaryKeyword, location, forceRefresh: false, onCost }),
+      getSerpComposition({
+        keyword: primaryKeyword,
+        location,
+        forceRefresh: false,
+        onCost,
+        difficultyWeights: opts.difficultyWeights,
+      }),
       getPaidAdCount({ keyword: primaryKeyword, location, onCost }),
       getKeywordCandidates({ seed: row.niche, onCost }),
       getContractorSupply({ niche: row.niche, city: row.city, state: row.state, onCost }),

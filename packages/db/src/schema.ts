@@ -1194,6 +1194,20 @@ export const systemState = pgTable('system_state', {
   scoutMinRentabilityPrior: numeric('scout_min_rentability_prior', { precision: 4, scale: 3 }),
   // Operator override for MIN_WINNABILITY_FLOOR (NULL = code default).
   scoutMinWinnability: numeric('scout_min_winnability', { precision: 4, scale: 3 }),
+  // Local-SERP difficulty formula knobs (migration 0063, ADR 0030 Phase 3).
+  // NULL = fall back to the code defaults AGGREGATOR_WEIGHT (70) and
+  // LOCAL_PACK_BOOST (30) in packages/integrations/src/dataforseo/index.ts
+  // (computeSerpDifficulty). Applied at cache-read time, so tuning a knob
+  // re-scores every cached SERP composition on the next read.
+  scoutAggWeight: numeric('scout_agg_weight', { precision: 5, scale: 2 }),
+  scoutLocalPackBoost: numeric('scout_local_pack_boost', { precision: 5, scale: 2 }),
+  // Benchmark-winnability default (migration 0063, ADR 0030 Phase 3). NULL =
+  // fall back to DEFAULT_BENCHMARK_WINNABILITY (0.5) in
+  // packages/agents/src/niche-hunter/scoring-config.ts.
+  scoutDefaultBenchmarkWinnability: numeric('scout_default_benchmark_winnability', {
+    precision: 4,
+    scale: 3,
+  }),
   // Geographic-targeting + refinement knobs (migration 0045, ADR 0022). NULL =
   // fall back to the defaults in packages/agents/src/niche-hunter/
   // {value-model,scoring-config}.ts. Set via /operator/control.

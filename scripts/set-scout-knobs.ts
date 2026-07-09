@@ -11,9 +11,13 @@ import { getDb, systemState, getSystemState } from '@leadlandlord/db';
  *   pnpm tsx scripts/set-scout-knobs.ts --measure-volume=true
  *   pnpm tsx scripts/set-scout-knobs.ts --pop-band-share=0.40
  *   pnpm tsx scripts/set-scout-knobs.ts --measure-volume=true --pop-band-share=0.40
+ *   pnpm tsx scripts/set-scout-knobs.ts --agg-weight=65 --local-pack-boost=25
+ *   pnpm tsx scripts/set-scout-knobs.ts --benchmark-winnability=0.45
  *
  * NULL/unset knobs fall back to the code defaults in
- * packages/agents/src/niche-hunter/scoring-config.ts. Pass a knob to override.
+ * packages/agents/src/niche-hunter/scoring-config.ts (and, for the SERP
+ * difficulty weights, packages/integrations/src/dataforseo/index.ts:
+ * AGGREGATOR_WEIGHT 70 / LOCAL_PACK_BOOST 30). Pass a knob to override.
  */
 
 const GLOBAL_ID = 'global';
@@ -26,6 +30,9 @@ function arg(name: string): string | undefined {
 async function main() {
   const measureVolume = arg('measure-volume');
   const popBandShare = arg('pop-band-share');
+  const aggWeight = arg('agg-weight');
+  const localPackBoost = arg('local-pack-boost');
+  const benchmarkWinnability = arg('benchmark-winnability');
 
   const current = await getSystemState();
   console.log('Current scout knobs:');
@@ -37,6 +44,9 @@ async function main() {
         scoutMaxPerTrade: current.scoutMaxPerTrade,
         scoutMaxCategoryShare: current.scoutMaxCategoryShare,
         scoutPerStateCap: current.scoutPerStateCap,
+        scoutAggWeight: current.scoutAggWeight,
+        scoutLocalPackBoost: current.scoutLocalPackBoost,
+        scoutDefaultBenchmarkWinnability: current.scoutDefaultBenchmarkWinnability,
       },
       null,
       2,
@@ -51,9 +61,20 @@ async function main() {
     // numeric columns are written as strings by drizzle-orm.
     patch.scoutMaxPopBandShare = String(parseFloat(popBandShare));
   }
+  if (aggWeight !== undefined) {
+    patch.scoutAggWeight = String(parseFloat(aggWeight));
+  }
+  if (localPackBoost !== undefined) {
+    patch.scoutLocalPackBoost = String(parseFloat(localPackBoost));
+  }
+  if (benchmarkWinnability !== undefined) {
+    patch.scoutDefaultBenchmarkWinnability = String(parseFloat(benchmarkWinnability));
+  }
 
   if (Object.keys(patch).length === 0) {
-    console.log('\nNo changes requested (pass --measure-volume / --pop-band-share to set).');
+    console.log(
+      '\nNo changes requested (pass --measure-volume / --pop-band-share / --agg-weight / --local-pack-boost / --benchmark-winnability to set).',
+    );
     return;
   }
 
@@ -71,6 +92,9 @@ async function main() {
       {
         scoutRefineMeasureVolume: row.scoutRefineMeasureVolume,
         scoutMaxPopBandShare: row.scoutMaxPopBandShare,
+        scoutAggWeight: row.scoutAggWeight,
+        scoutLocalPackBoost: row.scoutLocalPackBoost,
+        scoutDefaultBenchmarkWinnability: row.scoutDefaultBenchmarkWinnability,
       },
       null,
       2,

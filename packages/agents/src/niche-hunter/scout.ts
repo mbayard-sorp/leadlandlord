@@ -156,6 +156,22 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     // Benchmark-only trades (clusterDifficulty null) are always exempt.
     const minWinnability =
       sys.scoutMinWinnability != null ? parseFloat(sys.scoutMinWinnability) : MIN_WINNABILITY_FLOOR;
+    // Local-SERP difficulty formula knobs (ADR 0030 Phase 3) — NULL = code
+    // defaults (AGGREGATOR_WEIGHT 70 / LOCAL_PACK_BOOST 30 in the dataforseo
+    // integration). Applied at cache-read time inside getSerpComposition.
+    const aggWeight = sys.scoutAggWeight != null ? parseFloat(sys.scoutAggWeight) : undefined;
+    const localPackBoost =
+      sys.scoutLocalPackBoost != null ? parseFloat(sys.scoutLocalPackBoost) : undefined;
+    const difficultyWeights =
+      aggWeight !== undefined || localPackBoost !== undefined
+        ? { aggregatorWeight: aggWeight, localPackBoost }
+        : undefined;
+    // Benchmark-winnability default override (ADR 0030 Phase 3) — NULL =
+    // DEFAULT_BENCHMARK_WINNABILITY (0.5) in scoring-config.ts.
+    const scoutDefaultBenchmarkWinnability =
+      sys.scoutDefaultBenchmarkWinnability != null
+        ? parseFloat(sys.scoutDefaultBenchmarkWinnability)
+        : undefined;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -311,6 +327,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           ctrAtRank,
           callRate,
           clusterDifficulty,
+          defaultWinnability: scoutDefaultBenchmarkWinnability,
           metroDensityMult: signal.metroDensityMult,
           demandQuality: signal.demandQuality,
           compBlendStrength,
@@ -494,6 +511,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
             keyword: `${cell.trade} ${cell.city.toLowerCase()}`,
             location,
             onCost: refineOnCost,
+            difficultyWeights,
           });
 
           // A fallback composition is a failed lookup returned as a value, not
@@ -554,12 +572,17 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
             ctrAtRank,
             callRate,
             clusterDifficulty: cell.clusterDifficulty,
+            defaultWinnability: scoutDefaultBenchmarkWinnability,
             metroDensityMult: signal.metroDensityMult,
             demandQuality: signal.demandQuality,
             compBlendStrength,
             demandBlendStrength,
             winnabilityOverride: measuredWinnability,
             cityVolumeOverride,
+            // Measured local-pack presence feeds the CTR local-pack multiplier
+            // (ADR 0030 Phase 3). ctrLocalPackMult stays unset (1.0 no-op)
+            // until calibrated — code param only, no knob.
+            hasLocalPack: serp.has_local_pack,
           });
 
           // Snapshot the proxy values once, before the first successful
