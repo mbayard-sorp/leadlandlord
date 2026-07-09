@@ -15,6 +15,8 @@ import { getDb, systemState, getSystemState } from '@leadlandlord/db';
  *   pnpm tsx scripts/set-scout-knobs.ts --benchmark-winnability=0.45
  *   pnpm tsx scripts/set-scout-knobs.ts --proxy-bias-weight=0.5
  *   pnpm tsx scripts/set-scout-knobs.ts --metro-density-smooth=1.0
+ *   pnpm tsx scripts/set-scout-knobs.ts --state-demand-blend=0.5
+ *   pnpm tsx scripts/set-scout-knobs.ts --state-demand-clamp=4.0
  *
  * NULL/unset knobs fall back to the code defaults in
  * packages/agents/src/niche-hunter/scoring-config.ts (and, for the SERP
@@ -37,6 +39,8 @@ async function main() {
   const benchmarkWinnability = arg('benchmark-winnability');
   const proxyBiasWeight = arg('proxy-bias-weight');
   const metroDensitySmooth = arg('metro-density-smooth');
+  const stateDemandBlend = arg('state-demand-blend');
+  const stateDemandClamp = arg('state-demand-clamp');
 
   const current = await getSystemState();
   console.log('Current scout knobs:');
@@ -53,6 +57,8 @@ async function main() {
         scoutDefaultBenchmarkWinnability: current.scoutDefaultBenchmarkWinnability,
         scoutProxyBiasWeight: current.scoutProxyBiasWeight,
         scoutMetroDensitySmooth: current.scoutMetroDensitySmooth,
+        scoutStateDemandBlend: current.scoutStateDemandBlend,
+        scoutStateDemandClamp: current.scoutStateDemandClamp,
       },
       null,
       2,
@@ -82,10 +88,16 @@ async function main() {
   if (metroDensitySmooth !== undefined) {
     patch.scoutMetroDensitySmooth = String(parseFloat(metroDensitySmooth));
   }
+  if (stateDemandBlend !== undefined) {
+    patch.scoutStateDemandBlend = String(parseFloat(stateDemandBlend));
+  }
+  if (stateDemandClamp !== undefined) {
+    patch.scoutStateDemandClamp = String(parseFloat(stateDemandClamp));
+  }
 
   if (Object.keys(patch).length === 0) {
     console.log(
-      '\nNo changes requested (pass --measure-volume / --pop-band-share / --agg-weight / --local-pack-boost / --benchmark-winnability / --proxy-bias-weight / --metro-density-smooth to set).',
+      '\nNo changes requested (pass --measure-volume / --pop-band-share / --agg-weight / --local-pack-boost / --benchmark-winnability / --proxy-bias-weight / --metro-density-smooth / --state-demand-blend / --state-demand-clamp to set).',
     );
     return;
   }
@@ -109,6 +121,8 @@ async function main() {
         scoutDefaultBenchmarkWinnability: row.scoutDefaultBenchmarkWinnability,
         scoutProxyBiasWeight: row.scoutProxyBiasWeight,
         scoutMetroDensitySmooth: row.scoutMetroDensitySmooth,
+        scoutStateDemandBlend: row.scoutStateDemandBlend,
+        scoutStateDemandClamp: row.scoutStateDemandClamp,
       },
       null,
       2,

@@ -1221,6 +1221,17 @@ export const systemState = pgTable('system_state', {
   // >=2M); in between = linear blend. Consumed by computeCityMarketScores
   // (scout geo signal) only — rankCities always uses the step function.
   scoutMetroDensitySmooth: numeric('scout_metro_density_smooth', { precision: 4, scale: 3 }),
+  // State-level demand fold (migration 0065, ADR 0030 S2 / Phase 5). NULL/0 =
+  // the state-demand pass is skipped entirely (zero DataForSEO spend) — the
+  // shipped default. When blend > 0 on a multi-state run, the scout measures
+  // per-(trade, state) demand via getStateKeywordMetrics and multiplies
+  // estMonthlyValueUsd by `1 - blend + blend * stateFit`, where stateFit is
+  // the trade's state volume share over the state's population share.
+  scoutStateDemandBlend: numeric('scout_state_demand_blend', { precision: 4, scale: 3 }),
+  // NULL = code default DEFAULT_STATE_DEMAND_CLAMP (4.0) in
+  // packages/agents/src/niche-hunter/scoring-config.ts — max stateFit
+  // deviation from 1.0 in either direction (fit clamped to [1/clamp, clamp]).
+  scoutStateDemandClamp: numeric('scout_state_demand_clamp', { precision: 4, scale: 2 }),
   // Geographic-targeting + refinement knobs (migration 0045, ADR 0022). NULL =
   // fall back to the defaults in packages/agents/src/niche-hunter/
   // {value-model,scoring-config}.ts. Set via /operator/control.

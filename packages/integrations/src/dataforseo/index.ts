@@ -1,7 +1,8 @@
 import { stableKey, withDataForSeoCache, peekDataForSeoCache } from './cache';
 import { dfsPost } from './client';
+import { dfsStateLocationName } from './location';
 
-export { dfsLocationName, usStateName } from './location';
+export { dfsLocationName, usStateName, dfsStateLocationName } from './location';
 
 /**
  * DataForSEO REST client — keyword/SERP endpoints.
@@ -139,6 +140,51 @@ async function fetchLocalKeywordMetricsFromApi(
       monthly_searches: v?.monthly_searches ?? [],
     };
   });
+}
+
+/**
+ * State-level keyword volume for a trade (ADR 0030 S2). Sums the search
+ * volume of the trade's two canonical seeds (`trade`, `trade near me`) across
+ * the whole state — the scout folds these into a per-state demand fit.
+ *
+ * Cached for 90 days: state-level demand is a stable climate/structure signal
+ * (how much of a trade a state needs barely moves quarter over quarter), so a
+ * long TTL keeps repeat multi-state scouts effectively free.
+ *
+ * Only the summed `{ volume }` shape is cached (not the raw per-keyword rows)
+ * to keep the payload small.
+ */
+export async function getStateKeywordMetrics(args: {
+  trade: string;
+  /** 2-letter US state code (full names pass through unchanged). */
+  state: string;
+  /** Skip cache and re-fetch from DataForSEO. */
+  forceRefresh?: boolean;
+  /** Called with the cold-miss cost in USD (0 on cache hit). */
+  onCost?: (costUsd: number) => void;
+}): Promise<{ volume: number }> {
+  const { trade, state, forceRefresh, onCost } = args;
+  // MOCK_AI: canned state volume so the agents' MOCK path still runs.
+  if (process.env.MOCK_AI === 'true') {
+    return { volume: 400 };
+  }
+  const location = dfsStateLocationName(state);
+  const seeds = [trade, `${trade} near me`];
+  const cacheKey = stableKey(['en', location, trade.toLowerCase()]);
+  const { value, costUsd } = await withDataForSeoCache<{ volume: number }>({
+    endpoint: 'metrics-state',
+    key: cacheKey,
+    ttlDays: 90,
+    // 2 seeds × ~$0.0006 search_volume per keyword.
+    costUsd: 0.0012,
+    forceRefresh,
+    fetcher: async () => {
+      const rows = await fetchLocalKeywordMetricsFromApi(seeds, location, 'en');
+      return { volume: rows.reduce((s, r) => s + r.search_volume, 0) };
+    },
+  });
+  onCost?.(costUsd);
+  return value;
 }
 
 /**

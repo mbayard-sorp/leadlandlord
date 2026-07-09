@@ -123,6 +123,29 @@ export const ScoutReport = z.object({
      */
     proxy_bias_weight_applied: z.number().nullable().default(null),
   }),
+  /**
+   * State-level demand fold summary (ADR 0030 S2 / Phase 5). Null on older
+   * reports. active=true only when the pass actually ran (blend > 0, multi-
+   * state, under sub-budget); otherwise skipped_reason says why. fits is
+   * capped by the scout to the top 100 by |fit − 1| desc to bound jsonb size.
+   */
+  state_demand: z
+    .object({
+      active: z.boolean(),
+      /** 'blend_zero' | 'single_state' | 'over_sub_budget' | null */
+      skipped_reason: z.string().nullable(),
+      spend_usd: z.number(),
+      fits: z.array(
+        z.object({
+          trade: z.string(),
+          state: z.string(),
+          state_fit: z.number(),
+          mult: z.number(),
+        }),
+      ),
+    })
+    .nullable()
+    .default(null),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
 
@@ -226,6 +249,16 @@ export interface BuildScoutReportArgs {
     /** Multiplier applied to proxy cells' scoutScore (ADR 0030 Phase 4); null when knob off. */
     proxy_bias_weight_applied?: number | null;
   };
+  /**
+   * State-level demand fold summary (ADR 0030 S2). Omitted/null = section
+   * absent from the report (older callers / fold not wired).
+   */
+  state_demand?: {
+    active: boolean;
+    skipped_reason: string | null;
+    spend_usd: number;
+    fits: Array<{ trade: string; state: string; state_fit: number; mult: number }>;
+  } | null;
 }
 
 export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
@@ -312,6 +345,7 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
       geo_tiers,
     },
     refinement,
+    state_demand: args.state_demand ?? null,
   });
 }
 

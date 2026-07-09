@@ -192,6 +192,13 @@ export interface ScoutValueArgs {
   hasLocalPack?: boolean;
   /** CTR multiplier applied only when hasLocalPack === true. Default 1.0 (no-op) — code param only until calibrated (ADR 0030). */
   ctrLocalPackMult?: number;
+  /**
+   * State-level demand fold (ADR 0030 S2): `1 - α + α·stateFit`, computed by
+   * the scout from measured per-(trade, state) volume shares vs population
+   * shares. Undefined → 1.0 (no state signal → no effect; output is
+   * bit-identical to the pre-fold formula).
+   */
+  stateDemandMult?: number;
 }
 
 export interface ScoutValue {
@@ -217,6 +224,8 @@ export interface ScoutValue {
   demandMult: number;
   metroDensityMult: number;
   demandQuality: number;
+  /** State-demand fold audit field (ADR 0030 S2); 1.0 when the fold is absent. */
+  stateDemandMult: number;
 }
 
 export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
@@ -270,8 +279,13 @@ export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
   // unset/false → no-op. ctrLocalPackMult defaults to 1.0 until calibrated.
   const effectiveCtr = ctr * (args.hasLocalPack === true ? (args.ctrLocalPackMult ?? 1.0) : 1);
 
+  // State-demand fold (ADR 0030 S2): the scout precomputes `1 - α + α·stateFit`
+  // per (trade, state). Undefined → exactly 1.0, so the output is bit-identical
+  // when the fold is off.
+  const stateDemandMult = args.stateDemandMult ?? 1.0;
+
   const estMonthlyValueUsd = round2(
-    cityVolume * effectiveCtr * winnabilityEff * callRate * leadBenchmarkPrice * demandMult,
+    cityVolume * effectiveCtr * winnabilityEff * callRate * leadBenchmarkPrice * demandMult * stateDemandMult,
   );
   const scoutScore = round2(estMonthlyValueUsd * rentabilityPrior);
 
@@ -295,6 +309,7 @@ export function estimateScoutValue(args: ScoutValueArgs): ScoutValue {
     demandMult,
     metroDensityMult,
     demandQuality,
+    stateDemandMult,
   };
 }
 

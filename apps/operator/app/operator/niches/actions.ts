@@ -66,6 +66,7 @@ export async function runNicheScout(formData: FormData): Promise<ActionResult> {
   const refineTopKRaw = formData.get('refine_top_k');
   const refineBudgetRaw = formData.get('refine_budget_usd');
   const refineMeasureVolumeRaw = formData.get('refine_measure_volume');
+  const stateDemandBlendRaw = formData.get('state_demand_blend');
 
   const rawInput = {
     states,
@@ -76,6 +77,9 @@ export async function runNicheScout(formData: FormData): Promise<ActionResult> {
     ...(refineTopKRaw !== null && refineTopKRaw !== '' ? { refine_top_k: Number(refineTopKRaw) } : {}),
     ...(refineBudgetRaw !== null && refineBudgetRaw !== '' ? { refine_budget_usd: Number(refineBudgetRaw) } : {}),
     ...(refineMeasureVolumeRaw === 'true' ? { refine_measure_volume: true } : {}),
+    ...(stateDemandBlendRaw !== null && stateDemandBlendRaw !== ''
+      ? { state_demand_blend: Number(stateDemandBlendRaw) }
+      : {}),
   };
 
   const parsed = NicheScoutInput.safeParse(rawInput);

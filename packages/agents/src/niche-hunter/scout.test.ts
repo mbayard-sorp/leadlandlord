@@ -71,12 +71,32 @@ vi.mock('@leadlandlord/db', () => ({
 // computeCityMarketScores is imported from the same '/loader' subpath as
 // listCities (ADR 0022 Stage 1). Returns one MarketSignal per city; Gillette is
 // deliberately omitted so the scout's neutral-signal fallback path is exercised.
+// listCities respects the states + population filters so the state-demand pass
+// (ADR 0030 S2) can compute per-state population sums; MT total population is
+// deliberately EQUAL to WY's (124k) so pop shares are exactly 0.5/0.5 on a
+// WY+MT run and the state-fit math is easy to pin.
+const MOCK_CITIES = [
+  { city: 'Casper', state: 'WY', stateName: 'Wyoming', county: 'Natrona', population: 59_000, lat: 0, lng: 0 },
+  { city: 'Laramie', state: 'WY', stateName: 'Wyoming', county: 'Albany', population: 32_000, lat: 0, lng: 0 },
+  { city: 'Gillette', state: 'WY', stateName: 'Wyoming', county: 'Campbell', population: 33_000, lat: 0, lng: 0 },
+  { city: 'Bozeman', state: 'MT', stateName: 'Montana', county: 'Gallatin', population: 56_000, lat: 0, lng: 0 },
+  { city: 'Helena', state: 'MT', stateName: 'Montana', county: 'Lewis and Clark', population: 35_000, lat: 0, lng: 0 },
+  { city: 'Butte', state: 'MT', stateName: 'Montana', county: 'Silver Bow', population: 33_000, lat: 0, lng: 0 },
+];
 vi.mock('@leadlandlord/us-cities/loader', () => ({
-  listCities: vi.fn(() => [
-    { city: 'Casper', state: 'WY', stateName: 'Wyoming', county: 'Natrona', population: 59_000, lat: 0, lng: 0 },
-    { city: 'Laramie', state: 'WY', stateName: 'Wyoming', county: 'Albany', population: 32_000, lat: 0, lng: 0 },
-    { city: 'Gillette', state: 'WY', stateName: 'Wyoming', county: 'Campbell', population: 33_000, lat: 0, lng: 0 },
-  ]),
+  listCities: vi.fn(
+    (opts?: { states?: string[]; populationMin?: number; populationMax?: number }) => {
+      const stateSet = opts?.states?.length
+        ? new Set(opts.states.map((s) => s.toUpperCase()))
+        : null;
+      const min = opts?.populationMin ?? 10_000;
+      const max = opts?.populationMax ?? 100_000;
+      return MOCK_CITIES.filter(
+        (c) =>
+          (!stateSet || stateSet.has(c.state)) && c.population >= min && c.population <= max,
+      );
+    },
+  ),
   computeCityMarketScores: vi.fn(() =>
     new Map<string, { metroDensityMult: number; demandQuality: number; hasCensus: boolean }>([
       ['casper|WY', { metroDensityMult: 1.0, demandQuality: 0.62, hasCensus: true }],
@@ -117,6 +137,16 @@ const refineMock = {
   fallback: false,
   /** true → getSerpComposition throws (B2 failed-refinement path). */
   throwOnSerp: false,
+};
+
+// ── State-demand mock controls (ADR 0030 S2 / Phase 5) ──────────────────────
+// Drives getStateKeywordMetrics deterministically. volumes is keyed
+// `${trade}|${STATE}`; unkeyed pairs resolve defaultVolume. cost is the
+// per-call cost reported via onCost (0 simulates a cache hit).
+const stateMock = {
+  volumes: {} as Record<string, number>,
+  defaultVolume: 0,
+  cost: 0.0012,
 };
 
 vi.mock('@leadlandlord/integrations/dataforseo', () => ({
@@ -179,13 +209,26 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       }));
     },
   ),
+  getStateKeywordMetrics: vi.fn(
+    async (args: { trade: string; state: string; onCost?: (u: number) => void }) => {
+      args.onCost?.(stateMock.cost);
+      return {
+        volume: stateMock.volumes[`${args.trade}|${args.state}`] ?? stateMock.defaultVolume,
+      };
+    },
+  ),
+  dfsStateLocationName: vi.fn((state: string) => `${state},United States`),
 }));
 
 import { NicheScout, NicheScoutInput } from './scout';
 import { ScoutReport } from './scout-report';
 import { isDenylisted } from './denylist';
 import { getSystemState } from '@leadlandlord/db';
-import { getSerpComposition, getLocalKeywordMetrics } from '@leadlandlord/integrations/dataforseo';
+import {
+  getSerpComposition,
+  getLocalKeywordMetrics,
+  getStateKeywordMetrics,
+} from '@leadlandlord/integrations/dataforseo';
 
 const MOCK_CTX: AgentContext = {
   runId: 'run-scout-1',
@@ -222,6 +265,11 @@ beforeEach(() => {
   refineMock.freeKeys = new Set<string>();
   refineMock.fallback = false;
   refineMock.throwOnSerp = false;
+  // Reset state-demand mock controls (ADR 0030 S2).
+  vi.mocked(getStateKeywordMetrics).mockClear();
+  stateMock.volumes = {};
+  stateMock.defaultVolume = 0;
+  stateMock.cost = 0.0012;
 });
 
 describe('NicheScout', () => {
@@ -1072,5 +1120,167 @@ describe('NicheScout', () => {
     for (const c of clusterCandidates) {
       expect(parseFloat(c.winnability as string)).toBeCloseTo(0.9, 3);
     }
+  });
+
+  // ── State-level demand fold (ADR 0030 S2 / Phase 5) ────────────────────────
+  describe('State-demand fold (ADR 0030 S2)', () => {
+    const TARGET_TRADE = 'fence installation';
+
+    const resetPersisted = () => {
+      insertedRuns.length = 0;
+      insertedCandidates.length = 0;
+      statusUpdates.length = 0;
+      vi.mocked(getStateKeywordMetrics).mockClear();
+    };
+
+    type StateDemandReport = {
+      report: {
+        state_demand: {
+          active: boolean;
+          skipped_reason: string | null;
+          spend_usd: number;
+          fits: Array<{ trade: string; state: string; state_fit: number; mult: number }>;
+        } | null;
+      };
+    };
+
+    it('blend 0 (default): getStateKeywordMetrics never called, pass reported as blend_zero', async () => {
+      await runScout({ refine_top_k: 0 });
+      expect(vi.mocked(getStateKeywordMetrics)).not.toHaveBeenCalled();
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand).not.toBeNull();
+      expect(run.report.state_demand!.active).toBe(false);
+      expect(run.report.state_demand!.skipped_reason).toBe('blend_zero');
+      expect(run.report.state_demand!.spend_usd).toBe(0);
+      expect(run.report.state_demand!.fits).toEqual([]);
+    });
+
+    it('single-state run with sys blend 0.5: pass skipped with skipped_reason single_state', async () => {
+      vi.mocked(getSystemState).mockResolvedValueOnce({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: null,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+        scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
+        scoutStateDemandBlend: '0.5',
+      } as Awaited<ReturnType<typeof getSystemState>>);
+      await runScout({ refine_top_k: 0 }); // states default ['WY'] — single state
+      expect(vi.mocked(getStateKeywordMetrics)).not.toHaveBeenCalled();
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.active).toBe(false);
+      expect(run.report.state_demand!.skipped_reason).toBe('single_state');
+    });
+
+    it('two-state run with blend 0.5 scales values by 1 - α + α·fit; zero-volume trades untouched', async () => {
+      // WY and MT have EQUAL mock populations (124k each → pop share 0.5/0.5).
+      // The target trade has 3x per-capita volume in WY (300 vs 100):
+      //   WY: volShare 0.75 / popShare 0.5 → fit 1.5 → mult 1 - 0.5 + 0.5·1.5 = 1.25
+      //   MT: volShare 0.25 / popShare 0.5 → fit 0.5 → mult 0.75
+      // Every other trade has zero state volume → fit 1.0 → mult exactly 1.0.
+      stateMock.volumes = { [`${TARGET_TRADE}|WY`]: 300, [`${TARGET_TRADE}|MT`]: 100 };
+
+      // persist_top 2000 > the full 144-trade x 6-city grid, so EVERY surviving
+      // cell persists in both runs (the default 500 would drop the down-scaled
+      // MT cells off the cut and break the per-key comparison).
+      const RUN_ARGS = { states: ['WY', 'MT'], refine_top_k: 0, persist_top: 2000 } as const;
+
+      // Baseline: identical two-state run with the fold off (default blend 0).
+      await runScout({ ...RUN_ARGS });
+      const baseline = new Map(
+        insertedCandidates.map((c) => [
+          `${c.trade}|${c.city}|${c.state}`,
+          c.estMonthlyValueUsd as string,
+        ]),
+      );
+      resetPersisted();
+
+      await runScout({ ...RUN_ARGS, state_demand_blend: 0.5 });
+      expect(vi.mocked(getStateKeywordMetrics)).toHaveBeenCalled();
+
+      const targetWy = insertedCandidates.filter(
+        (c) => c.trade === TARGET_TRADE && c.state === 'WY',
+      );
+      const targetMt = insertedCandidates.filter(
+        (c) => c.trade === TARGET_TRADE && c.state === 'MT',
+      );
+      expect(targetWy.length).toBeGreaterThan(0);
+      expect(targetMt.length).toBeGreaterThan(0);
+      for (const c of targetWy) {
+        const base = parseFloat(baseline.get(`${c.trade}|${c.city}|${c.state}`)!);
+        expect(parseFloat(c.estMonthlyValueUsd as string)).toBeCloseTo(base * 1.25, 1);
+      }
+      for (const c of targetMt) {
+        const base = parseFloat(baseline.get(`${c.trade}|${c.city}|${c.state}`)!);
+        expect(parseFloat(c.estMonthlyValueUsd as string)).toBeCloseTo(base * 0.75, 1);
+      }
+      // Zero-state-volume trades get mult exactly 1.0 → values byte-identical.
+      const untouched = insertedCandidates.filter(
+        (c) => c.trade !== TARGET_TRADE && baseline.has(`${c.trade}|${c.city}|${c.state}`),
+      );
+      expect(untouched.length).toBeGreaterThan(0);
+      for (const c of untouched) {
+        expect(c.estMonthlyValueUsd).toBe(baseline.get(`${c.trade}|${c.city}|${c.state}`));
+      }
+
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.active).toBe(true);
+      expect(run.report.state_demand!.skipped_reason).toBeNull();
+      expect(run.report.state_demand!.fits.length).toBeGreaterThan(0);
+      // Fits are sorted by |fit − 1| desc, so the deviant target-trade entries
+      // survive the top-100 cap.
+      expect(run.report.state_demand!.fits).toContainEqual({
+        trade: TARGET_TRADE,
+        state: 'WY',
+        state_fit: 1.5,
+        mult: 1.25,
+      });
+      expect(run.report.state_demand!.fits).toContainEqual({
+        trade: TARGET_TRADE,
+        state: 'MT',
+        state_fit: 0.5,
+        mult: 0.75,
+      });
+    });
+
+    it('sub-budget exceeded → whole pass skipped with skipped_reason over_sub_budget', async () => {
+      // The escape-hatch input shrinks the sub-budget below one call's cost, so
+      // the worst-case pre-check trips before any call is issued.
+      await runScout({
+        states: ['WY', 'MT'],
+        refine_top_k: 0,
+        state_demand_blend: 0.5,
+        state_demand_sub_budget_usd: 0.0001,
+      });
+      expect(vi.mocked(getStateKeywordMetrics)).not.toHaveBeenCalled();
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.active).toBe(false);
+      expect(run.report.state_demand!.skipped_reason).toBe('over_sub_budget');
+      expect(run.report.state_demand!.spend_usd).toBe(0);
+    });
+
+    it('dfs_spend_usd includes state-metrics cost (onCost accounting)', async () => {
+      const out = await runScout({
+        states: ['WY', 'MT'],
+        refine_top_k: 0,
+        state_demand_blend: 0.5,
+      });
+      const calls = vi.mocked(getStateKeywordMetrics).mock.calls.length;
+      expect(calls).toBeGreaterThan(0);
+      // Cluster warming costs $0.028 (the one uncached trade); each state
+      // metrics call reports $0.0012 via the shared onCost.
+      expect(out.dfs_spend_usd).toBeCloseTo(0.028 + calls * 0.0012, 4);
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.spend_usd).toBeCloseTo(calls * 0.0012, 4);
+    });
   });
 });

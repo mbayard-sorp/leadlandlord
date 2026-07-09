@@ -155,6 +155,26 @@ export function ScoutForm() {
         Measure local volume during refinement (adds ~$0.001 per cell; empty system default = off).
       </label>
 
+      {/* State-level demand fold (ADR 0030 S2) */}
+      <label className="text-xs text-slate-400 flex flex-col gap-1">
+        State demand blend (0–1)
+        <input
+          name="state_demand_blend"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          max="1"
+          step="0.05"
+          defaultValue=""
+          placeholder="system default"
+          className="rounded bg-slate-950 border border-slate-700 px-2 min-h-[44px] text-sm text-slate-100"
+        />
+        <span className="text-[10px] text-slate-500">
+          Folds measured state-level demand into value on multi-state runs (~$0.001 per trade x
+          state). Empty = system default (off). Set 0 to disable.
+        </span>
+      </label>
+
       <button
         type="submit"
         disabled={pending}

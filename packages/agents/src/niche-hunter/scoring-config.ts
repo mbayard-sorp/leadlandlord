@@ -119,6 +119,27 @@ export const DEFAULT_SCOUT_BELOW_TOPK_SAMPLE_COUNT = 10;
  */
 export const BELOW_TOPK_TIER_MULTIPLIER = 4;
 
+// ── State-level demand fold (ADR 0030 S2 / Phase 5) ─────────────────────────
+
+/**
+ * Max stateFit deviation from 1.0 in either direction: the per-(trade, state)
+ * volume-share / population-share ratio is clamped to [1/clamp, clamp] before
+ * it is blended into estMonthlyValueUsd. Keeps a single noisy Google Ads state
+ * reading from swinging a cell's value by more than 4x even at blend 1.0.
+ * Operator-overridable via system_state.scout_state_demand_clamp.
+ */
+export const DEFAULT_STATE_DEMAND_CLAMP = 4.0;
+
+/**
+ * In-run DataForSEO sub-budget (USD) for the state-demand pass. Worst-case
+ * cold cost is survivingTrades × runStates × $0.0012 (getStateKeywordMetrics);
+ * when that projection exceeds this cap the whole pass is skipped and the
+ * report says so (skipped_reason 'over_sub_budget') — the pass never partially
+ * folds some trades and not others on cost grounds alone. Cache hits are $0,
+ * so warm reruns effectively never trip the actual-spend guard.
+ */
+export const STATE_DEMAND_SUB_BUDGET_USD = 2.0;
+
 // ── Approval-time diversity warning (Phase 5, Niche Algorithm Accuracy plan) ─
 
 /**

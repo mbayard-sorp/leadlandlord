@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { usStateName, dfsLocationName } from './location';
+import { usStateName, dfsLocationName, dfsStateLocationName } from './location';
 
 describe('usStateName', () => {
   it('expands a 2-letter abbreviation to the full state name', () => {
@@ -21,5 +21,15 @@ describe('dfsLocationName', () => {
 
   it('trims surrounding whitespace on city and state', () => {
     expect(dfsLocationName(' Austin ', ' TX ')).toBe('Austin,Texas,United States');
+  });
+});
+
+describe('dfsStateLocationName', () => {
+  it('builds the state-level format: full state, no spaces after commas (ADR 0030 S2)', () => {
+    expect(dfsStateLocationName('AZ')).toBe('Arizona,United States');
+  });
+
+  it('passes through an unknown input unchanged', () => {
+    expect(dfsStateLocationName('Ontario')).toBe('Ontario,United States');
   });
 });
