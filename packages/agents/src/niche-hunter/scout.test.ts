@@ -1192,7 +1192,7 @@ describe('NicheScout', () => {
       // persist_top 2000 > the full 144-trade x 6-city grid, so EVERY surviving
       // cell persists in both runs (the default 500 would drop the down-scaled
       // MT cells off the cut and break the per-key comparison).
-      const RUN_ARGS = { states: ['WY', 'MT'], refine_top_k: 0, persist_top: 2000 } as const;
+      const RUN_ARGS = { states: ['WY', 'MT'], refine_top_k: 0, persist_top: 2000 };
 
       // Baseline: identical two-state run with the fold off (default blend 0).
       await runScout({ ...RUN_ARGS });
