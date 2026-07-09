@@ -71,16 +71,39 @@ vi.mock('@leadlandlord/db', () => ({
 // computeCityMarketScores is imported from the same '/loader' subpath as
 // listCities (ADR 0022 Stage 1). Returns one MarketSignal per city; Gillette is
 // deliberately omitted so the scout's neutral-signal fallback path is exercised.
+// listCities respects the states + population filters so the state-demand pass
+// (ADR 0030 S2) can compute per-state population sums; MT total population is
+// deliberately EQUAL to WY's (124k) so pop shares are exactly 0.5/0.5 on a
+// WY+MT run and the state-fit math is easy to pin.
+const MOCK_CITIES = [
+  { city: 'Casper', state: 'WY', stateName: 'Wyoming', county: 'Natrona', population: 59_000, lat: 0, lng: 0 },
+  { city: 'Laramie', state: 'WY', stateName: 'Wyoming', county: 'Albany', population: 32_000, lat: 0, lng: 0 },
+  { city: 'Gillette', state: 'WY', stateName: 'Wyoming', county: 'Campbell', population: 33_000, lat: 0, lng: 0 },
+  { city: 'Bozeman', state: 'MT', stateName: 'Montana', county: 'Gallatin', population: 56_000, lat: 0, lng: 0 },
+  { city: 'Helena', state: 'MT', stateName: 'Montana', county: 'Lewis and Clark', population: 35_000, lat: 0, lng: 0 },
+  { city: 'Butte', state: 'MT', stateName: 'Montana', county: 'Silver Bow', population: 33_000, lat: 0, lng: 0 },
+];
 vi.mock('@leadlandlord/us-cities/loader', () => ({
-  listCities: vi.fn(() => [
-    { city: 'Casper', state: 'WY', stateName: 'Wyoming', county: 'Natrona', population: 59_000, lat: 0, lng: 0 },
-    { city: 'Laramie', state: 'WY', stateName: 'Wyoming', county: 'Albany', population: 32_000, lat: 0, lng: 0 },
-    { city: 'Gillette', state: 'WY', stateName: 'Wyoming', county: 'Campbell', population: 33_000, lat: 0, lng: 0 },
-  ]),
+  listCities: vi.fn(
+    (opts?: { states?: string[]; populationMin?: number; populationMax?: number }) => {
+      const stateSet = opts?.states?.length
+        ? new Set(opts.states.map((s) => s.toUpperCase()))
+        : null;
+      const min = opts?.populationMin ?? 10_000;
+      const max = opts?.populationMax ?? 100_000;
+      return MOCK_CITIES.filter(
+        (c) =>
+          (!stateSet || stateSet.has(c.state)) && c.population >= min && c.population <= max,
+      );
+    },
+  ),
   computeCityMarketScores: vi.fn(() =>
+    // County-aware keys matching the production city|county|state convention
+    // (ADR 0030 B3) — old city|state keys would silently miss every lookup
+    // and mask the geo-signal branch behind the neutral fallback.
     new Map<string, { metroDensityMult: number; demandQuality: number; hasCensus: boolean }>([
-      ['casper|WY', { metroDensityMult: 1.0, demandQuality: 0.62, hasCensus: true }],
-      ['laramie|WY', { metroDensityMult: 1.0, demandQuality: 0.55, hasCensus: true }],
+      ['casper|natrona|WY', { metroDensityMult: 1.0, demandQuality: 0.62, hasCensus: true }],
+      ['laramie|albany|WY', { metroDensityMult: 1.0, demandQuality: 0.55, hasCensus: true }],
       // Gillette intentionally absent → scout uses the neutral fallback signal.
     ]),
   ),
@@ -113,6 +136,20 @@ const refineMock = {
   metricsVolume: 500,
   metricsCost: 0.0012,
   freeKeys: new Set<string>(),
+  /** true → getSerpComposition returns a degraded fallback composition (B1). */
+  fallback: false,
+  /** true → getSerpComposition throws (B2 failed-refinement path). */
+  throwOnSerp: false,
+};
+
+// ── State-demand mock controls (ADR 0030 S2 / Phase 5) ──────────────────────
+// Drives getStateKeywordMetrics deterministically. volumes is keyed
+// `${trade}|${STATE}`; unkeyed pairs resolve defaultVolume. cost is the
+// per-call cost reported via onCost (0 simulates a cache hit).
+const stateMock = {
+  volumes: {} as Record<string, number>,
+  defaultVolume: 0,
+  cost: 0.0012,
 };
 
 vi.mock('@leadlandlord/integrations/dataforseo', () => ({
@@ -137,8 +174,21 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
   }),
   dfsLocationName: vi.fn((city: string, state: string) => `${city},${state},United States`),
   getSerpComposition: vi.fn(async (args: { keyword: string; onCost?: (u: number) => void }) => {
+    if (refineMock.throwOnSerp) throw new Error('mock SERP failure');
     const cost = refineMock.freeKeys.has(args.keyword) ? 0 : refineMock.serpCost;
     args.onCost?.(cost);
+    if (refineMock.fallback) {
+      return {
+        aggregator_share: 0,
+        organic_count: 0,
+        has_local_pack: false,
+        local_pack_count: 0,
+        top_domains: [],
+        top_local: [],
+        difficulty: 50,
+        fallback: true,
+      };
+    }
     return {
       aggregator_share: refineMock.aggregatorShare,
       organic_count: 10,
@@ -147,6 +197,7 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       top_domains: [],
       top_local: [],
       difficulty: refineMock.serpDifficulty,
+      fallback: false,
     };
   }),
   getLocalKeywordMetrics: vi.fn(
@@ -161,12 +212,26 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       }));
     },
   ),
+  getStateKeywordMetrics: vi.fn(
+    async (args: { trade: string; state: string; onCost?: (u: number) => void }) => {
+      args.onCost?.(stateMock.cost);
+      return {
+        volume: stateMock.volumes[`${args.trade}|${args.state}`] ?? stateMock.defaultVolume,
+      };
+    },
+  ),
+  dfsStateLocationName: vi.fn((state: string) => `${state},United States`),
 }));
 
 import { NicheScout, NicheScoutInput } from './scout';
+import { ScoutReport } from './scout-report';
 import { isDenylisted } from './denylist';
 import { getSystemState } from '@leadlandlord/db';
-import { getSerpComposition, getLocalKeywordMetrics } from '@leadlandlord/integrations/dataforseo';
+import {
+  getSerpComposition,
+  getLocalKeywordMetrics,
+  getStateKeywordMetrics,
+} from '@leadlandlord/integrations/dataforseo';
 
 const MOCK_CTX: AgentContext = {
   runId: 'run-scout-1',
@@ -201,9 +266,30 @@ beforeEach(() => {
   refineMock.metricsVolume = 500;
   refineMock.metricsCost = 0.0012;
   refineMock.freeKeys = new Set<string>();
+  refineMock.fallback = false;
+  refineMock.throwOnSerp = false;
+  // Reset state-demand mock controls (ADR 0030 S2).
+  vi.mocked(getStateKeywordMetrics).mockClear();
+  stateMock.volumes = {};
+  stateMock.defaultVolume = 0;
+  stateMock.cost = 0.0012;
 });
 
 describe('NicheScout', () => {
+  it('geo market signal reaches persisted cells via the county-aware key (ADR 0030 B3)', async () => {
+    // Guards the city|county|state key contract between computeCityMarketScores
+    // and the scout's lookups: if either side drifts, every cell silently falls
+    // back to NEUTRAL_SIGNAL (demandQuality 1.0) and this assertion fails.
+    await runScout({ refine_top_k: 0 });
+    const casper = insertedCandidates.filter((c) => c.city === 'Casper');
+    const gillette = insertedCandidates.filter((c) => c.city === 'Gillette');
+    expect(casper.length).toBeGreaterThan(0);
+    expect(gillette.length).toBeGreaterThan(0);
+    // Casper is mocked at demandQuality 0.62; Gillette is absent → neutral 1.0.
+    expect(casper.every((c) => parseFloat(c.demandQuality as string) === 0.62)).toBe(true);
+    expect(gillette.every((c) => parseFloat(c.demandQuality as string) === 1.0)).toBe(true);
+  });
+
   it('scores the grid, ranks deterministically, and persists run + candidates', async () => {
     const out = await runScout();
     expect(insertedRuns).toHaveLength(1);
@@ -396,6 +482,45 @@ describe('NicheScout', () => {
 
   // ── Stage-3 local-SERP refinement (ADR 0022 §5) ───────────────────────────
   describe('Stage-3 refinement', () => {
+    it('fallback composition → cell stays proxy, not counted refined, reported (B1, ADR 0030)', async () => {
+      refineMock.fallback = true;
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(3);
+      expect(out.refined_count).toBe(0);
+      // Fallback compositions must never be stamped onto cells as measurements.
+      expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
+      expect(insertedCandidates.every((c) => c.localSerpDifficulty === null)).toBe(true);
+      const run = insertedRuns[0]! as {
+        report: { refinement: { refined_count: number; refine_fallback_count: number; refine_failed_count: number } };
+      };
+      expect(run.report.refinement.refined_count).toBe(0);
+      expect(run.report.refinement.refine_fallback_count).toBe(3);
+      expect(run.report.refinement.refine_failed_count).toBe(0);
+    });
+
+    it('thrown SERP error → cell stays proxy, not counted refined (B2 regression)', async () => {
+      refineMock.throwOnSerp = true;
+      const out = await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(out.refined_count).toBe(0);
+      expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
+      const run = insertedRuns[0]! as {
+        report: { refinement: { refined_count: number; refine_fallback_count: number; refine_failed_count: number } };
+      };
+      expect(run.report.refinement.refined_count).toBe(0);
+      expect(run.report.refinement.refine_failed_count).toBe(2);
+      expect(run.report.refinement.refine_fallback_count).toBe(0);
+    });
+
     it('refine_top_k=0 explicitly → no refinement, all cells proxy', async () => {
       // DEFAULT_SCOUT_REFINE_TOP_K is now 25 (ADR 0024 on-by-default). Pass 0
       // explicitly to exercise the no-refinement path.
@@ -409,10 +534,10 @@ describe('NicheScout', () => {
       expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
     });
 
-    it('default run (refine_top_k unset) refines the top 25 cells via local SERP (ADR 0024)', async () => {
-      // With DEFAULT_SCOUT_REFINE_TOP_K=25 and DEFAULT_SCOUT_REFINE_BUDGET_USD=$3.00,
-      // the default run issues SERP calls capped by the budget. At $0.075/call,
-      // the budget allows up to 40 cold calls — so all 25 cells refine.
+    it('default run (refine_top_k unset) refines the top cells via local SERP (ADR 0024/0030)', async () => {
+      // With DEFAULT_SCOUT_REFINE_TOP_K=50 and DEFAULT_SCOUT_REFINE_BUDGET_USD=$5.00,
+      // the default run issues SERP calls capped by the budget (~66 cold at
+      // $0.075/call); the ensure-measured pass may add more.
       const out = await runScout();
       expect(out.refined_count).toBeGreaterThan(0);
       expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
@@ -425,10 +550,15 @@ describe('NicheScout', () => {
     it('refine_top_k=N with generous budget refines top-N, re-ranks, persists measured fields', async () => {
       refineMock.serpDifficulty = 30; // winnability_local = 0.70
       const N = 3;
-      // refine_below_topk_sample_count=0: isolate the top-K behavior from the
-      // below-top-K sampling pass (Phase 5), which would otherwise also
-      // consume the generous $100 budget in this test.
-      const out = await runScout({ refine_top_k: N, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      // refine_below_topk_sample_count=0 / ensure_measured_passes=0: isolate
+      // the top-K behavior from the sampling + ensure-measured passes, which
+      // would otherwise also consume the generous $100 budget in this test.
+      const out = await runScout({
+        refine_top_k: N,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
       expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(N);
       expect(out.refined_count).toBe(N);
       expect(out.refine_spend_usd).toBeCloseTo(N * 0.075, 4);
@@ -462,6 +592,7 @@ describe('NicheScout', () => {
         refine_budget_usd: 100,
         refine_measure_volume: true,
         refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
       });
       expect(vi.mocked(getLocalKeywordMetrics)).toHaveBeenCalledTimes(2);
       expect(out.refined_count).toBe(2);
@@ -540,13 +671,195 @@ describe('NicheScout', () => {
       // The grid never produces duplicates, so the guard is exercised indirectly:
       // with refine_top_k larger than the unique cell count, each unique cell is
       // refined exactly once (no double calls). refine_below_topk_sample_count=0
-      // isolates this from the below-top-K sampling pass (Phase 5).
-      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      // + ensure_measured_passes=0 isolate this from the other refine passes.
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
       const issuedKeys = vi
         .mocked(getSerpComposition)
         .mock.calls.map((c) => (c[0] as { keyword: string }).keyword);
       expect(new Set(issuedKeys).size).toBe(issuedKeys.length);
       expect(out.refined_count).toBe(issuedKeys.length);
+    });
+  });
+
+  // ── Ensure-measured-above-the-cliff + proxy persistence (ADR 0030) ────────
+  describe('Ensure-measured recommendation (ADR 0030 S1)', () => {
+    it('measures every proxy cell inside the value-cliff recommendation', async () => {
+      // Tiny top-K leaves the recommendation full of proxy cells; the ensure
+      // pass must sweep them so the operator is never told to validate an
+      // unmeasured cell when budget allows.
+      const out = await runScout({
+        refine_top_k: 1,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+      });
+      const run = insertedRuns[0]! as {
+        report: {
+          recommendation: { n: number };
+          refinement: {
+            ensure_measured_extra_count: number;
+            recommendation_fully_measured: boolean;
+          };
+        };
+      };
+      expect(run.report.refinement.recommendation_fully_measured).toBe(true);
+      expect(run.report.refinement.ensure_measured_extra_count).toBeGreaterThan(0);
+      // ensure-loop refinements are counted separately, never as refined/sampled
+      expect(out.refined_count).toBe(1);
+      expect(out.sampled_count).toBe(0);
+      // Every persisted candidate inside the recommendation is measured.
+      const topN = insertedCandidates.slice(0, run.report.recommendation.n);
+      expect(topN.every((c) => c.refinementSource === 'local_serp')).toBe(true);
+    });
+
+    it('recommendation_fully_measured=false when refinement is disabled', async () => {
+      await runScout({ refine_top_k: 0 });
+      const run = insertedRuns[0]! as {
+        report: { refinement: { recommendation_fully_measured: boolean } };
+      };
+      expect(run.report.refinement.recommendation_fully_measured).toBe(false);
+    });
+
+    it('persists pre-refinement proxy snapshots on refined cells only', async () => {
+      const out = await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(out.refined_count).toBe(2);
+      const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
+      const proxies = insertedCandidates.filter((c) => c.refinementSource === 'proxy');
+      expect(refined.length).toBe(2);
+      for (const c of refined) {
+        expect(c.proxyEstMonthlyValueUsd).not.toBeNull();
+        expect(c.proxyWinnability).not.toBeNull();
+        // Proxy winnability comes from cluster kd=10 → 0.90; measured is 0.70.
+        expect(parseFloat(c.proxyWinnability as string)).toBeCloseTo(0.9, 3);
+        expect(parseFloat(c.winnability as string)).toBeCloseTo(0.7, 3);
+      }
+      expect(proxies.every((c) => c.proxyEstMonthlyValueUsd === null)).toBe(true);
+      expect(proxies.every((c) => c.proxyWinnability === null)).toBe(true);
+    });
+
+    it('reports the in-run proxy-bias summary over refined cells', async () => {
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(out.refined_count).toBe(3);
+      const run = insertedRuns[0]! as {
+        report: {
+          refinement: { proxy_bias: { n: number; median_ratio: number; mean_ratio: number } | null };
+        };
+      };
+      const bias = run.report.refinement.proxy_bias;
+      expect(bias).not.toBeNull();
+      expect(bias!.n).toBe(3);
+      // Measured winnability 0.70 vs proxy 0.90 → every ratio ≈ 0.70/0.90.
+      expect(bias!.median_ratio).toBeCloseTo(0.7 / 0.9, 2);
+      expect(bias!.mean_ratio).toBeCloseTo(0.7 / 0.9, 2);
+    });
+
+    it('proxy_bias is null when nothing was refined', async () => {
+      await runScout({ refine_top_k: 0 });
+      const run = insertedRuns[0]! as {
+        report: { refinement: { proxy_bias: unknown } };
+      };
+      expect(run.report.refinement.proxy_bias).toBeNull();
+    });
+  });
+
+  // ── Proxy-bias apply (ADR 0030 Phase 4) ────────────────────────────────────
+  describe('Proxy-bias apply (ADR 0030 Phase 4)', () => {
+    // Isolated refine args so only the deterministic top-K pass runs.
+    const REFINE_ARGS = {
+      refine_top_k: 3,
+      refine_budget_usd: 100,
+      refine_below_topk_sample_count: 0,
+      ensure_measured_passes: 0,
+    } as const;
+
+    const resetPersisted = () => {
+      insertedRuns.length = 0;
+      insertedCandidates.length = 0;
+      statusUpdates.length = 0;
+      vi.mocked(getSerpComposition).mockClear();
+    };
+
+    const biasKnobState = (weight: string | null) =>
+      ({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: null,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+        scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
+        scoutProxyBiasWeight: weight,
+      }) as Awaited<ReturnType<typeof getSystemState>>;
+
+    it('weight null/0 → ranking identical to baseline and proxy_bias_weight_applied null', async () => {
+      // Baseline: shared mock leaves scoutProxyBiasWeight null (weight 0).
+      await runScout(REFINE_ARGS);
+      const baselineKeys = insertedCandidates.map((c) => `${c.trade}|${c.city}`);
+      const baseline = insertedRuns[0]! as {
+        report: { refinement: { proxy_bias_weight_applied: number | null } };
+      };
+      expect(baseline.report.refinement.proxy_bias_weight_applied).toBeNull();
+
+      resetPersisted();
+      vi.mocked(getSystemState).mockResolvedValueOnce(biasKnobState('0'));
+      await runScout(REFINE_ARGS);
+
+      expect(insertedCandidates.map((c) => `${c.trade}|${c.city}`)).toEqual(baselineKeys);
+      const run = insertedRuns[0]! as {
+        report: { refinement: { proxy_bias_weight_applied: number | null } };
+      };
+      expect(run.report.refinement.proxy_bias_weight_applied).toBeNull();
+    });
+
+    it('weight 1.0 applies the clamped median ratio to proxy scores; dollar values untouched', async () => {
+      // Baseline run captures each cell's persisted estMonthlyValueUsd.
+      await runScout(REFINE_ARGS);
+      const baselineValues = new Map(
+        insertedCandidates.map((c) => [`${c.trade}|${c.city}`, c.estMonthlyValueUsd]),
+      );
+
+      resetPersisted();
+      vi.mocked(getSystemState).mockResolvedValueOnce(biasKnobState('1.0'));
+      await runScout(REFINE_ARGS);
+
+      const run = insertedRuns[0]! as {
+        report: ScoutReport & {
+          refinement: { proxy_bias_weight_applied: number | null };
+        };
+      };
+      // Measured winnability 0.70 vs proxy 0.90 → median_ratio ≈ 0.7778, inside
+      // the [0.25, 1.5] clamp; w=1 → biasFactor = median_ratio.
+      expect(run.report.refinement.proxy_bias_weight_applied).toBeCloseTo(0.7 / 0.9, 2);
+      // The persisted report round-trips through the zod schema.
+      expect(() => ScoutReport.parse(run.report)).not.toThrow();
+      // Bias only re-ranks via scoutScore — every persisted cell's
+      // estMonthlyValueUsd is byte-identical to the baseline run's.
+      expect(insertedCandidates.length).toBe(baselineValues.size);
+      for (const c of insertedCandidates) {
+        expect(c.estMonthlyValueUsd).toBe(baselineValues.get(`${c.trade}|${c.city}`));
+      }
     });
   });
 
@@ -623,6 +936,7 @@ describe('NicheScout', () => {
         refine_top_k: 3,
         refine_budget_usd: 100,
         refine_below_topk_sample_count: 5,
+        ensure_measured_passes: 0,
       });
       const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
       // 3 top-K + 5 sampled = 8 distinct refined cells (no double-refinement).
@@ -650,6 +964,60 @@ describe('NicheScout', () => {
       } as Awaited<ReturnType<typeof getSystemState>>);
       const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100 });
       expect(out.sampled_count).toBe(2);
+    });
+  });
+
+  // ── SERP difficulty weights (ADR 0030 Phase 3) ─────────────────────────────
+  describe('SERP difficulty weights (ADR 0030 Phase 3)', () => {
+    it('forwards system_state scout_agg_weight to getSerpComposition as difficultyWeights', async () => {
+      vi.mocked(getSystemState).mockResolvedValueOnce({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: null,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+        scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
+        scoutAggWeight: '55', // numeric columns come back as strings
+        scoutLocalPackBoost: null,
+        scoutDefaultBenchmarkWinnability: null,
+      } as Awaited<ReturnType<typeof getSystemState>>);
+      await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
+      for (const [args] of vi.mocked(getSerpComposition).mock.calls) {
+        expect(
+          (args as { difficultyWeights?: { aggregatorWeight?: number; localPackBoost?: number } })
+            .difficultyWeights,
+        ).toEqual({ aggregatorWeight: 55, localPackBoost: undefined });
+      }
+    });
+
+    it('all-null knobs → difficultyWeights is undefined (code defaults)', async () => {
+      // Default shared mock returns every knob null.
+      await runScout({
+        refine_top_k: 1,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
+      const [args] = vi.mocked(getSerpComposition).mock.calls[0]!;
+      expect(
+        (args as { difficultyWeights?: unknown }).difficultyWeights,
+      ).toBeUndefined();
     });
   });
 
@@ -769,5 +1137,167 @@ describe('NicheScout', () => {
     for (const c of clusterCandidates) {
       expect(parseFloat(c.winnability as string)).toBeCloseTo(0.9, 3);
     }
+  });
+
+  // ── State-level demand fold (ADR 0030 S2 / Phase 5) ────────────────────────
+  describe('State-demand fold (ADR 0030 S2)', () => {
+    const TARGET_TRADE = 'fence installation';
+
+    const resetPersisted = () => {
+      insertedRuns.length = 0;
+      insertedCandidates.length = 0;
+      statusUpdates.length = 0;
+      vi.mocked(getStateKeywordMetrics).mockClear();
+    };
+
+    type StateDemandReport = {
+      report: {
+        state_demand: {
+          active: boolean;
+          skipped_reason: string | null;
+          spend_usd: number;
+          fits: Array<{ trade: string; state: string; state_fit: number; mult: number }>;
+        } | null;
+      };
+    };
+
+    it('blend 0 (default): getStateKeywordMetrics never called, pass reported as blend_zero', async () => {
+      await runScout({ refine_top_k: 0 });
+      expect(vi.mocked(getStateKeywordMetrics)).not.toHaveBeenCalled();
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand).not.toBeNull();
+      expect(run.report.state_demand!.active).toBe(false);
+      expect(run.report.state_demand!.skipped_reason).toBe('blend_zero');
+      expect(run.report.state_demand!.spend_usd).toBe(0);
+      expect(run.report.state_demand!.fits).toEqual([]);
+    });
+
+    it('single-state run with sys blend 0.5: pass skipped with skipped_reason single_state', async () => {
+      vi.mocked(getSystemState).mockResolvedValueOnce({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: null,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+        scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
+        scoutStateDemandBlend: '0.5',
+      } as Awaited<ReturnType<typeof getSystemState>>);
+      await runScout({ refine_top_k: 0 }); // states default ['WY'] — single state
+      expect(vi.mocked(getStateKeywordMetrics)).not.toHaveBeenCalled();
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.active).toBe(false);
+      expect(run.report.state_demand!.skipped_reason).toBe('single_state');
+    });
+
+    it('two-state run with blend 0.5 scales values by 1 - α + α·fit; zero-volume trades untouched', async () => {
+      // WY and MT have EQUAL mock populations (124k each → pop share 0.5/0.5).
+      // The target trade has 3x per-capita volume in WY (300 vs 100):
+      //   WY: volShare 0.75 / popShare 0.5 → fit 1.5 → mult 1 - 0.5 + 0.5·1.5 = 1.25
+      //   MT: volShare 0.25 / popShare 0.5 → fit 0.5 → mult 0.75
+      // Every other trade has zero state volume → fit 1.0 → mult exactly 1.0.
+      stateMock.volumes = { [`${TARGET_TRADE}|WY`]: 300, [`${TARGET_TRADE}|MT`]: 100 };
+
+      // persist_top 2000 > the full 144-trade x 6-city grid, so EVERY surviving
+      // cell persists in both runs (the default 500 would drop the down-scaled
+      // MT cells off the cut and break the per-key comparison).
+      const RUN_ARGS = { states: ['WY', 'MT'], refine_top_k: 0, persist_top: 2000 };
+
+      // Baseline: identical two-state run with the fold off (default blend 0).
+      await runScout({ ...RUN_ARGS });
+      const baseline = new Map(
+        insertedCandidates.map((c) => [
+          `${c.trade}|${c.city}|${c.state}`,
+          c.estMonthlyValueUsd as string,
+        ]),
+      );
+      resetPersisted();
+
+      await runScout({ ...RUN_ARGS, state_demand_blend: 0.5 });
+      expect(vi.mocked(getStateKeywordMetrics)).toHaveBeenCalled();
+
+      const targetWy = insertedCandidates.filter(
+        (c) => c.trade === TARGET_TRADE && c.state === 'WY',
+      );
+      const targetMt = insertedCandidates.filter(
+        (c) => c.trade === TARGET_TRADE && c.state === 'MT',
+      );
+      expect(targetWy.length).toBeGreaterThan(0);
+      expect(targetMt.length).toBeGreaterThan(0);
+      for (const c of targetWy) {
+        const base = parseFloat(baseline.get(`${c.trade}|${c.city}|${c.state}`)!);
+        expect(parseFloat(c.estMonthlyValueUsd as string)).toBeCloseTo(base * 1.25, 1);
+      }
+      for (const c of targetMt) {
+        const base = parseFloat(baseline.get(`${c.trade}|${c.city}|${c.state}`)!);
+        expect(parseFloat(c.estMonthlyValueUsd as string)).toBeCloseTo(base * 0.75, 1);
+      }
+      // Zero-state-volume trades get mult exactly 1.0 → values byte-identical.
+      const untouched = insertedCandidates.filter(
+        (c) => c.trade !== TARGET_TRADE && baseline.has(`${c.trade}|${c.city}|${c.state}`),
+      );
+      expect(untouched.length).toBeGreaterThan(0);
+      for (const c of untouched) {
+        expect(c.estMonthlyValueUsd).toBe(baseline.get(`${c.trade}|${c.city}|${c.state}`));
+      }
+
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.active).toBe(true);
+      expect(run.report.state_demand!.skipped_reason).toBeNull();
+      expect(run.report.state_demand!.fits.length).toBeGreaterThan(0);
+      // Fits are sorted by |fit − 1| desc, so the deviant target-trade entries
+      // survive the top-100 cap.
+      expect(run.report.state_demand!.fits).toContainEqual({
+        trade: TARGET_TRADE,
+        state: 'WY',
+        state_fit: 1.5,
+        mult: 1.25,
+      });
+      expect(run.report.state_demand!.fits).toContainEqual({
+        trade: TARGET_TRADE,
+        state: 'MT',
+        state_fit: 0.5,
+        mult: 0.75,
+      });
+    });
+
+    it('sub-budget exceeded → whole pass skipped with skipped_reason over_sub_budget', async () => {
+      // The escape-hatch input shrinks the sub-budget below one call's cost, so
+      // the worst-case pre-check trips before any call is issued.
+      await runScout({
+        states: ['WY', 'MT'],
+        refine_top_k: 0,
+        state_demand_blend: 0.5,
+        state_demand_sub_budget_usd: 0.0001,
+      });
+      expect(vi.mocked(getStateKeywordMetrics)).not.toHaveBeenCalled();
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.active).toBe(false);
+      expect(run.report.state_demand!.skipped_reason).toBe('over_sub_budget');
+      expect(run.report.state_demand!.spend_usd).toBe(0);
+    });
+
+    it('dfs_spend_usd includes state-metrics cost (onCost accounting)', async () => {
+      const out = await runScout({
+        states: ['WY', 'MT'],
+        refine_top_k: 0,
+        state_demand_blend: 0.5,
+      });
+      const calls = vi.mocked(getStateKeywordMetrics).mock.calls.length;
+      expect(calls).toBeGreaterThan(0);
+      // Cluster warming costs $0.028 (the one uncached trade); each state
+      // metrics call reports $0.0012 via the shared onCost.
+      expect(out.dfs_spend_usd).toBeCloseTo(0.028 + calls * 0.0012, 4);
+      const run = insertedRuns[0]! as StateDemandReport;
+      expect(run.report.state_demand!.spend_usd).toBeCloseTo(calls * 0.0012, 4);
+    });
   });
 });

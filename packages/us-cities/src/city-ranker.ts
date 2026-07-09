@@ -47,6 +47,13 @@ export interface ComputeCityMarketScoresOpts {
   states?: string[];
   populationMin?: number;
   populationMax?: number;
+  /**
+   * Metro-density smoothing blend 0..1 (ADR 0030 M2). 0/omitted = pure step
+   * function (bit-identical to historical behavior); 1 = fully smooth log
+   * interpolation between the step plateaus; in between = linear blend of the
+   * two. Scout-only knob — rankCities always uses the pure step function.
+   */
+  smoothMetroDensity?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,18 +168,50 @@ function nearbyPopulation(
   return total;
 }
 
+/** Step-function S6 multiplier from a cumulative nearby-pop total (ADR 0008). */
+function metroDensityStep(nearbyPop: number): number {
+  if (nearbyPop < 250_000) return 1.0;
+  if (nearbyPop < 500_000) return 0.7;
+  if (nearbyPop < 1_000_000) return 0.4;
+  return 0.15;
+}
+
 /**
  * S6 metro density multiplier based on cumulative nearby population within 50 km.
+ * Pure step function — rankCities (ADR 0008) always uses this variant.
  */
 function getMetroDensityMultiplier(
   candidate: UsCityEnriched,
   gridBuckets: GridBuckets,
 ): number {
+  return metroDensityStep(nearbyPopulation(candidate, gridBuckets));
+}
+
+/**
+ * Smooth S6 variant (ADR 0030 M2): log-interpolation whose endpoints match
+ * the step function's plateaus — 1.0 at/below 250k nearby pop, 0.15 at/above
+ * 2M, log10-linear in between. Removes the step function's cliff edges (a
+ * 499k vs 501k neighborhood no longer flips 0.7 → 0.4).
+ */
+export function getMetroDensityMultiplierSmooth(nearbyPop: number): number {
+  return 1 - 0.85 * normClamp(Math.log10(nearbyPop), Math.log10(250_000), Math.log10(2_000_000));
+}
+
+/**
+ * Blended S6 multiplier (ADR 0030 M2): `(1 - s)·step + s·smooth` over the same
+ * nearbyPopulation. s=0 → bit-identical to the step function; s=1 → fully
+ * smooth. Used ONLY by computeCityMarketScores (the scout geo signal) —
+ * rankCities keeps the pure step function by construction (no opt threads in).
+ */
+function getMetroDensityMultiplierBlended(
+  candidate: UsCityEnriched,
+  gridBuckets: GridBuckets,
+  smooth: number,
+): number {
   const pop = nearbyPopulation(candidate, gridBuckets);
-  if (pop < 250_000) return 1.0;
-  if (pop < 500_000) return 0.7;
-  if (pop < 1_000_000) return 0.4;
-  return 0.15;
+  const s = Math.max(0, Math.min(1, smooth));
+  if (s <= 0) return metroDensityStep(pop);
+  return (1 - s) * metroDensityStep(pop) + s * getMetroDensityMultiplierSmooth(pop);
 }
 
 /**
@@ -321,13 +360,15 @@ export function rankCities(opts: RankCitiesOpts = {}): RankedCity[] {
  * metro mass from large out-of-band cities still suppresses metroDensityMult
  * for nearby in-band candidates — same pattern as rankCities.
  *
- * Map key: `${city.toLowerCase()}|${state.toUpperCase()}` — matches the
- * existingCombos key convention in the scout.
+ * Map key: `${city.toLowerCase()}|${county.toLowerCase()}|${state.toUpperCase()}`.
+ * County is part of the key because duplicate city names within one state are
+ * real (Franklin, Springfield, ...) — a city|state key silently overwrites one
+ * sibling's signal with the other's (ADR 0030 B3).
  */
 export function computeCityMarketScores(
   opts: ComputeCityMarketScoresOpts = {},
 ): Map<string, MarketSignal> {
-  const { states, populationMin, populationMax } = opts;
+  const { states, populationMin, populationMax, smoothMetroDensity = 0 } = opts;
 
   // Build the spatial index over ALL cities (unfiltered, all states) so cross-
   // state metro mass still counts toward nearby population. The state filter is
@@ -354,14 +395,14 @@ export function computeCityMarketScores(
       0.4 * subscoreWealth(c) +
       0.2 * subscoreHousingUnits(c);
 
-    const metroDensityMult = getMetroDensityMultiplier(c, gridBuckets);
+    const metroDensityMult = getMetroDensityMultiplierBlended(c, gridBuckets, smoothMetroDensity);
 
     const hasCensus =
       c.ownerOccupiedPct !== undefined &&
       c.medianIncome !== undefined &&
       c.medianHomeValue !== undefined;
 
-    out.set(`${c.city.toLowerCase()}|${c.state.toUpperCase()}`, {
+    out.set(`${c.city.toLowerCase()}|${c.county.toLowerCase()}|${c.state.toUpperCase()}`, {
       metroDensityMult,
       demandQuality,
       hasCensus,

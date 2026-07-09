@@ -1,8 +1,10 @@
 import { z } from 'zod';
-import { eq, and, gte, lte } from 'drizzle-orm';
+import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import {
   getDb,
   sites,
+  niches,
+  nicheCandidates,
   seoMetricsDaily,
   portfolioSnapshots,
   nicheOutcomeSnapshots,
@@ -228,6 +230,32 @@ export class NicheCalibrator extends BaseAgent<typeof NicheCalibratorInput, type
     const callsInWeek = callsRows.reduce((sum, r) => sum + r.callsCount, 0);
     const observedCallRate = computeObservedCallRate(callsInWeek, agg.moneyKwClicks);
 
+    // Measured local-pack presence for the niche (ADR 0030 Phase 4): primary
+    // source is the validation-time SERP composition in niches.dfs_raw;
+    // fallback is the promoted scout candidate's measured has_local_pack
+    // column (left-joined — one extra query total). Null when neither source
+    // knows: "unknown" must never read as "no local pack".
+    let hasLocalPack: boolean | null = null;
+    if (siteRow.nicheId) {
+      const [nicheRow] = await db
+        .select({ dfsRaw: niches.dfsRaw, candidateHasLocalPack: nicheCandidates.hasLocalPack })
+        .from(niches)
+        .leftJoin(nicheCandidates, eq(nicheCandidates.nicheId, niches.id))
+        .where(eq(niches.id, siteRow.nicheId))
+        // A niche re-surfaced across scout runs has several candidate rows
+        // sharing its nicheId — without an ORDER BY, limit(1) picks one
+        // arbitrarily and the stamped flag could flip run to run. Newest wins.
+        .orderBy(desc(nicheCandidates.createdAt))
+        .limit(1);
+      const serpComposition = (
+        nicheRow?.dfsRaw as { serpComposition?: { has_local_pack?: boolean } } | null | undefined
+      )?.serpComposition;
+      hasLocalPack =
+        typeof serpComposition?.has_local_pack === 'boolean'
+          ? serpComposition.has_local_pack
+          : nicheRow?.candidateHasLocalPack ?? null;
+    }
+
     const values = {
       siteId: input.site_id,
       nicheId: siteRow.nicheId ?? null,
@@ -240,6 +268,7 @@ export class NicheCalibrator extends BaseAgent<typeof NicheCalibratorInput, type
       moneyKwClicks: agg.moneyKwClicks,
       observedCtr: agg.observedCtr !== null ? agg.observedCtr.toFixed(4) : null,
       observedCallRate: observedCallRate !== null ? observedCallRate.toFixed(4) : null,
+      hasLocalPack,
     };
 
     await db
@@ -257,6 +286,7 @@ export class NicheCalibrator extends BaseAgent<typeof NicheCalibratorInput, type
           moneyKwClicks: values.moneyKwClicks,
           observedCtr: values.observedCtr,
           observedCallRate: values.observedCallRate,
+          hasLocalPack: values.hasLocalPack,
         },
       });
 

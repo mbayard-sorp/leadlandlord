@@ -102,20 +102,26 @@ interface FakeSite {
 let nextSite: FakeSite | undefined;
 let gscRows: Array<{ query: string; clicks: number; impressions: number; position: string }> = [];
 let portfolioRows: Array<{ callsCount: number }> = [];
+let nicheJoinRows: Array<{ dfsRaw: unknown; candidateHasLocalPack: boolean | null }> = [];
 const insertCalls: Array<{ table: string; values: unknown }> = [];
 const updateCalls: Array<{ table: string; values: unknown }> = [];
 
 function makeSelectChain(rows: unknown[]) {
   // Supports both `.limit(n)` (site lookup) and no-limit (gsc/portfolio queries)
-  // terminal calls used across the agent's three select() call sites.
+  // terminal calls used across the agent's select() call sites.
+  const where = () => ({
+    limit: async () => rows,
+    // The has_local_pack lookup orders by candidate recency before limit(1).
+    orderBy: () => ({ limit: async () => rows }),
+    // Awaiting the `where(...)` result directly (no .limit chained) also
+    // needs to resolve to rows — drizzle's builder is thenable.
+    then: (resolve: (v: unknown[]) => void) => resolve(rows),
+  });
   const chain = {
     from: () => ({
-      where: () => ({
-        limit: async () => rows,
-        // Awaiting the `where(...)` result directly (no .limit chained) also
-        // needs to resolve to rows — drizzle's builder is thenable.
-        then: (resolve: (v: unknown[]) => void) => resolve(rows),
-      }),
+      where,
+      // The has_local_pack lookup left-joins niche_candidates before where().
+      leftJoin: () => ({ where }),
     }),
   };
   return chain;
@@ -128,6 +134,7 @@ const fakeDb = {
     if (call === 'site') return makeSelectChain(nextSite ? [nextSite] : []);
     if (call === 'gsc') return makeSelectChain(gscRows);
     if (call === 'portfolio') return makeSelectChain(portfolioRows);
+    if (call === 'niche') return makeSelectChain(nicheJoinRows);
     return makeSelectChain([]);
   },
   insert: (table: { constructor?: { name?: string } } | Record<string, unknown>) => ({
@@ -149,12 +156,18 @@ const fakeDb = {
 };
 
 // Tracks the expected order of select() calls within one execute() invocation:
-// 1) site lookup, 2) gsc rows, 3) portfolio rows.
-let selectCallOrder: Array<'site' | 'gsc' | 'portfolio'> = [];
+// 1) site lookup, 2) gsc rows, 3) portfolio rows, 4) niche + candidate
+// left-join (only when the site has a nicheId).
+let selectCallOrder: Array<'site' | 'gsc' | 'portfolio' | 'niche'> = [];
 
 vi.mock('@leadlandlord/db', () => ({
   getDb: () => fakeDb,
   sites: { id: 'sites.id', niche: 'sites.niche', status: 'sites.status', updatedAt: 'sites.updated_at', currentRank: 'sites.current_rank' },
+  niches: { id: 'niches.id', dfsRaw: 'niches.dfs_raw' },
+  nicheCandidates: {
+    nicheId: 'niche_candidates.niche_id',
+    hasLocalPack: 'niche_candidates.has_local_pack',
+  },
   seoMetricsDaily: {
     siteId: 'seo_metrics_daily.site_id',
     date: 'seo_metrics_daily.date',
@@ -187,6 +200,7 @@ describe('NicheCalibrator.execute', () => {
     nextSite = undefined;
     gscRows = [];
     portfolioRows = [];
+    nicheJoinRows = [];
     insertCalls.length = 0;
     updateCalls.length = 0;
     selectCallOrder = [];
@@ -229,7 +243,7 @@ describe('NicheCalibrator.execute', () => {
   });
 
   it('aggregates GSC + portfolio calls, upserts a snapshot, and updates sites.current_rank', async () => {
-    selectCallOrder = ['site', 'gsc', 'portfolio'];
+    selectCallOrder = ['site', 'gsc', 'portfolio', 'niche'];
     nextSite = { id: 'site-1', niche: 'residential roofing', status: 'live', nicheId: 'niche-1' };
     gscRows = [
       { query: 'roof repair phoenix az', clicks: 10, impressions: 100, position: '3.00' },
@@ -269,5 +283,52 @@ describe('NicheCalibrator.execute', () => {
     // Both calls resolved via insert().values().onConflictDoUpdate() — no throw,
     // and both recorded (BaseAgent-level dedupe is tested separately in base.test.ts).
     expect(insertCalls).toHaveLength(2);
+  });
+
+  // ── has_local_pack stamping (ADR 0030 Phase 4) ─────────────────────────────
+  describe('has_local_pack stamping (ADR 0030 Phase 4)', () => {
+    const GSC_ROW = { query: 'roof repair phoenix az', clicks: 10, impressions: 100, position: '3.00' };
+
+    async function runWithNiche(
+      rows: Array<{ dfsRaw: unknown; candidateHasLocalPack: boolean | null }>,
+      nicheId: string | null = 'niche-1',
+    ) {
+      selectCallOrder = nicheId ? ['site', 'gsc', 'portfolio', 'niche'] : ['site', 'gsc', 'portfolio'];
+      nextSite = { id: 'site-1', niche: 'residential roofing', status: 'live', nicheId };
+      gscRows = [GSC_ROW];
+      portfolioRows = [];
+      nicheJoinRows = rows;
+      const { NicheCalibrator } = await import('./index');
+      const agent = new NicheCalibrator();
+      const exec = (agent as unknown as { execute: Function }).execute.bind(agent);
+      await exec({ site_id: 'site-1', week_start: '2026-06-15' }, noopCtx);
+      return insertCalls[0]!.values as { hasLocalPack: boolean | null };
+    }
+
+    it('stamps from niches.dfs_raw serpComposition (primary source, wins over the fallback)', async () => {
+      const values = await runWithNiche([
+        { dfsRaw: { serpComposition: { has_local_pack: true } }, candidateHasLocalPack: false },
+      ]);
+      expect(values.hasLocalPack).toBe(true);
+    });
+
+    it('falls back to the promoted candidate column when dfs_raw lacks the flag', async () => {
+      const values = await runWithNiche([
+        { dfsRaw: { metrics: [] }, candidateHasLocalPack: false },
+      ]);
+      expect(values.hasLocalPack).toBe(false);
+    });
+
+    it('stamps null when neither source knows (unknown must never read as false)', async () => {
+      const values = await runWithNiche([{ dfsRaw: null, candidateHasLocalPack: null }]);
+      expect(values.hasLocalPack).toBeNull();
+    });
+
+    it('site without a nicheId → null, and the niche lookup is never issued', async () => {
+      const values = await runWithNiche([], null);
+      expect(values.hasLocalPack).toBeNull();
+      // selectCallOrder had exactly the 3 base queries and all were consumed.
+      expect(selectCallOrder).toHaveLength(0);
+    });
   });
 });

@@ -35,3 +35,11 @@ export function usStateName(stateAbbrevOrName: string): string {
 export function dfsLocationName(city: string, state: string): string {
   return `${city.trim()},${usStateName(state)},United States`;
 }
+
+/**
+ * State-level DataForSEO location_name (ADR 0030 S2), e.g. "Arizona,United States".
+ * No spaces after commas — the Google Ads endpoint rejects them (40501).
+ */
+export function dfsStateLocationName(state: string): string {
+  return `${usStateName(state)},United States`;
+}

@@ -120,6 +120,17 @@ export class NicheValidator extends BaseAgent<typeof NicheValidatorInput, typeof
           : DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
       ctrAtRank: sys.scoutCtrAtRank != null ? parseFloat(sys.scoutCtrAtRank) : undefined,
       callRate: sys.scoutCallRate != null ? parseFloat(sys.scoutCallRate) : undefined,
+      // Local-SERP difficulty formula knobs (ADR 0030 Phase 3) — NULL = code
+      // defaults (AGGREGATOR_WEIGHT 70 / LOCAL_PACK_BOOST 30).
+      difficultyWeights:
+        sys.scoutAggWeight != null || sys.scoutLocalPackBoost != null
+          ? {
+              aggregatorWeight:
+                sys.scoutAggWeight != null ? parseFloat(sys.scoutAggWeight) : undefined,
+              localPackBoost:
+                sys.scoutLocalPackBoost != null ? parseFloat(sys.scoutLocalPackBoost) : undefined,
+            }
+          : undefined,
     };
 
     let totalCost = 0;

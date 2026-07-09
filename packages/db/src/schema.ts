@@ -313,6 +313,16 @@ export const nicheCandidates = pgTable(
     metroDensityMult: numeric('metro_density_mult', { precision: 4, scale: 3 }),
     /** Composite demand-quality signal (0-1) from owner-occ + wealth ratios. */
     demandQuality: numeric('demand_quality', { precision: 4, scale: 3 }),
+    // ──────────────────────────────────────────────────────────
+    // Pre-refinement proxy snapshots (migration 0062, ADR 0030 S1).
+    // Set only on refined cells; null on proxy-only cells (their final
+    // values ARE the proxy values). Feed the scout-accuracy calibration
+    // report's refined-vs-proxy bias analysis.
+    // ──────────────────────────────────────────────────────────
+    /** estMonthlyValueUsd before Stage-3 refinement overwrote it. */
+    proxyEstMonthlyValueUsd: numeric('proxy_est_monthly_value_usd', { precision: 12, scale: 2 }),
+    /** winnability before Stage-3 refinement overwrote it. */
+    proxyWinnability: numeric('proxy_winnability', { precision: 4, scale: 3 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -1184,6 +1194,44 @@ export const systemState = pgTable('system_state', {
   scoutMinRentabilityPrior: numeric('scout_min_rentability_prior', { precision: 4, scale: 3 }),
   // Operator override for MIN_WINNABILITY_FLOOR (NULL = code default).
   scoutMinWinnability: numeric('scout_min_winnability', { precision: 4, scale: 3 }),
+  // Local-SERP difficulty formula knobs (migration 0063, ADR 0030 Phase 3).
+  // NULL = fall back to the code defaults AGGREGATOR_WEIGHT (70) and
+  // LOCAL_PACK_BOOST (30) in packages/integrations/src/dataforseo/index.ts
+  // (computeSerpDifficulty). Applied at cache-read time, so tuning a knob
+  // re-scores every cached SERP composition on the next read.
+  scoutAggWeight: numeric('scout_agg_weight', { precision: 5, scale: 2 }),
+  scoutLocalPackBoost: numeric('scout_local_pack_boost', { precision: 5, scale: 2 }),
+  // Benchmark-winnability default (migration 0063, ADR 0030 Phase 3). NULL =
+  // fall back to DEFAULT_BENCHMARK_WINNABILITY (0.5) in
+  // packages/agents/src/niche-hunter/scoring-config.ts.
+  scoutDefaultBenchmarkWinnability: numeric('scout_default_benchmark_winnability', {
+    precision: 4,
+    scale: 3,
+  }),
+  // Proxy-bias correction weight (migration 0064, ADR 0030 Phase 4). NULL/0 =
+  // report-only (the in-run proxy_bias summary is computed but never applied).
+  // When w > 0 the scout multiplies every UNMEASURED (refinement_source
+  // 'proxy') cell's scoutScore by `1 - w + w * clamp(median_ratio, 0.25, 1.5)`
+  // where median_ratio is the run's refined-vs-proxy score bias. Never touches
+  // estMonthlyValueUsd — ranking only.
+  scoutProxyBiasWeight: numeric('scout_proxy_bias_weight', { precision: 4, scale: 3 }),
+  // Metro-density smoothing blend (migration 0064, ADR 0030 M2 / Phase 4).
+  // NULL/0 = pure step function (historical behavior); 1 = fully smooth log
+  // interpolation between the step plateaus (1.0 at <=250k nearby pop, 0.15 at
+  // >=2M); in between = linear blend. Consumed by computeCityMarketScores
+  // (scout geo signal) only — rankCities always uses the step function.
+  scoutMetroDensitySmooth: numeric('scout_metro_density_smooth', { precision: 4, scale: 3 }),
+  // State-level demand fold (migration 0065, ADR 0030 S2 / Phase 5). NULL/0 =
+  // the state-demand pass is skipped entirely (zero DataForSEO spend) — the
+  // shipped default. When blend > 0 on a multi-state run, the scout measures
+  // per-(trade, state) demand via getStateKeywordMetrics and multiplies
+  // estMonthlyValueUsd by `1 - blend + blend * stateFit`, where stateFit is
+  // the trade's state volume share over the state's population share.
+  scoutStateDemandBlend: numeric('scout_state_demand_blend', { precision: 4, scale: 3 }),
+  // NULL = code default DEFAULT_STATE_DEMAND_CLAMP (4.0) in
+  // packages/agents/src/niche-hunter/scoring-config.ts — max stateFit
+  // deviation from 1.0 in either direction (fit clamped to [1/clamp, clamp]).
+  scoutStateDemandClamp: numeric('scout_state_demand_clamp', { precision: 4, scale: 2 }),
   // Geographic-targeting + refinement knobs (migration 0045, ADR 0022). NULL =
   // fall back to the defaults in packages/agents/src/niche-hunter/
   // {value-model,scoring-config}.ts. Set via /operator/control.
@@ -1517,6 +1565,13 @@ export const nicheOutcomeSnapshots = pgTable(
     observedCtr: numeric('observed_ctr', { precision: 6, scale: 4 }),
     /** portfolio_snapshots calls (that week, summed) / moneyKwClicks. Null when moneyKwClicks is 0. */
     observedCallRate: numeric('observed_call_rate', { precision: 6, scale: 4 }),
+    /**
+     * Measured local-pack presence copied from niches.dfs_raw (validation-time
+     * SERP composition) or, failing that, the promoted candidate's measured
+     * has_local_pack column at calibration time (migration 0064, ADR 0030) —
+     * enables CTR segmentation by SERP layout. Null when neither source knows.
+     */
+    hasLocalPack: boolean('has_local_pack'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

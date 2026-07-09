@@ -217,6 +217,46 @@ describe('estimateScoutValue', () => {
   });
 });
 
+// ---- estimateScoutValue CTR local-pack multiplier (ADR 0030 Phase 3) --------
+
+describe('estimateScoutValue — ctrLocalPackMult', () => {
+  const baseArgs = {
+    trade: 'tree removal',
+    cityPopulation: 100_000,
+    clusterVolume: 10_000,
+    clusterDifficulty: 40,
+  };
+  const baseline = estimateScoutValue(baseArgs);
+
+  it('hasLocalPack=true + mult 1.0 → unchanged vs baseline', () => {
+    const v = estimateScoutValue({ ...baseArgs, hasLocalPack: true, ctrLocalPackMult: 1.0 });
+    expect(v.estMonthlyValueUsd).toBe(baseline.estMonthlyValueUsd);
+    expect(v.scoutScore).toBe(baseline.scoutScore);
+  });
+
+  it('hasLocalPack=true with mult unset → unchanged (defaults to 1.0 no-op)', () => {
+    const v = estimateScoutValue({ ...baseArgs, hasLocalPack: true });
+    expect(v.estMonthlyValueUsd).toBe(baseline.estMonthlyValueUsd);
+  });
+
+  it('hasLocalPack=true + mult 0.5 → estMonthlyValueUsd exactly halved', () => {
+    const v = estimateScoutValue({ ...baseArgs, hasLocalPack: true, ctrLocalPackMult: 0.5 });
+    // Tolerance only absorbs round2's 2-decimal quantization of each output.
+    expect(v.estMonthlyValueUsd).toBeCloseTo(baseline.estMonthlyValueUsd / 2, 1);
+    expect(v.estMonthlyValueUsd).toBeLessThan(baseline.estMonthlyValueUsd);
+  });
+
+  it('hasLocalPack=false + mult 0.5 → unchanged (mult only applies when the pack is present)', () => {
+    const v = estimateScoutValue({ ...baseArgs, hasLocalPack: false, ctrLocalPackMult: 0.5 });
+    expect(v.estMonthlyValueUsd).toBe(baseline.estMonthlyValueUsd);
+  });
+
+  it('hasLocalPack undefined + mult 0.5 → unchanged (proxy cells: layout unknown)', () => {
+    const v = estimateScoutValue({ ...baseArgs, ctrLocalPackMult: 0.5 });
+    expect(v.estMonthlyValueUsd).toBe(baseline.estMonthlyValueUsd);
+  });
+});
+
 // ---- estimateScoutValue geo modifiers (ADR 0022) ----------------------------
 
 describe('estimateScoutValue — geo modifiers (ADR 0022)', () => {

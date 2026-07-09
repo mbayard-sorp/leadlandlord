@@ -22,6 +22,8 @@ export const ScoutReport = z.object({
     excluded_winnability: z.number().default(0),
     /** Cells held out of the persisted set by the diversity caps (ADR 0023). */
     excluded_diversity_cap: z.number().default(0),
+    /** Lower-ranked duplicate (trade, city, state) cells dropped pre-persist (ADR 0030 B3). */
+    duplicate_city_state_dropped: z.number().default(0),
     /** Per-trade candidate cap applied to the persisted set (ADR 0023). */
     diversity_cap_per_trade: z.number().optional(),
     /** Per-category candidate cap applied to the persisted set (ADR 0023). */
@@ -92,7 +94,58 @@ export const ScoutReport = z.object({
     refine_budget_exhausted: z.boolean(),
     /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). Default 0 on older reports. */
     sampled_count: z.number().default(0),
+    /** Refinement attempts that threw (cell left as proxy). Default 0 on older reports. */
+    refine_failed_count: z.number().default(0),
+    /** Refinement attempts that returned a fallback composition (cell left as proxy). Default 0 on older reports. */
+    refine_fallback_count: z.number().default(0),
+    /** Cells refined by the ensure-measured-above-the-cliff pass (ADR 0030). Default 0 on older reports. */
+    ensure_measured_extra_count: z.number().default(0),
+    /**
+     * False when a budget trip (or repeated failures) left proxy cells inside
+     * the value-cliff recommendation (ADR 0030). recommendation.n is never
+     * shrunk — this flag is the honest signal instead.
+     */
+    recommendation_fully_measured: z.boolean().default(true),
+    /**
+     * In-run refined-vs-proxy score bias over successfully refined cells
+     * (ADR 0030). ratio = scoutScore_refined / scoutScore_proxy. Null when no
+     * cells were refined. Report-only until scout_proxy_bias_weight applies it.
+     */
+    proxy_bias: z
+      .object({ n: z.number(), median_ratio: z.number(), mean_ratio: z.number() })
+      .nullable()
+      .default(null),
+    /**
+     * The multiplier actually applied to unmeasured (proxy) cells' scoutScore
+     * when scout_proxy_bias_weight is set (ADR 0030 Phase 4):
+     * `1 - w + w·clamp(median_ratio, 0.25, 1.5)`. Null when the knob is
+     * NULL/0 or nothing was refined (proxy_bias stays report-only).
+     */
+    proxy_bias_weight_applied: z.number().nullable().default(null),
   }),
+  /**
+   * State-level demand fold summary (ADR 0030 S2 / Phase 5). Null on older
+   * reports. active=true only when the pass actually ran (blend > 0, multi-
+   * state, under sub-budget); otherwise skipped_reason says why. fits is
+   * capped by the scout to the top 100 by |fit − 1| desc to bound jsonb size.
+   */
+  state_demand: z
+    .object({
+      active: z.boolean(),
+      /** 'blend_zero' | 'single_state' | 'over_sub_budget' | null */
+      skipped_reason: z.string().nullable(),
+      spend_usd: z.number(),
+      fits: z.array(
+        z.object({
+          trade: z.string(),
+          state: z.string(),
+          state_fit: z.number(),
+          mult: z.number(),
+        }),
+      ),
+    })
+    .nullable()
+    .default(null),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
 
@@ -137,6 +190,15 @@ export interface ScoredCell {
   hasLocalPack?: boolean;
   /** Stage-3 measured local seed volume (sum); set only when volume measured. */
   localMeasuredVolume?: number;
+  /**
+   * Pre-refinement snapshots (ADR 0030 S1), set once by the first successful
+   * refinement before it overwrites the proxy values. Unset on never-refined
+   * cells (their final values ARE the proxy values). Feed the proxy-bias
+   * report and the persisted proxy_* calibration columns.
+   */
+  proxyScoutScore?: number;
+  proxyEstMonthlyValueUsd?: number;
+  proxyWinnability?: number;
 }
 
 export const POPULATION_BANDS: Array<{ band: string; min: number; max: number }> = [
@@ -174,7 +236,29 @@ export interface BuildScoutReportArgs {
     refine_budget_exhausted: boolean;
     /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). */
     sampled_count?: number;
+    /** Refinement attempts that threw (cell left as proxy). */
+    refine_failed_count?: number;
+    /** Refinement attempts that returned a fallback composition (cell left as proxy). */
+    refine_fallback_count?: number;
+    /** Cells refined by the ensure-measured-above-the-cliff pass (ADR 0030). */
+    ensure_measured_extra_count?: number;
+    /** False when proxy cells remain inside the value-cliff recommendation (ADR 0030). */
+    recommendation_fully_measured?: boolean;
+    /** Refined-vs-proxy score bias summary (ADR 0030); null when nothing refined. */
+    proxy_bias?: { n: number; median_ratio: number; mean_ratio: number } | null;
+    /** Multiplier applied to proxy cells' scoutScore (ADR 0030 Phase 4); null when knob off. */
+    proxy_bias_weight_applied?: number | null;
   };
+  /**
+   * State-level demand fold summary (ADR 0030 S2). Omitted/null = section
+   * absent from the report (older callers / fold not wired).
+   */
+  state_demand?: {
+    active: boolean;
+    skipped_reason: string | null;
+    spend_usd: number;
+    fits: Array<{ trade: string; state: string; state_fit: number; mult: number }>;
+  } | null;
 }
 
 export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
@@ -184,6 +268,12 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
     refine_spend_usd: 0,
     refine_budget_exhausted: false,
     sampled_count: 0,
+    refine_failed_count: 0,
+    refine_fallback_count: 0,
+    ensure_measured_extra_count: 0,
+    recommendation_fully_measured: true,
+    proxy_bias: null,
+    proxy_bias_weight_applied: null,
   };
   const savings = Math.max(0, Math.min(1, args.expectedCacheSavingsRate ?? 0));
   const costForN = (n: number) =>
@@ -255,6 +345,7 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
       geo_tiers,
     },
     refinement,
+    state_demand: args.state_demand ?? null,
   });
 }
 

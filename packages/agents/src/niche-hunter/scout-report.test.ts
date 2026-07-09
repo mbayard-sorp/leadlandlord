@@ -38,6 +38,7 @@ const GRID = {
   excluded_floor: 5,
   excluded_winnability: 0,
   excluded_diversity_cap: 0,
+  duplicate_city_state_dropped: 0,
   uncached_trades: 12,
 };
 

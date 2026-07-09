@@ -428,6 +428,34 @@
       "when": 1783446286229,
       "tag": "0061_buildsell_klaviyo_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1783562548504,
+      "tag": "0062_niche_scout_accuracy_p2",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1783562548505,
+      "tag": "0063_scout_serp_difficulty_knobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1783562548506,
+      "tag": "0064_scout_calibration",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1783562548507,
+      "tag": "0065_scout_state_demand",
+      "breakpoints": true
     }
   ]
 }

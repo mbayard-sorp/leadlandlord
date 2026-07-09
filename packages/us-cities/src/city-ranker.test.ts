@@ -20,7 +20,11 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import { existsSync, readFileSync } from 'node:fs';
 import { _resetCensusCache, _resetCitiesCache } from './index';
-import { rankCities, computeCityMarketScores } from './city-ranker';
+import {
+  rankCities,
+  computeCityMarketScores,
+  getMetroDensityMultiplierSmooth,
+} from './city-ranker';
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
@@ -103,9 +107,10 @@ function makeCSVLine(
   lat: number,
   lng: number,
   population: number,
+  county = 'County',
 ): string {
-  // county_fips=00000, county_name=County, density=0, source=0, military=FALSE
-  return `${city},${city},${state},${stateName},00000,County,${lat},${lng},${population},0,0,FALSE,TRUE`;
+  // county_fips=00000, density=0, source=0, military=FALSE
+  return `${city},${city},${state},${stateName},00000,${county},${lat},${lng},${population},0,0,FALSE,TRUE`;
 }
 
 const CSV_HEADER =
@@ -131,6 +136,10 @@ const SYNTHETIC_CSV = [
   makeCSVLine('City_A', 'TN', 'Tennessee', 36.1, -87.0, 55_000),
   makeCSVLine('City_B', 'TN', 'Tennessee', 36.2, -87.1, 54_000),
   makeCSVLine('City_C', 'TN', 'Tennessee', 36.3, -87.2, 53_000),
+  // Duplicate city name within one state, distinct counties (ADR 0030 B3):
+  // remote from each other and everything else so their signals stay clean.
+  makeCSVLine('Twinsville', 'OK', 'Oklahoma', 34.5, -99.0, 30_000, 'Alpha County'),
+  makeCSVLine('Twinsville', 'OK', 'Oklahoma', 36.8, -95.0, 60_000, 'Beta County'),
 ].join('\n');
 
 // ---------------------------------------------------------------------------
@@ -476,8 +485,9 @@ describe('computeCityMarketScores (ADR 0022)', () => {
     vi.restoreAllMocks();
   });
 
-  const keyOf = (city: string, state: string) =>
-    `${city.toLowerCase()}|${state.toUpperCase()}`;
+  // County-aware key (ADR 0030 B3); every fixture city defaults to "County".
+  const keyOf = (city: string, state: string, county = 'County') =>
+    `${city.toLowerCase()}|${county.toLowerCase()}|${state.toUpperCase()}`;
 
   it('returns a signal for every in-band city, including Census-absent ones (never dropped)', () => {
     const scores = computeCityMarketScores({ states: ['TX'], populationMin: 1, populationMax: 999_999_999 });
@@ -512,6 +522,17 @@ describe('computeCityMarketScores (ADR 0022)', () => {
     const scores = computeCityMarketScores({ states: ['TX'], populationMin: 50_000, populationMax: 70_000 });
     expect(scores.has(keyOf('MetroCandidate', 'TX'))).toBe(true);
     expect(scores.has(keyOf('NearbyA', 'TX'))).toBe(false);
+  });
+
+  it('duplicate city names within one state get distinct county-keyed entries (ADR 0030 B3)', () => {
+    const scores = computeCityMarketScores({ states: ['OK'], populationMin: 1, populationMax: 999_999_999 });
+    const alpha = scores.get(keyOf('Twinsville', 'OK', 'Alpha County'));
+    const beta = scores.get(keyOf('Twinsville', 'OK', 'Beta County'));
+    // Before the county-aware key, one sibling silently overwrote the other.
+    expect(alpha).toBeDefined();
+    expect(beta).toBeDefined();
+    // The old collapsed key must no longer exist.
+    expect(scores.has('twinsville|OK')).toBe(false);
   });
 
   it('cross-state metro mass suppresses metroDensityMult for a city in the requested state (#6)', () => {
@@ -613,5 +634,89 @@ describe('computeCityMarketScores (ADR 0022)', () => {
 
     _resetCitiesCache();
     vi.restoreAllMocks();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Metro-density smoothing (ADR 0030 M2)
+// ---------------------------------------------------------------------------
+
+describe('metro-density smoothing (ADR 0030 M2)', () => {
+  beforeEach(() => {
+    _resetCensusCache();
+    _resetCitiesCache();
+    setupMocks();
+  });
+  afterEach(() => {
+    _resetCitiesCache();
+    vi.restoreAllMocks();
+  });
+
+  const keyOf = (city: string, state: string, county = 'County') =>
+    `${city.toLowerCase()}|${county.toLowerCase()}|${state.toUpperCase()}`;
+
+  const ALL = { states: ['TX'], populationMin: 1, populationMax: 999_999_999 };
+
+  // Expected smooth multiplier, computed from the M2 formula (never hardcode
+  // the decimal): 1 - 0.85 * normClamp(log10(pop), log10(250k), log10(2M)).
+  const smoothExpected = (pop: number) => {
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        (Math.log10(pop) - Math.log10(250_000)) /
+          (Math.log10(2_000_000) - Math.log10(250_000)),
+      ),
+    );
+    return 1 - 0.85 * t;
+  };
+
+  it('s=0 / omitted → bit-identical metroDensityMult to the step function', () => {
+    const base = computeCityMarketScores(ALL);
+    const zero = computeCityMarketScores({ ...ALL, smoothMetroDensity: 0 });
+    expect(zero.size).toBe(base.size);
+    for (const [k, v] of base) {
+      expect(zero.get(k)!.metroDensityMult).toBe(v.metroDensityMult);
+    }
+    // The 600k-nearby fixture keeps its exact step plateau.
+    expect(base.get(keyOf('MetroCandidate', 'TX'))!.metroDensityMult).toBe(0.4);
+    expect(base.get(keyOf('Remotetown', 'TX'))!.metroDensityMult).toBe(1.0);
+  });
+
+  it('s=1 → smooth log interpolation with endpoint agreement', () => {
+    const scores = computeCityMarketScores({ ...ALL, smoothMetroDensity: 1 });
+    // No nearby metro mass (≤ 250k) → exactly 1.0, matching the step plateau.
+    expect(scores.get(keyOf('Remotetown', 'TX'))!.metroDensityMult).toBe(1.0);
+    // MetroCandidate (600k nearby): strictly inside (0.15, 1.0) and equal to
+    // the formula.
+    const m = scores.get(keyOf('MetroCandidate', 'TX'))!.metroDensityMult;
+    expect(m).toBeGreaterThan(0.15);
+    expect(m).toBeLessThan(1.0);
+    expect(m).toBeCloseTo(smoothExpected(600_000), 6);
+  });
+
+  it('smooth multiplier is monotonically non-increasing in nearby pop with plateau endpoints', () => {
+    const pops = [0, 100_000, 250_000, 300_000, 600_000, 1_000_000, 1_999_999, 2_000_000, 10_000_000];
+    const vals = pops.map(getMetroDensityMultiplierSmooth);
+    expect(vals[0]).toBe(1.0); // zero nearby pop → no suppression
+    expect(vals[2]).toBe(1.0); // ≤ 250k → 1.0 (step plateau)
+    expect(vals[7]!).toBeCloseTo(0.15, 10); // ≥ 2M → 0.15 (step plateau)
+    expect(vals[8]!).toBeCloseTo(0.15, 10);
+    for (let i = 1; i < vals.length; i++) {
+      expect(vals[i]!).toBeLessThanOrEqual(vals[i - 1]!);
+    }
+  });
+
+  it('blend s=0.5 → midpoint of step and smooth for the 600k fixture', () => {
+    const scores = computeCityMarketScores({ ...ALL, smoothMetroDensity: 0.5 });
+    const m = scores.get(keyOf('MetroCandidate', 'TX'))!.metroDensityMult;
+    expect(m).toBeCloseTo((0.4 + smoothExpected(600_000)) / 2, 6);
+  });
+
+  it('rankCities has no smoothing option — the step plateau is pinned by construction', () => {
+    const results = rankCities();
+    const metro = results.find((c) => c.city === 'MetroCandidate');
+    expect(metro).toBeDefined();
+    expect(metro!.metroDensityMult).toBe(0.4);
   });
 });

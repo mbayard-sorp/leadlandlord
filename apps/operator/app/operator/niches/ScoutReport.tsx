@@ -76,7 +76,21 @@ export interface ScoutRunData {
       refined_count: number;
       refine_spend_usd: number;
       refine_budget_exhausted: boolean;
+      /** ADR 0030 honesty fields — absent on pre-0030 reports. */
+      refine_failed_count?: number;
+      refine_fallback_count?: number;
+      ensure_measured_extra_count?: number;
+      recommendation_fully_measured?: boolean;
+      proxy_bias?: { n: number; median_ratio: number; mean_ratio: number } | null;
+      proxy_bias_weight_applied?: number | null;
     };
+    /** ADR 0030 S2 state-demand fold summary — absent on older reports. */
+    state_demand?: {
+      active: boolean;
+      skipped_reason: string | null;
+      spend_usd: number;
+      fits: Array<{ trade: string; state: string; state_fit: number; mult: number }>;
+    } | null;
   };
 }
 
@@ -328,12 +342,65 @@ export function ScoutReport({
                   ${run.report.refinement.refine_spend_usd.toFixed(4)}
                 </span>
               </span>
+              {(run.report.refinement.ensure_measured_extra_count ?? 0) > 0 && (
+                <span>
+                  <span className="text-slate-400">Extra measured (above cliff): </span>
+                  <span className="font-medium text-emerald-300">
+                    {run.report.refinement.ensure_measured_extra_count!.toLocaleString()}
+                  </span>
+                </span>
+              )}
+              {(run.report.refinement.refine_fallback_count ?? 0) +
+                (run.report.refinement.refine_failed_count ?? 0) >
+                0 && (
+                <span>
+                  <span className="text-slate-400">Failed/fallback lookups: </span>
+                  <span className="font-medium text-amber-300">
+                    {(run.report.refinement.refine_failed_count ?? 0) +
+                      (run.report.refinement.refine_fallback_count ?? 0)}
+                  </span>
+                </span>
+              )}
+              {run.report.refinement.proxy_bias && (
+                <span>
+                  <span className="text-slate-400">Refined vs proxy score (median): </span>
+                  <span className="font-medium text-slate-200">
+                    {(run.report.refinement.proxy_bias.median_ratio * 100).toFixed(0)}%
+                  </span>
+                </span>
+              )}
               {run.report.refinement.refine_budget_exhausted && (
                 <span className="inline-flex items-center rounded border border-amber-800 bg-amber-950/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
                   budget exhausted
                 </span>
               )}
             </div>
+            {/* ADR 0030: the honesty signal — never hide a partially-measured
+                recommendation from the human making the validation call. */}
+            {run.report.refinement.recommendation_fully_measured === false && (
+              <p className="text-[11px] text-amber-300">
+                Some cells inside the recommended top {rec.n} were never measured against a real
+                local SERP (proxy scores only) — treat their ranking as provisional.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* State-demand fold — ADR 0030 S2 (observational until the blend knob is on) */}
+        {run.report.state_demand?.active && (
+          <div className="rounded border border-slate-700 bg-slate-800/40 px-3 py-2 space-y-1">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
+              State demand fold
+            </p>
+            <p className="text-[11px] text-slate-300">
+              Measured per-state demand applied to {run.report.state_demand.fits.length} trade ×
+              state pairs (spend ${run.report.state_demand.spend_usd.toFixed(4)}). Strongest fits:{' '}
+              {run.report.state_demand.fits
+                .slice(0, 3)
+                .map((f) => `${f.trade} ${f.state} ×${f.mult.toFixed(2)}`)
+                .join(', ')}
+              .
+            </p>
           </div>
         )}
       </div>
