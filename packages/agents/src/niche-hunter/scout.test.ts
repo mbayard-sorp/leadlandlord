@@ -418,7 +418,12 @@ describe('NicheScout', () => {
   describe('Stage-3 refinement', () => {
     it('fallback composition → cell stays proxy, not counted refined, reported (B1, ADR 0030)', async () => {
       refineMock.fallback = true;
-      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
       expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(3);
       expect(out.refined_count).toBe(0);
       // Fallback compositions must never be stamped onto cells as measurements.
@@ -434,7 +439,12 @@ describe('NicheScout', () => {
 
     it('thrown SERP error → cell stays proxy, not counted refined (B2 regression)', async () => {
       refineMock.throwOnSerp = true;
-      const out = await runScout({ refine_top_k: 2, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      const out = await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
       expect(out.refined_count).toBe(0);
       expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
       const run = insertedRuns[0]! as {
@@ -458,10 +468,10 @@ describe('NicheScout', () => {
       expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
     });
 
-    it('default run (refine_top_k unset) refines the top 25 cells via local SERP (ADR 0024)', async () => {
-      // With DEFAULT_SCOUT_REFINE_TOP_K=25 and DEFAULT_SCOUT_REFINE_BUDGET_USD=$3.00,
-      // the default run issues SERP calls capped by the budget. At $0.075/call,
-      // the budget allows up to 40 cold calls — so all 25 cells refine.
+    it('default run (refine_top_k unset) refines the top cells via local SERP (ADR 0024/0030)', async () => {
+      // With DEFAULT_SCOUT_REFINE_TOP_K=50 and DEFAULT_SCOUT_REFINE_BUDGET_USD=$5.00,
+      // the default run issues SERP calls capped by the budget (~66 cold at
+      // $0.075/call); the ensure-measured pass may add more.
       const out = await runScout();
       expect(out.refined_count).toBeGreaterThan(0);
       expect(vi.mocked(getSerpComposition)).toHaveBeenCalled();
@@ -474,10 +484,15 @@ describe('NicheScout', () => {
     it('refine_top_k=N with generous budget refines top-N, re-ranks, persists measured fields', async () => {
       refineMock.serpDifficulty = 30; // winnability_local = 0.70
       const N = 3;
-      // refine_below_topk_sample_count=0: isolate the top-K behavior from the
-      // below-top-K sampling pass (Phase 5), which would otherwise also
-      // consume the generous $100 budget in this test.
-      const out = await runScout({ refine_top_k: N, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      // refine_below_topk_sample_count=0 / ensure_measured_passes=0: isolate
+      // the top-K behavior from the sampling + ensure-measured passes, which
+      // would otherwise also consume the generous $100 budget in this test.
+      const out = await runScout({
+        refine_top_k: N,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
       expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(N);
       expect(out.refined_count).toBe(N);
       expect(out.refine_spend_usd).toBeCloseTo(N * 0.075, 4);
@@ -511,6 +526,7 @@ describe('NicheScout', () => {
         refine_budget_usd: 100,
         refine_measure_volume: true,
         refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
       });
       expect(vi.mocked(getLocalKeywordMetrics)).toHaveBeenCalledTimes(2);
       expect(out.refined_count).toBe(2);
@@ -589,13 +605,108 @@ describe('NicheScout', () => {
       // The grid never produces duplicates, so the guard is exercised indirectly:
       // with refine_top_k larger than the unique cell count, each unique cell is
       // refined exactly once (no double calls). refine_below_topk_sample_count=0
-      // isolates this from the below-top-K sampling pass (Phase 5).
-      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      // + ensure_measured_passes=0 isolate this from the other refine passes.
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
       const issuedKeys = vi
         .mocked(getSerpComposition)
         .mock.calls.map((c) => (c[0] as { keyword: string }).keyword);
       expect(new Set(issuedKeys).size).toBe(issuedKeys.length);
       expect(out.refined_count).toBe(issuedKeys.length);
+    });
+  });
+
+  // ── Ensure-measured-above-the-cliff + proxy persistence (ADR 0030) ────────
+  describe('Ensure-measured recommendation (ADR 0030 S1)', () => {
+    it('measures every proxy cell inside the value-cliff recommendation', async () => {
+      // Tiny top-K leaves the recommendation full of proxy cells; the ensure
+      // pass must sweep them so the operator is never told to validate an
+      // unmeasured cell when budget allows.
+      const out = await runScout({
+        refine_top_k: 1,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+      });
+      const run = insertedRuns[0]! as {
+        report: {
+          recommendation: { n: number };
+          refinement: {
+            ensure_measured_extra_count: number;
+            recommendation_fully_measured: boolean;
+          };
+        };
+      };
+      expect(run.report.refinement.recommendation_fully_measured).toBe(true);
+      expect(run.report.refinement.ensure_measured_extra_count).toBeGreaterThan(0);
+      // ensure-loop refinements are counted separately, never as refined/sampled
+      expect(out.refined_count).toBe(1);
+      expect(out.sampled_count).toBe(0);
+      // Every persisted candidate inside the recommendation is measured.
+      const topN = insertedCandidates.slice(0, run.report.recommendation.n);
+      expect(topN.every((c) => c.refinementSource === 'local_serp')).toBe(true);
+    });
+
+    it('recommendation_fully_measured=false when refinement is disabled', async () => {
+      await runScout({ refine_top_k: 0 });
+      const run = insertedRuns[0]! as {
+        report: { refinement: { recommendation_fully_measured: boolean } };
+      };
+      expect(run.report.refinement.recommendation_fully_measured).toBe(false);
+    });
+
+    it('persists pre-refinement proxy snapshots on refined cells only', async () => {
+      const out = await runScout({
+        refine_top_k: 2,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(out.refined_count).toBe(2);
+      const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
+      const proxies = insertedCandidates.filter((c) => c.refinementSource === 'proxy');
+      expect(refined.length).toBe(2);
+      for (const c of refined) {
+        expect(c.proxyEstMonthlyValueUsd).not.toBeNull();
+        expect(c.proxyWinnability).not.toBeNull();
+        // Proxy winnability comes from cluster kd=10 → 0.90; measured is 0.70.
+        expect(parseFloat(c.proxyWinnability as string)).toBeCloseTo(0.9, 3);
+        expect(parseFloat(c.winnability as string)).toBeCloseTo(0.7, 3);
+      }
+      expect(proxies.every((c) => c.proxyEstMonthlyValueUsd === null)).toBe(true);
+      expect(proxies.every((c) => c.proxyWinnability === null)).toBe(true);
+    });
+
+    it('reports the in-run proxy-bias summary over refined cells', async () => {
+      const out = await runScout({
+        refine_top_k: 3,
+        refine_budget_usd: 100,
+        refine_below_topk_sample_count: 0,
+        ensure_measured_passes: 0,
+      });
+      expect(out.refined_count).toBe(3);
+      const run = insertedRuns[0]! as {
+        report: {
+          refinement: { proxy_bias: { n: number; median_ratio: number; mean_ratio: number } | null };
+        };
+      };
+      const bias = run.report.refinement.proxy_bias;
+      expect(bias).not.toBeNull();
+      expect(bias!.n).toBe(3);
+      // Measured winnability 0.70 vs proxy 0.90 → every ratio ≈ 0.70/0.90.
+      expect(bias!.median_ratio).toBeCloseTo(0.7 / 0.9, 2);
+      expect(bias!.mean_ratio).toBeCloseTo(0.7 / 0.9, 2);
+    });
+
+    it('proxy_bias is null when nothing was refined', async () => {
+      await runScout({ refine_top_k: 0 });
+      const run = insertedRuns[0]! as {
+        report: { refinement: { proxy_bias: unknown } };
+      };
+      expect(run.report.refinement.proxy_bias).toBeNull();
     });
   });
 
@@ -672,6 +783,7 @@ describe('NicheScout', () => {
         refine_top_k: 3,
         refine_budget_usd: 100,
         refine_below_topk_sample_count: 5,
+        ensure_measured_passes: 0,
       });
       const refined = insertedCandidates.filter((c) => c.refinementSource === 'local_serp');
       // 3 top-K + 5 sampled = 8 distinct refined cells (no double-refinement).

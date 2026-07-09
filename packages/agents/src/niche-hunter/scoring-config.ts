@@ -73,20 +73,32 @@ export const DEFAULT_GEO_DEMAND_BLEND = 0.25;
 
 /**
  * In-run DataForSEO budget cap (USD) for the bounded local-SERP refinement
- * pass. ~13 cold trios at $0.225 each, far more on a warm cache. The per-agent
- * and global caps only fire at run start, so this in-run guard is the real
- * bound on refinement spend. Operator-overridable per-run (ScoutForm) or
- * globally via system_state.scout_refine_budget_usd.
+ * pass. Raised $3 → $5 (ADR 0030): ~66 cold SERP calls at $0.075, far more on
+ * a warm cache — enough to cover the top-50 + sampling + the ensure-measured
+ * pass on a cold day. The per-agent and global caps only fire at run start, so
+ * this in-run guard is the real bound on refinement spend. Operator-overridable
+ * per-run (ScoutForm) or globally via system_state.scout_refine_budget_usd.
  */
-export const DEFAULT_SCOUT_REFINE_BUDGET_USD = 3.00;
+export const DEFAULT_SCOUT_REFINE_BUDGET_USD = 5.00;
 
 /**
  * Number of top-scoring cells fed to the local-SERP refinement pass. ON by
- * default at 25 (ADR 0024): Stage 3 now runs on every scout, budget-capped by
- * DEFAULT_SCOUT_REFINE_BUDGET_USD (~13 cold calls). Set to 0 per-run via
- * ScoutForm or globally via system_state.scout_refine_top_k to disable.
+ * default; raised 25 → 50 (ADR 0030) so more of the final ranking rests on
+ * measured local SERPs rather than the national-kd proxy. Budget-capped by
+ * DEFAULT_SCOUT_REFINE_BUDGET_USD. Set to 0 per-run via ScoutForm or globally
+ * via system_state.scout_refine_top_k to disable.
  */
-export const DEFAULT_SCOUT_REFINE_TOP_K = 25;
+export const DEFAULT_SCOUT_REFINE_TOP_K = 50;
+
+/**
+ * Max passes of the ensure-measured-above-the-cliff loop (ADR 0030): after the
+ * refinement re-sort, any still-proxy cell ranked inside the value-cliff
+ * recommendation is refined and the ranking recomputed, up to this many
+ * iterations. A budget trip mid-loop only flags
+ * report.refinement.recommendation_fully_measured=false — it never shrinks
+ * recommendation.n, which must not depend on live spend or cache warmth.
+ */
+export const ENSURE_MEASURED_MAX_ITERATIONS = 3;
 
 /**
  * Below-top-K sampling (Phase 5, Niche Algorithm Accuracy plan). The top-K
@@ -248,6 +260,50 @@ export function resolveRefinedCityVolume(measuredVolume: number, proxyVolume: nu
  * its peak month isn't overvalued relative to its true annual average.
  */
 export const SEASONALITY_DAMPENING_THRESHOLD = 0.35;
+
+/** Seasonality signal derived from a trailing ~12mo monthly-volume series. */
+export interface SeasonalitySignal {
+  /** trough/peak on a 0-1 scale; null when no monthly history exists. */
+  seasonalityIndex: number | null;
+  /** Mean of the monthly series; null when no monthly history exists. */
+  annualMean: number | null;
+  /** True when seasonalityIndex < SEASONALITY_DAMPENING_THRESHOLD. */
+  isHighlySeasonal: boolean;
+}
+
+/**
+ * Single source of truth for the seasonality math shared by validateNicheCore
+ * and the scout's Stage-3 measured-volume path (ADR 0030 M1). Near-1 index =
+ * flat demand year-round; near-0 = highly seasonal (e.g. snow removal). Null
+ * index/mean when the series is empty — callers never dampen in that case.
+ */
+export function computeSeasonalitySignal(monthlyValues: number[]): SeasonalitySignal {
+  if (monthlyValues.length === 0) {
+    return { seasonalityIndex: null, annualMean: null, isHighlySeasonal: false };
+  }
+  const peak = Math.max(...monthlyValues);
+  const trough = Math.min(...monthlyValues);
+  const seasonalityIndex = peak > 0 ? trough / peak : null;
+  const annualMean = monthlyValues.reduce((s, v) => s + v, 0) / monthlyValues.length;
+  return {
+    seasonalityIndex,
+    annualMean,
+    isHighlySeasonal:
+      seasonalityIndex !== null && seasonalityIndex < SEASONALITY_DAMPENING_THRESHOLD,
+  };
+}
+
+/**
+ * Dampen a current-month-driven measured volume toward the annual mean for a
+ * highly seasonal trade — a niche measured during its peak month must not be
+ * valued off peak demand. No-op (returns rawVolume) unless the signal is
+ * highly seasonal with a usable annual mean.
+ */
+export function dampenSeasonalVolume(rawVolume: number, signal: SeasonalitySignal): number {
+  return signal.isHighlySeasonal && signal.annualMean !== null
+    ? (rawVolume + signal.annualMean) / 2
+    : rawVolume;
+}
 
 // ── Approval-time diversity warning: pure trigger logic ─────────────────────
 

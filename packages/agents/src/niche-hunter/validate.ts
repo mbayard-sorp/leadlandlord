@@ -11,7 +11,8 @@ import { computeScore } from './index';
 import {
   DEFAULT_WEIGHTS,
   resolveDemandVolume,
-  SEASONALITY_DAMPENING_THRESHOLD,
+  computeSeasonalitySignal,
+  dampenSeasonalVolume,
 } from './scoring-config';
 import {
   getRentabilityPrior,
@@ -131,16 +132,11 @@ export async function validateNicheCore(
       seasonalityPeak !== null && seasonalityTrough !== null
         ? { peak: seasonalityPeak, trough: seasonalityTrough }
         : null;
-    // seasonalityIndex: trough/peak on a 0-1 scale. Near 1 = flat demand
-    // year-round; near 0 = highly seasonal (e.g. snow removal). Null when we
-    // have no monthly history (metrics.monthly_searches empty) — never
-    // dampens in that case, matching prior behavior exactly.
-    const seasonalityIndex =
-      seasonalityPeak !== null && seasonalityPeak > 0 ? seasonalityTrough! / seasonalityPeak : null;
-    const isHighlySeasonal = seasonalityIndex !== null && seasonalityIndex < SEASONALITY_DAMPENING_THRESHOLD;
-    // Annual mean across the trailing ~12 months (same window DFS returns).
-    const seasonalityAnnualMean =
-      monthlyValues.length > 0 ? monthlyValues.reduce((s, v) => s + v, 0) / monthlyValues.length : null;
+    // Shared seasonality math (scoring-config.ts, ADR 0030 M1) — same helper
+    // the scout's Stage-3 measured-volume path uses. Null index when we have
+    // no monthly history — never dampens in that case.
+    const seasonalitySignal = computeSeasonalitySignal(monthlyValues);
+    const { seasonalityIndex, isHighlySeasonal } = seasonalitySignal;
 
     // Sum search_volume across commercial/transactional-intent phrases.
     const clusterVolume = clusterCandidates
@@ -209,10 +205,7 @@ export async function validateNicheCore(
     // is the ONLY place seasonality touches the pipeline; the legacy 0-100
     // `score` above deliberately still uses the raw (undampened) demandVolume
     // so the two paths never double-count the adjustment.
-    const dampenedCityVolume =
-      isHighlySeasonal && seasonalityAnnualMean !== null
-        ? (search_volume + seasonalityAnnualMean) / 2
-        : search_volume;
+    const dampenedCityVolume = dampenSeasonalVolume(search_volume, seasonalitySignal);
 
     const validated = estimateValidatedValue({
       trade: row.niche,

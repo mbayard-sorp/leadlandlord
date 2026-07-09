@@ -4,6 +4,9 @@ import {
   DEFAULT_APPROVE_MAX_PER_STATE_SHARE,
   resolveRefinedCityVolume,
   DFS_TRUST_FLOOR,
+  computeSeasonalitySignal,
+  dampenSeasonalVolume,
+  SEASONALITY_DAMPENING_THRESHOLD,
 } from './scoring-config';
 
 describe('evaluateApprovalDiversity', () => {
@@ -200,5 +203,54 @@ describe('resolveRefinedCityVolume (F3)', () => {
   it('keeps a proxy already at or below the floor (clamp never inflates)', () => {
     expect(resolveRefinedCityVolume(40, 60)).toBe(60);
     expect(resolveRefinedCityVolume(0, 25)).toBe(25);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared seasonality helpers (ADR 0030 M1) — single source of truth for
+// validateNicheCore and the scout's Stage-3 measured-volume path.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('computeSeasonalitySignal / dampenSeasonalVolume (ADR 0030 M1)', () => {
+  it('empty series → null index/mean, never highly seasonal, dampen is a no-op', () => {
+    const signal = computeSeasonalitySignal([]);
+    expect(signal.seasonalityIndex).toBeNull();
+    expect(signal.annualMean).toBeNull();
+    expect(signal.isHighlySeasonal).toBe(false);
+    expect(dampenSeasonalVolume(500, signal)).toBe(500);
+  });
+
+  it('flat demand → index near 1, not highly seasonal, no dampening', () => {
+    const signal = computeSeasonalitySignal([100, 100, 100, 100]);
+    expect(signal.seasonalityIndex).toBe(1);
+    expect(signal.isHighlySeasonal).toBe(false);
+    expect(dampenSeasonalVolume(400, signal)).toBe(400);
+  });
+
+  it('highly seasonal (snow removal shape) → dampens toward the annual mean', () => {
+    // Peak 1000 in winter, trough 0 in summer → index 0 < 0.35 threshold.
+    const monthly = [1000, 800, 300, 50, 0, 0, 0, 0, 50, 200, 600, 1000];
+    const signal = computeSeasonalitySignal(monthly);
+    expect(signal.seasonalityIndex).toBe(0);
+    expect(signal.isHighlySeasonal).toBe(true);
+    const mean = monthly.reduce((s, v) => s + v, 0) / monthly.length;
+    expect(signal.annualMean).toBeCloseTo(mean, 6);
+    // Peak-month measured volume 1000 → (1000 + mean) / 2, matching the exact
+    // formula validateNicheCore has always applied.
+    expect(dampenSeasonalVolume(1000, signal)).toBeCloseTo((1000 + mean) / 2, 6);
+  });
+
+  it('index exactly at the threshold is NOT highly seasonal (strict <)', () => {
+    // trough/peak = 0.35 exactly → NOT dampened (strict less-than).
+    const signal = computeSeasonalitySignal([35, 100]);
+    expect(signal.seasonalityIndex).toBeCloseTo(SEASONALITY_DAMPENING_THRESHOLD, 6);
+    expect(signal.isHighlySeasonal).toBe(false);
+  });
+
+  it('all-zero series → index null (peak 0), never dampens', () => {
+    const signal = computeSeasonalitySignal([0, 0, 0]);
+    expect(signal.seasonalityIndex).toBeNull();
+    expect(signal.isHighlySeasonal).toBe(false);
+    expect(dampenSeasonalVolume(50, signal)).toBe(50);
   });
 });

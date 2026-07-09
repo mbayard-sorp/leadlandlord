@@ -313,6 +313,16 @@ export const nicheCandidates = pgTable(
     metroDensityMult: numeric('metro_density_mult', { precision: 4, scale: 3 }),
     /** Composite demand-quality signal (0-1) from owner-occ + wealth ratios. */
     demandQuality: numeric('demand_quality', { precision: 4, scale: 3 }),
+    // ──────────────────────────────────────────────────────────
+    // Pre-refinement proxy snapshots (migration 0062, ADR 0030 S1).
+    // Set only on refined cells; null on proxy-only cells (their final
+    // values ARE the proxy values). Feed the scout-accuracy calibration
+    // report's refined-vs-proxy bias analysis.
+    // ──────────────────────────────────────────────────────────
+    /** estMonthlyValueUsd before Stage-3 refinement overwrote it. */
+    proxyEstMonthlyValueUsd: numeric('proxy_est_monthly_value_usd', { precision: 12, scale: 2 }),
+    /** winnability before Stage-3 refinement overwrote it. */
+    proxyWinnability: numeric('proxy_winnability', { precision: 4, scale: 3 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

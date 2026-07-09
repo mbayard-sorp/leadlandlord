@@ -103,9 +103,10 @@ function makeCSVLine(
   lat: number,
   lng: number,
   population: number,
+  county = 'County',
 ): string {
-  // county_fips=00000, county_name=County, density=0, source=0, military=FALSE
-  return `${city},${city},${state},${stateName},00000,County,${lat},${lng},${population},0,0,FALSE,TRUE`;
+  // county_fips=00000, density=0, source=0, military=FALSE
+  return `${city},${city},${state},${stateName},00000,${county},${lat},${lng},${population},0,0,FALSE,TRUE`;
 }
 
 const CSV_HEADER =
@@ -131,6 +132,10 @@ const SYNTHETIC_CSV = [
   makeCSVLine('City_A', 'TN', 'Tennessee', 36.1, -87.0, 55_000),
   makeCSVLine('City_B', 'TN', 'Tennessee', 36.2, -87.1, 54_000),
   makeCSVLine('City_C', 'TN', 'Tennessee', 36.3, -87.2, 53_000),
+  // Duplicate city name within one state, distinct counties (ADR 0030 B3):
+  // remote from each other and everything else so their signals stay clean.
+  makeCSVLine('Twinsville', 'OK', 'Oklahoma', 34.5, -99.0, 30_000, 'Alpha County'),
+  makeCSVLine('Twinsville', 'OK', 'Oklahoma', 36.8, -95.0, 60_000, 'Beta County'),
 ].join('\n');
 
 // ---------------------------------------------------------------------------
@@ -476,8 +481,9 @@ describe('computeCityMarketScores (ADR 0022)', () => {
     vi.restoreAllMocks();
   });
 
-  const keyOf = (city: string, state: string) =>
-    `${city.toLowerCase()}|${state.toUpperCase()}`;
+  // County-aware key (ADR 0030 B3); every fixture city defaults to "County".
+  const keyOf = (city: string, state: string, county = 'County') =>
+    `${city.toLowerCase()}|${county.toLowerCase()}|${state.toUpperCase()}`;
 
   it('returns a signal for every in-band city, including Census-absent ones (never dropped)', () => {
     const scores = computeCityMarketScores({ states: ['TX'], populationMin: 1, populationMax: 999_999_999 });
@@ -512,6 +518,17 @@ describe('computeCityMarketScores (ADR 0022)', () => {
     const scores = computeCityMarketScores({ states: ['TX'], populationMin: 50_000, populationMax: 70_000 });
     expect(scores.has(keyOf('MetroCandidate', 'TX'))).toBe(true);
     expect(scores.has(keyOf('NearbyA', 'TX'))).toBe(false);
+  });
+
+  it('duplicate city names within one state get distinct county-keyed entries (ADR 0030 B3)', () => {
+    const scores = computeCityMarketScores({ states: ['OK'], populationMin: 1, populationMax: 999_999_999 });
+    const alpha = scores.get(keyOf('Twinsville', 'OK', 'Alpha County'));
+    const beta = scores.get(keyOf('Twinsville', 'OK', 'Beta County'));
+    // Before the county-aware key, one sibling silently overwrote the other.
+    expect(alpha).toBeDefined();
+    expect(beta).toBeDefined();
+    // The old collapsed key must no longer exist.
+    expect(scores.has('twinsville|OK')).toBe(false);
   });
 
   it('cross-state metro mass suppresses metroDensityMult for a city in the requested state (#6)', () => {

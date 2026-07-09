@@ -321,8 +321,10 @@ export function rankCities(opts: RankCitiesOpts = {}): RankedCity[] {
  * metro mass from large out-of-band cities still suppresses metroDensityMult
  * for nearby in-band candidates — same pattern as rankCities.
  *
- * Map key: `${city.toLowerCase()}|${state.toUpperCase()}` — matches the
- * existingCombos key convention in the scout.
+ * Map key: `${city.toLowerCase()}|${county.toLowerCase()}|${state.toUpperCase()}`.
+ * County is part of the key because duplicate city names within one state are
+ * real (Franklin, Springfield, ...) — a city|state key silently overwrites one
+ * sibling's signal with the other's (ADR 0030 B3).
  */
 export function computeCityMarketScores(
   opts: ComputeCityMarketScoresOpts = {},
@@ -361,7 +363,7 @@ export function computeCityMarketScores(
       c.medianIncome !== undefined &&
       c.medianHomeValue !== undefined;
 
-    out.set(`${c.city.toLowerCase()}|${c.state.toUpperCase()}`, {
+    out.set(`${c.city.toLowerCase()}|${c.county.toLowerCase()}|${c.state.toUpperCase()}`, {
       metroDensityMult,
       demandQuality,
       hasCensus,

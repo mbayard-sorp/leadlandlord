@@ -67,7 +67,7 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   orchestrator: ON(5), // Phase 6
 
   // ── Armed: enabled but fires only on a human-initiated event ──
-  'niche-scout': ARMED(15), // deterministic grid scout; cap tolerates a cold cluster warm
+  'niche-scout': ARMED(20), // deterministic grid scout; cap tolerates a cold cluster warm + $5 refine (ADR 0030)
   'niche-validator': ARMED(15), // operator-approved validation spend
   'niche-keyword-refresher': ON(15), // quarterly cluster warm (~$12.50 fully stale)
   'site-builder': ARMED(10), // fires only on niche.approved
