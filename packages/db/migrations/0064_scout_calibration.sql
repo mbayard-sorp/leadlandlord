@@ -11,5 +11,9 @@
 -- Additive + idempotent.
 
 ALTER TABLE "system_state" ADD COLUMN IF NOT EXISTS "scout_proxy_bias_weight" numeric(4,3);
+--> statement-breakpoint
+
 ALTER TABLE "system_state" ADD COLUMN IF NOT EXISTS "scout_metro_density_smooth" numeric(4,3);
+--> statement-breakpoint
+
 ALTER TABLE "niche_outcome_snapshots" ADD COLUMN IF NOT EXISTS "has_local_pack" boolean;
