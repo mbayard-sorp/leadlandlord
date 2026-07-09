@@ -5,6 +5,7 @@ import {
   computeRentabilityScore,
   matchesTradeQuery,
   resolveMatchedTradeKeywords,
+  resolveCanonicalTrade,
   DEFAULT_RENTABILITY_CPC_CEILING,
   DEFAULT_RENTABILITY_LEAD_PRICE_CEILING,
 } from './lead-benchmarks';
@@ -375,6 +376,52 @@ describe('all pruned taxonomy trades pass ability-to-pay floor', () => {
         ).toBeGreaterThanOrEqual(MIN_RENTABILITY_PRIOR);
       });
     }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGRESSION GUARD (M3, ADR 0030): benchmark matching resolves every taxonomy
+// trade to SOME entry, and collision-prone trades resolve to the INTENDED
+// entry. The floor test above can't catch a wrong-entry match that happens to
+// clear the floor (e.g. "soft wash roof cleaning" swallowed by the roofing
+// entry's "roof" keyword would pass the floor with 2x the real lead price) —
+// the canonical-trade assertions below can.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('benchmark matching resolves every taxonomy trade', () => {
+  for (const [category, trades] of Object.entries(SERVICE_TAXONOMY)) {
+    for (const trade of trades) {
+      it(`[${category}] "${trade}" resolves to a benchmark entry`, () => {
+        expect(
+          resolveCanonicalTrade(trade),
+          `"${trade}" matched no TRADE_BENCHMARKS entry — priors would silently default`,
+        ).not.toBeNull();
+      });
+    }
+  }
+});
+
+describe('collision-prone trades resolve to the intended benchmark entry', () => {
+  // [trade, expected canonical (first keyword of the intended entry)]
+  const CASES: Array<[string, string]> = [
+    // longest-match must beat the roofing entry's "roof" and the pressure-washing
+    // entry's "soft wash"
+    ['soft wash roof cleaning', 'soft wash roof cleaning'],
+    // must beat any bare "solar" prefix match
+    ['solar panel cleaning', 'solar panel cleaning'],
+    // must beat the deck entry's "deck repair"
+    ['pool deck resurfacing', 'pool deck resurfacing'],
+    // sanity anchors for the generic entries
+    ['deck staining', 'deck building'],
+    // dedicated "tree trimming" entry must beat the generic entry's "tree trim"
+    ['tree trimming', 'tree trimming'],
+    ['residential roofing', 'roof'],
+  ];
+
+  for (const [trade, canonical] of CASES) {
+    it(`"${trade}" → "${canonical}"`, () => {
+      expect(resolveCanonicalTrade(trade)).toBe(canonical);
+    });
   }
 });
 

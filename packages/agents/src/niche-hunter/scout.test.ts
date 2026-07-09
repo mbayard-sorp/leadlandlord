@@ -113,6 +113,10 @@ const refineMock = {
   metricsVolume: 500,
   metricsCost: 0.0012,
   freeKeys: new Set<string>(),
+  /** true → getSerpComposition returns a degraded fallback composition (B1). */
+  fallback: false,
+  /** true → getSerpComposition throws (B2 failed-refinement path). */
+  throwOnSerp: false,
 };
 
 vi.mock('@leadlandlord/integrations/dataforseo', () => ({
@@ -137,8 +141,21 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
   }),
   dfsLocationName: vi.fn((city: string, state: string) => `${city},${state},United States`),
   getSerpComposition: vi.fn(async (args: { keyword: string; onCost?: (u: number) => void }) => {
+    if (refineMock.throwOnSerp) throw new Error('mock SERP failure');
     const cost = refineMock.freeKeys.has(args.keyword) ? 0 : refineMock.serpCost;
     args.onCost?.(cost);
+    if (refineMock.fallback) {
+      return {
+        aggregator_share: 0,
+        organic_count: 0,
+        has_local_pack: false,
+        local_pack_count: 0,
+        top_domains: [],
+        top_local: [],
+        difficulty: 50,
+        fallback: true,
+      };
+    }
     return {
       aggregator_share: refineMock.aggregatorShare,
       organic_count: 10,
@@ -147,6 +164,7 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
       top_domains: [],
       top_local: [],
       difficulty: refineMock.serpDifficulty,
+      fallback: false,
     };
   }),
   getLocalKeywordMetrics: vi.fn(
@@ -201,6 +219,8 @@ beforeEach(() => {
   refineMock.metricsVolume = 500;
   refineMock.metricsCost = 0.0012;
   refineMock.freeKeys = new Set<string>();
+  refineMock.fallback = false;
+  refineMock.throwOnSerp = false;
 });
 
 describe('NicheScout', () => {
@@ -396,6 +416,35 @@ describe('NicheScout', () => {
 
   // ── Stage-3 local-SERP refinement (ADR 0022 §5) ───────────────────────────
   describe('Stage-3 refinement', () => {
+    it('fallback composition → cell stays proxy, not counted refined, reported (B1, ADR 0030)', async () => {
+      refineMock.fallback = true;
+      const out = await runScout({ refine_top_k: 3, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      expect(vi.mocked(getSerpComposition)).toHaveBeenCalledTimes(3);
+      expect(out.refined_count).toBe(0);
+      // Fallback compositions must never be stamped onto cells as measurements.
+      expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
+      expect(insertedCandidates.every((c) => c.localSerpDifficulty === null)).toBe(true);
+      const run = insertedRuns[0]! as {
+        report: { refinement: { refined_count: number; refine_fallback_count: number; refine_failed_count: number } };
+      };
+      expect(run.report.refinement.refined_count).toBe(0);
+      expect(run.report.refinement.refine_fallback_count).toBe(3);
+      expect(run.report.refinement.refine_failed_count).toBe(0);
+    });
+
+    it('thrown SERP error → cell stays proxy, not counted refined (B2 regression)', async () => {
+      refineMock.throwOnSerp = true;
+      const out = await runScout({ refine_top_k: 2, refine_budget_usd: 100, refine_below_topk_sample_count: 0 });
+      expect(out.refined_count).toBe(0);
+      expect(insertedCandidates.every((c) => c.refinementSource === 'proxy')).toBe(true);
+      const run = insertedRuns[0]! as {
+        report: { refinement: { refined_count: number; refine_fallback_count: number; refine_failed_count: number } };
+      };
+      expect(run.report.refinement.refined_count).toBe(0);
+      expect(run.report.refinement.refine_failed_count).toBe(2);
+      expect(run.report.refinement.refine_fallback_count).toBe(0);
+    });
+
     it('refine_top_k=0 explicitly → no refinement, all cells proxy', async () => {
       // DEFAULT_SCOUT_REFINE_TOP_K is now 25 (ADR 0024 on-by-default). Pass 0
       // explicitly to exercise the no-refinement path.

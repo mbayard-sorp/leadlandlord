@@ -371,6 +371,10 @@ export async function getSerpComposition(args: {
     ttlDays: 14,
     costUsd: 0.075,
     forceRefresh,
+    // A fallback composition is a failed lookup, not a measurement — caching
+    // it would serve fabricated difficulty=50 to scout AND validate for the
+    // full TTL. Callers must check `.fallback` before trusting the value.
+    shouldCache: (v) => !v.fallback,
     fetcher: () => fetchSerpCompositionFromApi(keyword, location, language),
   });
   onCost?.(costUsd);

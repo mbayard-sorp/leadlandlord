@@ -64,6 +64,18 @@ describe('getSerpComposition — fallback flag', () => {
     expect(result.difficulty).toBe(50); // neutral fabricated score
     expect(result.organic_count).toBe(0);
   });
+
+  it('passes a shouldCache predicate that rejects fallback payloads (B1, ADR 0030)', async () => {
+    mockDfsPost.mockResolvedValueOnce(makeSerpResponse(['local-plumber.com'], true));
+    await getSerpComposition({ keyword: 'plumber tucson', location: 'Tucson,Arizona,United States' });
+    const { withDataForSeoCache } = await import('./cache');
+    const call = vi.mocked(withDataForSeoCache).mock.calls.at(-1)![0] as {
+      shouldCache?: (v: { fallback: boolean }) => boolean;
+    };
+    expect(call.shouldCache).toBeDefined();
+    expect(call.shouldCache!({ fallback: true })).toBe(false);
+    expect(call.shouldCache!({ fallback: false })).toBe(true);
+  });
 });
 
 describe('isAggregator — new domains', () => {

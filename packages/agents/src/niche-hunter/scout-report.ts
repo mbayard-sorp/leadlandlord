@@ -92,6 +92,10 @@ export const ScoutReport = z.object({
     refine_budget_exhausted: z.boolean(),
     /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). Default 0 on older reports. */
     sampled_count: z.number().default(0),
+    /** Refinement attempts that threw (cell left as proxy). Default 0 on older reports. */
+    refine_failed_count: z.number().default(0),
+    /** Refinement attempts that returned a fallback composition (cell left as proxy). Default 0 on older reports. */
+    refine_fallback_count: z.number().default(0),
   }),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
@@ -174,6 +178,10 @@ export interface BuildScoutReportArgs {
     refine_budget_exhausted: boolean;
     /** Below-top-K cells randomly sampled + refined (Phase 5 follow-up to ADR 0024). */
     sampled_count?: number;
+    /** Refinement attempts that threw (cell left as proxy). */
+    refine_failed_count?: number;
+    /** Refinement attempts that returned a fallback composition (cell left as proxy). */
+    refine_fallback_count?: number;
   };
 }
 
@@ -184,6 +192,8 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
     refine_spend_usd: 0,
     refine_budget_exhausted: false,
     sampled_count: 0,
+    refine_failed_count: 0,
+    refine_fallback_count: 0,
   };
   const savings = Math.max(0, Math.min(1, args.expectedCacheSavingsRate ?? 0));
   const costForN = (n: number) =>

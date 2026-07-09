@@ -353,6 +353,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
     let sampledCount = 0;
     let refineSpendUsd = 0;
     let refineBudgetExhausted = false;
+    let refineFailedCount = 0;
+    let refineFallbackCount = 0;
 
     if (refineTopK > 0) {
       // Worst-case cold cost of one cell's calls — used only for the pre-check.
@@ -364,9 +366,14 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       // measured local volume), rescoring through the SAME estimateScoutValue
       // math (geo blends, dollar formula) via overrides — no formula
       // duplication. Shared by both the top-K loop and the below-top-K
-      // sampling pass below. Returns false when the budget pre-check trips
-      // (caller decides whether that means "stop" or "skip this cell").
-      const refineOneCell = async (cell: ScoredCell): Promise<boolean> => {
+      // sampling pass below.
+      //
+      // Outcomes: 'refined' = cell measured + rescored; 'fallback' = DFS
+      // returned a degraded composition (cell untouched, stays proxy);
+      // 'failed' = the call threw (cell untouched, loop continues);
+      // 'budget' = the pre-check tripped (caller stops issuing new calls).
+      type RefineOutcome = 'refined' | 'fallback' | 'failed' | 'budget';
+      const refineOneCell = async (cell: ScoredCell): Promise<RefineOutcome> => {
         // Pre-check (graceful abort): would a worst-case cold call push ACTUAL
         // spend over budget? Compared against the budget net of what we have
         // actually spent so far — and actual spend only ever moved on cold calls,
@@ -375,7 +382,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         // let MORE cells refine before this guard ever trips.
         if (refineSpendUsd + worstCaseCellCost > refineBudgetUsd) {
           refineBudgetExhausted = true;
-          return false;
+          return 'budget';
         }
 
         // Local onCost: sum this call's incurred cost into a per-call accumulator
@@ -394,6 +401,17 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
             location,
             onCost: refineOnCost,
           });
+
+          // A fallback composition is a failed lookup returned as a value, not
+          // a measurement — writing it onto the cell would fabricate a
+          // difficulty-50 "local_serp" refinement. Leave the cell as proxy.
+          if (serp.fallback) {
+            ctx.log.warn(
+              { trade: cell.trade, city: cell.city, state: cell.state },
+              'niche-scout: local-SERP lookup returned fallback — leaving cell as proxy',
+            );
+            return 'fallback';
+          }
 
           let measuredCityVolume: number | undefined;
           if (refineMeasureVolume) {
@@ -453,7 +471,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           cell.localAggregatorShare = serp.aggregator_share;
           cell.hasLocalPack = serp.has_local_pack;
           if (measuredCityVolume !== undefined) cell.localMeasuredVolume = measuredCityVolume;
-          return true;
+          return 'refined';
         } catch (err) {
           ctx.log.warn(
             {
@@ -465,7 +483,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
             'niche-scout: local-SERP refinement failed — leaving cell as proxy',
           );
           // Leave the cell as proxy; do not abort the whole run.
-          return true;
+          return 'failed';
         } finally {
           refineSpendUsd += cellSpend;
         }
@@ -485,9 +503,11 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
 
       ctx.progress({ step: 3, total: 5, label: `refining top ${refineTopK} cells (local SERP)` });
       for (const cell of targets) {
-        const proceeded = await refineOneCell(cell);
-        if (!proceeded) break; // budget pre-check tripped — stop issuing new calls entirely
-        refinedCount++;
+        const outcome = await refineOneCell(cell);
+        if (outcome === 'budget') break; // budget pre-check tripped — stop issuing new calls entirely
+        if (outcome === 'refined') refinedCount++;
+        else if (outcome === 'fallback') refineFallbackCount++;
+        else refineFailedCount++;
       }
 
       // Below-top-K sampling (Phase 5 follow-up to ADR 0024): a low-competition
@@ -526,9 +546,11 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
               label: `sampling ${sampleTargets.length} below-top-${refineTopK} cells (local SERP)`,
             });
             for (const cell of sampleTargets) {
-              const proceeded = await refineOneCell(cell);
-              if (!proceeded) break;
-              sampledCount++;
+              const outcome = await refineOneCell(cell);
+              if (outcome === 'budget') break;
+              if (outcome === 'refined') sampledCount++;
+              else if (outcome === 'fallback') refineFallbackCount++;
+              else refineFailedCount++;
             }
           }
         }
@@ -589,6 +611,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
         refine_budget_exhausted: refineBudgetExhausted,
         sampled_count: sampledCount,
+        refine_failed_count: refineFailedCount,
+        refine_fallback_count: refineFallbackCount,
       },
       cellsDesc: rankedCells,
       grid: {
@@ -694,6 +718,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         uncached_trades: uncachedTrades,
         refined_count: refinedCount,
         sampled_count: sampledCount,
+        refine_failed_count: refineFailedCount,
+        refine_fallback_count: refineFallbackCount,
         refine_spend_usd: Number(refineSpendUsd.toFixed(4)),
         refine_budget_exhausted: refineBudgetExhausted,
       },
