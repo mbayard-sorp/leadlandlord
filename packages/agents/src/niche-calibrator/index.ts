@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, and, gte, lte } from 'drizzle-orm';
+import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import {
   getDb,
   sites,
@@ -242,6 +242,10 @@ export class NicheCalibrator extends BaseAgent<typeof NicheCalibratorInput, type
         .from(niches)
         .leftJoin(nicheCandidates, eq(nicheCandidates.nicheId, niches.id))
         .where(eq(niches.id, siteRow.nicheId))
+        // A niche re-surfaced across scout runs has several candidate rows
+        // sharing its nicheId — without an ORDER BY, limit(1) picks one
+        // arbitrarily and the stamped flag could flip run to run. Newest wins.
+        .orderBy(desc(nicheCandidates.createdAt))
         .limit(1);
       const serpComposition = (
         nicheRow?.dfsRaw as { serpComposition?: { has_local_pack?: boolean } } | null | undefined

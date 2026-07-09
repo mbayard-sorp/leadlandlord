@@ -111,6 +111,8 @@ function makeSelectChain(rows: unknown[]) {
   // terminal calls used across the agent's select() call sites.
   const where = () => ({
     limit: async () => rows,
+    // The has_local_pack lookup orders by candidate recency before limit(1).
+    orderBy: () => ({ limit: async () => rows }),
     // Awaiting the `where(...)` result directly (no .limit chained) also
     // needs to resolve to rows — drizzle's builder is thenable.
     then: (resolve: (v: unknown[]) => void) => resolve(rows),

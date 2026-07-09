@@ -98,9 +98,12 @@ vi.mock('@leadlandlord/us-cities/loader', () => ({
     },
   ),
   computeCityMarketScores: vi.fn(() =>
+    // County-aware keys matching the production city|county|state convention
+    // (ADR 0030 B3) — old city|state keys would silently miss every lookup
+    // and mask the geo-signal branch behind the neutral fallback.
     new Map<string, { metroDensityMult: number; demandQuality: number; hasCensus: boolean }>([
-      ['casper|WY', { metroDensityMult: 1.0, demandQuality: 0.62, hasCensus: true }],
-      ['laramie|WY', { metroDensityMult: 1.0, demandQuality: 0.55, hasCensus: true }],
+      ['casper|natrona|WY', { metroDensityMult: 1.0, demandQuality: 0.62, hasCensus: true }],
+      ['laramie|albany|WY', { metroDensityMult: 1.0, demandQuality: 0.55, hasCensus: true }],
       // Gillette intentionally absent → scout uses the neutral fallback signal.
     ]),
   ),
@@ -273,6 +276,20 @@ beforeEach(() => {
 });
 
 describe('NicheScout', () => {
+  it('geo market signal reaches persisted cells via the county-aware key (ADR 0030 B3)', async () => {
+    // Guards the city|county|state key contract between computeCityMarketScores
+    // and the scout's lookups: if either side drifts, every cell silently falls
+    // back to NEUTRAL_SIGNAL (demandQuality 1.0) and this assertion fails.
+    await runScout({ refine_top_k: 0 });
+    const casper = insertedCandidates.filter((c) => c.city === 'Casper');
+    const gillette = insertedCandidates.filter((c) => c.city === 'Gillette');
+    expect(casper.length).toBeGreaterThan(0);
+    expect(gillette.length).toBeGreaterThan(0);
+    // Casper is mocked at demandQuality 0.62; Gillette is absent → neutral 1.0.
+    expect(casper.every((c) => parseFloat(c.demandQuality as string) === 0.62)).toBe(true);
+    expect(gillette.every((c) => parseFloat(c.demandQuality as string) === 1.0)).toBe(true);
+  });
+
   it('scores the grid, ranks deterministically, and persists run + candidates', async () => {
     const out = await runScout();
     expect(insertedRuns).toHaveLength(1);

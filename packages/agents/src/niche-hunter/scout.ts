@@ -37,6 +37,7 @@ import {
   dampenSeasonalVolume,
 } from './scoring-config';
 import { buildScoutReport, populationBandOf, type ScoredCell } from './scout-report';
+import { summarizeBias } from './accuracy-stats';
 import { selectDiversified } from './selection';
 import { seededRandom, sampleIndices } from './rng';
 
@@ -131,7 +132,8 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       inputSchema: NicheScoutInput,
       outputSchema: NicheScoutOutput,
       // $20 (ADR 0030): the cap is a pre-run gate only, so a fully-cold run
-      // (cluster warming ~$12.50 + $5 refine budget) must fit under it.
+      // (cluster warming ~$12.50 + $5 refine budget + $2 state-demand
+      // sub-budget when that knob is on ≈ $19.50) must fit under it.
       defaultDailyCapUsd: 20,
       dedupeKeyFn: (input) =>
         `niche-scout:${[...input.states].sort().join(',')}:${input.category_filter ? [...input.category_filter].sort().join('+') : 'all'}:${new Date().toISOString().slice(0, 10)}`,
@@ -895,13 +897,21 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       // shrinks recommendation.n, which must not depend on cache warmth.
       const ensureMeasuredPasses =
         input.ensure_measured_passes ?? ENSURE_MEASURED_MAX_ITERATIONS;
+      // Cells whose refinement already failed or fell back this run: still
+      // 'proxy', but retrying them within the same run re-issues paid,
+      // uncached DFS calls for cells that just proved unmeasurable. Skip them
+      // (they surface via refine_failed_count / refine_fallback_count and the
+      // recommendation_fully_measured flag instead).
+      const attemptedUnmeasurable = new Set<string>();
       for (let pass = 0; pass < ensureMeasuredPasses && !refineBudgetExhausted; pass++) {
         const ranked = selectRanked().selected;
         const valuesDesc = ranked.map((c) => c.estMonthlyValueUsd).sort((a, b) => b - a);
         const cliff = findValueCliff(valuesDesc);
         const unmeasured = ranked
           .slice(0, cliff.n)
-          .filter((c) => c.refinementSource === 'proxy');
+          .filter(
+            (c) => c.refinementSource === 'proxy' && !attemptedUnmeasurable.has(dedupeKey(c)),
+          );
         if (unmeasured.length === 0) break;
         ctx.progress({
           step: 3,
@@ -912,8 +922,13 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           const outcome = await refineOneCell(cell);
           if (outcome === 'budget') break;
           if (outcome === 'refined') ensureMeasuredExtraCount++;
-          else if (outcome === 'fallback') refineFallbackCount++;
-          else refineFailedCount++;
+          else if (outcome === 'fallback') {
+            refineFallbackCount++;
+            attemptedUnmeasurable.add(dedupeKey(cell));
+          } else {
+            refineFailedCount++;
+            attemptedUnmeasurable.add(dedupeKey(cell));
+          }
         }
         cells.sort(cellComparator);
       }
@@ -931,20 +946,18 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           c.proxyScoutScore !== undefined &&
           c.proxyScoutScore > 0,
       )
-      .map((c) => c.scoutScore / c.proxyScoutScore!)
-      .sort((a, b) => a - b);
-    const proxyBias =
-      proxyBiasRatios.length > 0
-        ? {
-            n: proxyBiasRatios.length,
-            median_ratio: Number(
-              proxyBiasRatios[Math.floor(proxyBiasRatios.length / 2)]!.toFixed(4),
-            ),
-            mean_ratio: Number(
-              (proxyBiasRatios.reduce((s, r) => s + r, 0) / proxyBiasRatios.length).toFixed(4),
-            ),
-          }
-        : null;
+      .map((c) => c.scoutScore / c.proxyScoutScore!);
+    // summarizeBias is the SAME statistic scripts/scout-accuracy-report.ts
+    // computes offline — one median definition, so the calibration report can
+    // reproduce the exact multiplier a run applied.
+    const proxyBiasSummary = summarizeBias(proxyBiasRatios);
+    const proxyBias = proxyBiasSummary
+      ? {
+          n: proxyBiasSummary.n,
+          median_ratio: Number(proxyBiasSummary.median.toFixed(4)),
+          mean_ratio: Number(proxyBiasSummary.mean.toFixed(4)),
+        }
+      : null;
 
     // Proxy-bias apply (ADR 0030 Phase 4): refinement systematically moves
     // scores (usually down — proxies flatter competition), so never-measured
@@ -968,21 +981,22 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       cells.sort(cellComparator);
     }
 
+    // Final persisted ranking — same selectRanked math the ensure-measured
+    // loop protected above, over the bias-corrected scores. Computed ONCE and
+    // shared with the honest assessment below so the flag always describes
+    // exactly the ranking that persists.
+    const { selected: rankedCells, excludedByCap } = selectRanked();
+
     // Honest final assessment over the final ranking, regardless of whether
     // refinement ran at all: does the value-cliff recommendation contain
     // never-measured cells? (refine_top_k=0 → everything proxy → false.)
     {
-      const ranked = selectRanked().selected;
-      const valuesDesc = ranked.map((c) => c.estMonthlyValueUsd).sort((a, b) => b - a);
+      const valuesDesc = rankedCells.map((c) => c.estMonthlyValueUsd).sort((a, b) => b - a);
       const cliff = findValueCliff(valuesDesc);
-      recommendationFullyMeasured = ranked
+      recommendationFullyMeasured = rankedCells
         .slice(0, cliff.n)
         .every((c) => c.refinementSource !== 'proxy');
     }
-
-    // Final persisted ranking — same selectRanked math the ensure-measured
-    // loop protected above, over the bias-corrected scores.
-    const { selected: rankedCells, excludedByCap } = selectRanked();
 
     const report = buildScoutReport({
       refinement: {
