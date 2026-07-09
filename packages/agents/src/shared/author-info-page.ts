@@ -23,6 +23,34 @@ export interface StoryScaffoldInput {
   settingHint: string;
 }
 
+/**
+ * Verbatim grounded facts for the four original_* archetypes. The seeds/metric
+ * come straight from siteOriginalDataInputs / siteNetworkMetrics rows — the
+ * anti-fabrication contract is that these are the ONLY specific claims the
+ * drafted page may cite.
+ */
+export interface GroundedFactsInput {
+  /** Where the facts came from, e.g. 'caseStudyInputs' | 'siteNetworkMetrics'. */
+  source: string;
+  /** Operator- or scaffolder-seeded fact objects (case studies, firsthand notes, takes). */
+  seeds?: Array<Record<string, unknown>> | null;
+  /** Verbatim computed metric for data studies — value + sampleSize, no derived stats. */
+  metric?: { metricKind: string; value: Record<string, unknown>; sampleSize: number } | null;
+  /**
+   * True when any seed is scaffolder-generated (illustrative: true) rather than
+   * operator-vouched. Forces composite/illustrative framing + a disclosure line,
+   * mirroring the job-story rules.
+   */
+  illustrative: boolean;
+}
+
+/** E-E-A-T author attribution from siteOriginalDataInputs.expertiseProfile. */
+export interface AuthorProfileInput {
+  authorName?: string;
+  authorTitle?: string;
+  authorBio?: string;
+}
+
 export interface AuthorInfoPageArgs {
   siteId: string;
   proposedSlug: string;
@@ -58,6 +86,16 @@ export interface AuthorInfoPageArgs {
    * the model respects the target.
    */
   lengthTarget?: number;
+  /**
+   * Grounded facts for original_* archetypes. When present, the model is bound
+   * to a hard grounding contract: cite ONLY these facts, invent nothing.
+   */
+  groundedFacts?: GroundedFactsInput | null;
+  /**
+   * Author attribution (byline + JSON-LD author). Only rendered when
+   * authorName is present; credentials are never invented beyond what's given.
+   */
+  authorProfile?: AuthorProfileInput | null;
 }
 
 export interface DraftedInfoPage {
@@ -145,8 +183,69 @@ function voiceInstruction(voiceSeed: string | undefined): string {
   return `\nVoice seed: ${voiceSeed}. Match the tone described.`;
 }
 
+/**
+ * System-prompt lines enforcing the grounding contract + author attribution.
+ * Shared by the story and info variants so original_* archetypes are bound the
+ * same way regardless of intent.
+ */
+function groundingSystemLines(
+  groundedFacts: GroundedFactsInput | null | undefined,
+  authorProfile: AuthorProfileInput | null | undefined,
+): string[] {
+  const lines: string[] = [];
+  if (groundedFacts) {
+    lines.push(
+      `GROUNDING CONTRACT: the task includes a "Grounded facts" block. Those are the ONLY specific facts, numbers, jobs, experiences, or claims you may cite. Do NOT invent statistics, named clients, dates, credentials, awards, or outcomes beyond that block. If a detail is missing, write around it in general terms instead of fabricating it.`,
+    );
+    lines.push(
+      groundedFacts.illustrative
+        ? `The seeds are marked ILLUSTRATIVE — composite scenarios, not verified client engagements. Frame them as typical/illustrative ("a job like this usually…"), never as a specific real customer story, and end the body with a short italic line noting the examples are illustrative.`
+        : `The grounded facts are real, operator-vouched inputs. Present them accurately, without exaggeration or embellishment.`,
+    );
+  }
+  if (authorProfile?.authorName) {
+    lines.push(
+      `BYLINE: attribute the page to ${authorProfile.authorName}${authorProfile.authorTitle ? ` (${authorProfile.authorTitle})` : ''}. Add an italic byline line directly under the H1, and set the JSON-LD "author" to this name — @type "Organization" for a team/business name, "Person" only for a clearly personal name. Never invent credentials beyond what is given.`,
+    );
+  }
+  return lines;
+}
+
+/** User-prompt lines carrying the verbatim grounded facts + author bio. */
+function groundingPromptLines(
+  groundedFacts: GroundedFactsInput | null | undefined,
+  authorProfile: AuthorProfileInput | null | undefined,
+): string[] {
+  const lines: string[] = [];
+  if (groundedFacts) {
+    lines.push(
+      ``,
+      `Grounded facts (source: ${groundedFacts.source}) — the ONLY specific claims you may cite:`,
+      '```json',
+      JSON.stringify(
+        {
+          ...(groundedFacts.seeds && groundedFacts.seeds.length > 0 ? { seeds: groundedFacts.seeds } : {}),
+          ...(groundedFacts.metric ? { metric: groundedFacts.metric } : {}),
+        },
+        null,
+        2,
+      ),
+      '```',
+    );
+    if (groundedFacts.metric) {
+      lines.push(
+        `Cite the metric numbers VERBATIM (you may round for readability but never extrapolate) and mention the sample size (${groundedFacts.metric.sampleSize} observations) so readers can judge the data.`,
+      );
+    }
+  }
+  if (authorProfile?.authorBio) {
+    lines.push(``, `Author bio (context for tone/expertise; do not add claims beyond it): ${authorProfile.authorBio}`);
+  }
+  return lines;
+}
+
 export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedInfoPage> {
-  const { proposedTitle, intent, niche, city, state, ctx, themeKey, archetype, voiceSeed, storyScaffold, nicheKnowledge, lengthTarget = 1000 } = args;
+  const { proposedTitle, intent, niche, city, state, ctx, themeKey, archetype, voiceSeed, storyScaffold, nicheKnowledge, lengthTarget = 1000, groundedFacts, authorProfile } = args;
 
   if (process.env.MOCK_AI === '1') {
     return mockDraft(args);
@@ -166,6 +265,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
         `Avoid: fake reviews, made-up awards, specific license numbers, claims like "best in state".`,
         `Tone: clear, neighborly, practical. Theme vibe: ${themeKey ?? 'classic'}.`,
         archetype ? `Content archetype: ${archetype}. Shape the narrative arc accordingly.` : '',
+        ...groundingSystemLines(groundedFacts, authorProfile),
         voiceInstruction(voiceSeed),
       ].filter(Boolean).join('\n')
     : [
@@ -174,6 +274,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
         `CRITICAL — phone numbers: never write a literal phone number anywhere in the MDX or CTAs. Always use the placeholder token {{phone}} exactly as written (e.g. "Call us today at {{phone}}"). The site-host runtime substitutes the tenant's real tracking number at render. A literal number like (555) 123-4567 is a hard failure.`,
         `Tone: clear, neighborly, practical. Theme vibe: ${themeKey ?? 'classic'}.`,
         archetype ? `Content archetype: ${archetype}. Structure and angle the content accordingly.` : '',
+        ...groundingSystemLines(groundedFacts, authorProfile),
         voiceInstruction(voiceSeed),
       ].filter(Boolean).join('\n');
 
@@ -191,6 +292,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
         ...(nicheKnowledge
           ? [``, `Niche knowledge — keep terminology and technique consistent with this:`, nicheKnowledge]
           : []),
+        ...groundingPromptLines(groundedFacts, authorProfile),
         ``,
         `Requirements:`,
         `- Title ≤60 chars, framed as a job/use-case, includes the keyword naturally.`,
@@ -206,6 +308,7 @@ export async function draftInfoPage(args: AuthorInfoPageArgs): Promise<DraftedIn
         `Author a single info page for a ${niche} business serving ${city}, ${state}.`,
         `Topic: "${proposedTitle}"`,
         `Intent: ${intent}`,
+        ...groundingPromptLines(groundedFacts, authorProfile),
         ``,
         `Requirements:`,
         `- Title ≤60 chars, includes the topic phrase naturally.`,
@@ -281,7 +384,27 @@ function clampString(s: string, max: number): string {
 }
 
 function mockDraft(args: AuthorInfoPageArgs): DraftedInfoPage {
-  const { proposedTitle, niche, city, state, lengthTarget = 1000, archetype, voiceSeed, intent, storyScaffold } = args;
+  const { proposedTitle, niche, city, state, lengthTarget = 1000, archetype, voiceSeed, intent, storyScaffold, groundedFacts, authorProfile } = args;
+
+  // Byline + grounded-facts blocks mirror what the real prompt demands, so
+  // unit tests can assert the plumbing end-to-end without an LLM call.
+  const bylineLine = authorProfile?.authorName
+    ? `*By ${authorProfile.authorName}${authorProfile.authorTitle ? `, ${authorProfile.authorTitle}` : ''}*`
+    : null;
+  const groundedBlock = groundedFacts
+    ? [
+        `## Grounded facts`,
+        ``,
+        '```json',
+        JSON.stringify({ source: groundedFacts.source, seeds: groundedFacts.seeds ?? undefined, metric: groundedFacts.metric ?? undefined }),
+        '```',
+        ...(groundedFacts.metric ? [``, `Based on ${groundedFacts.metric.sampleSize} observations of ${groundedFacts.metric.metricKind}.`] : []),
+        ...(groundedFacts.illustrative ? [``, `*The examples above are illustrative composites, not specific verified client engagements.*`] : []),
+      ].join('\n')
+    : null;
+  const mockAuthorJsonLd = authorProfile?.authorName
+    ? { author: { '@type': 'Organization', name: authorProfile.authorName } }
+    : {};
 
   if (intent === 'story' && storyScaffold) {
     const title = clampString(`${proposedTitle} | ${niche} ${city}`, 60);
@@ -291,6 +414,7 @@ function mockDraft(args: AuthorInfoPageArgs): DraftedInfoPage {
     );
     const mdx = [
       `# ${proposedTitle}`,
+      ...(bylineLine ? [``, bylineLine] : []),
       ``,
       `## The call`,
       ``,
@@ -324,6 +448,7 @@ function mockDraft(args: AuthorInfoPageArgs): DraftedInfoPage {
         headline: title,
         about: storyScaffold.rootCause,
         areaServed: `${city}, ${state}`,
+        ...mockAuthorJsonLd,
       }),
     };
   }
@@ -346,12 +471,14 @@ function mockDraft(args: AuthorInfoPageArgs): DraftedInfoPage {
 
   const mdx = [
     `# ${proposedTitle}`,
+    ...(bylineLine ? [``, bylineLine] : []),
     ``,
     `If you're searching for ${proposedTitle.toLowerCase()} in ${city}, ${state}, here's what local ${niche} pros want you to know.`,
     ``,
     `## What ${proposedTitle.toLowerCase()} usually involves`,
     ``,
     `Most ${niche} jobs in ${city} share a common workflow: assessment, planning, execution, and cleanup. Knowing what to expect helps you compare quotes and avoid surprises.`,
+    ...(groundedBlock ? [``, groundedBlock] : []),
     extraParagraphs,
     ``,
     `## Ready to talk it through?`,
@@ -370,6 +497,7 @@ function mockDraft(args: AuthorInfoPageArgs): DraftedInfoPage {
       headline: title,
       about: proposedTitle,
       areaServed: `${city}, ${state}`,
+      ...mockAuthorJsonLd,
     }),
   };
 }

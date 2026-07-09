@@ -37,6 +37,7 @@ import { GeoAeoAuditor } from './geo-aeo-auditor/index';
 import { LocalSeoOptimizer } from './local-seo-optimizer/index';
 import { NetworkMetricsAggregator } from './network-metrics-aggregator/index';
 import { ContentDataAuditor } from './content-data-auditor/index';
+import { DataInputsScaffolder } from './data-inputs-scaffolder/index';
 import { FleetDigest } from './fleet-digest/index';
 import { CitationRunner } from './citation-runner/index';
 import { Molly } from './molly/index';
@@ -90,6 +91,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   'local-seo-optimizer': () => new LocalSeoOptimizer(),
   'network-metrics-aggregator': () => new NetworkMetricsAggregator(),
   'content-data-auditor': () => new ContentDataAuditor(),
+  'data-inputs-scaffolder': () => new DataInputsScaffolder(),
   'fleet-digest': () => new FleetDigest(),
   'citation-runner': () => new CitationRunner(),
   molly: () => new Molly(),

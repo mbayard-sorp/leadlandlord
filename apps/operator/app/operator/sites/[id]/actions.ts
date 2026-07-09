@@ -845,8 +845,30 @@ export async function saveProprietaryData(formData: FormData): Promise<ActionRes
     return { ok: false, message: err instanceof Error ? err.message : 'save failed' };
   }
 
+  // Sync sameAs to the Sanity site doc — the renderer reads `site.sameAs` from
+  // Sanity (theme-bundle → LocalBusiness JSON-LD), NOT from Postgres, so
+  // without this patch the URLs saved above never reach the live org schema.
+  // persist-sanity carries the existing doc's sameAs forward across rebuilds,
+  // so this value survives. Best-effort: a missing doc (site not built yet)
+  // must not fail the save. An emptied form leaves the Sanity value untouched
+  // (clearing real profile URLs is an explicit Studio action).
+  let sameAsWarning: string | undefined;
+  if (sameAs.length > 0) {
+    try {
+      const client = createWriteClient();
+      await client.patch(siteDocId(siteId)).set({ sameAs }).commit();
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : err, siteId },
+        'saveProprietaryData: sameAs Sanity sync failed (doc missing or write error)',
+      );
+      sameAsWarning =
+        'Saved, but syncing sameAs to the live site failed (is the site built yet?). Re-save once the site exists.';
+    }
+  }
+
   revalidatePath(`/operator/sites/${siteId}`);
-  return { ok: true };
+  return { ok: true, message: sameAsWarning };
 }
 
 export async function setLocalContentEnabled(siteId: string, enabled: boolean): Promise<ActionResult> {

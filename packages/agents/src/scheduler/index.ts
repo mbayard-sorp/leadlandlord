@@ -24,6 +24,7 @@ import { scheduleGeoAeoAuditor } from './geo-aeo-auditor';
 import { scheduleLocalSeoOptimizer } from './local-seo-optimizer';
 import { scheduleNetworkMetricsAggregator } from './network-metrics-aggregator';
 import { scheduleContentDataAuditor } from './content-data-auditor';
+import { scheduleDataInputsScaffolder } from './data-inputs-scaffolder';
 import { scheduleFleetDigest } from './fleet-digest';
 import { scheduleCitationRunner } from './citation-runner';
 import { scheduleNicheKeywordRefresher } from './niche-keyword-refresher';
@@ -60,6 +61,7 @@ export const schedulers: Record<string, Scheduler> = {
   'local-seo-optimizer': scheduleLocalSeoOptimizer,
   'network-metrics-aggregator': scheduleNetworkMetricsAggregator,
   'content-data-auditor': scheduleContentDataAuditor,
+  'data-inputs-scaffolder': scheduleDataInputsScaffolder,
   'fleet-digest': scheduleFleetDigest,
   'citation-runner': scheduleCitationRunner,
   'niche-keyword-refresher': scheduleNicheKeywordRefresher,

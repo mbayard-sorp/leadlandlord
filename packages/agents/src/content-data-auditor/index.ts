@@ -319,10 +319,14 @@ export class ContentDataAuditor extends BaseAgent<
       .set({ status: 'approved', decidedAt: new Date() })
       .where(eq(contentIdeas.id, ideaId));
 
+    // Payload keys MUST be snake_case: operator-tick passes the payload
+    // verbatim as the writer's input, whose schema is { idea_id }. (The old
+    // { ideaId } camelCase payload failed input validation and dead-lettered
+    // every auditor-approved idea.)
     await ctx.emitNextStepEvent({
       type: 'content.idea.approved',
       targetAgent: 'local-content-writer',
-      payload: { ideaId, siteId: rec.siteId },
+      payload: { idea_id: ideaId, site_id: rec.siteId },
     });
 
     await this.markStatus(rec.id, 'auto_applied', ctx.runId);
