@@ -8,4 +8,6 @@
 -- Additive + idempotent.
 
 ALTER TABLE "system_state" ADD COLUMN IF NOT EXISTS "scout_state_demand_blend" numeric(4,3);
+--> statement-breakpoint
+
 ALTER TABLE "system_state" ADD COLUMN IF NOT EXISTS "scout_state_demand_clamp" numeric(4,2);
