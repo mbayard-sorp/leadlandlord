@@ -36,6 +36,7 @@
     "./niche-hunter/service-taxonomy": "./src/niche-hunter/service-taxonomy.ts",
     "./niche-hunter/scout-report": "./src/niche-hunter/scout-report.ts",
     "./niche-hunter/selection": "./src/niche-hunter/selection.ts",
+    "./niche-hunter/accuracy-stats": "./src/niche-hunter/accuracy-stats.ts",
     "./keyword-planner": "./src/keyword-planner/index.ts",
     "./alert-evaluator": "./src/alert-evaluator/index.ts",
     "./molly/persona": "./src/molly/persona.ts",

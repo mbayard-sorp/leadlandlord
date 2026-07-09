@@ -172,6 +172,17 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       sys.scoutDefaultBenchmarkWinnability != null
         ? parseFloat(sys.scoutDefaultBenchmarkWinnability)
         : undefined;
+    // Proxy-bias correction weight (ADR 0030 Phase 4). NULL/0 = report-only:
+    // the in-run proxy_bias summary is computed but never applied. w > 0
+    // multiplies every unmeasured (proxy) cell's scoutScore by
+    // `1 - w + w * clamp(median_ratio, 0.25, 1.5)` — ranking only, never
+    // estMonthlyValueUsd.
+    const proxyBiasWeight =
+      sys.scoutProxyBiasWeight != null ? parseFloat(sys.scoutProxyBiasWeight) : 0;
+    // Metro-density smoothing blend (ADR 0030 M2 / Phase 4). NULL = 0 (pure
+    // step function — historical behavior); 1 = fully smooth log interpolation.
+    const metroDensitySmooth =
+      sys.scoutMetroDensitySmooth != null ? parseFloat(sys.scoutMetroDensitySmooth) : 0;
 
     // 1. City pool — deterministic, no sampling.
     ctx.progress({ step: 1, total: 5, label: 'building trade x city grid' });
@@ -189,6 +200,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
       states: input.states,
       populationMin: input.population_min,
       populationMax: input.population_max,
+      smoothMetroDensity: metroDensitySmooth,
     });
     const NEUTRAL_SIGNAL: MarketSignal = { metroDensityMult: 1.0, demandQuality: 1.0, hasCensus: false };
 
@@ -730,25 +742,10 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
 
     }
 
-    // Honest final assessment over the final ranking, regardless of whether
-    // refinement ran at all: does the value-cliff recommendation contain
-    // never-measured cells? (refine_top_k=0 → everything proxy → false.)
-    {
-      const ranked = selectRanked().selected;
-      const valuesDesc = ranked.map((c) => c.estMonthlyValueUsd).sort((a, b) => b - a);
-      const cliff = findValueCliff(valuesDesc);
-      recommendationFullyMeasured = ranked
-        .slice(0, cliff.n)
-        .every((c) => c.refinementSource !== 'proxy');
-    }
-
-    // Final persisted ranking — same selectRanked math the ensure-measured
-    // loop protected above.
-    const { selected: rankedCells, excludedByCap } = selectRanked();
-
     // In-run proxy-bias summary (ADR 0030 S1): how far refinement moved scores,
     // over cells whose proxy score was snapshotted by a successful refinement.
-    // Report-only until scout_proxy_bias_weight (Phase 4) applies it.
+    // Computed BEFORE the final ranking so scout_proxy_bias_weight (Phase 4)
+    // can apply it below; report-only when that knob is NULL/0.
     const proxyBiasRatios = cells
       .filter(
         (c) =>
@@ -771,6 +768,44 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
           }
         : null;
 
+    // Proxy-bias apply (ADR 0030 Phase 4): refinement systematically moves
+    // scores (usually down — proxies flatter competition), so never-measured
+    // proxy cells hold an unearned edge over measured ones in the final
+    // ranking. When the knob is on, shrink (or grow) every proxy cell's
+    // scoutScore by the blended in-run median ratio. Deterministic (derived
+    // from run data only, no rng); ranking-only — estMonthlyValueUsd and the
+    // dollar report stay untouched.
+    let biasFactor: number | null = null;
+    if (proxyBiasWeight > 0 && proxyBias !== null) {
+      biasFactor =
+        1 -
+        proxyBiasWeight +
+        proxyBiasWeight * Math.max(0.25, Math.min(1.5, proxyBias.median_ratio));
+      for (const cell of cells) {
+        if (cell.refinementSource === 'proxy') {
+          // round2 matches the value-model's persisted score precision.
+          cell.scoutScore = Number((cell.scoutScore * biasFactor).toFixed(2));
+        }
+      }
+      cells.sort(cellComparator);
+    }
+
+    // Honest final assessment over the final ranking, regardless of whether
+    // refinement ran at all: does the value-cliff recommendation contain
+    // never-measured cells? (refine_top_k=0 → everything proxy → false.)
+    {
+      const ranked = selectRanked().selected;
+      const valuesDesc = ranked.map((c) => c.estMonthlyValueUsd).sort((a, b) => b - a);
+      const cliff = findValueCliff(valuesDesc);
+      recommendationFullyMeasured = ranked
+        .slice(0, cliff.n)
+        .every((c) => c.refinementSource !== 'proxy');
+    }
+
+    // Final persisted ranking — same selectRanked math the ensure-measured
+    // loop protected above, over the bias-corrected scores.
+    const { selected: rankedCells, excludedByCap } = selectRanked();
+
     const report = buildScoutReport({
       refinement: {
         refined_count: refinedCount,
@@ -782,6 +817,7 @@ export class NicheScout extends BaseAgent<typeof NicheScoutInput, typeof NicheSc
         ensure_measured_extra_count: ensureMeasuredExtraCount,
         recommendation_fully_measured: recommendationFullyMeasured,
         proxy_bias: proxyBias,
+        proxy_bias_weight_applied: biasFactor !== null ? Number(biasFactor.toFixed(4)) : null,
       },
       cellsDesc: rankedCells,
       grid: {

@@ -182,6 +182,7 @@ vi.mock('@leadlandlord/integrations/dataforseo', () => ({
 }));
 
 import { NicheScout, NicheScoutInput } from './scout';
+import { ScoutReport } from './scout-report';
 import { isDenylisted } from './denylist';
 import { getSystemState } from '@leadlandlord/db';
 import { getSerpComposition, getLocalKeywordMetrics } from '@leadlandlord/integrations/dataforseo';
@@ -707,6 +708,93 @@ describe('NicheScout', () => {
         report: { refinement: { proxy_bias: unknown } };
       };
       expect(run.report.refinement.proxy_bias).toBeNull();
+    });
+  });
+
+  // ── Proxy-bias apply (ADR 0030 Phase 4) ────────────────────────────────────
+  describe('Proxy-bias apply (ADR 0030 Phase 4)', () => {
+    // Isolated refine args so only the deterministic top-K pass runs.
+    const REFINE_ARGS = {
+      refine_top_k: 3,
+      refine_budget_usd: 100,
+      refine_below_topk_sample_count: 0,
+      ensure_measured_passes: 0,
+    } as const;
+
+    const resetPersisted = () => {
+      insertedRuns.length = 0;
+      insertedCandidates.length = 0;
+      statusUpdates.length = 0;
+      vi.mocked(getSerpComposition).mockClear();
+    };
+
+    const biasKnobState = (weight: string | null) =>
+      ({
+        scoutCtrAtRank: null,
+        scoutCallRate: null,
+        scoutMinLeadPrice: null,
+        scoutMinRentabilityPrior: null,
+        scoutMinWinnability: null,
+        scoutGeoCompBlend: null,
+        scoutGeoDemandBlend: null,
+        scoutPerStateCap: null,
+        scoutRefineTopK: null,
+        scoutRefineBudgetUsd: null,
+        scoutRefineMeasureVolume: null,
+        scoutBelowTopkSampleCount: null,
+        scoutMaxPerTrade: null,
+        scoutMaxCategoryShare: null,
+        scoutMaxPopBandShare: '1.0', // band cap disabled — see shared mock note
+        scoutProxyBiasWeight: weight,
+      }) as Awaited<ReturnType<typeof getSystemState>>;
+
+    it('weight null/0 → ranking identical to baseline and proxy_bias_weight_applied null', async () => {
+      // Baseline: shared mock leaves scoutProxyBiasWeight null (weight 0).
+      await runScout(REFINE_ARGS);
+      const baselineKeys = insertedCandidates.map((c) => `${c.trade}|${c.city}`);
+      const baseline = insertedRuns[0]! as {
+        report: { refinement: { proxy_bias_weight_applied: number | null } };
+      };
+      expect(baseline.report.refinement.proxy_bias_weight_applied).toBeNull();
+
+      resetPersisted();
+      vi.mocked(getSystemState).mockResolvedValueOnce(biasKnobState('0'));
+      await runScout(REFINE_ARGS);
+
+      expect(insertedCandidates.map((c) => `${c.trade}|${c.city}`)).toEqual(baselineKeys);
+      const run = insertedRuns[0]! as {
+        report: { refinement: { proxy_bias_weight_applied: number | null } };
+      };
+      expect(run.report.refinement.proxy_bias_weight_applied).toBeNull();
+    });
+
+    it('weight 1.0 applies the clamped median ratio to proxy scores; dollar values untouched', async () => {
+      // Baseline run captures each cell's persisted estMonthlyValueUsd.
+      await runScout(REFINE_ARGS);
+      const baselineValues = new Map(
+        insertedCandidates.map((c) => [`${c.trade}|${c.city}`, c.estMonthlyValueUsd]),
+      );
+
+      resetPersisted();
+      vi.mocked(getSystemState).mockResolvedValueOnce(biasKnobState('1.0'));
+      await runScout(REFINE_ARGS);
+
+      const run = insertedRuns[0]! as {
+        report: ScoutReport & {
+          refinement: { proxy_bias_weight_applied: number | null };
+        };
+      };
+      // Measured winnability 0.70 vs proxy 0.90 → median_ratio ≈ 0.7778, inside
+      // the [0.25, 1.5] clamp; w=1 → biasFactor = median_ratio.
+      expect(run.report.refinement.proxy_bias_weight_applied).toBeCloseTo(0.7 / 0.9, 2);
+      // The persisted report round-trips through the zod schema.
+      expect(() => ScoutReport.parse(run.report)).not.toThrow();
+      // Bias only re-ranks via scoutScore — every persisted cell's
+      // estMonthlyValueUsd is byte-identical to the baseline run's.
+      expect(insertedCandidates.length).toBe(baselineValues.size);
+      for (const c of insertedCandidates) {
+        expect(c.estMonthlyValueUsd).toBe(baselineValues.get(`${c.trade}|${c.city}`));
+      }
     });
   });
 

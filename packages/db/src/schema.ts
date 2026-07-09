@@ -1208,6 +1208,19 @@ export const systemState = pgTable('system_state', {
     precision: 4,
     scale: 3,
   }),
+  // Proxy-bias correction weight (migration 0064, ADR 0030 Phase 4). NULL/0 =
+  // report-only (the in-run proxy_bias summary is computed but never applied).
+  // When w > 0 the scout multiplies every UNMEASURED (refinement_source
+  // 'proxy') cell's scoutScore by `1 - w + w * clamp(median_ratio, 0.25, 1.5)`
+  // where median_ratio is the run's refined-vs-proxy score bias. Never touches
+  // estMonthlyValueUsd — ranking only.
+  scoutProxyBiasWeight: numeric('scout_proxy_bias_weight', { precision: 4, scale: 3 }),
+  // Metro-density smoothing blend (migration 0064, ADR 0030 M2 / Phase 4).
+  // NULL/0 = pure step function (historical behavior); 1 = fully smooth log
+  // interpolation between the step plateaus (1.0 at <=250k nearby pop, 0.15 at
+  // >=2M); in between = linear blend. Consumed by computeCityMarketScores
+  // (scout geo signal) only — rankCities always uses the step function.
+  scoutMetroDensitySmooth: numeric('scout_metro_density_smooth', { precision: 4, scale: 3 }),
   // Geographic-targeting + refinement knobs (migration 0045, ADR 0022). NULL =
   // fall back to the defaults in packages/agents/src/niche-hunter/
   // {value-model,scoring-config}.ts. Set via /operator/control.
@@ -1541,6 +1554,13 @@ export const nicheOutcomeSnapshots = pgTable(
     observedCtr: numeric('observed_ctr', { precision: 6, scale: 4 }),
     /** portfolio_snapshots calls (that week, summed) / moneyKwClicks. Null when moneyKwClicks is 0. */
     observedCallRate: numeric('observed_call_rate', { precision: 6, scale: 4 }),
+    /**
+     * Measured local-pack presence copied from niches.dfs_raw (validation-time
+     * SERP composition) or, failing that, the promoted candidate's measured
+     * has_local_pack column at calibration time (migration 0064, ADR 0030) —
+     * enables CTR segmentation by SERP layout. Null when neither source knows.
+     */
+    hasLocalPack: boolean('has_local_pack'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

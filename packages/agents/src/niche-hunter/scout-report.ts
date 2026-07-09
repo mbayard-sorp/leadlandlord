@@ -115,6 +115,13 @@ export const ScoutReport = z.object({
       .object({ n: z.number(), median_ratio: z.number(), mean_ratio: z.number() })
       .nullable()
       .default(null),
+    /**
+     * The multiplier actually applied to unmeasured (proxy) cells' scoutScore
+     * when scout_proxy_bias_weight is set (ADR 0030 Phase 4):
+     * `1 - w + w·clamp(median_ratio, 0.25, 1.5)`. Null when the knob is
+     * NULL/0 or nothing was refined (proxy_bias stays report-only).
+     */
+    proxy_bias_weight_applied: z.number().nullable().default(null),
   }),
 });
 export type ScoutReport = z.infer<typeof ScoutReport>;
@@ -216,6 +223,8 @@ export interface BuildScoutReportArgs {
     recommendation_fully_measured?: boolean;
     /** Refined-vs-proxy score bias summary (ADR 0030); null when nothing refined. */
     proxy_bias?: { n: number; median_ratio: number; mean_ratio: number } | null;
+    /** Multiplier applied to proxy cells' scoutScore (ADR 0030 Phase 4); null when knob off. */
+    proxy_bias_weight_applied?: number | null;
   };
 }
 
@@ -231,6 +240,7 @@ export function buildScoutReport(args: BuildScoutReportArgs): ScoutReport {
     ensure_measured_extra_count: 0,
     recommendation_fully_measured: true,
     proxy_bias: null,
+    proxy_bias_weight_applied: null,
   };
   const savings = Math.max(0, Math.min(1, args.expectedCacheSavingsRate ?? 0));
   const costForN = (n: number) =>
