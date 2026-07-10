@@ -64,6 +64,10 @@ export async function provisionNumber(args: ProvisionNumberArgs): Promise<Tracki
     body.set('AreaCode', args.areaCodeHint);
   }
   body.set('FriendlyName', `LeadLandlord-${args.siteId.slice(0, 8)}`);
+  // Enable CNAM (caller-name) lookup so Twilio populates the `CallerName`
+  // webhook param on inbound calls. Without this, `params.CallerName` is always
+  // empty and the operator calls list shows no caller names. (~$0.01/lookup.)
+  body.set('VoiceCallerIdLookup', 'true');
   if (args.voiceUrl) {
     body.set('VoiceUrl', args.voiceUrl);
     body.set('VoiceMethod', 'POST');
@@ -108,6 +112,12 @@ export interface UpdateNumberArgs {
   voiceUrl?: string;
   statusCallbackUrl?: string;
   friendlyName?: string;
+  /**
+   * Toggle CNAM (caller-name) lookup on the number. Set true to have Twilio
+   * populate the `CallerName` webhook param on inbound calls. Left unchanged
+   * when undefined (Twilio only updates fields present in the request).
+   */
+  callerIdLookup?: boolean;
 }
 
 export async function updateNumber(args: UpdateNumberArgs): Promise<void> {
@@ -128,6 +138,9 @@ export async function updateNumber(args: UpdateNumberArgs): Promise<void> {
     body.set('StatusCallbackMethod', 'POST');
   }
   if (args.friendlyName) body.set('FriendlyName', args.friendlyName);
+  if (args.callerIdLookup !== undefined) {
+    body.set('VoiceCallerIdLookup', String(args.callerIdLookup));
+  }
 
   const res = await fetch(
     `${TWILIO_BASE}/Accounts/${sid}/IncomingPhoneNumbers/${args.twilioSid}.json`,
@@ -174,6 +187,54 @@ export async function releaseNumber(twilioSid: string): Promise<{ released: bool
     throw new IntegrationError('twilio', `release failed: ${res.status} ${text}`, res.status, text);
   }
   return { released: true };
+}
+
+const LOOKUPS_BASE = 'https://lookups.twilio.com/v2';
+
+/**
+ * Parse a caller name out of a Twilio Lookup v2 response body. Exposed for
+ * unit testing. The v2 shape nests the CNAM result under `caller_name`:
+ *   { caller_name: { caller_name: "JOHN DOE", caller_type: "CONSUMER", error_code: null } }
+ * Returns the trimmed name, or null when absent/blank or the lookup carried an
+ * error code (e.g. carrier had no CNAM record).
+ */
+export function parseCallerNameLookup(json: unknown): string | null {
+  const block = (json as { caller_name?: unknown })?.caller_name;
+  if (!block || typeof block !== 'object') return null;
+  const { caller_name: name, error_code: errorCode } = block as {
+    caller_name?: unknown;
+    error_code?: unknown;
+  };
+  if (errorCode != null) return null;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+/**
+ * Resolve the CNAM (caller name) for a phone number via the Twilio Lookup v2
+ * API. Used to backfill `calls.caller_name` for historical calls that predate
+ * caller-name lookup being enabled on the number. Costs ~$0.01 per lookup.
+ *
+ * Returns null (never throws) when creds are missing, the number is unknown
+ * (404), or no CNAM record exists — callers treat that as "no name available".
+ *
+ * Twilio API docs: https://www.twilio.com/docs/lookup/v2-api/caller-name
+ */
+export async function lookupCallerName(phoneNumber: string): Promise<string | null> {
+  assertNotAuditing('twilio.lookupCallerName');
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) return null;
+
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  const url = `${LOOKUPS_BASE}/PhoneNumbers/${encodeURIComponent(phoneNumber)}?Fields=caller_name`;
+  const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+  // 404 = number not found / not lookupable — treat as "no name", don't throw.
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new IntegrationError('twilio', `caller-name lookup failed: ${res.status} ${text}`, res.status, text);
+  }
+  return parseCallerNameLookup(await res.json());
 }
 
 /**

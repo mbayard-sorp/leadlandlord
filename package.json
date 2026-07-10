@@ -21,7 +21,8 @@
     "backfill-indexnow": "tsx scripts/backfill-indexnow.ts",
     "backfill-structured-data": "tsx scripts/backfill-structured-data.ts",
     "backfill-faq": "tsx scripts/backfill-faq.ts",
-    "backfill-buildsell-noindex": "tsx scripts/backfill-buildsell-noindex.ts"
+    "backfill-buildsell-noindex": "tsx scripts/backfill-buildsell-noindex.ts",
+    "backfill-caller-names": "tsx scripts/backfill-caller-names.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
