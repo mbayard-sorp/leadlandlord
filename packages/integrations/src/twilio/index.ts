@@ -376,3 +376,72 @@ function simpleHash(s: string): number {
   for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
   return Math.abs(h);
 }
+
+// ---------------------------------------------------------------------------
+// Repeat-caller spam throttle
+// ---------------------------------------------------------------------------
+
+/**
+ * Policy for diverting rapid-fire repeat callers to voicemail instead of
+ * forwarding them to the tenant. Spam dialers frequently hammer a number many
+ * times in a few minutes, which is a poor experience for the tenant on the
+ * receiving end. Genuine callers rarely re-dial more than a couple of times in
+ * a short window, so a generous threshold protects the tenant without dropping
+ * real leads (diverted calls still reach voicemail and are logged/classified).
+ */
+export interface SpamThrottleConfig {
+  /** Look-back window, in milliseconds, over which calls are counted. */
+  windowMs: number;
+  /**
+   * Maximum number of calls (including the current one) from the same caller
+   * to the same site within the window before further calls are diverted to
+   * voicemail. e.g. 3 means the 4th call within the window goes to voicemail.
+   */
+  maxCallsInWindow: number;
+}
+
+export const DEFAULT_SPAM_THROTTLE: SpamThrottleConfig = {
+  windowMs: 10 * 60_000,
+  maxCallsInWindow: 3,
+};
+
+/**
+ * Resolve the spam-throttle policy from environment variables, falling back to
+ * {@link DEFAULT_SPAM_THROTTLE}. Set `CALL_SPAM_THROTTLE=off` to disable the
+ * throttle entirely (returns `null`). `CALL_SPAM_WINDOW_MINUTES` and
+ * `CALL_SPAM_MAX_CALLS` override the window and threshold; invalid or
+ * non-positive values fall back to the defaults.
+ */
+export function resolveSpamThrottleConfig(
+  env: Record<string, string | undefined> = process.env,
+): SpamThrottleConfig | null {
+  if (env.CALL_SPAM_THROTTLE === 'off') return null;
+
+  const minutes = Number(env.CALL_SPAM_WINDOW_MINUTES);
+  const maxCalls = Number(env.CALL_SPAM_MAX_CALLS);
+
+  return {
+    windowMs:
+      Number.isFinite(minutes) && minutes > 0
+        ? minutes * 60_000
+        : DEFAULT_SPAM_THROTTLE.windowMs,
+    maxCallsInWindow:
+      Number.isFinite(maxCalls) && maxCalls > 0
+        ? Math.floor(maxCalls)
+        : DEFAULT_SPAM_THROTTLE.maxCallsInWindow,
+  };
+}
+
+/**
+ * Decide whether an inbound call should be diverted to voicemail because the
+ * caller is a rapid-fire repeat dialer. `recentCallCount` is the number of
+ * calls from the same caller number to the same site within the window,
+ * INCLUDING the current call. Returns true once that count exceeds the
+ * configured allowance.
+ */
+export function shouldDivertRepeatCaller(
+  recentCallCount: number,
+  config: SpamThrottleConfig = DEFAULT_SPAM_THROTTLE,
+): boolean {
+  return recentCallCount > config.maxCallsInWindow;
+}

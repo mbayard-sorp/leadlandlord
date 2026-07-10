@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb, calls } from '@leadlandlord/db';
 import {
   buildForwardingTwiml,
   buildVoicemailTwiml,
+  resolveSpamThrottleConfig,
+  shouldDivertRepeatCaller,
 } from '@leadlandlord/integrations/twilio';
 import { log } from '@leadlandlord/shared/log';
 import { readTwilioParams, verifyTwilioRequest } from '../../../../../lib/twilio-webhook';
-import { findSiteForCall, voicemailResponseForSite } from '../../../../../lib/twilio-voice';
+import {
+  countRecentCallsFromCaller,
+  findSiteForCall,
+  voicemailResponseForSite,
+} from '../../../../../lib/twilio-voice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -81,6 +87,34 @@ export async function POST(req: Request) {
   // No forwarding configured -> straight to voicemail with optional transcription.
   if (!site.forwardingNumber) {
     return voicemailResponseForSite(site, baseUrl);
+  }
+
+  // Repeat-caller spam throttle: rapid-fire dialers (often spam) shouldn't keep
+  // ringing the tenant. Once a caller exceeds the allowed calls within the
+  // window, divert to voicemail instead of forwarding — the lead is still
+  // captured and classified, and the tenant stops getting hammered.
+  const throttle = resolveSpamThrottleConfig();
+  if (throttle && callerNumber && callSid) {
+    const since = new Date(Date.now() - throttle.windowMs);
+    const recentCount = await countRecentCallsFromCaller(site.id, callerNumber, since);
+    if (shouldDivertRepeatCaller(recentCount, throttle)) {
+      log.warn(
+        { siteId: site.id, callerNumber, recentCount, callSid },
+        'voice webhook: diverting rapid repeat caller to voicemail',
+      );
+      // Flag the diverted call so operators can see why it went to voicemail.
+      await db
+        .update(calls)
+        .set({
+          isVoicemail: true,
+          metadata: sql`coalesce(${calls.metadata}, '{}'::jsonb) || ${JSON.stringify({
+            throttled: 'repeat_caller_spam',
+            recentCallCount: recentCount,
+          })}::jsonb`,
+        })
+        .where(eq(calls.twilioCallSid, callSid));
+      return voicemailResponseForSite(site, baseUrl);
+    }
   }
 
   const recordingCallback = site.recordingEnabled

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
-import { getDb, sites, type Site } from '@leadlandlord/db';
+import { and, eq, gte, sql } from 'drizzle-orm';
+import { getDb, sites, calls, type Site } from '@leadlandlord/db';
 import { buildVoicemailTwiml } from '@leadlandlord/integrations/twilio';
 
 /**
@@ -25,6 +25,31 @@ export async function findSiteForCall(params: Record<string, string>): Promise<S
     site = rows[0];
   }
   return site;
+}
+
+/**
+ * Count how many inbound calls the given caller has placed to a site since
+ * `since`. Used by the repeat-caller spam throttle on the voice webhook. The
+ * count includes the current call, which was inserted upfront by the handler.
+ * Backed by the `calls_site_started_idx` index on (site_id, started_at).
+ */
+export async function countRecentCallsFromCaller(
+  siteId: string,
+  callerNumber: string,
+  since: Date,
+): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(calls)
+    .where(
+      and(
+        eq(calls.siteId, siteId),
+        eq(calls.callerNumber, callerNumber),
+        gte(calls.startedAt, since),
+      ),
+    );
+  return rows[0]?.count ?? 0;
 }
 
 /**
