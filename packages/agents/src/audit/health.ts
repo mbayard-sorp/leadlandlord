@@ -66,6 +66,7 @@ export const AGENT_REQUIRED_ENV: Record<string, string[][]> = {
   maintenance: [['VERCEL_TOKEN']],
   'compliance-guard': [], // Rules + Anthropic.
   'call-classifier': [], // Anthropic-only.
+  'lead-qualifier': [], // Anthropic-only.
   operator: [], // Owned-asset orchestration; DB only.
   'molly': [['ZOHO_MCP_URL'], ['ZOHO_ACCOUNT_ID']], // guest-post outreach; Zoho optional (ZOHO_MOLLY_ENABLED gate).
   'molly-scorer': [], // Firecrawl receptivity scrape is best-effort.

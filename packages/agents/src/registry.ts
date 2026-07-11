@@ -22,6 +22,7 @@ import { NichePriorSuggester } from './niche-prior-suggester/index';
 import { MaintenanceAgent } from './maintenance/index';
 import { ComplianceGuard } from './compliance-guard/index';
 import { CallClassifier } from './call-classifier/index';
+import { LeadQualifier } from './lead-qualifier/index';
 import { Operator } from './operator/index';
 import { MollyScorer } from './molly-scorer/index';
 import { MollyDigest } from './molly-digest/index';
@@ -76,6 +77,7 @@ export const agentRegistry: Record<string, () => AnyAgent> = {
   maintenance: () => new MaintenanceAgent(),
   'compliance-guard': () => new ComplianceGuard(),
   'call-classifier': () => new CallClassifier(),
+  'lead-qualifier': () => new LeadQualifier(),
   operator: () => new Operator(),
   'molly-scorer': () => new MollyScorer(),
   'molly-digest': () => new MollyDigest(),

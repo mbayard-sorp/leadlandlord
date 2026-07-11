@@ -91,6 +91,26 @@ export const callClassificationEnum = pgEnum('call_classification', [
   'no_voicemail',
 ]);
 
+/**
+ * Per-site inbound AI voice qualification mode (ADR 0031).
+ * `off` — no AI answering (default, safety gate).
+ * `ai_first` — AI answers every inbound call, qualifies, then warm-transfers.
+ * `fallback` — tenant's phone rings first; AI answers on no-answer/busy.
+ */
+export const callModeEnum = pgEnum('call_mode', ['off', 'ai_first', 'fallback']);
+export type CallMode = (typeof callModeEnum.enumValues)[number];
+
+/**
+ * Caller urgency signal extracted by LeadQualifier from the AI-answered
+ * transcript (ADR 0031). Nullable — only set for AI-answered calls.
+ */
+export const qualificationUrgencyEnum = pgEnum('qualification_urgency', [
+  'emergency',
+  'this_week',
+  'flexible',
+  'just_browsing',
+]);
+
 export const backlinkTypeEnum = pgEnum('backlink_type', [
   'citation',
   'directory',
@@ -381,6 +401,12 @@ export const sites = pgTable(
      */
     localContentEnabled: boolean('local_content_enabled').notNull().default(false),
     /**
+     * Inbound AI voice qualification mode (ADR 0031). `off` = safety gate
+     * (default); no site is AI-answered until an operator opts it in via
+     * CallModeSelector. See callModeEnum for the full state meaning.
+     */
+    callMode: callModeEnum('call_mode').notNull().default('off'),
+    /**
      * Stable per-build token. Anchors site-builder's expensive sub-agent
      * dedupe keys (content-engine, keyword-planner, compliance-guard) so a
      * reaper-triggered re-run reuses the cached agent_runs output instead of
@@ -518,6 +544,21 @@ export const calls = pgTable(
     transcript: text('transcript'),
     classification: callClassificationEnum('classification').notNull().default('unclassified'),
     estRevenueUsd: numeric('est_revenue_usd', { precision: 10, scale: 2 }),
+    /** ElevenLabs conversation id — set for AI-answered calls (ADR 0031). */
+    elevenlabsConversationId: text('elevenlabs_conversation_id'),
+    /** 'human' | 'ai' — who answered the call. Null for legacy/unclassified rows. */
+    answeredBy: text('answered_by'),
+    /** LeadQualifier structured output (0-100), AI-answered calls only. */
+    qualificationScore: integer('qualification_score'),
+    /** Free-text intent summary from LeadQualifier. */
+    qualificationIntent: text('qualification_intent'),
+    qualificationUrgency: qualificationUrgencyEnum('qualification_urgency'),
+    qualificationJobType: text('qualification_job_type'),
+    qualificationBudgetBand: text('qualification_budget_band'),
+    qualificationAddress: text('qualification_address'),
+    /** Tenant-facing notification delivery status — mirrors leads.smsStatus. */
+    tenantSmsStatus: text('tenant_sms_status'),
+    tenantEmailStatus: text('tenant_email_status'),
     metadata: jsonb('metadata'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -527,6 +568,9 @@ export const calls = pgTable(
     twilioCallSidIdx: uniqueIndex('calls_twilio_call_sid_uniq')
       .on(t.twilioCallSid)
       .where(sql`${t.twilioCallSid} IS NOT NULL`),
+    elevenlabsConversationIdx: index('calls_elevenlabs_conversation_idx').on(
+      t.elevenlabsConversationId,
+    ),
   }),
 );
 
@@ -2392,4 +2436,27 @@ export const bsCustomerSiteAccess = pgTable(
 );
 
 export type BsCustomerSiteAccess = typeof bsCustomerSiteAccess.$inferSelect;
+
+// ════════════════════════════════════════════════════════════
+// Inbound AI call qualification (ADR 0031)
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Niche-keyed question scripts for the shared ElevenLabs qualification
+ * agent. `niche` is UNIQUE and nullable — the single row with `niche IS
+ * NULL` is the default fallback script used when no niche-specific row
+ * exists. `questions` is a flat, ordered array of question strings (no
+ * branching DSL in v1); rendered into the `{{question_script}}` dynamic
+ * variable via renderQuestionScript() in @leadlandlord/integrations.
+ */
+export const callQualificationScripts = pgTable('call_qualification_scripts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  niche: text('niche').unique(),
+  questions: jsonb('questions').$type<string[]>().notNull(),
+  systemPromptOverride: text('system_prompt_override'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type CallQualificationScript = typeof callQualificationScripts.$inferSelect;
+export type NewCallQualificationScript = typeof callQualificationScripts.$inferInsert;
 export type NewBsCustomerSiteAccess = typeof bsCustomerSiteAccess.$inferInsert;

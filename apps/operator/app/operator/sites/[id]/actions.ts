@@ -883,6 +883,27 @@ export async function setLocalContentEnabled(siteId: string, enabled: boolean): 
   return { ok: true };
 }
 
+const CallModeSchema = z.enum(['off', 'ai_first', 'fallback']);
+
+/**
+ * Flip a site's inbound AI voice qualification mode (ADR 0031). `off` is the
+ * safety-gate default — no site is AI-answered until an operator opts it in
+ * here via CallModeSelector.
+ */
+export async function setCallMode(siteId: string, mode: string): Promise<ActionResult> {
+  try { await requireOperatorSession(); } catch { return { ok: false, message: 'unauthorized' }; }
+  if (!siteId) return { ok: false, message: 'missing site id' };
+  const parsed = CallModeSchema.safeParse(mode);
+  if (!parsed.success) return { ok: false, message: 'invalid call mode' };
+  const db = getDb();
+  await db
+    .update(sites)
+    .set({ callMode: parsed.data, updatedAt: new Date() })
+    .where(eq(sites.id, siteId));
+  revalidatePath(`/operator/sites/${siteId}`);
+  return { ok: true };
+}
+
 /**
  * Run keyword-planner against this site. Pulls fresh DataForSEO keywords +
  * re-clusters them. Operator clicks this when:
