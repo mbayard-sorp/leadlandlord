@@ -36,10 +36,12 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { GoLiveChecklist, type GoLiveItem } from './GoLiveChecklist';
 import type { GoLiveManualFlags } from './go-live-actions';
 import { LocalContentToggle } from './LocalContentToggle';
+import { CallModeSelector } from './CallModeSelector';
 import { ProprietaryDataPanel } from './ProprietaryDataPanel';
 import { GeoSeoAuditPanel } from './GeoSeoAuditPanel';
 import { DeleteSitePanel } from './DeleteSitePanel';
 import { Timestamp } from '../../../../components/Timestamp';
+import { QualificationSummaryCell } from '../../../../components/QualificationBadges';
 
 export const dynamic = 'force-dynamic';
 
@@ -248,6 +250,16 @@ export default async function SiteDetailPage({ params }: Params) {
           Phone &amp; integrations
         </h2>
         <PhoneProvisionPanel site={site} />
+      </section>
+
+      {/* 6b. Inbound AI call qualification mode (ADR 0031) */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          AI call answering
+        </h2>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3">
+          <CallModeSelector siteId={site.id} current={site.callMode} />
+        </div>
       </section>
 
       {/* 7. Recent calls + Recent leads (2-col grid) */}
@@ -492,6 +504,7 @@ function CallsTable({ rows }: { rows: Call[] }) {
           <th>From</th>
           <th className="hidden md:table-cell">Dur</th>
           <th>Class</th>
+          <th>Qualification</th>
           <th className="hidden md:table-cell">Recording</th>
         </tr>
       </thead>
@@ -517,6 +530,9 @@ function CallsTable({ rows }: { rows: Call[] }) {
             <td className="text-slate-400 hidden md:table-cell">{c.durationS ? `${c.durationS}s` : '—'}</td>
             <td>
               <ClassPill v={c.classification} />
+            </td>
+            <td>
+              <QualificationSummaryCell call={c} />
             </td>
             <td className="hidden md:table-cell">
               {c.recordingUrl ? (

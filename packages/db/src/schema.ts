@@ -98,6 +98,7 @@ export const callClassificationEnum = pgEnum('call_classification', [
  * `fallback` — tenant's phone rings first; AI answers on no-answer/busy.
  */
 export const callModeEnum = pgEnum('call_mode', ['off', 'ai_first', 'fallback']);
+export type CallMode = (typeof callModeEnum.enumValues)[number];
 
 /**
  * Caller urgency signal extracted by LeadQualifier from the AI-answered

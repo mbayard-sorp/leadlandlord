@@ -10,6 +10,7 @@ export const navLinks: ReadonlyArray<NavLinkItem> = [
   { href: '/operator/build', label: 'Build site' },
   { href: '/operator/buildsell', label: 'Build & Sell' },
   { href: '/operator/calls', label: 'Calls' },
+  { href: '/operator/call-scripts', label: 'Call scripts' },
   { href: '/operator/agents', label: 'Agents' },
   { href: '/operator/seo', label: 'SEO' },
   { href: '/operator/links', label: 'Link building' },

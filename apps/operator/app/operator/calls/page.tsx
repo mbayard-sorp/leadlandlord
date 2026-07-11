@@ -5,6 +5,7 @@ import { getDb, calls, sites, type Call } from '@leadlandlord/db';
 import { SiteFilter, type SiteOption } from './SiteFilter';
 import { DeleteCallButton } from './DeleteCallButton';
 import { Timestamp } from '../../../components/Timestamp';
+import { QualificationSummaryCell } from '../../../components/QualificationBadges';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +115,7 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                 <th>From</th>
                 <th className="hidden md:table-cell">Dur</th>
                 <th>Class</th>
+                <th>Qualification</th>
                 <th className="hidden md:table-cell">Recording</th>
                 <th className="hidden lg:table-cell">Transcript</th>
                 <th />
@@ -158,6 +160,9 @@ export default async function CallsPage({ searchParams }: SearchParams) {
                   <td className="text-slate-400 hidden md:table-cell">{c.durationS ? `${c.durationS}s` : '—'}</td>
                   <td>
                     <ClassPill v={c.classification} />
+                  </td>
+                  <td>
+                    <QualificationSummaryCell call={c} />
                   </td>
                   <td className="hidden md:table-cell">
                     {c.recordingUrl ? (
