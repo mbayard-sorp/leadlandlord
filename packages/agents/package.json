@@ -13,6 +13,7 @@
     "./seo-operator": "./src/seo-operator/index.ts",
     "./tracking-setup": "./src/tracking-setup/index.ts",
     "./call-classifier": "./src/call-classifier/index.ts",
+    "./lead-qualifier": "./src/lead-qualifier/index.ts",
     "./tenant-prospector": "./src/tenant-prospector/index.ts",
     "./compliance-guard": "./src/compliance-guard/index.ts",
     "./outreach-agent": "./src/outreach-agent/index.ts",

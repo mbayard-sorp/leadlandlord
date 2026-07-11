@@ -10,6 +10,7 @@ import {
 import { log } from '@leadlandlord/shared/log';
 import { readTwilioParams, verifyTwilioRequest } from '../../../../../lib/twilio-webhook';
 import {
+  aiQualificationResponseForSite,
   countRecentCallsFromCaller,
   findSiteForCall,
   voicemailResponseForSite,
@@ -84,15 +85,12 @@ export async function POST(req: Request) {
 
   const baseUrl = process.env.OPERATOR_PUBLIC_URL ?? '';
 
-  // No forwarding configured -> straight to voicemail with optional transcription.
-  if (!site.forwardingNumber) {
-    return voicemailResponseForSite(site, baseUrl);
-  }
-
   // Repeat-caller spam throttle: rapid-fire dialers (often spam) shouldn't keep
-  // ringing the tenant. Once a caller exceeds the allowed calls within the
-  // window, divert to voicemail instead of forwarding — the lead is still
-  // captured and classified, and the tenant stops getting hammered.
+  // ringing the tenant (or the AI agent). Once a caller exceeds the allowed
+  // calls within the window, divert to voicemail instead — the lead is still
+  // captured and classified, and the tenant/agent stops getting hammered.
+  // Checked BEFORE the callMode branch: spam-throttled callers always get
+  // voicemail regardless of ai_first/fallback/off.
   const throttle = resolveSpamThrottleConfig();
   if (throttle && callerNumber && callSid) {
     const since = new Date(Date.now() - throttle.windowMs);
@@ -115,6 +113,36 @@ export async function POST(req: Request) {
         .where(eq(calls.twilioCallSid, callSid));
       return voicemailResponseForSite(site, baseUrl);
     }
+  }
+
+  // AI-first: the shared ElevenLabs agent answers every call for this site.
+  // aiQualificationResponseForSite() marks the call row answeredBy: 'ai' on
+  // success and falls back to voicemail (never dead-air) on any ElevenLabs
+  // failure — see lib/twilio-voice.ts.
+  if (site.callMode === 'ai_first') {
+    return aiQualificationResponseForSite(site, {
+      fromNumber: callerNumber ?? '',
+      toNumber: calledNumber ?? '',
+      callerName,
+      callSid,
+      baseUrl,
+    });
+  }
+
+  // No forwarding configured -> straight to voicemail with optional transcription.
+  if (!site.forwardingNumber) {
+    return voicemailResponseForSite(site, baseUrl);
+  }
+
+  // Forwarding to the tenant's phone (mode 'fallback' or 'off') — mark who's
+  // answering so the calls list can distinguish AI-answered from human-answered
+  // rows. Best-effort: don't block the response on this write.
+  if (callSid) {
+    void db
+      .update(calls)
+      .set({ answeredBy: 'human' })
+      .where(eq(calls.twilioCallSid, callSid))
+      .catch(() => {});
   }
 
   const recordingCallback = site.recordingEnabled

@@ -62,6 +62,7 @@ export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   maintenance: ON(2),
   'compliance-guard': ON(2),
   'call-classifier': ON(2),
+  'lead-qualifier': ON(2), // event-driven via ElevenLabs post-call webhook, not cron-scheduled
   operator: ON(2),
   'fleet-digest': ON(1), // Phase 5
   orchestrator: ON(5), // Phase 6

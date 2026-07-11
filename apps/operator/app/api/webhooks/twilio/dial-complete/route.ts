@@ -3,7 +3,11 @@ import { eq } from 'drizzle-orm';
 import { getDb, calls } from '@leadlandlord/db';
 import { log } from '@leadlandlord/shared/log';
 import { readTwilioParams, verifyTwilioRequest } from '../../../../../lib/twilio-webhook';
-import { findSiteForCall, voicemailResponseForSite } from '../../../../../lib/twilio-voice';
+import {
+  aiQualificationResponseForSite,
+  findSiteForCall,
+  voicemailResponseForSite,
+} from '../../../../../lib/twilio-voice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,5 +60,21 @@ export async function POST(req: Request) {
     });
   }
 
-  return voicemailResponseForSite(site, process.env.OPERATOR_PUBLIC_URL ?? '');
+  const baseUrl = process.env.OPERATOR_PUBLIC_URL ?? '';
+
+  // Fallback mode: the tenant's phone didn't pick up — hand off to the AI
+  // agent instead of going straight to voicemail. aiQualificationResponseForSite
+  // marks answeredBy: 'ai' on success and falls back to voicemail itself on
+  // any ElevenLabs failure (never dead-air the caller).
+  if (site.callMode === 'fallback') {
+    return aiQualificationResponseForSite(site, {
+      fromNumber: params.From ?? '',
+      toNumber: params.Called || params.To || '',
+      callerName: params.CallerName?.trim() || null,
+      callSid,
+      baseUrl,
+    });
+  }
+
+  return voicemailResponseForSite(site, baseUrl);
 }

@@ -92,6 +92,11 @@ export const agentMetadata: Record<string, AgentMeta> = {
     description: 'Classifies an inbound call transcript and estimates its revenue (Haiku).',
     trigger: 'Event-driven (inbound call)',
   },
+  'lead-qualifier': {
+    description:
+      'Qualifies an AI-answered inbound call transcript into score, intent, urgency, job type, and classification (Haiku).',
+    trigger: 'Event-driven (ElevenLabs post-call webhook)',
+  },
   operator: {
     description: 'Top-level orchestrator: reads global state and dispatches work to the fleet.',
   },

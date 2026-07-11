@@ -183,15 +183,20 @@ export async function getConversation(conversationId: string): Promise<Conversat
 // returns back to Twilio. Per-call context (niche, city, question script,
 // transfer number) rides along as dynamic variables.
 //
-// ⚠️ Confidence note: the exact request/response shape below is best-effort
-// from the ElevenLabs Twilio register-call docs
-// (https://elevenlabs.io/docs/api-reference/twilio/register-call) plus the
-// existing outbound-call precedent above. This sandboxed environment's
-// egress proxy blocks elevenlabs.io (confirmed 403 at the CONNECT layer),
-// so this could NOT be re-verified against live docs during this change.
-// Re-verify against current docs before Phase B wires real traffic through
-// this path; mock mode (below) does not depend on the shape being exactly
-// right.
+// ⚠️ Confidence note: re-verified against current ElevenLabs docs/search
+// (this sandboxed environment's egress proxy still blocks elevenlabs.io
+// directly, so verification happened out-of-band). `POST
+// https://api.elevenlabs.io/v1/convai/twilio/register-call` is the
+// documented "use your own Twilio infrastructure" endpoint for inbound
+// calls and returns TwiML directly (typically
+// `<Response><Connect><Stream .../></Connect></Response>`), with body
+// `agent_id`, `from_number`, `to_number`, `direction`,
+// `conversation_initiation_client_data: { dynamic_variables,
+// conversation_config_override }` — matching the shape below. Still worth a
+// final check against the live ElevenLabs account before the first
+// production call (endpoint/response shapes can drift between doc
+// snapshots and what an account actually returns). Mock mode (below) does
+// not depend on the shape being exactly right.
 // ─────────────────────────────────────────────────────────────────────────
 
 const RegisterInboundCallResponseSchema = z.union([
