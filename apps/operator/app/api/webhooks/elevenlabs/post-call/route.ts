@@ -69,6 +69,7 @@ export async function POST(req: Request) {
 
   const metadata: Record<string, unknown> = { ...(call.metadata as Record<string, unknown> | null) };
   if (summary) metadata.elevenlabsSummary = summary;
+  if (detectWarmTransfer(data)) metadata.warmTransfer = true;
 
   const updates: Partial<typeof calls.$inferInsert> = {
     answeredBy: call.answeredBy ?? 'ai',
@@ -176,6 +177,42 @@ function extractCallSid(data: PostCallDataT): string | undefined {
   return undefined;
 }
 
+/**
+ * Best-effort detection of a warm transfer (the agent invoking its
+ * `transfer_to_number` tool mid-call) somewhere in the post-call payload.
+ * ElevenLabs' tool-call shape isn't pinned down in our schema (payloads
+ * vary), so this defensively optional-chains over the couple of places a
+ * tool invocation is known to show up rather than assuming one exact shape.
+ * Never throws — any unexpected shape just means "not detected".
+ */
+function detectWarmTransfer(data: PostCallDataT): boolean {
+  try {
+    const transcript = data.transcript as
+      | Array<{ tool_calls?: unknown[]; tool_results?: unknown[] }>
+      | undefined;
+    for (const turn of transcript ?? []) {
+      if (mentionsTransferTool(turn?.tool_calls)) return true;
+      if (mentionsTransferTool(turn?.tool_results)) return true;
+    }
+    const analysis = data.analysis as Record<string, unknown> | undefined;
+    if (analysis && JSON.stringify(analysis).includes('transfer_to_number')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function mentionsTransferTool(entries: unknown[] | undefined): boolean {
+  if (!Array.isArray(entries)) return false;
+  return entries.some((entry) => {
+    try {
+      return JSON.stringify(entry).includes('transfer_to_number');
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** Flatten transcript turns into role-labeled lines, e.g. "AGENT: ...\nUSER: ...". */
 function extractTranscriptText(
   transcript: Array<{ role?: string; message?: string | null }> | undefined,
@@ -200,6 +237,11 @@ function extractTranscriptText(
  */
 async function runQualificationAndNotify(call: Call): Promise<void> {
   const db = getDb();
+
+  // Classification of the call, used below to gate the tenant notify
+  // fan-out — spam/no_voicemail/no-transcript calls aren't "real"
+  // conversations and shouldn't page the tenant.
+  let classification: string | null = call.classification ?? null;
 
   if (!call.transcript) {
     log.warn({ callId: call.id }, 'elevenlabs post-call: no transcript to qualify');
@@ -227,10 +269,6 @@ async function runQualificationAndNotify(call: Call): Promise<void> {
         metadata.qualification_summary = result.summary;
         metadata.qualification_confidence = result.confidence;
         if (result.notes) metadata.qualification_notes = result.notes;
-        // Recording proxy (Phase D) reads calls.recordingUrl directly; flag
-        // when it's not populated yet so the tenant email fan-out (once it
-        // lands) knows to omit the recording link rather than send a dead one.
-        if (!call.recordingUrl) metadata.recordingUrlPending = true;
 
         await db
           .update(calls)
@@ -247,6 +285,8 @@ async function runQualificationAndNotify(call: Call): Promise<void> {
           })
           .where(eq(calls.id, call.id));
 
+        classification = result.classification;
+
         log.info(
           { callId: call.id, score: result.qualification_score, classification: result.classification },
           'lead qualified',
@@ -260,12 +300,26 @@ async function runQualificationAndNotify(call: Call): Promise<void> {
     }
   }
 
-  try {
-    const notifyResult = await notifyTenantOfQualifiedLead(call.id);
+  // Skip the tenant SMS/email fan-out for calls that aren't real qualified
+  // conversations: no transcript to summarize, or LeadQualifier classified
+  // the call as spam / a voicemail-only attempt. `notifyTenantOfQualifiedLead`
+  // is the single writer of tenantSmsStatus/tenantEmailStatus for calls that
+  // DO get notified — this branch writes 'skipped' directly instead of
+  // calling it, so there's no duplicate write either way.
+  if (!call.transcript || classification === 'spam' || classification === 'no_voicemail') {
+    log.info(
+      { callId: call.id, classification },
+      'elevenlabs post-call: skipping tenant notify (no transcript or gated classification)',
+    );
     await db
       .update(calls)
-      .set({ tenantSmsStatus: notifyResult.smsStatus, tenantEmailStatus: notifyResult.emailStatus })
+      .set({ tenantSmsStatus: 'skipped', tenantEmailStatus: 'skipped' })
       .where(eq(calls.id, call.id));
+    return;
+  }
+
+  try {
+    await notifyTenantOfQualifiedLead(call.id);
   } catch (err) {
     log.error(
       { err: err instanceof Error ? err.message : err, callId: call.id },

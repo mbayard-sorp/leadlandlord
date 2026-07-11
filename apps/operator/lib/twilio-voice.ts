@@ -161,6 +161,11 @@ export async function aiQualificationResponseForSite(
       caller_name: params.callerName?.trim() || '',
       transfer_number: transferNumber,
       warm_transfer_enabled: transferNumber ? 'true' : 'false',
+      // Echoed back in the post-call payload's
+      // conversation_initiation_client_data.dynamic_variables.call_sid so
+      // apps/operator/app/api/webhooks/elevenlabs/post-call/route.ts can
+      // correlate even if elevenlabsConversationId sync is delayed.
+      call_sid: params.callSid ?? '',
     };
 
     const twiml = await registerInboundCall({
@@ -172,11 +177,15 @@ export async function aiQualificationResponseForSite(
     // Mark who answered here (rather than in each calling route) so both the
     // voice webhook's ai_first path and dial-complete's fallback path get
     // consistent answeredBy bookkeeping without duplicating success/failure
-    // branching in two places.
+    // branching in two places. isVoicemail: false matters for the
+    // dial-complete fallback path specifically — it marks the row
+    // isVoicemail: true (unanswered forward) before handing off here, so a
+    // successful AI handoff needs to clear that flag or the call would be
+    // mislabeled as a voicemail even though a live agent answered it.
     if (params.callSid) {
       await db
         .update(calls)
-        .set({ answeredBy: 'ai' })
+        .set({ answeredBy: 'ai', isVoicemail: false })
         .where(eq(calls.twilioCallSid, params.callSid))
         .catch(() => {});
     }

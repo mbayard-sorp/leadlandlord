@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { getDb, calls } from '@leadlandlord/db';
+import { getConversationAudio } from '@leadlandlord/integrations/elevenlabs';
 import { verifyRecordingToken } from '@leadlandlord/shared/tenant-recording-token';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,10 @@ export const dynamic = 'force-dynamic';
  * fetches the Twilio-protected recording URL server-side with Basic Auth so
  * the tenant's browser never sees Twilio credentials, and forwards Range for
  * seeking.
+ *
+ * AI-answered calls bridge straight to ElevenLabs and never get a Twilio
+ * `recordingUrl` — for those we fall back to ElevenLabs' own conversation
+ * audio endpoint.
  */
 export async function GET(
   req: Request,
@@ -30,11 +35,30 @@ export async function GET(
 
   const db = getDb();
   const row = (
-    await db.select({ recordingUrl: calls.recordingUrl }).from(calls).where(eq(calls.id, callId)).limit(1)
+    await db
+      .select({ recordingUrl: calls.recordingUrl, elevenlabsConversationId: calls.elevenlabsConversationId })
+      .from(calls)
+      .where(eq(calls.id, callId))
+      .limit(1)
   )[0];
 
-  if (!row?.recordingUrl) {
+  if (!row?.recordingUrl && !row?.elevenlabsConversationId) {
     return NextResponse.json({ ok: false, error: 'no recording' }, { status: 404 });
+  }
+
+  if (!row.recordingUrl) {
+    const audio = await getConversationAudio(row.elevenlabsConversationId as string);
+    if (!audio) {
+      return NextResponse.json({ ok: false, error: 'no recording' }, { status: 404 });
+    }
+    return new NextResponse(new Uint8Array(audio), {
+      status: 200,
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'private, max-age=3600',
+        'Content-Length': String(audio.byteLength),
+      },
+    });
   }
 
   const sid = process.env.TWILIO_ACCOUNT_SID;

@@ -77,13 +77,27 @@ export async function saveCallScript(formData: FormData): Promise<ActionResult> 
     }
   }
 
-  if (id) {
-    await db
-      .update(callQualificationScripts)
-      .set({ niche, questions, systemPromptOverride, updatedAt: new Date() })
-      .where(eq(callQualificationScripts.id, id));
-  } else {
-    await db.insert(callQualificationScripts).values({ niche, questions, systemPromptOverride });
+  try {
+    if (id) {
+      await db
+        .update(callQualificationScripts)
+        .set({ niche, questions, systemPromptOverride, updatedAt: new Date() })
+        .where(eq(callQualificationScripts.id, id));
+    } else {
+      await db.insert(callQualificationScripts).values({ niche, questions, systemPromptOverride });
+    }
+  } catch (err: unknown) {
+    // Postgres unique-violation (error code 23505) — a script for this
+    // niche already exists (see network-linker/index.ts for the same
+    // pattern). Surface a friendly message instead of a raw 500.
+    const pgCode =
+      err !== null && typeof err === 'object' && 'code' in err
+        ? (err as { code: unknown }).code
+        : undefined;
+    if (pgCode === '23505') {
+      return { ok: false, message: 'A script for that niche already exists.' };
+    }
+    throw err;
   }
 
   revalidatePath('/operator/call-scripts');

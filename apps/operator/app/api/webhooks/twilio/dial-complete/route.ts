@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb, calls } from '@leadlandlord/db';
 import { log } from '@leadlandlord/shared/log';
 import { readTwilioParams, verifyTwilioRequest } from '../../../../../lib/twilio-webhook';
@@ -47,7 +47,12 @@ export async function POST(req: Request) {
     const db = getDb();
     await db
       .update(calls)
-      .set({ isVoicemail: true, metadata: { dialCallStatus: dialStatus } })
+      .set({
+        isVoicemail: true,
+        metadata: sql`coalesce(${calls.metadata}, '{}'::jsonb) || ${JSON.stringify({
+          dialCallStatus: dialStatus,
+        })}::jsonb`,
+      })
       .where(eq(calls.twilioCallSid, callSid));
   }
 

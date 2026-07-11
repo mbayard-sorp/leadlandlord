@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { registerInboundCall } from './index';
+import { getConversationAudio, registerInboundCall } from './index';
 
 describe('registerInboundCall (mock mode)', () => {
   const originalEnv = { ...process.env };
@@ -36,6 +36,36 @@ describe('registerInboundCall (mock mode)', () => {
     });
 
     expect(twiml).toContain('mock elevenlabs qualification');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('getConversationAudio (mock mode)', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.restoreAllMocks();
+  });
+
+  it('returns null when ELEVENLABS_API_KEY is unset', async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const audio = await getConversationAudio('conv_123');
+
+    expect(audio).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null when MOCK_TELEPHONY=true even with creds set', async () => {
+    process.env.ELEVENLABS_API_KEY = 'xi-real-key';
+    process.env.MOCK_TELEPHONY = 'true';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const audio = await getConversationAudio('conv_123');
+
+    expect(audio).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

@@ -35,8 +35,17 @@ export function callerLabel(call: TenantLeadCallInfo): string {
 /**
  * Concise SMS body for a newly-qualified AI-answered lead. Kept under
  * ~320 chars (2-segment SMS) where the fields allow it.
+ *
+ * `emailExpected` gates the "Recording + full details emailed." line — only
+ * true when the tenant email is actually going out (tenant has an email on
+ * file and email sending is configured), so the SMS never promises a
+ * follow-up email that isn't coming.
  */
-export function formatTenantLeadSms(site: TenantLeadSiteInfo, call: TenantLeadCallInfo): string {
+export function formatTenantLeadSms(
+  site: TenantLeadSiteInfo,
+  call: TenantLeadCallInfo,
+  emailExpected = false,
+): string {
   const lines: string[] = [`New qualified lead for ${site.businessName}`];
 
   const who = callerLabel(call);
@@ -57,7 +66,7 @@ export function formatTenantLeadSms(site: TenantLeadSiteInfo, call: TenantLeadCa
 
   if (call.qualificationAddress) lines.push(call.qualificationAddress);
 
-  lines.push('Recording + full details emailed.');
+  if (emailExpected) lines.push('Recording + full details emailed.');
 
   return lines.join('\n');
 }

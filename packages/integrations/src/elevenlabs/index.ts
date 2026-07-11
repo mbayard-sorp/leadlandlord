@@ -173,6 +173,40 @@ export async function getConversation(conversationId: string): Promise<Conversat
   }
 }
 
+/**
+ * Fetch the recorded audio for a completed ElevenLabs conversation (used as
+ * the tenant-recording fallback for AI-answered calls, which never get a
+ * Twilio `recordingUrl` since the call bridges straight to ElevenLabs — see
+ * apps/operator/app/api/tenant-recordings/[callId]/route.ts). Returns null
+ * when the conversation has no audio yet (404) or credentials aren't
+ * configured — mirrors `getConversation`'s null-on-404 pattern. Mock mode
+ * (no ELEVENLABS_API_KEY / MOCK_TELEPHONY=true) returns null so downstream
+ * routes fall through to their own "no recording" 404 without a live call.
+ */
+export async function getConversationAudio(conversationId: string): Promise<Buffer | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const useMock = !apiKey || process.env.MOCK_TELEPHONY === 'true';
+  if (useMock) return null;
+
+  const res = await fetch(`${ELEVENLABS_BASE}/convai/conversations/${conversationId}/audio`, {
+    method: 'GET',
+    headers: { 'xi-api-key': apiKey as string },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new IntegrationError(
+      'elevenlabs',
+      `convai/conversations/${conversationId}/audio → ${res.status} ${text.slice(0, 500)}`,
+      res.status,
+      text,
+    );
+  }
+  const arrayBuf = await res.arrayBuffer();
+  if (arrayBuf.byteLength === 0) return null;
+  return Buffer.from(arrayBuf);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Inbound AI lead call qualification (ADR 0031).
 //
@@ -272,14 +306,36 @@ export async function registerInboundCall(args: RegisterInboundCallArgs): Promis
     body.conversation_initiation_client_data = initData;
   }
 
-  const res = await fetch(`${ELEVENLABS_BASE}/convai/twilio/register-call`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': apiKey as string,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  // Inbound calls can't wait indefinitely for ElevenLabs to respond — Twilio
+  // needs TwiML back quickly or the caller hears dead air. An AbortController
+  // timeout turns a hung registration into a thrown IntegrationError, which
+  // aiQualificationResponseForSite's catch turns into a voicemail fallback
+  // rather than leaving the caller connected to nothing.
+  const REGISTER_CALL_TIMEOUT_MS = 8_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REGISTER_CALL_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${ELEVENLABS_BASE}/convai/twilio/register-call`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey as string,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new IntegrationError(
+        'elevenlabs',
+        `convai/twilio/register-call timed out after ${REGISTER_CALL_TIMEOUT_MS}ms`,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new IntegrationError(
@@ -365,8 +421,11 @@ export function verifyElevenLabsWebhook(args: VerifyElevenLabsWebhookArgs): bool
   const signedPayload = `${timestampRaw}.${args.rawBody}`;
   const expectedHex = createHmac('sha256', secret).update(signedPayload, 'utf-8').digest('hex');
 
-  const expected = Buffer.from(expectedHex, 'utf-8');
-  const actual = Buffer.from(signatureHex, 'utf-8');
+  // Hex digests should always be lowercase, but normalize case on both sides
+  // before comparing so an uppercase-hex signature header (a legitimate
+  // variance some providers/clients use) doesn't spuriously fail verification.
+  const expected = Buffer.from(expectedHex.toLowerCase(), 'utf-8');
+  const actual = Buffer.from(signatureHex.toLowerCase(), 'utf-8');
   if (expected.length !== actual.length) return false;
   try {
     return timingSafeEqual(expected, actual);

@@ -104,6 +104,17 @@ describe('verifyElevenLabsWebhook', () => {
     ).toBe(false);
   });
 
+  it('accepts an uppercase-hex signature', () => {
+    const rawBody = JSON.stringify({ conversation_id: 'conv_123' });
+    const nowMs = 1_700_000_000_000;
+    const timestampS = Math.floor(nowMs / 1000);
+    const signatureHeader = sign(timestampS, rawBody).replace(/v0=(.+)$/, (_m, hex) => `v0=${hex.toUpperCase()}`);
+
+    expect(
+      verifyElevenLabsWebhook({ rawBody, signatureHeader, secret: SECRET, nowMs }),
+    ).toBe(true);
+  });
+
   it('returns false when no secret is configured', () => {
     const rawBody = '{}';
     const timestampS = 1_700_000_000;

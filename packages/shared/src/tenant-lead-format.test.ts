@@ -19,14 +19,18 @@ describe('callerLabel', () => {
 
 describe('formatTenantLeadSms', () => {
   it('includes business name, caller, job type, urgency, score, and address', () => {
-    const sms = formatTenantLeadSms(site, {
-      callerName: 'Jane Doe',
-      callerNumber: '+15205551234',
-      qualificationJobType: 'water heater replacement',
-      qualificationUrgency: 'emergency',
-      qualificationScore: 87,
-      qualificationAddress: '123 Main St, Tucson AZ',
-    });
+    const sms = formatTenantLeadSms(
+      site,
+      {
+        callerName: 'Jane Doe',
+        callerNumber: '+15205551234',
+        qualificationJobType: 'water heater replacement',
+        qualificationUrgency: 'emergency',
+        qualificationScore: 87,
+        qualificationAddress: '123 Main St, Tucson AZ',
+      },
+      true,
+    );
 
     expect(sms).toContain('Ace Plumbing');
     expect(sms).toContain('Jane Doe (+15205551234)');
@@ -48,6 +52,21 @@ describe('formatTenantLeadSms', () => {
   it('does not duplicate the number when callerName equals callerNumber', () => {
     const sms = formatTenantLeadSms(site, { callerName: '+15205551234', callerNumber: '+15205551234' });
     expect(sms.match(/\+15205551234/g)?.length).toBe(1);
+  });
+
+  it('omits the "emailed" line by default (emailExpected not passed)', () => {
+    const sms = formatTenantLeadSms(site, { callerNumber: '+15205551234' });
+    expect(sms).not.toContain('Recording + full details emailed.');
+  });
+
+  it('omits the "emailed" line when emailExpected is false', () => {
+    const sms = formatTenantLeadSms(site, { callerNumber: '+15205551234' }, false);
+    expect(sms).not.toContain('Recording + full details emailed.');
+  });
+
+  it('includes the "emailed" line when emailExpected is true', () => {
+    const sms = formatTenantLeadSms(site, { callerNumber: '+15205551234' }, true);
+    expect(sms).toContain('Recording + full details emailed.');
   });
 });
 

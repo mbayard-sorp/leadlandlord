@@ -83,7 +83,12 @@ async function notifyTenantSms(call: Call, site: Site, tenant: Tenant): Promise<
   if (!tenant.phone || !from || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
     return 'skipped';
   }
-  const body = formatTenantLeadSms({ businessName: tenant.businessName }, callToLeadInfo(call));
+  // Only promise "Recording + full details emailed." when the email fan-out
+  // is actually going to fire — mirrors notifyTenantEmail's own skip gate.
+  const emailExpected = Boolean(
+    tenant.email && process.env.RESEND_FROM_ADDRESS && process.env.RESEND_API_KEY,
+  );
+  const body = formatTenantLeadSms({ businessName: tenant.businessName }, callToLeadInfo(call), emailExpected);
   await sendSms({ to: tenant.phone, from, body });
   return 'sent';
 }
@@ -123,12 +128,14 @@ function callToLeadInfo(call: Call) {
 
 /**
  * Builds a signed, 7-day tenant-recording link for `call`, or null when
- * there's no recording yet or no secret configured to sign with. Base URL
- * mirrors the OPERATOR_PUBLIC_URL usage elsewhere (e.g.
- * apps/operator/app/operator/sites/[id]/actions.ts).
+ * there's no recording yet (Twilio `recordingUrl` OR an ElevenLabs
+ * conversation for AI-answered calls — see
+ * apps/operator/app/api/tenant-recordings/[callId]/route.ts) or no secret
+ * configured to sign with. Base URL mirrors the OPERATOR_PUBLIC_URL usage
+ * elsewhere (e.g. apps/operator/app/operator/sites/[id]/actions.ts).
  */
 function buildSignedRecordingUrl(call: Call): string | null {
-  if (!call.recordingUrl) return null;
+  if (!call.recordingUrl && !call.elevenlabsConversationId) return null;
   const secret = process.env.TENANT_RECORDING_SECRET || process.env.OPERATOR_SESSION_SECRET;
   if (!secret) return null;
 
