@@ -54,6 +54,8 @@ const EnvSchema = z.object({
   ELEVENLABS_AGENT_ID: z.string().optional(),
   /** ElevenLabs phone_number_id — created when you import a Twilio number into ElevenLabs. */
   ELEVENLABS_PHONE_NUMBER_ID: z.string().optional(),
+  /** Shared secret for verifying the `ElevenLabs-Signature` header on inbound webhooks (ADR 0031). */
+  ELEVENLABS_WEBHOOK_SECRET: z.string().optional(),
   /** Stripe sandbox/test secret key (sk_test_...). Preferred during development. */
   STRIPE_SECRET_KEY_TEST: z.string().optional(),
   /** Stripe live secret key (sk_live_...). Only set when ready for real payments. */
@@ -162,6 +164,7 @@ export function getEnvLoose() {
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     ELEVENLABS_AGENT_ID: process.env.ELEVENLABS_AGENT_ID,
     ELEVENLABS_PHONE_NUMBER_ID: process.env.ELEVENLABS_PHONE_NUMBER_ID,
+    ELEVENLABS_WEBHOOK_SECRET: process.env.ELEVENLABS_WEBHOOK_SECRET,
     STRIPE_SECRET_KEY_TEST: process.env.STRIPE_SECRET_KEY_TEST,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,

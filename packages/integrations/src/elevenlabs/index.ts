@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { IntegrationError } from '@leadlandlord/shared/errors';
 import { log } from '@leadlandlord/shared/log';
@@ -170,6 +171,213 @@ export async function getConversation(conversationId: string): Promise<Conversat
     if (err instanceof IntegrationError && err.status === 404) return null;
     throw err;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Inbound AI lead call qualification (ADR 0031).
+//
+// We keep our own Twilio voice webhook as the entry point (signature check,
+// `calls` row, spam throttle) and, when the site's call_mode calls for it,
+// hand the call off to ElevenLabs' native Twilio inbound integration by
+// POSTing to their "register call" endpoint and relaying the TwiML it
+// returns back to Twilio. Per-call context (niche, city, question script,
+// transfer number) rides along as dynamic variables.
+//
+// ⚠️ Confidence note: the exact request/response shape below is best-effort
+// from the ElevenLabs Twilio register-call docs
+// (https://elevenlabs.io/docs/api-reference/twilio/register-call) plus the
+// existing outbound-call precedent above. This sandboxed environment's
+// egress proxy blocks elevenlabs.io (confirmed 403 at the CONNECT layer),
+// so this could NOT be re-verified against live docs during this change.
+// Re-verify against current docs before Phase B wires real traffic through
+// this path; mock mode (below) does not depend on the shape being exactly
+// right.
+// ─────────────────────────────────────────────────────────────────────────
+
+const RegisterInboundCallResponseSchema = z.union([
+  // Most likely shape: ElevenLabs responds with raw TwiML (Content-Type
+  // text/xml) that we relay to Twilio unchanged — handled before we ever
+  // reach JSON parsing, see registerInboundCall() below.
+  z.string(),
+  // Fallback shape some ElevenLabs endpoints use: JSON wrapping the TwiML.
+  z.object({
+    twiml: z.string().optional(),
+    callSid: z.string().optional(),
+    call_sid: z.string().optional(),
+    conversation_id: z.string().optional(),
+  }),
+]);
+
+export interface RegisterInboundCallArgs {
+  /** Caller's number (Twilio `From`), E.164. */
+  fromNumber: string;
+  /** The tracking number that was called (Twilio `To`), E.164. */
+  toNumber: string;
+  /** ElevenLabs Agent ID. Defaults to ELEVENLABS_AGENT_ID env. */
+  agentId?: string;
+  /** Dynamic variables interpolated into the agent's system prompt — e.g.
+   * { niche, city, business_name, question_script, transfer_number }. */
+  dynamicVariables?: Record<string, string | number | boolean>;
+  /** First message the agent says when the call connects (overrides agent default). */
+  firstMessage?: string;
+}
+
+/** Deterministic mock TwiML — mirrors twilio/index.ts's mock-mode pattern. */
+const MOCK_QUALIFICATION_TWIML =
+  '<?xml version="1.0" encoding="UTF-8"?><Response><Say>mock elevenlabs qualification</Say></Response>';
+
+/**
+ * Register an inbound Twilio call with ElevenLabs' Conversational AI native
+ * Twilio integration and return the TwiML ElevenLabs wants us to hand back
+ * to Twilio (bridging the caller to the agent). Falls back to a
+ * deterministic mock TwiML string when ELEVENLABS_API_KEY/AGENT_ID are
+ * unset or MOCK_TELEPHONY=true, so downstream webhook flows stay testable
+ * without a live ElevenLabs account.
+ */
+export async function registerInboundCall(args: RegisterInboundCallArgs): Promise<string> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const agentId = args.agentId ?? process.env.ELEVENLABS_AGENT_ID;
+  const useMock = !apiKey || !agentId || process.env.MOCK_TELEPHONY === 'true';
+
+  if (useMock) {
+    log.info(
+      { from: args.fromNumber, to: args.toNumber, provider: 'mock' },
+      'elevenlabs.registerInboundCall using mock TwiML',
+    );
+    return MOCK_QUALIFICATION_TWIML;
+  }
+
+  const initData: Record<string, unknown> = {};
+  if (args.dynamicVariables && Object.keys(args.dynamicVariables).length > 0) {
+    initData.dynamic_variables = args.dynamicVariables;
+  }
+  if (args.firstMessage) {
+    initData.conversation_config_override = {
+      agent: { first_message: args.firstMessage },
+    };
+  }
+
+  const body: Record<string, unknown> = {
+    agent_id: agentId,
+    from_number: args.fromNumber,
+    to_number: args.toNumber,
+    direction: 'inbound',
+  };
+  if (Object.keys(initData).length > 0) {
+    body.conversation_initiation_client_data = initData;
+  }
+
+  const res = await fetch(`${ELEVENLABS_BASE}/convai/twilio/register-call`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey as string,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new IntegrationError(
+      'elevenlabs',
+      `convai/twilio/register-call → ${res.status} ${text.slice(0, 500)}`,
+      res.status,
+      text,
+    );
+  }
+
+  const contentType = res.headers.get('content-type') ?? '';
+  const rawText = await res.text();
+
+  // Raw TwiML response — relay unchanged.
+  if (contentType.includes('xml') || rawText.trim().startsWith('<?xml') || rawText.trim().startsWith('<Response')) {
+    return rawText;
+  }
+
+  // JSON-wrapped TwiML — unwrap.
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(rawText);
+  } catch {
+    // Not JSON either — treat the raw body as TwiML-ish text and relay it.
+    return rawText;
+  }
+  const parsed = RegisterInboundCallResponseSchema.parse(parsedJson);
+  if (typeof parsed === 'string') return parsed;
+  if (parsed.twiml) return parsed.twiml;
+  throw new IntegrationError(
+    'elevenlabs',
+    'convai/twilio/register-call returned JSON with no twiml field',
+  );
+}
+
+export interface VerifyElevenLabsWebhookArgs {
+  /** Raw (unparsed) request body — signature is computed over the exact bytes sent. */
+  rawBody: string;
+  /** The `ElevenLabs-Signature` header value, e.g. "t=1700000000,v0=abcd...". */
+  signatureHeader: string | null;
+  secret?: string;
+  /** Injectable clock for tests. Defaults to Date.now(). */
+  nowMs?: number;
+}
+
+const WEBHOOK_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Verify the `ElevenLabs-Signature` header on inbound ElevenLabs webhooks
+ * (conversation-init + post-call).
+ *
+ * Header format: `t=<unix_seconds>,v0=<hex hmac-sha256>` where the HMAC is
+ * computed over `"<t>.<rawBody>"` keyed by the webhook secret. Rejects a
+ * missing/malformed header, a timestamp older than 30 minutes, or a
+ * signature mismatch (timing-safe compare).
+ */
+export function verifyElevenLabsWebhook(args: VerifyElevenLabsWebhookArgs): boolean {
+  const secret = args.secret ?? process.env.ELEVENLABS_WEBHOOK_SECRET;
+  if (!secret || !args.signatureHeader) return false;
+
+  const parts = Object.fromEntries(
+    args.signatureHeader
+      .split(',')
+      .map((piece) => piece.trim())
+      .filter(Boolean)
+      .map((piece) => {
+        const eq = piece.indexOf('=');
+        if (eq === -1) return [piece, ''];
+        return [piece.slice(0, eq), piece.slice(eq + 1)];
+      }),
+  );
+  const timestampRaw = parts.t;
+  const signatureHex = parts.v0;
+  if (!timestampRaw || !signatureHex) return false;
+  if (!/^\d+$/.test(timestampRaw)) return false;
+
+  const timestampMs = Number.parseInt(timestampRaw, 10) * 1000;
+  const now = args.nowMs ?? Date.now();
+  if (Number.isNaN(timestampMs) || Math.abs(now - timestampMs) > WEBHOOK_MAX_AGE_MS) {
+    return false;
+  }
+
+  const signedPayload = `${timestampRaw}.${args.rawBody}`;
+  const expectedHex = createHmac('sha256', secret).update(signedPayload, 'utf-8').digest('hex');
+
+  const expected = Buffer.from(expectedHex, 'utf-8');
+  const actual = Buffer.from(signatureHex, 'utf-8');
+  if (expected.length !== actual.length) return false;
+  try {
+    return timingSafeEqual(expected, actual);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Render a flat, numbered question script for the `{{question_script}}`
+ * dynamic variable passed to the shared ElevenLabs qualification agent.
+ * Pure + trivial, but exported so Phase C's conversation-init route reuses
+ * exactly this formatting.
+ */
+export function renderQuestionScript(questions: string[]): string {
+  return questions.map((q, i) => `${i + 1}. ${q}`).join('\n');
 }
 
 // ─────────────────────────────────────────────────────────────────────────
