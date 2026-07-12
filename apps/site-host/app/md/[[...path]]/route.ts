@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: RouteParams): Promise<Respo
     const markdown = indexToMarkdown(
       'Blog',
       `Articles and guides on ${bundle.niche} in ${bundle.city}, ${bundle.state}.`,
-      bundle.blog_posts.map((p) => ({ title: p.title, path: pageHref(p) })),
+      bundle.blog_posts.map((p) => ({ title: p.title, path: `${pageHref(p)}.md` })),
       `${base}/blog`
     );
     return new Response(markdown, { headers: MD_HEADERS });
@@ -50,7 +50,7 @@ export async function GET(_req: Request, { params }: RouteParams): Promise<Respo
     const markdown = indexToMarkdown(
       'FAQ',
       `Answers to common ${bundle.niche.toLowerCase()} questions in ${bundle.city}, ${bundle.state}.`,
-      bundle.faq_pages.map((p) => ({ title: p.title, path: pageHref(p) })),
+      bundle.faq_pages.map((p) => ({ title: p.title, path: `${pageHref(p)}.md` })),
       `${base}/faq`
     );
     return new Response(markdown, { headers: MD_HEADERS });
