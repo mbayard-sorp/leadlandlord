@@ -87,6 +87,21 @@ export const BundleSchema = z.object({
     closes: z.string(),
     closed_days: z.array(z.string()).optional(),
   }).optional(),
+  /**
+   * Operator-entered licenses/certifications for LocalBusiness `hasCredential`.
+   * Sanity-only passthrough field (ADR 0032) — no ContentBundle equivalent.
+   * Optional/empty until supplied; never fabricated.
+   */
+  credentials: z
+    .array(
+      z.object({
+        name: z.string(),
+        issuer: z.string().optional(),
+        license_number: z.string().optional(),
+        url: z.string().url().optional(),
+      }),
+    )
+    .optional(),
   home: PageSchema,
   services: z.array(PageSchema),
   service_areas: z.array(PageSchema),

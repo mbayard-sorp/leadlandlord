@@ -86,6 +86,41 @@ describe('sanityToBundle — opening_hours mapping', () => {
   });
 });
 
+describe('sanityToBundle — credentials mapping', () => {
+  it('is undefined when the site has no credentials', () => {
+    expect(sanityToBundle(minimalSite()).credentials).toBeUndefined();
+  });
+
+  it('is undefined when credentials is an empty array', () => {
+    expect(sanityToBundle(minimalSite({ credentials: [] })).credentials).toBeUndefined();
+  });
+
+  it('maps name/issuer/licenseNumber/url to snake_case credentials, passthrough', () => {
+    const bundle = sanityToBundle(
+      minimalSite({
+        credentials: [
+          { name: 'Master Plumber License', issuer: 'State of Nevada', licenseNumber: 'PL-1234', url: 'https://example.com/verify' },
+        ],
+      }),
+    );
+    expect(bundle.credentials).toEqual([
+      {
+        name: 'Master Plumber License',
+        issuer: 'State of Nevada',
+        license_number: 'PL-1234',
+        url: 'https://example.com/verify',
+      },
+    ]);
+  });
+
+  it('omits optional fields when absent', () => {
+    const bundle = sanityToBundle(minimalSite({ credentials: [{ name: 'EPA 608 Certified' }] }));
+    expect(bundle.credentials).toEqual([
+      { name: 'EPA 608 Certified', issuer: undefined, license_number: undefined, url: undefined },
+    ]);
+  });
+});
+
 describe('sanityToBundle — image alt text mapping', () => {
   it('carries hero_image_alt through when present', () => {
     const bundle = sanityToBundle(minimalSite({ heroImageAlt: 'Roofer on a ladder in Henderson' }));

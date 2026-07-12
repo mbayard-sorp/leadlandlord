@@ -386,6 +386,10 @@ function buildProprietaryInitial(row: SiteOriginalDataInputs | null) {
     | { opens?: unknown; closes?: unknown; closedDays?: unknown }
     | undefined;
   delete (factsWithoutSameAs as Record<string, unknown>).openingHours;
+  const credentialsRaw = Array.isArray(factsWithoutSameAs.credentials)
+    ? (factsWithoutSameAs.credentials as unknown[])
+    : [];
+  delete (factsWithoutSameAs as Record<string, unknown>).credentials;
 
   const pretty = (v: unknown): string =>
     v == null || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0)
@@ -405,6 +409,15 @@ function buildProprietaryInitial(row: SiteOriginalDataInputs | null) {
     openingHoursClosedDays: Array.isArray(openingHoursRaw?.closedDays)
       ? (openingHoursRaw.closedDays as unknown[]).map(String)
       : [],
+    credentials: credentialsRaw.map((c) => {
+      const cr = c as { name?: unknown; issuer?: unknown; licenseNumber?: unknown; url?: unknown };
+      return {
+        name: typeof cr.name === 'string' ? cr.name : '',
+        issuer: typeof cr.issuer === 'string' ? cr.issuer : '',
+        licenseNumber: typeof cr.licenseNumber === 'string' ? cr.licenseNumber : '',
+        url: typeof cr.url === 'string' ? cr.url : '',
+      };
+    }),
   };
 }
 

@@ -6,6 +6,13 @@ import { Timestamp } from '../../../../components/Timestamp';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 
+interface CredentialRow {
+  name: string;
+  issuer: string;
+  licenseNumber: string;
+  url: string;
+}
+
 interface Props {
   siteId: string;
   initial: {
@@ -19,9 +26,16 @@ interface Props {
     openingHoursOpens: string;
     openingHoursCloses: string;
     openingHoursClosedDays: string[];
+    credentials: CredentialRow[];
   };
   updatedBy: string | null;
   updatedAt: string | null;
+}
+
+let credentialKeySeq = 0;
+function newCredentialKey() {
+  credentialKeySeq += 1;
+  return `credential-${credentialKeySeq}`;
 }
 
 /**
@@ -37,6 +51,11 @@ interface Props {
 export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: Props) {
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [credentialRows, setCredentialRows] = useState<Array<{ key: string } & CredentialRow>>(() =>
+    (initial.credentials.length > 0 ? initial.credentials : [{ name: '', issuer: '', licenseNumber: '', url: '' }]).map(
+      (c) => ({ key: newCredentialKey(), ...c }),
+    ),
+  );
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -164,6 +183,61 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
       </fieldset>
       <p className="text-[11px] text-slate-600">
         Emitted as LocalBusiness openingHoursSpecification. Leave both times blank to fall back to the hardcoded default range; clearing after a prior save unsets it on the live site.
+      </p>
+
+      <fieldset>
+        <legend className="block text-xs uppercase tracking-wide text-slate-500 mb-1">Credentials (licenses / certifications)</legend>
+        <div className="space-y-2">
+          {credentialRows.map((row, i) => (
+            <div key={row.key} className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.5fr_2fr_auto] gap-2 items-start">
+              <input
+                name="credential_name"
+                defaultValue={row.name}
+                placeholder="Name (e.g. Master Plumber License)"
+                className="input"
+              />
+              <input
+                name="credential_issuer"
+                defaultValue={row.issuer}
+                placeholder="Issuer (e.g. State of Nevada)"
+                className="input"
+              />
+              <input
+                name="credential_license_number"
+                defaultValue={row.licenseNumber}
+                placeholder="License #"
+                className="input"
+              />
+              <input
+                name="credential_url"
+                defaultValue={row.url}
+                placeholder="https://..."
+                autoCorrect="off"
+                spellCheck={false}
+                className="input"
+              />
+              <button
+                type="button"
+                onClick={() => setCredentialRows((rows) => rows.filter((_, idx) => idx !== i))}
+                className="min-h-[36px] px-2 rounded border border-slate-700 text-xs text-slate-400 hover:text-red-300 hover:border-red-800"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            setCredentialRows((rows) => [...rows, { key: newCredentialKey(), name: '', issuer: '', licenseNumber: '', url: '' }])
+          }
+          className="mt-2 min-h-[36px] px-3 rounded border border-slate-700 text-xs text-slate-300 hover:border-sky-700"
+        >
+          + Add credential
+        </button>
+      </fieldset>
+      <p className="text-[11px] text-slate-600">
+        Emitted as LocalBusiness hasCredential — real licenses/certifications only, never fabricated. Rows with a blank name are dropped on save; removing all rows unsets it on the live site.
       </p>
 
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</p>}
