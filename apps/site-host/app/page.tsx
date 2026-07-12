@@ -62,9 +62,7 @@ export async function generateMetadata() {
     const bsSite = await resolveCurrentBuildSellSite();
     if (!bsSite) return { robots: { index: false, follow: false } };
     const base = await currentRequestBaseUrl();
-    // No mdPath: the /index.md route only exists under /buildsell/{slug}
-    // today, not at a custom-domain root (deferred to Phase 2).
-    return buildBuildSellMetadata({ site: bsSite, base, canonicalPath: '/' });
+    return buildBuildSellMetadata({ site: bsSite, base, canonicalPath: '/', mdPath: '/index.md' });
   }
   const bundle = sanityToBundle(site);
   return buildPageMetadata({

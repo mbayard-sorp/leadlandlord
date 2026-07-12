@@ -1,7 +1,10 @@
 import { BuildSellHome } from './BuildSellHome';
 import { BuildSellLocalBusinessJsonLd } from './BuildSellLocalBusinessJsonLd';
+import { BuildSellWebSiteJsonLd } from './BuildSellWebSiteJsonLd';
 import { BuildSellBreadcrumbJsonLd } from './BuildSellBreadcrumbJsonLd';
 import { BuildSellFaqJsonLd } from './BuildSellFaqJsonLd';
+import { BuildSellServiceJsonLd } from './BuildSellServiceJsonLd';
+import { BuildSellOfferJsonLd } from './BuildSellOfferJsonLd';
 import { ALL_BS_FONTS } from '@/lib/buildsell-fonts';
 import type { BuildSellSite } from '@/lib/sanity';
 
@@ -29,6 +32,9 @@ export function BuildSellSiteView({ site, pageUrl, base }: BuildSellSiteViewProp
   return (
     <div className={fontVars}>
       <BuildSellLocalBusinessJsonLd site={site} url={pageUrl} />
+      <BuildSellWebSiteJsonLd site={site} url={pageUrl} />
+      <BuildSellServiceJsonLd site={site} url={pageUrl} />
+      <BuildSellOfferJsonLd site={site} url={pageUrl} />
       {isSubpage && (
         <BuildSellBreadcrumbJsonLd
           url={pageUrl}
