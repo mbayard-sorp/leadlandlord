@@ -117,7 +117,7 @@ geo-aeo-auditor. The gaps that separate it from world-class fall into four group
 | H1 opening-hours field (Sanity → theme-bundle → both LocalBusiness emitters + operator UI) | next-engineer | M |
 | Image alt in ContentBundle (Zod + prompt + both mappers + renderers, one coordinated PR) | next-engineer + agent-prompt-engineer | M |
 
-### Phase 3 — content-layer / agent work
+### Phase 3 — content-layer / agent work ✅ core items implemented 2026-07-12 (pillar architecture + live citation probe remain deferred)
 
 | Item | Owner | Size |
 |------|-------|------|
