@@ -338,7 +338,7 @@ export function schemaCoverage(pages: FetchedPage[], ctx: SiteContext): {
 // Answer extractability
 // ────────────────────────────────────────────────────────────
 
-function isQuestionHeading(h: string): boolean {
+export function isQuestionHeading(h: string): boolean {
   return /\?$/.test(h.trim()) || /^(how|what|why|when|where|who|which|can|do|does|is|are|should)\b/i.test(h.trim());
 }
 
