@@ -364,10 +364,15 @@ describe('checkFaqOverlap', () => {
   it('detects normalized question overlap between two FAQ sets', () => {
     const faqsA = [{ q: 'How much does roof repair cost in Austin?', a: GOOD_ANSWER }];
     const faqsB = [{ q: 'How much does roof repair cost in Dallas?', a: GOOD_ANSWER }];
-    const overlaps = checkFaqOverlap(faqsA, faqsB, { city: 'Austin' });
-    // City stripped from A only via opts.city, but Dallas remains in B unless
-    // also passed — overlap detection normalizes shared non-city tokens.
-    expect(Array.isArray(overlaps)).toBe(true);
+    const overlaps = checkFaqOverlap(faqsA, faqsB, { cityA: 'Austin', cityB: 'Dallas' });
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0]).toMatchObject({ indexA: 0, indexB: 0 });
+  });
+
+  it('does not flag city-swapped questions when cities are not stripped', () => {
+    const faqsA = [{ q: 'How much does roof repair cost in Austin?', a: GOOD_ANSWER }];
+    const faqsB = [{ q: 'How much does roof repair cost in Dallas?', a: GOOD_ANSWER }];
+    expect(checkFaqOverlap(faqsA, faqsB)).toHaveLength(0);
   });
 
   it('flags identical questions as overlapping', () => {

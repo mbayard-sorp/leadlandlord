@@ -179,17 +179,19 @@ const CITY_STOP_WORDS = new Set(['near', 'me', 'area', 'local', 'city', 'town'])
  * Pure comparator for cross-site FAQ overlap. Cannot run at bundle-emit time
  * (no other sites in scope there) — this is exported for the network
  * footprint-review pass to call once it has two sites' FAQ sets in hand.
- * Returns the pairs of (a-index, b-index) whose normalized questions match.
+ * Pass each site's own city so localized rewordings of the same question
+ * still match. Returns the pairs of (a-index, b-index) whose normalized
+ * questions match.
  */
 export function checkFaqOverlap(
   faqsA: Array<{ q: string; a: string }>,
   faqsB: Array<{ q: string; a: string }>,
-  opts?: { city?: string },
+  opts?: { cityA?: string; cityB?: string },
 ): Array<{ indexA: number; indexB: number; question: string }> {
-  const normalizedB = faqsB.map((f) => normalizeFaqQuestion(f.q, opts?.city));
+  const normalizedB = faqsB.map((f) => normalizeFaqQuestion(f.q, opts?.cityB));
   const overlaps: Array<{ indexA: number; indexB: number; question: string }> = [];
   faqsA.forEach((fa, indexA) => {
-    const na = normalizeFaqQuestion(fa.q, opts?.city);
+    const na = normalizeFaqQuestion(fa.q, opts?.cityA);
     if (!na) return;
     normalizedB.forEach((nb, indexB) => {
       if (nb && na === nb) {
