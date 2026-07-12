@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 import { saveProprietaryData } from './actions';
 import { Timestamp } from '../../../../components/Timestamp';
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+
 interface Props {
   siteId: string;
   initial: {
@@ -14,6 +16,9 @@ interface Props {
     expertiseProfile: string;
     gbpUrl: string;
     socials: string;
+    openingHoursOpens: string;
+    openingHoursCloses: string;
+    openingHoursClosedDays: string[];
   };
   updatedBy: string | null;
   updatedAt: string | null;
@@ -85,7 +90,7 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
       <JsonField
         name="proprietary_facts"
         label="Proprietary facts"
-        hint='JSON object of vouched facts (hours, certifications, equipment, guarantees). sameAs is managed via the fields below.'
+        hint='JSON object of vouched facts (certifications, equipment, guarantees). sameAs and opening hours are managed via the fields below.'
         defaultValue={initial.proprietaryFacts}
         rows={4}
       />
@@ -121,6 +126,44 @@ export function ProprietaryDataPanel({ siteId, initial, updatedBy, updatedAt }: 
       </div>
       <p className="text-[11px] text-slate-600">
         The GBP URL + socials are written into proprietaryFacts.sameAs and rendered as the site&apos;s organization-schema sameAs[]. Use the contractor&apos;s real listings only.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field label="Opens (24h HH:MM)">
+          <input
+            type="time"
+            name="opening_hours_opens"
+            defaultValue={initial.openingHoursOpens}
+            className="input"
+          />
+        </Field>
+        <Field label="Closes (24h HH:MM)">
+          <input
+            type="time"
+            name="opening_hours_closes"
+            defaultValue={initial.openingHoursCloses}
+            className="input"
+          />
+        </Field>
+      </div>
+      <fieldset>
+        <legend className="block text-xs uppercase tracking-wide text-slate-500 mb-1">Closed days</legend>
+        <div className="flex flex-wrap gap-3">
+          {DAYS.map((day) => (
+            <label key={day} className="inline-flex items-center gap-1.5 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                name="opening_hours_closed_days"
+                value={day}
+                defaultChecked={initial.openingHoursClosedDays.includes(day)}
+              />
+              {day}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <p className="text-[11px] text-slate-600">
+        Emitted as LocalBusiness openingHoursSpecification. Leave both times blank to fall back to the hardcoded default range; clearing after a prior save unsets it on the live site.
       </p>
 
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</p>}

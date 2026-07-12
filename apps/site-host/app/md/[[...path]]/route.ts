@@ -1,8 +1,10 @@
 import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../../../lib/site-context';
+import { resolveCurrentBuildSellSite } from '../../../lib/buildsell-context';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { pageToMarkdown, indexToMarkdown } from '../../../lib/page-markdown';
+import { buildSellToMarkdown } from '../../../lib/buildsell-markdown';
 import { pageHref } from '../../../lib/content';
 import type { Bundle, Page } from '../../../lib/content';
 
@@ -26,15 +28,24 @@ export async function GET(_req: Request, { params }: RouteParams): Promise<Respo
     return new Response('', { status: 404 });
   }
 
+  const { path: segments = [] } = await params;
+  const base = await currentRequestBaseUrl();
+
   const site = await resolveCurrentSite();
-  if (!site) return new Response('', { status: 404 });
+  if (!site) {
+    // No R&R site on this host — check whether it's a custom domain attached
+    // to a sold B&S spec site (see attachBuildSellDomain).
+    const bsSite = await resolveCurrentBuildSellSite();
+    if (!bsSite) return new Response('', { status: 404 });
+    if (bsSite.robotsDisallow) return new Response('', { status: 404 });
+    if (segments.length !== 0) return new Response('', { status: 404 });
+    return new Response(buildSellToMarkdown(bsSite, base), { headers: MD_HEADERS });
+  }
 
   // Respect warming/blockAll logic matching robots.ts
   if (site.robotsDisallow) return new Response('', { status: 404 });
 
   const bundle = sanityToBundle(site);
-  const { path: segments = [] } = await params;
-  const base = await currentRequestBaseUrl();
 
   if (segments.length === 1 && segments[0] === 'blog') {
     const markdown = indexToMarkdown(

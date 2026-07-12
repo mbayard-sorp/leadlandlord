@@ -810,6 +810,23 @@ export async function saveProprietaryData(formData: FormData): Promise<ActionRes
     proprietaryFacts = { ...proprietaryFacts, sameAs };
   }
 
+  // Operator-entered business hours, feeding LocalBusiness `openingHoursSpecification`.
+  // Optional: only persisted when both opens/closes are set; cleared explicitly
+  // removes it from both Postgres and the Sanity doc.
+  const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const opensRaw = emptyToNull(nullable(formData.get('opening_hours_opens')));
+  const closesRaw = emptyToNull(nullable(formData.get('opening_hours_closes')));
+  const closedDays = formData.getAll('opening_hours_closed_days').map(String).filter(Boolean);
+  if (opensRaw && !HHMM.test(opensRaw)) return { ok: false, message: 'Opening hours: "opens" must be HH:MM (24h)' };
+  if (closesRaw && !HHMM.test(closesRaw)) return { ok: false, message: 'Opening hours: "closes" must be HH:MM (24h)' };
+  const openingHours =
+    opensRaw && closesRaw
+      ? { opens: opensRaw, closes: closesRaw, ...(closedDays.length > 0 ? { closedDays } : {}) }
+      : null;
+  if (openingHours) {
+    proprietaryFacts = { ...proprietaryFacts, openingHours };
+  }
+
   const db = getDb();
   const now = new Date();
   try {
@@ -867,8 +884,26 @@ export async function saveProprietaryData(formData: FormData): Promise<ActionRes
     }
   }
 
+  // Opening hours sync — unlike sameAs, an explicitly cleared form (both fields
+  // blank) actively unsets the Sanity value so the renderer falls back to the
+  // hardcoded default range.
+  let openingHoursWarning: string | undefined;
+  try {
+    const client = createWriteClient();
+    const patch = client.patch(siteDocId(siteId));
+    await (openingHours ? patch.set({ openingHours }) : patch.unset(['openingHours'])).commit();
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : err, siteId },
+      'saveProprietaryData: openingHours Sanity sync failed (doc missing or write error)',
+    );
+    openingHoursWarning =
+      'Saved, but syncing opening hours to the live site failed (is the site built yet?). Re-save once the site exists.';
+  }
+
   revalidatePath(`/operator/sites/${siteId}`);
-  return { ok: true, message: sameAsWarning };
+  const warning = [sameAsWarning, openingHoursWarning].filter(Boolean).join(' ') || undefined;
+  return { ok: true, message: warning };
 }
 
 export async function setLocalContentEnabled(siteId: string, enabled: boolean): Promise<ActionResult> {

@@ -16,6 +16,7 @@ export function sanityToBundle(site: SanitySite): Bundle {
     variant: (site.theme ?? 'classic') as Variant,
     hero_image_prompt: site.heroImagePrompt ?? undefined,
     hero_image_url: site.heroImageUrl ?? undefined,
+    hero_image_alt: site.heroImageAlt ?? undefined,
     video_url: site.videoUrl ?? undefined,
     video_description: site.videoDescription ?? undefined,
     longform_body: site.longformBody ?? undefined,
@@ -29,6 +30,18 @@ export function sanityToBundle(site: SanitySite): Bundle {
     latitude: site.latitude ?? undefined,
     longitude: site.longitude ?? undefined,
     same_as: site.sameAs ?? [],
+    // Operator-entered business hours, passed through verbatim (Sanity-only
+    // field, no ContentBundle equivalent — see ADR). Absent unless both
+    // opens/closes are set; the JSON-LD emitter falls back to a hardcoded
+    // default range when unset.
+    opening_hours:
+      site.openingHours?.opens && site.openingHours?.closes
+        ? {
+            opens: site.openingHours.opens,
+            closes: site.openingHours.closes,
+            closed_days: site.openingHours.closedDays ?? undefined,
+          }
+        : undefined,
     home: pageToBundlePage(site.home, 'home'),
     about: pageToBundlePage(site.about, 'about') ?? blank,
     contact: pageToBundlePage(site.contact, 'contact') ?? blank,
@@ -94,6 +107,7 @@ function pageToBundlePage(p: SanitySitePage | undefined | null, fallbackKind: st
     mdx: p.mdx ?? '',
     schema_org_jsonld: jsonLd,
     og_image_url: p.articleImageUrl ?? p.pageOgImageUrl ?? undefined,
+    og_image_alt: p.articleImageAlt ?? undefined,
     date_modified: p.dateModified ?? undefined,
     faqs: (p.faqs ?? []).map((f) => ({ q: f.q, a: f.a })),
   };

@@ -1,9 +1,11 @@
 import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../../lib/site-context';
+import { resolveCurrentBuildSellSite } from '../../lib/buildsell-context';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { fetchCorporatePageList, fetchCorporateSite } from '../../lib/sanity';
 import { pageHref } from '../../lib/content';
 import { siteMarkdownPaths } from '../../lib/page-markdown';
+import { buildSellToLlmsTxt } from '../../lib/buildsell-markdown';
 
 // Cache for an hour, same rationale as sitemap.ts: avoid a cold-start Sanity
 // round-trip on every crawler/agent fetch.
@@ -56,7 +58,15 @@ export async function GET(): Promise<Response> {
   }
 
   const site = await resolveCurrentSite();
-  if (!site) return new Response('', { status: 404 });
+  if (!site) {
+    // No R&R site on this host — check whether it's a custom domain attached
+    // to a sold B&S spec site (see attachBuildSellDomain).
+    const bsSite = await resolveCurrentBuildSellSite();
+    if (!bsSite) return new Response('', { status: 404 });
+    if (bsSite.robotsDisallow) return new Response('', { status: 404 });
+    const body = buildSellToLlmsTxt(bsSite, base, `${base}/index.md`);
+    return new Response(body, { headers: TEXT_HEADERS });
+  }
   if (site.robotsDisallow) return new Response('', { status: 404 });
   const bundle = sanityToBundle(site);
 

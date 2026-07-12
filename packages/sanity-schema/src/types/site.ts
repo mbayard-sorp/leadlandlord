@@ -49,6 +49,34 @@ export const site = defineType({
         "LocalBusiness `sameAs` — the partner contractor's REAL Google Business Profile plus any real social profiles. Operator-entered; never fabricated.",
     }),
     defineField({
+      name: 'openingHours',
+      title: 'Opening Hours',
+      type: 'object',
+      description:
+        'Operator-entered business hours emitted as LocalBusiness `openingHoursSpecification`. Falls back to a hardcoded default range when unset.',
+      fields: [
+        defineField({ name: 'opens', title: 'Opens', type: 'string', description: '24h "HH:MM", e.g. "07:00"' }),
+        defineField({ name: 'closes', title: 'Closes', type: 'string', description: '24h "HH:MM", e.g. "21:00"' }),
+        defineField({
+          name: 'closedDays',
+          title: 'Closed Days',
+          type: 'array',
+          of: [{ type: 'string' }],
+          options: {
+            list: [
+              { title: 'Monday', value: 'Monday' },
+              { title: 'Tuesday', value: 'Tuesday' },
+              { title: 'Wednesday', value: 'Wednesday' },
+              { title: 'Thursday', value: 'Thursday' },
+              { title: 'Friday', value: 'Friday' },
+              { title: 'Saturday', value: 'Saturday' },
+              { title: 'Sunday', value: 'Sunday' },
+            ],
+          },
+        }),
+      ],
+    }),
+    defineField({
       name: 'siteMode',
       title: 'Site Mode',
       type: 'string',
@@ -246,6 +274,13 @@ export const site = defineType({
       title: 'Hero Image Prompt',
       type: 'text',
       rows: 3,
+    }),
+    defineField({
+      name: 'heroImageAlt',
+      title: 'Hero Image Alt Text',
+      type: 'string',
+      description:
+        'Alt text for heroImage — a literal description of the image (not the page topic), for screen readers and image SEO.',
     }),
     defineField({
       name: 'videoUrl',

@@ -119,3 +119,31 @@ function normalizeStateSuffix(locality: string, state: string): string {
   if (st && abbr !== st) return locality;
   return `${city}, ${abbr}`;
 }
+
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** Hardcoded fallback used when the operator hasn't entered `opening_hours`. */
+const DEFAULT_OPENING_HOURS = { opens: '07:00', closes: '21:00' };
+
+/**
+ * Build the `openingHoursSpecification` node for LocalBusiness JSON-LD.
+ *
+ * Uses the operator-entered `bundle.opening_hours` (opens/closes + optional
+ * closedDays) when present, otherwise falls back to the hardcoded default
+ * 07:00-21:00, all week.
+ */
+export function openingHoursSpecification(
+  openingHours: { opens: string; closes: string; closed_days?: string[] } | undefined,
+): Array<{ '@type': string; dayOfWeek: string[]; opens: string; closes: string }> {
+  const { opens, closes } = openingHours ?? DEFAULT_OPENING_HOURS;
+  const closedDays = new Set(openingHours?.closed_days ?? []);
+  const dayOfWeek = ALL_DAYS.filter((d) => !closedDays.has(d));
+  return [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek,
+      opens,
+      closes,
+    },
+  ];
+}

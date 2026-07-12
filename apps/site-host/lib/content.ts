@@ -26,6 +26,8 @@ export const PageSchema = z.object({
   mdx: z.string(),
   schema_org_jsonld: z.unknown().optional(),
   og_image_url: z.string().url().optional(),
+  /** Alt text for `og_image_url`. Optional: falls back to the page title when absent. */
+  og_image_alt: z.string().optional(),
   /**
    * Last-modified timestamp for this page, surfaced as Article `dateModified`.
    * Optional: populated by the pipeline (Phase 2); falls back to the bundle's
@@ -53,6 +55,8 @@ export const BundleSchema = z.object({
   variant: VariantSchema.default('classic'),
   hero_image_prompt: z.string().optional(),
   hero_image_url: z.string().optional(),
+  /** Alt text for `hero_image_url`. Optional: variants fall back to a templated string when absent. */
+  hero_image_alt: z.string().optional(),
   video_url: z.string().optional(),
   video_description: z.string().optional(),
   longform_body: z.string().optional(),
@@ -73,6 +77,16 @@ export const BundleSchema = z.object({
    * entered; never fabricated. Optional/empty until supplied.
    */
   same_as: z.array(z.string().url()).default([]),
+  /**
+   * Operator-entered business hours for LocalBusiness `openingHoursSpecification`.
+   * Sanity-only passthrough field — no ContentBundle equivalent. Optional/absent
+   * until supplied; falls back to a hardcoded default range when unset.
+   */
+  opening_hours: z.object({
+    opens: z.string(),
+    closes: z.string(),
+    closed_days: z.array(z.string()).optional(),
+  }).optional(),
   home: PageSchema,
   services: z.array(PageSchema),
   service_areas: z.array(PageSchema),

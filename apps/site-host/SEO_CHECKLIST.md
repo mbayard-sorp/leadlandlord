@@ -49,6 +49,15 @@ These are tracked in the architect's plan and don't block deploying R1.
 - ⏳ **Premium + Bright LeadForm rendering** — currently absent on home; brief lists form-submit as #2 conversion priority.
 - ⏳ **Niche-specialized Copywriter overlays** — `packages/agents/src/copywriter/niches/{trades,modern,premium,bright}.md`.
 
+## What's in place (R2 — 2026-07-12, Phase 1+2 of docs/seo-aeo-geo-audit-2026-07.md)
+
+- ✅ `/llms.txt` gated on `robotsDisallow` (warming sites 404 to AI crawlers, matching `/llms-full.txt` and `/md/*`).
+- ✅ Blog + FAQ index pages emit `text/markdown` alternates backed by `/blog.md` and `/faq.md` index mirrors.
+- ✅ Service JSON-LD uses the page-specific image, absolutized.
+- ✅ Data-driven `openingHoursSpecification` from the operator-entered `openingHours` Sanity field (ProprietaryDataPanel); hardcoded 07:00–21:00 is now only the fallback (ADR 0032).
+- ✅ LLM-authored image alt text: `article_image_alt` / `hero_image_alt` on the content contract, threaded Sanity→bundle→renderers with the old templated alts as fallback.
+- ✅ Buildsell parity: WebSite / Service / AggregateOffer JSON-LD, `@id`-linked entity graph, `inLanguage`, `<main id="main">` landmark, `next/image` logo, custom-domain `/index.md` + `/llms.txt` mirrors with `mdPath` metadata.
+
 ## Deploy / verify checklist (run on every new tenant before going live)
 
 1. **Lighthouse mobile:** ≥95 SEO, ≥95 Accessibility, green Core Web Vitals (LCP < 2.5s, CLS < 0.1, INP < 200ms).
