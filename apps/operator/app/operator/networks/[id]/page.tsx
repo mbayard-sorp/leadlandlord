@@ -15,7 +15,7 @@ import {
 import { Timestamp } from '../../../../components/Timestamp';
 import { CrossLinkPauseToggle } from '../CrossLinkPauseToggle';
 import { loadNetworkRoi } from '../../../../lib/cross-link-roi';
-import { scoreNetworkFootprint } from '@leadlandlord/agents';
+import { scoreNetworkFootprint, scoreNetworkContentFootprint } from '@leadlandlord/agents';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,6 +144,9 @@ export default async function NetworkDetailPage({ params }: Params) {
   const crossLinkPaused = await isCrossLinkPaused();
   const roi = await loadNetworkRoi(memberIds);
   const footprint = await scoreNetworkFootprint(id);
+  const contentFootprint = await scoreNetworkContentFootprint(id);
+  const flaggedFaqOverlaps = contentFootprint.faqOverlaps.filter((o) => o.flagged);
+  const flaggedLinkPatterns = contentFootprint.linkPatternSimilarities.filter((c) => c.flagged);
 
   // Stat helpers.
   const activeLinks = recentLinks.filter((l) => l.status === 'active');
@@ -256,6 +259,61 @@ export default async function NetworkDetailPage({ params }: Params) {
             ))}
           </ul>
         )}
+      </section>
+
+      {/* Content similarity (BL-021: FAQ overlap + internal-link-pattern signature) */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+          Content similarity
+        </h2>
+        <p className="text-xs text-slate-500 mb-3">
+          Compares each site's OWN generated content (FAQs, internal-linker signatures) across the
+          network — distinct from the cross-link footprint above, which only looks at links
+          BETWEEN sites.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">
+              FAQ overlap (&gt;40% of smaller set)
+            </div>
+            {flaggedFaqOverlaps.length === 0 ? (
+              <div className="text-sm text-emerald-300">No flagged pairs</div>
+            ) : (
+              <ul className="space-y-2 text-xs text-amber-200/90">
+                {flaggedFaqOverlaps.map((o) => (
+                  <li key={`${o.siteA}-${o.siteB}`}>
+                    <span className="font-mono">{memberLabelMap[o.siteA] ?? o.siteA}</span>
+                    {' ↔ '}
+                    <span className="font-mono">{memberLabelMap[o.siteB] ?? o.siteB}</span>
+                    {': '}
+                    {Math.round(o.overlapRatio * 100)}% overlap ({o.overlapCount}/{o.smallerSetSize}{' '}
+                    questions)
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">
+              Internal-link-pattern similarity (&gt;80% of shared page kinds identical)
+            </div>
+            {flaggedLinkPatterns.length === 0 ? (
+              <div className="text-sm text-emerald-300">No flagged pairs</div>
+            ) : (
+              <ul className="space-y-2 text-xs text-amber-200/90">
+                {flaggedLinkPatterns.map((c) => (
+                  <li key={`${c.siteA}-${c.siteB}`}>
+                    <span className="font-mono">{memberLabelMap[c.siteA] ?? c.siteA}</span>
+                    {' ↔ '}
+                    <span className="font-mono">{memberLabelMap[c.siteB] ?? c.siteB}</span>
+                    {': '}
+                    {Math.round(c.matchRatio * 100)}% identical ({c.matchingKinds.join(', ')})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* Members table */}
