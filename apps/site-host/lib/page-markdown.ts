@@ -74,6 +74,34 @@ export function pageToMarkdown(page: Page, bundle: Bundle, canonicalUrl: string)
   return parts.join('\n\n');
 }
 
+/**
+ * Serialize an index page (blog, faq) to a plain-markdown link list for
+ * LLM/AI crawlers. Unlike pageToMarkdown, this has no body content — just a
+ * title, description, and a flat list of child page links.
+ */
+export function indexToMarkdown(
+  title: string,
+  description: string | undefined,
+  items: { title: string; path: string }[],
+  canonicalUrl: string
+): string {
+  const parts: string[] = [`# ${title}`];
+
+  if (description) {
+    parts.push(`> ${description}`);
+  }
+
+  if (items.length > 0) {
+    parts.push(items.map((i) => `- [${i.title}](${i.path})`).join('\n'));
+  } else {
+    parts.push('No items published yet.');
+  }
+
+  parts.push(`---\nCanonical URL: ${canonicalUrl}`);
+
+  return parts.join('\n\n');
+}
+
 export interface SiteMarkdownPath {
   htmlPath: string;
   mdPath: string;

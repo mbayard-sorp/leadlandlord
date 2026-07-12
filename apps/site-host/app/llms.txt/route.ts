@@ -57,6 +57,7 @@ export async function GET(): Promise<Response> {
 
   const site = await resolveCurrentSite();
   if (!site) return new Response('', { status: 404 });
+  if (site.robotsDisallow) return new Response('', { status: 404 });
   const bundle = sanityToBundle(site);
 
   const name = bundle.business_name || bundle.niche || host;

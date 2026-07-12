@@ -2,7 +2,8 @@ import { headers } from 'next/headers';
 import { resolveCurrentSite } from '../../../lib/site-context';
 import { sanityToBundle } from '../../../lib/theme-bundle';
 import { currentRequestBaseUrl } from '../../../lib/seo-meta';
-import { pageToMarkdown } from '../../../lib/page-markdown';
+import { pageToMarkdown, indexToMarkdown } from '../../../lib/page-markdown';
+import { pageHref } from '../../../lib/content';
 import type { Bundle, Page } from '../../../lib/content';
 
 export const revalidate = 3600;
@@ -33,11 +34,31 @@ export async function GET(_req: Request, { params }: RouteParams): Promise<Respo
 
   const bundle = sanityToBundle(site);
   const { path: segments = [] } = await params;
+  const base = await currentRequestBaseUrl();
+
+  if (segments.length === 1 && segments[0] === 'blog') {
+    const markdown = indexToMarkdown(
+      'Blog',
+      `Articles and guides on ${bundle.niche} in ${bundle.city}, ${bundle.state}.`,
+      bundle.blog_posts.map((p) => ({ title: p.title, path: `${pageHref(p)}.md` })),
+      `${base}/blog`
+    );
+    return new Response(markdown, { headers: MD_HEADERS });
+  }
+
+  if (segments.length === 1 && segments[0] === 'faq') {
+    const markdown = indexToMarkdown(
+      'FAQ',
+      `Answers to common ${bundle.niche.toLowerCase()} questions in ${bundle.city}, ${bundle.state}.`,
+      bundle.faq_pages.map((p) => ({ title: p.title, path: `${pageHref(p)}.md` })),
+      `${base}/faq`
+    );
+    return new Response(markdown, { headers: MD_HEADERS });
+  }
 
   const page = resolvePage(bundle, segments);
   if (!page) return new Response('', { status: 404 });
 
-  const base = await currentRequestBaseUrl();
   const htmlPath = segments.length === 0 ? '/' : `/${segments.join('/')}`;
   const canonicalUrl = `${base}${htmlPath}`;
 

@@ -291,7 +291,7 @@ const BUILDSELL_PROJECTION = `{
   heroImagePrompt,
   aboutImagePrompt,
   ogImagePrompt,
-  "logo": logo{ "asset": asset->{ url } },
+  "logo": logo{ "asset": asset->{ url, "dims": metadata.dimensions{ width, height } } },
   logoSize,
   navShowBusinessName,
   "faviconUrl": favicon.asset->url,
@@ -485,7 +485,12 @@ export interface BuildSellSite {
   heroImagePrompt?: string | null;
   aboutImagePrompt?: string | null;
   ogImagePrompt?: string | null;
-  logo?: { asset?: { url?: string | null } | null } | null;
+  logo?: {
+    asset?: {
+      url?: string | null;
+      dims?: { width?: number | null; height?: number | null } | null;
+    } | null;
+  } | null;
   logoSize?: number | null;
   navShowBusinessName?: boolean | null;
   faviconUrl?: string | null;

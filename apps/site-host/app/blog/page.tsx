@@ -123,6 +123,7 @@ export async function generateMetadata() {
     ogType: 'website',
     image: bundle.hero_image_url,
     siteName: bundle.business_name,
+    mdPath: '/blog.md',
   });
 
   if (thinContent) {

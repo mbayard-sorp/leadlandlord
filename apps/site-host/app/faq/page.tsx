@@ -123,6 +123,7 @@ export async function generateMetadata() {
     description: `Answers to common ${bundle.niche.toLowerCase()} questions in ${bundle.city}, ${bundle.state}.`,
     path: '/faq',
     siteName: bundle.business_name,
+    mdPath: '/faq.md',
   });
 
   if (thinContent) {

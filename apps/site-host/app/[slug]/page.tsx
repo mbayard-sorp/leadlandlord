@@ -41,6 +41,7 @@ export default async function FlatServicePage({ params }: Params) {
   const tel = telHref(phone);
   const base = await currentRequestBaseUrl();
   const canonical = `/${slug}`;
+  const serviceImage = page.og_image_url ?? bundle.hero_image_url;
 
   const jsonLd = parseJsonLd(page.schema_org_jsonld) ?? {
     '@context': 'https://schema.org',
@@ -48,7 +49,7 @@ export default async function FlatServicePage({ params }: Params) {
     name: page.title,
     description: page.meta_description,
     url: `${base}${canonical}`,
-    ...(bundle.hero_image_url ? { image: bundle.hero_image_url } : {}),
+    ...(serviceImage ? { image: new URL(serviceImage, base).toString() } : {}),
     provider: {
       '@type': 'LocalBusiness',
       name: bundle.business_name,
