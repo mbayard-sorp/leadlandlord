@@ -24,5 +24,6 @@ Lifecycle: `proposed → accepted → in-pr (#NNN) → merged → verified` | `r
 | BL-018 | Content-migration "trivial class" auto-apply (pure metadata moves) | gap analysis | P3 | T3 | proposed | 2026-07-07 | Deferred — low value relative to risk |
 | BL-019 | Go-live checklist *verification* automation: agent verifies every checklist item and reports; human keeps the promote-to-live click | gap analysis | P3 | code | proposed | 2026-07-07 | Never automate the click itself |
 | BL-020 | Domain approval batch UX: keep the human gate (spends money), improve batch-approval ergonomics in `/operator` | gap analysis | P3 | code | proposed | 2026-07-07 | UX-only |
+| BL-021 | Automated cross-site internal-link-pattern similarity check: extend footprint review to compare link caps/anchors/targets across the network now that internal-linker covers faq/info/service-area pages | seo audit 2026-07 (Phase 3) | P2 | code | proposed | 2026-07-12 | Architect flagged as follow-up to linker extension; `checkFaqOverlap` helper from density-lint is the companion for FAQ dedupe |
 
 Out of scope permanently: automating the niche approval gate (`/operator/niches`) — see ADR 0027.
