@@ -19,6 +19,16 @@ export const KeywordClusterInput = z.object({
   supporting_keywords: z.array(z.string()).default([]),
   search_volume: z.number().int().nonnegative().default(0),
   total_volume: z.number().int().nonnegative().default(0),
+  /**
+   * Topical pillar architecture (SEO audit M3). The cluster_key of the
+   * SERVICE cluster this blog/info/faq cluster supports, or null/undefined
+   * when general or when this cluster IS a service/home cluster. Populated
+   * by keyword-planner's resolvePillarKeys() — already validated to
+   * reference an emitted service cluster or be null by the time it reaches
+   * Content Engine, but content-engine treats any non-resolving value as
+   * absent defensively (see resolvePillarClusterKey in internal-linker.ts).
+   */
+  pillar_key: z.string().nullable().optional(),
 });
 export type KeywordClusterInput = z.infer<typeof KeywordClusterInput>;
 

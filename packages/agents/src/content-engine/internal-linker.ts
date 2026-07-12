@@ -1,6 +1,19 @@
 import type { ContentBundle, Page } from '@leadlandlord/shared/types';
 
 /**
+ * Minimal shape of a keyword cluster the linker needs for pillar resolution.
+ * Deliberately structural (not imported from content-engine/schema.ts) to
+ * keep this module dependency-free and directly unit-testable — matches
+ * `KeywordClusterInput` from schema.ts and the Sanity-sourced shape from
+ * site-builder's read-clusters.ts.
+ */
+export interface ClusterPillarInput {
+  cluster_key: string;
+  /** cluster_key of the service cluster this cluster is a topical spoke of, or null/absent. */
+  pillar_key?: string | null;
+}
+
+/**
  * Deterministic internal linker. Pure function — no I/O. Runs as a post-pass
  * after density-lint passes, before returning the bundle from execute().
  *
@@ -35,6 +48,17 @@ import type { ContentBundle, Page } from '@leadlandlord/shared/types';
  *
  * If quota not met by natural phrase matching, appends a "Related services"
  * bullet list at the end (service/FAQ/contact/service_area/info pages only).
+ *
+ * Pillar architecture (SEO audit M3): when `clusters` is supplied and a
+ * blog/info/faq page's `cluster_key` has a `pillar_key` pointing at an
+ * emitted service cluster, that service page becomes the page's FIRST
+ * preferred link target (ahead of the generic relatedness ranking), and the
+ * service page gains a reciprocal link back down to its highest-relatedness
+ * spoke pages (0-2, within the existing service cap — never raised). Pages
+ * without a resolvable pillar fall back to the pre-existing relatedness-only
+ * behavior unchanged. Resolution happens here (not on the Page contract) —
+ * `cluster_key` already round-trips onto pages via the existing content
+ * engine contract, so no new field is needed on ContentBundle/Page.
  */
 
 interface LinkTarget {
@@ -45,13 +69,24 @@ interface LinkTarget {
   primaryKeyword?: string;
   /** page.targeted_keywords[].phrase, when present — same purpose as primaryKeyword. */
   keywords?: string[];
+  /** page.cluster_key, when present — used to resolve pillar/spoke relationships. */
+  clusterKey?: string;
 }
 
 /**
  * Returns a new ContentBundle with internal links injected. Does not mutate
  * the input bundle.
+ *
+ * @param clusters Optional keyword-cluster inputs (same list passed into
+ *   Content Engine) carrying `pillar_key` per cluster. When provided, faq/
+ *   info/blog pages whose cluster resolves to a service pillar link to that
+ *   service first, and the service page links back to its spokes. Omit (or
+ *   pass an empty array) to get the pre-pillar behavior unchanged.
  */
-export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
+export function injectInternalLinks(
+  bundle: ContentBundle,
+  clusters: readonly ClusterPillarInput[] = [],
+): ContentBundle {
   // Build link target list from the bundle
   const serviceTargets: LinkTarget[] = (bundle.services ?? []).map(toLinkTarget('service'));
   const contactTarget: LinkTarget | null = bundle.contact
@@ -60,7 +95,14 @@ export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
   const blogTargets: LinkTarget[] = (bundle.blog_posts ?? []).map(toLinkTarget('blog'));
   const serviceAreaTargets: LinkTarget[] = (bundle.service_areas ?? []).map(toLinkTarget('service_area'));
   const infoTargets: LinkTarget[] = (bundle.info_pages ?? []).map(toLinkTarget('info'));
+  const faqTargets: LinkTarget[] = (bundle.faq_pages ?? []).map(toLinkTarget('faq'));
   const businessName = bundle.business_name;
+
+  const pillar = resolvePillarLinking(clusters, serviceTargets, [
+    ...blogTargets,
+    ...infoTargets,
+    ...faqTargets,
+  ]);
 
   return {
     ...bundle,
@@ -74,16 +116,23 @@ export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
       ...page,
       mdx: linkServicePage(
         page.mdx,
-        page.slug,
+        toLinkTarget('service')(page),
         serviceTargets,
         contactTarget,
         blogTargets,
+        pillar.spokesByServiceSlug.get(page.slug) ?? [],
         businessName,
       ),
     })),
     blog_posts: (bundle.blog_posts ?? []).map((page) => ({
       ...page,
-      mdx: linkBlogPage(page.mdx, page.slug, serviceTargets, businessName),
+      mdx: linkBlogPage(
+        page.mdx,
+        page.slug,
+        serviceTargets,
+        pillar.pillarTargetBySlug.get(page.slug) ?? null,
+        businessName,
+      ),
     })),
     contact: bundle.contact
       ? {
@@ -108,6 +157,7 @@ export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
         toLinkTarget('faq')(page),
         serviceTargets,
         infoTargets,
+        pillar.pillarTargetBySlug.get(page.slug) ?? null,
         businessName,
       ),
     })),
@@ -118,6 +168,7 @@ export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
         toLinkTarget('info')(page),
         serviceTargets,
         [...infoTargets, ...blogTargets],
+        pillar.pillarTargetBySlug.get(page.slug) ?? null,
         businessName,
       ),
     })),
@@ -135,7 +186,59 @@ function toLinkTarget(kind: string) {
     kind,
     primaryKeyword: p.primary_keyword,
     keywords: (p.targeted_keywords ?? []).map((k) => k.phrase),
+    clusterKey: p.cluster_key,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Pillar/spoke resolution (SEO audit M3)
+// ---------------------------------------------------------------------------
+
+interface PillarLinking {
+  /** spoke page slug -> its pillar service LinkTarget. */
+  pillarTargetBySlug: Map<string, LinkTarget>;
+  /** service page slug -> its spoke LinkTargets (unranked; callers rank by relatedness). */
+  spokesByServiceSlug: Map<string, LinkTarget[]>;
+}
+
+/**
+ * Resolves cluster-level `pillar_key` references into concrete LinkTargets.
+ * Defensive by design — a `pillar_key` that doesn't resolve to an emitted
+ * service page (already validated upstream by keyword-planner's
+ * resolvePillarKeys(), but re-checked here since this module has no
+ * guarantee about caller data) is silently dropped rather than throwing.
+ */
+function resolvePillarLinking(
+  clusters: readonly ClusterPillarInput[],
+  services: LinkTarget[],
+  spokeCandidates: LinkTarget[],
+): PillarLinking {
+  const pillarTargetBySlug = new Map<string, LinkTarget>();
+  const spokesByServiceSlug = new Map<string, LinkTarget[]>();
+  if (clusters.length === 0) return { pillarTargetBySlug, spokesByServiceSlug };
+
+  const pillarKeyByClusterKey = new Map<string, string>();
+  for (const c of clusters) {
+    if (c.pillar_key) pillarKeyByClusterKey.set(c.cluster_key, c.pillar_key);
+  }
+  const serviceByClusterKey = new Map<string, LinkTarget>();
+  for (const s of services) {
+    if (s.clusterKey) serviceByClusterKey.set(s.clusterKey, s);
+  }
+
+  for (const spoke of spokeCandidates) {
+    if (!spoke.clusterKey) continue;
+    const pillarKey = pillarKeyByClusterKey.get(spoke.clusterKey);
+    if (!pillarKey) continue;
+    const service = serviceByClusterKey.get(pillarKey);
+    if (!service) continue;
+    pillarTargetBySlug.set(spoke.slug, service);
+    const existing = spokesByServiceSlug.get(service.slug);
+    if (existing) existing.push(spoke);
+    else spokesByServiceSlug.set(service.slug, [spoke]);
+  }
+
+  return { pillarTargetBySlug, spokesByServiceSlug };
 }
 
 // ---------------------------------------------------------------------------
@@ -155,31 +258,51 @@ function linkHomePage(
   return injectLinks(mdx, selfSlug, targets, { minLinks: 8, maxLinks: 12, businessName });
 }
 
+/**
+ * Service pages: 4-8 links, unchanged cap. Pillar architecture adds up to 2
+ * reciprocal links down to this service's highest-relatedness spoke pages
+ * (faq/info/blog clusters whose pillar_key points here) — inserted after
+ * sibling services/contact so the existing hub-spoke priority order is
+ * preserved, before the existing generic topBlogs filler.
+ */
 function linkServicePage(
   mdx: string,
-  selfSlug: string,
+  self: LinkTarget,
   services: LinkTarget[],
   contact: LinkTarget | null,
   blogs: LinkTarget[],
+  spokes: LinkTarget[],
   businessName: string,
 ): string {
-  const otherServices = services.filter((t) => t.slug !== selfSlug);
-  const topBlogs = blogs.slice(0, 2);
+  const otherServices = services.filter((t) => t.slug !== self.slug);
+  const rankedSpokes = sortByRelatedness(self, spokes).slice(0, 2);
+  const spokeSlugsUsed = new Set(rankedSpokes.map((s) => s.slug));
+  const topBlogs = blogs.filter((b) => !spokeSlugsUsed.has(b.slug)).slice(0, 2);
   const targets = [
     ...otherServices,
     ...(contact ? [contact] : []),
+    ...rankedSpokes,
     ...topBlogs,
   ];
-  return injectLinks(mdx, selfSlug, targets, { minLinks: 4, maxLinks: 8, businessName });
+  return injectLinks(mdx, self.slug, targets, { minLinks: 4, maxLinks: 8, businessName });
 }
 
+/**
+ * Blog pages: 2-4 links. When the cluster has a pillar service, that service
+ * is the FIRST preferred target (replacing the generic top-ranked service);
+ * the pre-existing single-service fallback fills remaining quota otherwise.
+ */
 function linkBlogPage(
   mdx: string,
   selfSlug: string,
   services: LinkTarget[],
+  pillarTarget: LinkTarget | null,
   businessName: string,
 ): string {
-  const targets = services.filter((t) => t.slug !== selfSlug).slice(0, 1);
+  const others = services.filter((t) => t.slug !== selfSlug);
+  const targets = pillarTarget
+    ? [pillarTarget, ...others.filter((t) => t.slug !== pillarTarget.slug).slice(0, 1)]
+    : others.slice(0, 1);
   return injectLinks(mdx, selfSlug, targets, { minLinks: 2, maxLinks: 4, businessName });
 }
 
@@ -219,8 +342,10 @@ function linkServiceAreaPage(
 }
 
 /**
- * faq_pages: 1-3 links. The single most-related service or info page,
- * ranked by keyword overlap; remaining related pages act as filler only if
+ * faq_pages: 1-3 links. When the cluster has a pillar service, that service
+ * is the FIRST preferred target (replacing the generic top-ranked
+ * service/info page); the pre-existing relatedness ranking over
+ * services+info fills remaining quota, with related pages as filler only if
  * quota isn't hit naturally.
  */
 function linkFaqPage(
@@ -228,22 +353,29 @@ function linkFaqPage(
   self: LinkTarget,
   services: LinkTarget[],
   infoPages: LinkTarget[],
+  pillarTarget: LinkTarget | null,
   businessName: string,
 ): string {
   const candidates = [...services, ...infoPages].filter((t) => t.slug !== self.slug);
   const ranked = sortByRelatedness(self, candidates);
-  return injectLinks(mdx, self.slug, ranked, { minLinks: 1, maxLinks: 3, businessName });
+  const targets = pillarTarget
+    ? [pillarTarget, ...ranked.filter((t) => t.slug !== pillarTarget.slug)]
+    : ranked;
+  return injectLinks(mdx, self.slug, targets, { minLinks: 1, maxLinks: 3, businessName });
 }
 
 /**
- * info_pages: 2-4 links. Related service pages first, plus 0-1 related
- * blog/info page (whichever scores highest against self).
+ * info_pages: 2-4 links. When the cluster has a pillar service, that service
+ * is the FIRST preferred target (replacing the generic top-ranked service);
+ * the pre-existing service-relatedness ranking plus 0-1 related blog/info
+ * page fills remaining quota.
  */
 function linkInfoPage(
   mdx: string,
   self: LinkTarget,
   services: LinkTarget[],
   otherInfoAndBlog: LinkTarget[],
+  pillarTarget: LinkTarget | null,
   businessName: string,
 ): string {
   const rankedServices = sortByRelatedness(self, services.filter((t) => t.slug !== self.slug));
@@ -251,7 +383,10 @@ function linkInfoPage(
     self,
     otherInfoAndBlog.filter((t) => t.slug !== self.slug),
   ).slice(0, 1);
-  const targets = [...rankedServices, ...rankedOther];
+  const orderedServices = pillarTarget
+    ? [pillarTarget, ...rankedServices.filter((t) => t.slug !== pillarTarget.slug)]
+    : rankedServices;
+  const targets = [...orderedServices, ...rankedOther];
   return injectLinks(mdx, self.slug, targets, { minLinks: 2, maxLinks: 4, businessName });
 }
 

@@ -7,20 +7,22 @@ import type { ClusterIntent, KeywordRole } from '@leadlandlord/sanity-schema/ids
  */
 export interface KeywordClusterInput {
   cluster_key: string;
-  page_kind: 'home' | 'service' | 'service_area' | 'blog' | 'info';
+  page_kind: 'home' | 'service' | 'service_area' | 'blog' | 'info' | 'faq';
   intent: ClusterIntent;
   primary_keyword: string;
   supporting_keywords: string[];
   search_volume: number;
   total_volume: number;
+  pillar_key?: string | null;
 }
 
 interface SanityCluster {
   clusterKey: string;
-  pageKind: 'home' | 'service' | 'service_area' | 'blog' | 'info';
+  pageKind: 'home' | 'service' | 'service_area' | 'blog' | 'info' | 'faq';
   intent: ClusterIntent;
   primaryKeyword: string;
   totalVolume: number;
+  pillarKey?: string | null;
   keywords: Array<{
     phrase: string;
     role: KeywordRole;
@@ -29,7 +31,7 @@ interface SanityCluster {
 }
 
 const QUERY = `*[_type == "keywordCluster" && siteId == $siteId && status != "retired"]{
-  clusterKey, pageKind, intent, primaryKeyword, totalVolume,
+  clusterKey, pageKind, intent, primaryKeyword, totalVolume, pillarKey,
   keywords[]{ phrase, role, searchVolume }
 }`;
 
@@ -55,6 +57,7 @@ export async function loadKeywordClustersForSite(siteId: string): Promise<Keywor
       supporting_keywords: supporting,
       search_volume: primaryEntry?.searchVolume ?? 0,
       total_volume: row.totalVolume ?? 0,
+      pillar_key: row.pillarKey ?? null,
     };
   });
 }

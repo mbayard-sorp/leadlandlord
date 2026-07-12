@@ -7,7 +7,7 @@ function makePage(
   kind: string,
   title: string,
   mdx: string,
-  keywordOpts?: { primary_keyword?: string; targeted_keywords?: string[] },
+  keywordOpts?: { primary_keyword?: string; targeted_keywords?: string[]; cluster_key?: string },
 ): ContentBundle['home'] {
   return {
     kind: kind as ContentBundle['home']['kind'],
@@ -16,6 +16,7 @@ function makePage(
     meta_description: `${title} in test city`,
     mdx,
     primary_keyword: keywordOpts?.primary_keyword,
+    cluster_key: keywordOpts?.cluster_key,
     targeted_keywords: (keywordOpts?.targeted_keywords ?? []).map((phrase) => ({
       phrase,
       role: 'secondary' as const,
@@ -423,5 +424,208 @@ describe('injectInternalLinks — info_pages', () => {
     expect(relatedBlogOrInfoLinks.length).toBeLessThanOrEqual(1);
     // The related service must still be linked (preferred target).
     expect(mdx).toContain('](/window-cleaning)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pillar/spoke architecture — SEO audit M3
+// ---------------------------------------------------------------------------
+
+describe('injectInternalLinks — pillar architecture (SEO audit M3)', () => {
+  // Deliberately unrelated titles/keywords across services so relatedness
+  // ranking alone (no pillar) would NOT naturally rank pressure-washing
+  // first for a gutter-cleaning-cost FAQ — isolates the pillar-first effect
+  // from the pre-existing keyword-overlap ranking.
+  const services = [
+    makePage('/pressure-washing', 'service', 'Pressure Washing', buildServiceMdx('Pressure Washing'), {
+      primary_keyword: 'pressure washing',
+      cluster_key: 'service-pressure-washing',
+    }),
+    makePage('/gutter-cleaning', 'service', 'Gutter Cleaning', buildServiceMdx('Gutter Cleaning'), {
+      primary_keyword: 'gutter cleaning',
+      cluster_key: 'service-gutter-cleaning',
+    }),
+  ];
+
+  it('faq page with a pillar links the pillar service FIRST, ahead of relatedness ranking', () => {
+    const faqPages = [
+      makePage(
+        '/faq/gutter-cleaning-cost',
+        'faq',
+        'How Much Does Gutter Cleaning Cost?',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'gutter cleaning cost', cluster_key: 'faq-gutter-cleaning-cost' },
+      ),
+    ];
+    const clusters = [
+      { cluster_key: 'service-pressure-washing', pillar_key: null },
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'faq-gutter-cleaning-cost', pillar_key: 'service-gutter-cleaning' },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: [] });
+    const result = injectInternalLinks(bundle, clusters);
+    const slugs = extractLinkSlugsInOrder(result.faq_pages[0]!.mdx);
+    expect(slugs[0]).toBe('/gutter-cleaning');
+  });
+
+  it('info page with a pillar links the pillar service FIRST', () => {
+    const infoPages = [
+      makePage(
+        '/pages/gutter-cleaning-regulations',
+        'info',
+        'Local Gutter Cleaning Regulations',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'gutter cleaning regulations', cluster_key: 'info-gutter-regs' },
+      ),
+    ];
+    const clusters = [
+      { cluster_key: 'service-pressure-washing', pillar_key: null },
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'info-gutter-regs', pillar_key: 'service-gutter-cleaning' },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: [], info_pages: infoPages });
+    const result = injectInternalLinks(bundle, clusters);
+    const slugs = extractLinkSlugsInOrder(result.info_pages[0]!.mdx);
+    expect(slugs[0]).toBe('/gutter-cleaning');
+  });
+
+  it('blog page with a pillar links the pillar service FIRST', () => {
+    const blogPosts = [
+      makePage(
+        '/blog/gutter-cleaning-diy-vs-pro',
+        'blog',
+        'DIY vs Pro Gutter Cleaning',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'diy vs pro gutter cleaning', cluster_key: 'blog-gutter-diy-vs-pro' },
+      ),
+    ];
+    const clusters = [
+      { cluster_key: 'service-pressure-washing', pillar_key: null },
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'blog-gutter-diy-vs-pro', pillar_key: 'service-gutter-cleaning' },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: [], info_pages: [], blog_posts: blogPosts });
+    const result = injectInternalLinks(bundle, clusters);
+    const slugs = extractLinkSlugsInOrder(result.blog_posts[0]!.mdx);
+    expect(slugs[0]).toBe('/gutter-cleaning');
+  });
+
+  it('service page gains a reciprocal link down to its spoke pages', () => {
+    const faqPages = [
+      makePage(
+        '/faq/gutter-cleaning-cost',
+        'faq',
+        'How Much Does Gutter Cleaning Cost?',
+        buildLargeBody(['pressure washing', 'gutter cleaning']),
+        { primary_keyword: 'gutter cleaning cost', cluster_key: 'faq-gutter-cleaning-cost' },
+      ),
+    ];
+    const clusters = [
+      { cluster_key: 'service-pressure-washing', pillar_key: null },
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'faq-gutter-cleaning-cost', pillar_key: 'service-gutter-cleaning' },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: [] });
+    const result = injectInternalLinks(bundle, clusters);
+    const gutterServicePage = result.services.find((s) => s.slug === '/gutter-cleaning')!;
+    expect(gutterServicePage.mdx).toContain('](/faq/gutter-cleaning-cost)');
+    // The unrelated pressure-washing service page should not gain a link to
+    // a spoke that isn't assigned to it.
+    const pressureServicePage = result.services.find((s) => s.slug === '/pressure-washing')!;
+    expect(pressureServicePage.mdx).not.toContain('](/faq/gutter-cleaning-cost)');
+  });
+
+  it('service page caps reciprocal spoke links at 2, respecting the existing 4-8 cap', () => {
+    const faqPages = [
+      makePage('/faq/gutter-cleaning-cost', 'faq', 'How Much Does Gutter Cleaning Cost?', buildUnrelatedFillerMdx(), {
+        primary_keyword: 'gutter cleaning cost',
+        cluster_key: 'faq-gutter-cost',
+      }),
+      makePage('/faq/gutter-cleaning-frequency', 'faq', 'How Often Should Gutters Be Cleaned?', buildUnrelatedFillerMdx(), {
+        primary_keyword: 'gutter cleaning frequency',
+        cluster_key: 'faq-gutter-frequency',
+      }),
+      makePage('/faq/gutter-cleaning-diy', 'faq', 'Can I Clean My Own Gutters?', buildUnrelatedFillerMdx(), {
+        primary_keyword: 'diy gutter cleaning',
+        cluster_key: 'faq-gutter-diy',
+      }),
+    ];
+    const clusters = [
+      { cluster_key: 'service-pressure-washing', pillar_key: null },
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'faq-gutter-cost', pillar_key: 'service-gutter-cleaning' },
+      { cluster_key: 'faq-gutter-frequency', pillar_key: 'service-gutter-cleaning' },
+      { cluster_key: 'faq-gutter-diy', pillar_key: 'service-gutter-cleaning' },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: [] });
+    const result = injectInternalLinks(bundle, clusters);
+    const gutterServicePage = result.services.find((s) => s.slug === '/gutter-cleaning')!;
+    const linkedSpokeSlugs = faqPages
+      .map((p) => p.slug)
+      .filter((slug) => gutterServicePage.mdx.includes(`](${slug})`));
+    expect(linkedSpokeSlugs.length).toBeLessThanOrEqual(2);
+    const totalLinks = countLinks(gutterServicePage.mdx);
+    expect(totalLinks).toBeLessThanOrEqual(8);
+  });
+
+  it('a page with no pillar (null pillar_key) falls back to the pre-existing relatedness-only behavior', () => {
+    const faqPages = [
+      makePage(
+        '/faq/gutter-cleaning-cost',
+        'faq',
+        'How Much Does Gutter Cleaning Cost?',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'gutter cleaning cost', cluster_key: 'faq-gutter-cleaning-cost' },
+      ),
+    ];
+    const clusters = [
+      { cluster_key: 'service-pressure-washing', pillar_key: null },
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'faq-gutter-cleaning-cost', pillar_key: null },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: [] });
+    const withClusters = injectInternalLinks(bundle, clusters);
+    const withoutClusters = injectInternalLinks(bundle);
+    expect(withClusters.faq_pages[0]!.mdx).toBe(withoutClusters.faq_pages[0]!.mdx);
+  });
+
+  it('a page whose pillar_key references a dropped/unknown cluster falls back to relatedness ranking (no throw)', () => {
+    const faqPages = [
+      makePage(
+        '/faq/gutter-cleaning-cost',
+        'faq',
+        'How Much Does Gutter Cleaning Cost?',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'gutter cleaning cost', cluster_key: 'faq-gutter-cleaning-cost' },
+      ),
+    ];
+    // pillar_key references a service cluster that was never emitted.
+    const clusters = [
+      { cluster_key: 'service-gutter-cleaning', pillar_key: null },
+      { cluster_key: 'faq-gutter-cleaning-cost', pillar_key: 'service-does-not-exist' },
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: [] });
+    expect(() => injectInternalLinks(bundle, clusters)).not.toThrow();
+    const result = injectInternalLinks(bundle, clusters);
+    const linkCount = countLinks(result.faq_pages[0]!.mdx);
+    expect(linkCount).toBeGreaterThanOrEqual(1);
+    expect(linkCount).toBeLessThanOrEqual(3);
+  });
+
+  it('calling injectInternalLinks without a clusters argument preserves pre-pillar behavior', () => {
+    const faqPages = [
+      makePage(
+        '/faq/gutter-cleaning-cost',
+        'faq',
+        'How Much Does Gutter Cleaning Cost?',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'gutter cleaning cost', cluster_key: 'faq-gutter-cleaning-cost' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: [] });
+    expect(() => injectInternalLinks(bundle)).not.toThrow();
+    const result = injectInternalLinks(bundle);
+    const linkCount = countLinks(result.faq_pages[0]!.mdx);
+    expect(linkCount).toBeGreaterThanOrEqual(1);
   });
 });
