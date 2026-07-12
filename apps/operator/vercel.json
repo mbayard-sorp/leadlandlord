@@ -12,6 +12,7 @@
 
     { "path": "/api/cron/schedule/lighthouse-audit", "schedule": "0 7 * * 1" },
     { "path": "/api/cron/schedule/seo-operator", "schedule": "0 8 * * 1" },
+    { "path": "/api/cron/schedule/content-freshness", "schedule": "0 8 * * *" },
     { "path": "/api/cron/schedule/seo-ingest-gsc", "schedule": "0 6 * * *" },
     { "path": "/api/cron/schedule/seo-ingest-ga4", "schedule": "15 6 * * *" },
 

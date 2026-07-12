@@ -381,6 +381,11 @@ contract:
 
 - Each cluster maps to **exactly one page**. Match `cluster.page_kind` to the
   page kind in your output.
+- A cluster with `page_kind: "faq"` is a literal question harvested from
+  DataForSEO (the PAA/AEO signal). Target it with a `faq_pages` entry per the
+  "FAQ pages" section below: `title` and `slug` ARE the question (the cluster's
+  `primary_keyword`, phrased naturally), not a paraphrase or a generic topic
+  title. Do not route an `faq` cluster into `blog_posts` or `info_pages`.
 - The cluster's `primary_keyword` MUST appear verbatim (lowercased OK,
   natural phrasing OK) in:
     * the page's H1 (title), exactly once

@@ -13,7 +13,7 @@ import { CompetitorBrief } from '../competitor-analyzer/schema';
  */
 export const KeywordClusterInput = z.object({
   cluster_key: z.string(),
-  page_kind: z.enum(['home', 'service', 'service_area', 'blog', 'info']),
+  page_kind: z.enum(['home', 'service', 'service_area', 'blog', 'info', 'faq']),
   intent: z.enum(['commercial', 'informational', 'local-modifier', 'navigational', 'transactional']),
   primary_keyword: z.string(),
   supporting_keywords: z.array(z.string()).default([]),

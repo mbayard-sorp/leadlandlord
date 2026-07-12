@@ -77,6 +77,28 @@ export const site = defineType({
       ],
     }),
     defineField({
+      name: 'credentials',
+      title: 'Credentials',
+      type: 'array',
+      description:
+        'Operator-entered licenses/certifications emitted as LocalBusiness `hasCredential`. Operational Sanity passthrough field (ADR 0032) — no ContentBundle equivalent; never fabricated.',
+      of: [
+        {
+          type: 'object',
+          fields: [
+            defineField({ name: 'name', title: 'Name', type: 'string', validation: (r) => r.required() }),
+            defineField({ name: 'issuer', title: 'Issuer', type: 'string' }),
+            defineField({ name: 'licenseNumber', title: 'License Number', type: 'string' }),
+            defineField({ name: 'url', title: 'URL', type: 'url' }),
+          ],
+          preview: {
+            select: { title: 'name', issuer: 'issuer' },
+            prepare: ({ title, issuer }) => ({ title: title ?? '(unnamed)', subtitle: issuer }),
+          },
+        },
+      ],
+    }),
+    defineField({
       name: 'siteMode',
       title: 'Site Mode',
       type: 'string',

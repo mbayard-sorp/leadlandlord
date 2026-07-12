@@ -827,6 +827,32 @@ export async function saveProprietaryData(formData: FormData): Promise<ActionRes
     proprietaryFacts = { ...proprietaryFacts, openingHours };
   }
 
+  // Operator-entered credentials (licenses/certifications), feeding LocalBusiness
+  // `hasCredential`. Operational Sanity passthrough field (ADR 0032) — no
+  // ContentBundle equivalent. Parallel-array form fields, zipped by index;
+  // rows with a blank name are dropped. Empty result unsets on save.
+  const credentialNames = formData.getAll('credential_name').map(String);
+  const credentialIssuers = formData.getAll('credential_issuer').map(String);
+  const credentialLicenseNumbers = formData.getAll('credential_license_number').map(String);
+  const credentialUrls = formData.getAll('credential_url').map(String);
+  const credentials = credentialNames
+    .map((name, i) => ({
+      name: name.trim(),
+      issuer: (credentialIssuers[i] ?? '').trim(),
+      licenseNumber: (credentialLicenseNumbers[i] ?? '').trim(),
+      url: (credentialUrls[i] ?? '').trim(),
+    }))
+    .filter((c) => c.name.length > 0)
+    .map((c) => ({
+      name: c.name,
+      ...(c.issuer ? { issuer: c.issuer } : {}),
+      ...(c.licenseNumber ? { licenseNumber: c.licenseNumber } : {}),
+      ...(c.url ? { url: c.url } : {}),
+    }));
+  if (credentials.length > 0) {
+    proprietaryFacts = { ...proprietaryFacts, credentials };
+  }
+
   const db = getDb();
   const now = new Date();
   try {
@@ -901,8 +927,25 @@ export async function saveProprietaryData(formData: FormData): Promise<ActionRes
       'Saved, but syncing opening hours to the live site failed (is the site built yet?). Re-save once the site exists.';
   }
 
+  // Credentials sync — same as openingHours, an explicitly emptied form
+  // (all rows removed / left blank) actively unsets the Sanity value.
+  let credentialsWarning: string | undefined;
+  try {
+    const client = createWriteClient();
+    const patch = client.patch(siteDocId(siteId));
+    await (credentials.length > 0 ? patch.set({ credentials }) : patch.unset(['credentials'])).commit();
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : err, siteId },
+      'saveProprietaryData: credentials Sanity sync failed (doc missing or write error)',
+    );
+    credentialsWarning =
+      'Saved, but syncing credentials to the live site failed (is the site built yet?). Re-save once the site exists.';
+  }
+
   revalidatePath(`/operator/sites/${siteId}`);
-  const warning = [sameAsWarning, openingHoursWarning].filter(Boolean).join(' ') || undefined;
+  const warning =
+    [sameAsWarning, openingHoursWarning, credentialsWarning].filter(Boolean).join(' ') || undefined;
   return { ok: true, message: warning };
 }
 

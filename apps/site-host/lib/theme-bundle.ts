@@ -42,6 +42,18 @@ export function sanityToBundle(site: SanitySite): Bundle {
             closed_days: site.openingHours.closedDays ?? undefined,
           }
         : undefined,
+    // Operator-entered credentials, passed through verbatim (Sanity-only
+    // field, no ContentBundle equivalent — ADR 0032). Absent when unset;
+    // the JSON-LD emitter omits `hasCredential` entirely in that case.
+    credentials:
+      site.credentials && site.credentials.length > 0
+        ? site.credentials.map((c) => ({
+            name: c.name,
+            issuer: c.issuer ?? undefined,
+            license_number: c.licenseNumber ?? undefined,
+            url: c.url ?? undefined,
+          }))
+        : undefined,
     home: pageToBundlePage(site.home, 'home'),
     about: pageToBundlePage(site.about, 'about') ?? blank,
     contact: pageToBundlePage(site.contact, 'contact') ?? blank,

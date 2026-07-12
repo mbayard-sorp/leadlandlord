@@ -1,5 +1,5 @@
 import type { Bundle } from '../../lib/content';
-import { openingHoursSpecification, serviceAreaLocality, subtypeFor } from './local-business-schema';
+import { hasCredential, openingHoursSpecification, serviceAreaLocality, subtypeFor } from './local-business-schema';
 
 interface Props {
   bundle: Bundle;
@@ -51,6 +51,10 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
       : undefined;
   const sameAs = bundle.same_as.length > 0 ? bundle.same_as : undefined;
 
+  // hasCredential: operator-entered licenses/certifications (ADR 0032). Only
+  // added to the node when present — never emitted as an empty array.
+  const credentials = hasCredential(bundle.credentials);
+
   const json = {
     '@context': 'https://schema.org',
     '@type': subtype,
@@ -77,6 +81,7 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
       .filter((c, i, arr) => c && arr.indexOf(c) === i)
       .map((name) => ({ '@type': 'City', name })),
     openingHoursSpecification: openingHoursSpecification(bundle.opening_hours),
+    hasCredential: credentials.length > 0 ? credentials : undefined,
     aggregateRating,
     review: reviewNodes,
   };

@@ -59,9 +59,12 @@ export const KeywordPlannerInput = z.object({
 });
 export type KeywordPlannerInput = z.infer<typeof KeywordPlannerInput>;
 
-const ClusterSchema = z.object({
+// Exported for prompt-output validation tests (parses what Claude's tool_use
+// response is expected to look like, including the "faq" page_kind added for
+// the PAA/question-keyword harvest).
+export const ClusterSchema = z.object({
   cluster_key: z.string(),
-  page_kind: z.enum(['home', 'service', 'service_area', 'blog', 'info']),
+  page_kind: z.enum(['home', 'service', 'service_area', 'blog', 'info', 'faq']),
   intent: z.enum(['commercial', 'informational', 'local-modifier', 'navigational', 'transactional']),
   primary_keyword: z.string(),
   supporting_keywords: z.array(z.string()).default([]),
@@ -100,7 +103,7 @@ const CLUSTER_TOOL_SCHEMA = {
           },
           page_kind: {
             type: 'string',
-            enum: ['home', 'service', 'service_area', 'blog', 'info'],
+            enum: ['home', 'service', 'service_area', 'blog', 'info', 'faq'],
           },
           intent: {
             type: 'string',
@@ -133,8 +136,9 @@ const SYSTEM_PROMPT = `You are a local-SEO strategist for a lead-generation plat
 
 Hard rules:
 - Each cluster maps to exactly one page on the website.
-- The site has these page kinds: home (1), service (3-6), service_area (3-6), blog (8-12), info (3-6). About + Contact don't get clusters (no SEO target).
+- The site has these page kinds: home (1), service (3-6), service_area (3-6), blog (8-12), info (3-6), faq (3-8). About + Contact don't get clusters (no SEO target).
 - The primary_keyword for each cluster MUST be from the candidate list. Don't invent phrases.
+- Candidates phrased as a literal question (start with how/what/why/when/where/who/should/do i/does/is/can i/will, etc., or read as a natural spoken question) are exact-match question queries — the kind Google surfaces in "People Also Ask". Cluster each ONE around a single question and give it page_kind "faq", NOT "blog" or "info". A "blog" cluster targets a broader long-tail topic that isn't a single verbatim question; "faq" is reserved for exact-question intent where the ranking page title IS the question and the body IS its direct answer.
 - Prefer primary keywords with KD <= 30 — the platform exists to rank quickly. A KD-50 keyword that's "the obvious one" is wrong if KD-15 alternatives exist in the cluster.
 - One cluster's primary_keyword must NOT appear as primary in another cluster.
 - Supporting keywords are 3-8 candidates that share intent with the primary. Volume can be lower; KD up to 50 is fine for support.
@@ -145,11 +149,12 @@ Cluster types:
 - HOME (1): commercial intent, the broad head term + city. e.g. "<niche> <city>".
 - SERVICES (3-6): commercial, niche-specific sub-services. e.g. "pet turf installation chandler".
 - SERVICE_AREAS (3-6): local-modifier, "<niche> <neighboring city>" patterns.
-- BLOG (8-12): informational long-tails — questions, cost guides, how-tos, comparisons.
+- BLOG (8-12): informational long-tails — cost guides, how-tos, comparisons. Multi-topic, not a single verbatim question.
 - INFO (3-6): hyper-local informational — neighborhood-specific, regulatory, technical.
+- FAQ (3-8): one literal question candidate per cluster (cost, timing, permits, insurance, "do you serve X", DIY-vs-pro). primary_keyword is the question itself, phrased exactly as a searcher would type it. No supporting_keywords needed beyond close question variants — do NOT pad an FAQ cluster with unrelated commercial phrases.
 
 Output discipline:
-- cluster_key is lowercase, kebab-case, prefixed by page_kind (home-, service-, service_area-, blog-, info-).
+- cluster_key is lowercase, kebab-case, prefixed by page_kind (home-, service-, service_area-, blog-, info-, faq-).
 - Inside a page_kind, cluster keys are unique and descriptive ("blog-cost-guide" not "blog-1").
 
 Pass the cluster list back via the submit_keyword_clusters tool exactly once.`;
@@ -307,11 +312,7 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
   }
 
   private buildSeeds(niche: string, city: string): string[] {
-    const n = niche.toLowerCase().trim();
-    const c = city.toLowerCase().trim();
-    return Array.from(
-      new Set([n, `${n} ${c}`, `${n} near me`, `${n} cost`, `${n} services`]),
-    );
+    return buildKeywordSeeds(niche, city);
   }
 
   private async clusterWithClaude(
@@ -343,7 +344,7 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
 
     const thinModeInstruction =
       input.site_mode === 'thin'
-        ? `\nSITE MODE: thin. Generate ONLY: 1 home cluster, 3 service clusters, 3 blog/FAQ clusters. Do NOT generate service_area or info clusters. HARD LIMIT: 8 clusters max — any over 8 will be dropped.`
+        ? `\nSITE MODE: thin. Generate ONLY: 1 home cluster, 3 service clusters, 3 blog/faq clusters (mix of page_kind "blog" and "faq" — prefer "faq" for candidates that are literal questions, "blog" for broader long-tail topics). Do NOT generate service_area or info clusters. HARD LIMIT: 8 clusters max — any over 8 will be dropped by totalVolume, so favor the highest-volume question and long-tail candidates.`
         : '';
 
     const userPrompt = `Niche: ${input.niche}
@@ -435,6 +436,52 @@ Cluster these into ${derivedTarget} (±3) page-mapped keyword clusters per the r
 }
 
 // ---- helpers --------------------------------------------------------------
+
+/**
+ * Question-style seed expansion (SEO roadmap Phase 3 item 4 — PAA / AEO
+ * harvest). These templates mirror the phrasing Google surfaces in "People
+ * Also Ask" for local-service niches: cost, duration, permits/regulation,
+ * value, and scope-of-work questions. Fed through the same
+ * getKeywordCandidates() path as the head-term seeds (related_keywords +
+ * keyword_suggestions) — no new DataForSEO endpoint. related_keywords in
+ * particular returns real semantically-neighboring search queries for a
+ * question seed, which is the closest proxy to PAA data the Labs API exposes
+ * without a dedicated PAA/related-searches endpoint.
+ *
+ * Pure function — kept separate from buildKeywordSeeds so it's directly
+ * testable without a niche+city pair.
+ */
+export function buildQuestionSeeds(niche: string): string[] {
+  const n = niche.toLowerCase().trim();
+  return [
+    `how much does ${n} cost`,
+    `how long does ${n} take`,
+    `do i need a permit for ${n}`,
+    `is ${n} worth it`,
+    `what is included in ${n}`,
+  ];
+}
+
+/**
+ * Full seed list fed to DataForSEO for a niche × city: the existing
+ * volume-driven head terms plus the question-style seeds above. Dedupe via
+ * Set — a niche whose lowercase form already contains "cost" etc. won't
+ * double up.
+ */
+export function buildKeywordSeeds(niche: string, city: string): string[] {
+  const n = niche.toLowerCase().trim();
+  const c = city.toLowerCase().trim();
+  return Array.from(
+    new Set([
+      n,
+      `${n} ${c}`,
+      `${n} near me`,
+      `${n} cost`,
+      `${n} services`,
+      ...buildQuestionSeeds(n),
+    ]),
+  );
+}
 
 interface EnrichedCluster {
   cluster_key: string;

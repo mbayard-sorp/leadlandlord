@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { lintPage, lintBundle } from './density-lint';
-import { ContentBundle } from '@leadlandlord/shared/types';
+import { lintPage, lintBundle, lintFaqs, checkFaqOverlap } from './density-lint';
+import { ContentBundle, type Page } from '@leadlandlord/shared/types';
 
 const KW = 'auto glass repair';
 
@@ -236,5 +236,166 @@ describe('lintBundle — clusters option is required for keyword rule evaluation
     const keywordErrors = results.flatMap((r) => r.violations).filter((v) => v.severity === 'error');
     // With clusters, clusterMap resolves the page keyword and keyword rules fire.
     expect(keywordErrors.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// lintFaqs — hard failures (Phase 3 item 3)
+// ---------------------------------------------------------------------------
+
+function makeFaqPage(overrides: Partial<Page> & Pick<Page, 'kind' | 'slug'>): Page {
+  return {
+    title: 'Test Page',
+    meta_description: 'Test meta.',
+    mdx: 'Body text.',
+    targeted_keywords: [],
+    faqs: [],
+    ...overrides,
+  } as Page;
+}
+
+const GOOD_ANSWER =
+  'Most jobs take between two and four hours depending on the size of the property and the scope of work involved, so plan your day accordingly.';
+
+describe('lintFaqs — zero FAQs on a kind that requires them is a hard failure', () => {
+  it('service page with 0 FAQs fails "faqs-missing" as an error', () => {
+    const page = makeFaqPage({ kind: 'service', slug: '/window-cleaning', faqs: [] });
+    const violations = lintFaqs(page);
+    const v = violations.find((v) => v.rule === 'faqs-missing');
+    expect(v?.severity).toBe('error');
+  });
+
+  it('service_area page with 0 FAQs fails "faqs-missing" as an error', () => {
+    const page = makeFaqPage({ kind: 'service_area', slug: '/service-area/downtown', faqs: [] });
+    const violations = lintFaqs(page);
+    const v = violations.find((v) => v.rule === 'faqs-missing');
+    expect(v?.severity).toBe('error');
+  });
+
+  it('service page below the min (3) still fails even with some FAQs present', () => {
+    const page = makeFaqPage({
+      kind: 'service',
+      slug: '/window-cleaning',
+      faqs: [
+        { q: 'How much does window cleaning cost?', a: GOOD_ANSWER },
+        { q: 'Do you offer same-day service?', a: GOOD_ANSWER },
+      ],
+    });
+    const violations = lintFaqs(page);
+    const v = violations.find((v) => v.rule === 'faqs-missing');
+    expect(v?.severity).toBe('error');
+  });
+
+  it('other kinds (blog, info, faq, home) are never checked for FAQ presence', () => {
+    for (const kind of ['blog', 'info', 'faq', 'home', 'about', 'contact'] as const) {
+      const page = makeFaqPage({ kind, slug: `/${kind}`, faqs: [] });
+      expect(lintFaqs(page)).toHaveLength(0);
+    }
+  });
+
+  it('passes with no violations when a service page meets the FAQ min with quality answers', () => {
+    const page = makeFaqPage({
+      kind: 'service',
+      slug: '/window-cleaning',
+      faqs: [
+        { q: 'How much does window cleaning cost?', a: GOOD_ANSWER },
+        { q: 'Do you offer same-day service?', a: GOOD_ANSWER },
+        { q: 'What areas do you serve?', a: GOOD_ANSWER },
+      ],
+    });
+    expect(lintFaqs(page)).toHaveLength(0);
+  });
+});
+
+describe('lintFaqs — thin answers are a hard failure', () => {
+  it('an answer under 12 words fails "faq-answer-thin" as an error', () => {
+    const page = makeFaqPage({
+      kind: 'service',
+      slug: '/window-cleaning',
+      faqs: [
+        { q: 'How much does it cost?', a: 'It depends on the job.' },
+        { q: 'Do you offer same-day service?', a: GOOD_ANSWER },
+        { q: 'What areas do you serve?', a: GOOD_ANSWER },
+      ],
+    });
+    const violations = lintFaqs(page);
+    const v = violations.find((v) => v.rule === 'faq-answer-thin');
+    expect(v?.severity).toBe('error');
+  });
+});
+
+describe('lintFaqs — within-bundle duplicate questions are a hard failure', () => {
+  it('exact-duplicate question text fails "faq-duplicate" as an error', () => {
+    const page = makeFaqPage({
+      kind: 'service',
+      slug: '/window-cleaning',
+      faqs: [
+        { q: 'How much does window cleaning cost?', a: GOOD_ANSWER },
+        { q: 'How much does window cleaning cost?', a: GOOD_ANSWER },
+        { q: 'What areas do you serve?', a: GOOD_ANSWER },
+      ],
+    });
+    const violations = lintFaqs(page);
+    const v = violations.find((v) => v.rule === 'faq-duplicate');
+    expect(v?.severity).toBe('error');
+  });
+
+  it('normalized-duplicate (punctuation/case differ) still fails', () => {
+    const page = makeFaqPage({
+      kind: 'service',
+      slug: '/window-cleaning',
+      faqs: [
+        { q: 'How much does window cleaning cost?', a: GOOD_ANSWER },
+        { q: 'how much does window cleaning cost', a: GOOD_ANSWER },
+        { q: 'What areas do you serve?', a: GOOD_ANSWER },
+      ],
+    });
+    const violations = lintFaqs(page);
+    const v = violations.find((v) => v.rule === 'faq-duplicate');
+    expect(v?.severity).toBe('error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkFaqOverlap — pure cross-site comparator for footprint-review
+// ---------------------------------------------------------------------------
+
+describe('checkFaqOverlap', () => {
+  it('detects normalized question overlap between two FAQ sets', () => {
+    const faqsA = [{ q: 'How much does roof repair cost in Austin?', a: GOOD_ANSWER }];
+    const faqsB = [{ q: 'How much does roof repair cost in Dallas?', a: GOOD_ANSWER }];
+    const overlaps = checkFaqOverlap(faqsA, faqsB, { cityA: 'Austin', cityB: 'Dallas' });
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0]).toMatchObject({ indexA: 0, indexB: 0 });
+  });
+
+  it('does not flag city-swapped questions when cities are not stripped', () => {
+    const faqsA = [{ q: 'How much does roof repair cost in Austin?', a: GOOD_ANSWER }];
+    const faqsB = [{ q: 'How much does roof repair cost in Dallas?', a: GOOD_ANSWER }];
+    expect(checkFaqOverlap(faqsA, faqsB)).toHaveLength(0);
+  });
+
+  it('flags identical questions as overlapping', () => {
+    const faqsA = [{ q: 'Do you offer free estimates?', a: GOOD_ANSWER }];
+    const faqsB = [{ q: 'Do you offer free estimates?', a: GOOD_ANSWER }];
+    const overlaps = checkFaqOverlap(faqsA, faqsB);
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0]).toMatchObject({ indexA: 0, indexB: 0 });
+  });
+
+  it('does not flag genuinely distinct questions', () => {
+    const faqsA = [{ q: 'Do you offer free estimates?', a: GOOD_ANSWER }];
+    const faqsB = [{ q: 'What payment methods do you accept?', a: GOOD_ANSWER }];
+    expect(checkFaqOverlap(faqsA, faqsB)).toHaveLength(0);
+  });
+
+  it('is a pure function — does not mutate its inputs', () => {
+    const faqsA = [{ q: 'Do you offer free estimates?', a: GOOD_ANSWER }];
+    const faqsB = [{ q: 'Do you offer free estimates?', a: GOOD_ANSWER }];
+    const snapshotA = JSON.stringify(faqsA);
+    const snapshotB = JSON.stringify(faqsB);
+    checkFaqOverlap(faqsA, faqsB);
+    expect(JSON.stringify(faqsA)).toBe(snapshotA);
+    expect(JSON.stringify(faqsB)).toBe(snapshotB);
   });
 });

@@ -21,6 +21,7 @@ import { scheduleNetworkLinkRequests } from './network-link-requests';
 import { scheduleWaveProgression } from './wave-progression';
 import { scheduleLocalContentScout } from './local-content-scout';
 import { scheduleGeoAeoAuditor } from './geo-aeo-auditor';
+import { scheduleContentFreshness } from './content-freshness';
 import { scheduleLocalSeoOptimizer } from './local-seo-optimizer';
 import { scheduleNetworkMetricsAggregator } from './network-metrics-aggregator';
 import { scheduleContentDataAuditor } from './content-data-auditor';
@@ -58,6 +59,9 @@ export const schedulers: Record<string, Scheduler> = {
   'wave-progression': scheduleWaveProgression,
   'local-content-scout': scheduleLocalContentScout,
   'geo-aeo-auditor': scheduleGeoAeoAuditor,
+  // Content-freshness loop (Phase 3 SEO roadmap item 2 / ADR 0032 D2) — same
+  // agent as 'seo-operator', new mode:'freshness' payload.
+  'content-freshness': scheduleContentFreshness,
   'local-seo-optimizer': scheduleLocalSeoOptimizer,
   'network-metrics-aggregator': scheduleNetworkMetricsAggregator,
   'content-data-auditor': scheduleContentDataAuditor,

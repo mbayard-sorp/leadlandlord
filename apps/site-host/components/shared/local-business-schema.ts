@@ -147,3 +147,38 @@ export function openingHoursSpecification(
     },
   ];
 }
+
+interface BundleCredential {
+  name: string;
+  issuer?: string;
+  license_number?: string;
+  url?: string;
+}
+
+interface CredentialNode {
+  '@type': 'EducationalOccupationalCredential';
+  credentialCategory: 'license' | 'certification';
+  name: string;
+  recognizedBy?: { '@type': 'Organization'; name: string };
+  url?: string;
+}
+
+/**
+ * Build the `hasCredential` nodes for LocalBusiness JSON-LD from
+ * operator-entered `bundle.credentials` (ADR 0032 — operational Sanity
+ * passthrough field, no ContentBundle equivalent). Returns an empty array
+ * when no credentials are present, so callers can omit the property.
+ *
+ * Categorized as `license` when a `license_number` is present, otherwise
+ * `certification`.
+ */
+export function hasCredential(credentials: BundleCredential[] | undefined): CredentialNode[] {
+  if (!credentials || credentials.length === 0) return [];
+  return credentials.map((c) => ({
+    '@type': 'EducationalOccupationalCredential',
+    credentialCategory: c.license_number ? 'license' : 'certification',
+    name: c.name,
+    ...(c.issuer ? { recognizedBy: { '@type': 'Organization', name: c.issuer } } : {}),
+    ...(c.url ? { url: c.url } : {}),
+  }));
+}

@@ -51,6 +51,7 @@ const SITE_PROJECTION = `{
   gaMeasurementId, robotsDisallow, indexnowKey, generatedAt,
   latitude, longitude, sameAs,
   openingHours{ opens, closes, closedDays },
+  credentials[]{ name, issuer, licenseNumber, url },
   trustSignals, nearbyCities,
   "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
@@ -116,6 +117,7 @@ export interface SanitySite {
   longitude?: number | null;
   sameAs?: string[] | null;
   openingHours?: { opens?: string | null; closes?: string | null; closedDays?: string[] | null } | null;
+  credentials?: Array<{ name: string; issuer?: string | null; licenseNumber?: string | null; url?: string | null }> | null;
   trustSignals?: string[] | null;
   nearbyCities?: string[] | null;
   neighborhoods?: Array<{ name: string; googleMapsUrl: string }> | null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { openingHoursSpecification, serviceAreaLocality, subtypeFor } from './local-business-schema';
+import { hasCredential, openingHoursSpecification, serviceAreaLocality, subtypeFor } from './local-business-schema';
 
 describe('subtypeFor', () => {
   it('maps the canonical single-word trades', () => {
@@ -124,5 +124,61 @@ describe('openingHoursSpecification', () => {
   it('handles an empty closed_days array the same as unset', () => {
     const out = openingHoursSpecification({ opens: '09:00', closes: '18:00', closed_days: [] });
     expect(out[0]?.dayOfWeek).toHaveLength(7);
+  });
+});
+
+describe('hasCredential', () => {
+  it('returns an empty array when undefined', () => {
+    expect(hasCredential(undefined)).toEqual([]);
+  });
+
+  it('returns an empty array when empty', () => {
+    expect(hasCredential([])).toEqual([]);
+  });
+
+  it('categorizes as "license" when license_number is present', () => {
+    const out = hasCredential([{ name: 'Master Plumber License', license_number: 'PL-1234' }]);
+    expect(out).toEqual([
+      {
+        '@type': 'EducationalOccupationalCredential',
+        credentialCategory: 'license',
+        name: 'Master Plumber License',
+      },
+    ]);
+  });
+
+  it('categorizes as "certification" when license_number is absent', () => {
+    const out = hasCredential([{ name: 'EPA 608 Certified' }]);
+    expect(out[0]?.credentialCategory).toBe('certification');
+  });
+
+  it('includes recognizedBy when issuer is present, omits it otherwise', () => {
+    const withIssuer = hasCredential([{ name: 'Certified Master Electrician', issuer: 'State Board' }]);
+    expect(withIssuer[0]).toMatchObject({
+      recognizedBy: { '@type': 'Organization', name: 'State Board' },
+    });
+
+    const withoutIssuer = hasCredential([{ name: 'Certified Master Electrician' }]);
+    expect(withoutIssuer[0]).not.toHaveProperty('recognizedBy');
+  });
+
+  it('includes url when present, omits it otherwise', () => {
+    const withUrl = hasCredential([{ name: 'NARI Certified', url: 'https://nari.org/verify/123' }]);
+    expect(withUrl[0]).toMatchObject({ url: 'https://nari.org/verify/123' });
+
+    const withoutUrl = hasCredential([{ name: 'NARI Certified' }]);
+    expect(withoutUrl[0]).not.toHaveProperty('url');
+  });
+
+  it('maps multiple credentials in order', () => {
+    const out = hasCredential([
+      { name: 'License A', license_number: '111' },
+      { name: 'Cert B' },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0]?.name).toBe('License A');
+    expect(out[0]?.credentialCategory).toBe('license');
+    expect(out[1]?.name).toBe('Cert B');
+    expect(out[1]?.credentialCategory).toBe('certification');
   });
 });
