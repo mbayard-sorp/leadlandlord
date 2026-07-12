@@ -17,7 +17,7 @@ export default async function About() {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: 'About', path: '/about/' },
+    { name: 'About', path: '/about' },
   ]);
 
   return (
@@ -34,7 +34,7 @@ export default async function About() {
       />
       <Breadcrumbs items={[
         { name: bundle.business_name, url: '/' },
-        { name: 'About', url: '/about/' },
+        { name: 'About', url: '/about' },
       ]} />
       <h1 className="info-page-h1">{pageH1(bundle.about)}</h1>
       <PageBody phone={phone} page={{ ...bundle.about, mdx: bundle.about.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
@@ -49,7 +49,7 @@ export async function generateMetadata() {
   return buildPageMetadata({
     title: bundle.about.title,
     description: bundle.about.meta_description,
-    path: '/about/',
+    path: '/about',
     image: bundle.hero_image_url,
     siteName: bundle.business_name,
     mdPath: '/about.md',

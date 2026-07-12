@@ -38,7 +38,9 @@ export function BuildSellSiteView({ site, pageUrl, base }: BuildSellSiteViewProp
         />
       )}
       <BuildSellFaqJsonLd sections={site.sections} />
-      <BuildSellHome site={site} draft={false} />
+      <main id="main">
+        <BuildSellHome site={site} draft={false} />
+      </main>
     </div>
   );
 }

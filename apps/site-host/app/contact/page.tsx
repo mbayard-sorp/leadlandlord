@@ -18,7 +18,7 @@ export default async function Contact() {
 
   const breadcrumb = await breadcrumbsJsonLd([
     { name: bundle.business_name, path: '/' },
-    { name: 'Contact', path: '/contact/' },
+    { name: 'Contact', path: '/contact' },
   ]);
 
   return (
@@ -35,7 +35,7 @@ export default async function Contact() {
       />
       <Breadcrumbs items={[
         { name: bundle.business_name, url: '/' },
-        { name: 'Contact', url: '/contact/' },
+        { name: 'Contact', url: '/contact' },
       ]} />
       <h1 className="info-page-h1">{pageH1(bundle.contact)}</h1>
       <PageBody phone={phone} page={{ ...bundle.contact, mdx: bundle.contact.mdx.replace(/^\s*#\s+[^\n]+\n+/, '') }} />
@@ -64,7 +64,7 @@ export async function generateMetadata() {
   return buildPageMetadata({
     title: bundle.contact.title,
     description: bundle.contact.meta_description,
-    path: '/contact/',
+    path: '/contact',
     image: bundle.hero_image_url,
     siteName: bundle.business_name,
     mdPath: '/contact.md',

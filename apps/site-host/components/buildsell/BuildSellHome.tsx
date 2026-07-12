@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { BuildSellSite } from '@/lib/sanity';
 import { resolveBuildSellTheme } from '@/lib/buildsell-theme';
 import { resolveBsFont } from '@/lib/buildsell-fonts';
@@ -85,11 +86,12 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
             }
           >
             {site.logo?.asset?.url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Sanity CDN asset, sized via CSS
-              <img
+              <Image
                 className="bs-nav-logo"
                 src={site.logo.asset.url}
                 alt={site.businessName}
+                width={site.logo.asset.dims?.width ?? 400}
+                height={site.logo.asset.dims?.height ?? 120}
                 style={
                   site.logoSize
                     ? { height: `${site.logoSize}px`, maxWidth: 'none' }
