@@ -1,30 +1,50 @@
-import type { ContentBundle } from '@leadlandlord/shared/types';
+import type { ContentBundle, Page } from '@leadlandlord/shared/types';
 
 /**
  * Deterministic internal linker. Pure function — no I/O. Runs as a post-pass
  * after density-lint passes, before returning the bundle from execute().
  *
  * Injects Markdown links into page MDX bodies according to the caps defined
- * in build plan section 7.1 item 5:
+ * in build plan section 7.1 item 5, extended per the SEO audit (2026-07,
+ * finding H5 / architect decision "footprint-mitigated"):
  *   home:          8-12 links (to all service pages + contact)
  *   service:       4-8 links (to other services + contact + 1-2 FAQ posts)
- *   blog/FAQ:      2-4 links (to most-related service page)
+ *   blog:          2-4 links (to most-related service page)
  *   contact:       links back to all services
+ *   service_area:  3-5 links — preferentially the most-related service
+ *                  page(s) (keyword-overlap match), plus 1-2 nearby
+ *                  service-area pages.
+ *   faq_pages:     1-3 links — the single most-related service or info
+ *                  page, with additional related pages as filler if the
+ *                  quota isn't met naturally.
+ *   info_pages:    2-4 links — related service pages, plus 0-1 related
+ *                  blog/info page.
+ *
+ * Per-kind caps are deliberately non-uniform (not all reusing the blog's
+ * 2-4 range) so a network of sites doesn't share one obviously-templated
+ * link-count signature — see the architect's footprint-mitigation note in
+ * docs/seo-aeo-geo-audit-2026-07.md.
  *
  * Hard constraints:
  *   - Never link a page to itself.
  *   - Never inject inside H1/H2/H3 (skip lines starting with #).
  *   - Never inject within the first 100 words of any page.
  *   - Don't double-link the same anchor phrase to the same target on one page.
+ *   - Deterministic: no Date.now/Math.random — ranking ties break on the
+ *     input array's original order.
  *
  * If quota not met by natural phrase matching, appends a "Related services"
- * bullet list at the end (service/FAQ/contact pages only).
+ * bullet list at the end (service/FAQ/contact/service_area/info pages only).
  */
 
 interface LinkTarget {
   slug: string;
   title: string;
   kind: string;
+  /** page.primary_keyword, when present — used for kind-aware relatedness ranking. */
+  primaryKeyword?: string;
+  /** page.targeted_keywords[].phrase, when present — same purpose as primaryKeyword. */
+  keywords?: string[];
 }
 
 /**
@@ -33,19 +53,13 @@ interface LinkTarget {
  */
 export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
   // Build link target list from the bundle
-  const serviceTargets: LinkTarget[] = (bundle.services ?? []).map((p) => ({
-    slug: p.slug,
-    title: p.title,
-    kind: 'service',
-  }));
+  const serviceTargets: LinkTarget[] = (bundle.services ?? []).map(toLinkTarget('service'));
   const contactTarget: LinkTarget | null = bundle.contact
     ? { slug: bundle.contact.slug, title: bundle.contact.title, kind: 'contact' }
     : null;
-  const blogTargets: LinkTarget[] = (bundle.blog_posts ?? []).map((p) => ({
-    slug: p.slug,
-    title: p.title,
-    kind: 'blog',
-  }));
+  const blogTargets: LinkTarget[] = (bundle.blog_posts ?? []).map(toLinkTarget('blog'));
+  const serviceAreaTargets: LinkTarget[] = (bundle.service_areas ?? []).map(toLinkTarget('service_area'));
+  const infoTargets: LinkTarget[] = (bundle.info_pages ?? []).map(toLinkTarget('info'));
   const businessName = bundle.business_name;
 
   return {
@@ -77,7 +91,51 @@ export function injectInternalLinks(bundle: ContentBundle): ContentBundle {
           mdx: linkContactPage(bundle.contact.mdx, bundle.contact.slug, serviceTargets, businessName),
         }
       : bundle.contact,
+    service_areas: (bundle.service_areas ?? []).map((page) => ({
+      ...page,
+      mdx: linkServiceAreaPage(
+        page.mdx,
+        toLinkTarget('service_area')(page),
+        serviceTargets,
+        serviceAreaTargets,
+        businessName,
+      ),
+    })),
+    faq_pages: (bundle.faq_pages ?? []).map((page) => ({
+      ...page,
+      mdx: linkFaqPage(
+        page.mdx,
+        toLinkTarget('faq')(page),
+        serviceTargets,
+        infoTargets,
+        businessName,
+      ),
+    })),
+    info_pages: (bundle.info_pages ?? []).map((page) => ({
+      ...page,
+      mdx: linkInfoPage(
+        page.mdx,
+        toLinkTarget('info')(page),
+        serviceTargets,
+        [...infoTargets, ...blogTargets],
+        businessName,
+      ),
+    })),
   };
+}
+
+/**
+ * Build a LinkTarget from a Page, carrying keyword signal (primary_keyword +
+ * targeted_keywords phrases) forward for kind-aware relatedness ranking.
+ */
+function toLinkTarget(kind: string) {
+  return (p: Page): LinkTarget => ({
+    slug: p.slug,
+    title: p.title,
+    kind,
+    primaryKeyword: p.primary_keyword,
+    keywords: (p.targeted_keywords ?? []).map((k) => k.phrase),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +191,118 @@ function linkContactPage(
 ): string {
   const targets = services.filter((t) => t.slug !== selfSlug);
   return injectLinks(mdx, selfSlug, targets, { minLinks: targets.length, maxLinks: targets.length, businessName });
+}
+
+/**
+ * service_area pages: 3-5 links. Preferentially the most-related service
+ * page(s) (keyword-overlap match against self), plus 1-2 nearby
+ * service-area pages. "Nearby" has no geo-distance data in the bundle, so
+ * array order (as planned/emitted) is used as a deterministic proxy.
+ */
+function linkServiceAreaPage(
+  mdx: string,
+  self: LinkTarget,
+  services: LinkTarget[],
+  serviceAreas: LinkTarget[],
+  businessName: string,
+): string {
+  const rankedServices = sortByRelatedness(self, services.filter((t) => t.slug !== self.slug));
+  const otherAreas = serviceAreas.filter((t) => t.slug !== self.slug);
+  // Reserve the top 2 relevance slots for services, then interleave 1-2
+  // nearby areas, then fall back to remaining services as filler so the
+  // 3-5 cap is still reachable when few areas/services score well.
+  const topServices = rankedServices.slice(0, 2);
+  const nearbyAreas = otherAreas.slice(0, 2);
+  const fillerServices = rankedServices.slice(2);
+  const targets = [...topServices, ...nearbyAreas, ...fillerServices];
+  return injectLinks(mdx, self.slug, targets, { minLinks: 3, maxLinks: 5, businessName });
+}
+
+/**
+ * faq_pages: 1-3 links. The single most-related service or info page,
+ * ranked by keyword overlap; remaining related pages act as filler only if
+ * quota isn't hit naturally.
+ */
+function linkFaqPage(
+  mdx: string,
+  self: LinkTarget,
+  services: LinkTarget[],
+  infoPages: LinkTarget[],
+  businessName: string,
+): string {
+  const candidates = [...services, ...infoPages].filter((t) => t.slug !== self.slug);
+  const ranked = sortByRelatedness(self, candidates);
+  return injectLinks(mdx, self.slug, ranked, { minLinks: 1, maxLinks: 3, businessName });
+}
+
+/**
+ * info_pages: 2-4 links. Related service pages first, plus 0-1 related
+ * blog/info page (whichever scores highest against self).
+ */
+function linkInfoPage(
+  mdx: string,
+  self: LinkTarget,
+  services: LinkTarget[],
+  otherInfoAndBlog: LinkTarget[],
+  businessName: string,
+): string {
+  const rankedServices = sortByRelatedness(self, services.filter((t) => t.slug !== self.slug));
+  const rankedOther = sortByRelatedness(
+    self,
+    otherInfoAndBlog.filter((t) => t.slug !== self.slug),
+  ).slice(0, 1);
+  const targets = [...rankedServices, ...rankedOther];
+  return injectLinks(mdx, self.slug, targets, { minLinks: 2, maxLinks: 4, businessName });
+}
+
+// ---------------------------------------------------------------------------
+// Keyword-overlap relatedness ranking (kind-aware target selection)
+// ---------------------------------------------------------------------------
+
+// Generic words stripped before scoring so "cleaning services near you" vs.
+// "gutter cleaning services" doesn't over-match on filler terms.
+const GENERIC_SIGNAL_WORDS = new Set([
+  'the', 'and', 'for', 'with', 'your', 'our', 'you', 'near', 'me', 'in',
+  'a', 'an', 'of', 'to', 'best', 'top', 'get', 'services', 'service',
+  'today', 'free', 'call', 'local',
+]);
+
+function extractSignalWords(target: LinkTarget): Set<string> {
+  const raw = [target.primaryKeyword ?? '', ...(target.keywords ?? []), target.title]
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ');
+  return new Set(
+    raw
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !GENERIC_SIGNAL_WORDS.has(w)),
+  );
+}
+
+/**
+ * Score relatedness between two targets by counting shared signal words
+ * drawn from primary_keyword + targeted_keywords + title. Higher is more
+ * related. Pure, deterministic — no randomness.
+ */
+function relatednessScore(a: LinkTarget, b: LinkTarget): number {
+  const wa = extractSignalWords(a);
+  const wb = extractSignalWords(b);
+  let overlap = 0;
+  for (const w of wa) {
+    if (wb.has(w)) overlap++;
+  }
+  return overlap;
+}
+
+/**
+ * Sort candidates by relatedness to `self`, descending. Ties preserve the
+ * original candidate order (stable sort) for determinism.
+ */
+function sortByRelatedness(self: LinkTarget, candidates: LinkTarget[]): LinkTarget[] {
+  return candidates
+    .map((c, index) => ({ c, index, score: relatednessScore(self, c) }))
+    .sort((x, y) => y.score - x.score || x.index - y.index)
+    .map((x) => x.c);
 }
 
 // ---------------------------------------------------------------------------

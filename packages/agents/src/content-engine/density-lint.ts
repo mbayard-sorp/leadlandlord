@@ -6,6 +6,11 @@ import type { ContentBundle, Page } from '@leadlandlord/shared/types';
  * retry the LLM once with violations appended; on second failure, throw.
  *
  * Rules are defined in build plan section 10.
+ *
+ * FAQ dedupe: within-bundle duplicate/thin/missing FAQs are hard failures via
+ * `lintFaqs` below. Cross-site FAQ dedupe can't run here (no other sites in
+ * context at emit) — see `checkFaqOverlap` for the pure comparator the
+ * network footprint-review pass should call instead.
  */
 
 export interface Violation {
@@ -98,11 +103,17 @@ export function lintBundle(
 }
 
 /**
- * FAQ quality lint for service + service-area pages. Warn-only: the system
- * prompt is what drives FAQ generation; this surfaces gaps (too few, thin, or
- * duplicate answers) without failing the build. Local-specificity and
- * cross-site variation can't be judged per-page here — those are enforced by
- * the system prompt and the network footprint-review pass.
+ * FAQ quality lint for service + service-area pages. system.md requires a
+ * `faqs` array on both kinds (see "Per-page FAQs" section) — a page that
+ * targets an answer-engine surface with zero, duplicate, or thin FAQs is a
+ * structural defect, not a style nit, so these are HARD failures (severity
+ * 'error') that flow through the same density-lint retry-then-degrade path
+ * as the keyword rules in `lintPage` (see content-engine/index.ts's
+ * errorPages / retry handling). Local-specificity and cross-site variation
+ * can't be judged per-page here — those are enforced by the system prompt
+ * and the network footprint-review pass; see `checkFaqOverlap` below for the
+ * pure comparator that pass is expected to consume once it has other sites'
+ * FAQs in context.
  */
 export function lintFaqs(page: Page): Violation[] {
   if (page.kind !== 'service' && page.kind !== 'service_area') return [];
@@ -112,7 +123,7 @@ export function lintFaqs(page: Page): Violation[] {
   if (faqs.length < min) {
     violations.push({
       rule: 'faqs-missing',
-      severity: 'warn',
+      severity: 'error',
       detail: `${page.kind} page "${page.slug}" has ${faqs.length} FAQ(s) — expected at least ${min}`,
     });
   }
@@ -121,24 +132,72 @@ export function lintFaqs(page: Page): Violation[] {
     if (words < 12) {
       violations.push({
         rule: 'faq-answer-thin',
-        severity: 'warn',
+        severity: 'error',
         detail: `FAQ #${i + 1} on "${page.slug}" has a ${words}-word answer — thin; aim for 25-80 words`,
       });
     }
   });
   const seen = new Set<string>();
   for (const f of faqs) {
-    const key = f.q.toLowerCase().trim();
+    const key = normalizeFaqQuestion(f.q);
     if (seen.has(key)) {
       violations.push({
         rule: 'faq-duplicate',
-        severity: 'warn',
+        severity: 'error',
         detail: `Duplicate FAQ question on "${page.slug}": "${f.q}"`,
       });
     }
     seen.add(key);
   }
   return violations;
+}
+
+/**
+ * Normalize a FAQ question for duplicate/overlap comparison: lowercase,
+ * strip punctuation, and drop common city/location tokens so "How much does
+ * roof repair cost in Austin?" and "How much does roof repair cost?" compare
+ * equal. Shared by the within-bundle dedupe above and `checkFaqOverlap`.
+ */
+function normalizeFaqQuestion(question: string, city?: string): string {
+  let q = question.toLowerCase();
+  if (city) {
+    q = q.replaceAll(city.toLowerCase(), '');
+  }
+  return q
+    .replace(/[^a-z0-9\s]/g, '') // strip punctuation
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && !CITY_STOP_WORDS.has(w))
+    .join(' ')
+    .trim();
+}
+
+// Generic location-ish tokens stripped even when no explicit city is passed,
+// so "near me" / "in your area" phrasing doesn't defeat normalization.
+const CITY_STOP_WORDS = new Set(['near', 'me', 'area', 'local', 'city', 'town']);
+
+/**
+ * Pure comparator for cross-site FAQ overlap. Cannot run at bundle-emit time
+ * (no other sites in scope there) — this is exported for the network
+ * footprint-review pass to call once it has two sites' FAQ sets in hand.
+ * Returns the pairs of (a-index, b-index) whose normalized questions match.
+ */
+export function checkFaqOverlap(
+  faqsA: Array<{ q: string; a: string }>,
+  faqsB: Array<{ q: string; a: string }>,
+  opts?: { city?: string },
+): Array<{ indexA: number; indexB: number; question: string }> {
+  const normalizedB = faqsB.map((f) => normalizeFaqQuestion(f.q, opts?.city));
+  const overlaps: Array<{ indexA: number; indexB: number; question: string }> = [];
+  faqsA.forEach((fa, indexA) => {
+    const na = normalizeFaqQuestion(fa.q, opts?.city);
+    if (!na) return;
+    normalizedB.forEach((nb, indexB) => {
+      if (nb && na === nb) {
+        overlaps.push({ indexA, indexB, question: fa.q });
+      }
+    });
+  });
+  return overlaps;
 }
 
 /**

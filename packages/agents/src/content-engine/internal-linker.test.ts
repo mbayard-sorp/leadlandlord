@@ -2,14 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { injectInternalLinks } from './internal-linker';
 import type { ContentBundle } from '@leadlandlord/shared/types';
 
-function makePage(slug: string, kind: string, title: string, mdx: string): ContentBundle['home'] {
+function makePage(
+  slug: string,
+  kind: string,
+  title: string,
+  mdx: string,
+  keywordOpts?: { primary_keyword?: string; targeted_keywords?: string[] },
+): ContentBundle['home'] {
   return {
     kind: kind as ContentBundle['home']['kind'],
     slug,
     title,
     meta_description: `${title} in test city`,
     mdx,
-    targeted_keywords: [],
+    primary_keyword: keywordOpts?.primary_keyword,
+    targeted_keywords: (keywordOpts?.targeted_keywords ?? []).map((phrase) => ({
+      phrase,
+      role: 'secondary' as const,
+    })),
     faqs: [],
   };
 }
@@ -156,5 +166,262 @@ describe('injectInternalLinks — does not mutate input', () => {
     const originalHomeMdx = bundle.home.mdx;
     injectInternalLinks(bundle);
     expect(bundle.home.mdx).toBe(originalHomeMdx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// service_area / faq_pages / info_pages — Phase 3 item 1 extension
+// ---------------------------------------------------------------------------
+
+// Body with no natural mentions of any target phrase — forces the linker
+// down the "Related services" fallback path, whose bullet order mirrors
+// the internal target-ranking order 1:1. This lets tests assert on
+// relatedness ranking without depending on paragraph-scan internals.
+function buildUnrelatedFillerMdx(): string {
+  const filler = 'Our licensed local crew proudly serves homeowners with dependable, on-time results every visit. ';
+  return `${filler.repeat(6)}\n\n${filler.repeat(4)}`;
+}
+
+function extractLinkSlugsInOrder(mdx: string): string[] {
+  const matches = [...mdx.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)];
+  return matches.map((m) => m[1]!);
+}
+
+describe('injectInternalLinks — service_area pages', () => {
+  const services = [
+    makePage('/window-cleaning', 'service', 'Window Cleaning', buildServiceMdx('Window Cleaning'), {
+      primary_keyword: 'window cleaning',
+    }),
+    makePage('/gutter-cleaning', 'service', 'Gutter Cleaning', buildServiceMdx('Gutter Cleaning'), {
+      primary_keyword: 'gutter cleaning',
+    }),
+    makePage('/pressure-washing', 'service', 'Pressure Washing', buildServiceMdx('Pressure Washing'), {
+      primary_keyword: 'pressure washing',
+    }),
+  ];
+
+  it('caps links between 3 and 5 when mentions are naturally present', () => {
+    const serviceAreas = [
+      makePage(
+        '/service-area/downtown',
+        'service_area',
+        'Downtown Service Area',
+        buildLargeBody(['window cleaning', 'gutter cleaning', 'pressure washing']),
+        { primary_keyword: 'window cleaning downtown' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: serviceAreas, faq_pages: [], info_pages: [] });
+    const result = injectInternalLinks(bundle);
+    const linkCount = countLinks(result.service_areas[0]!.mdx);
+    expect(linkCount).toBeGreaterThanOrEqual(3);
+    expect(linkCount).toBeLessThanOrEqual(5);
+  });
+
+  it('never links a service_area page to itself', () => {
+    const serviceAreas = [
+      makePage(
+        '/service-area/downtown',
+        'service_area',
+        'Downtown Service Area',
+        buildLargeBody(['window cleaning', 'gutter cleaning', 'pressure washing']),
+        { primary_keyword: 'window cleaning downtown' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: serviceAreas, faq_pages: [], info_pages: [] });
+    const result = injectInternalLinks(bundle);
+    expect(result.service_areas[0]!.mdx).not.toContain('](/service-area/downtown)');
+  });
+
+  it('preferentially targets the most keyword-related service page', () => {
+    const serviceAreas = [
+      makePage('/service-area/downtown', 'service_area', 'Downtown Service Area', buildUnrelatedFillerMdx(), {
+        primary_keyword: 'window cleaning downtown',
+      }),
+    ];
+    const bundle = makeBundle({ services, service_areas: serviceAreas, faq_pages: [], info_pages: [] });
+    const result = injectInternalLinks(bundle);
+    const slugs = extractLinkSlugsInOrder(result.service_areas[0]!.mdx);
+    // 'window cleaning' shares the most signal words with 'window cleaning
+    // downtown' (window + cleaning) and must rank ahead of the less-related
+    // gutter/pressure-washing services in the fallback bullet list.
+    expect(slugs[0]).toBe('/window-cleaning');
+    expect(slugs.indexOf('/window-cleaning')).toBeLessThan(slugs.indexOf('/gutter-cleaning'));
+    expect(slugs.indexOf('/gutter-cleaning')).toBeLessThan(slugs.indexOf('/pressure-washing'));
+  });
+
+  it('links 1-2 nearby (other) service-area pages in addition to related services', () => {
+    const serviceAreas = [
+      makePage(
+        '/service-area/downtown',
+        'service_area',
+        'Downtown Service Area',
+        buildLargeBody(['window cleaning', 'gutter cleaning', 'pressure washing', 'midtown service area', 'uptown service area']),
+        { primary_keyword: 'window cleaning downtown' },
+      ),
+      makePage('/service-area/midtown', 'service_area', 'Midtown Service Area', buildServiceMdx('Midtown'), {
+        primary_keyword: 'window cleaning midtown',
+      }),
+      makePage('/service-area/uptown', 'service_area', 'Uptown Service Area', buildServiceMdx('Uptown'), {
+        primary_keyword: 'window cleaning uptown',
+      }),
+    ];
+    const bundle = makeBundle({ services, service_areas: serviceAreas, faq_pages: [], info_pages: [] });
+    const result = injectInternalLinks(bundle);
+    const mdx = result.service_areas[0]!.mdx;
+    const linkedAreaSlugs = ['/service-area/midtown', '/service-area/uptown'].filter((slug) =>
+      mdx.includes(`](${slug})`),
+    );
+    expect(linkedAreaSlugs.length).toBeGreaterThanOrEqual(1);
+    expect(linkedAreaSlugs.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('injectInternalLinks — faq_pages', () => {
+  const services = [
+    makePage('/window-cleaning', 'service', 'Window Cleaning', buildServiceMdx('Window Cleaning'), {
+      primary_keyword: 'window cleaning',
+    }),
+    makePage('/gutter-cleaning', 'service', 'Gutter Cleaning', buildServiceMdx('Gutter Cleaning'), {
+      primary_keyword: 'gutter cleaning',
+    }),
+  ];
+  const infoPages = [
+    makePage(
+      '/pages/window-cleaning-tips',
+      'info',
+      'Window Cleaning Maintenance Tips',
+      buildServiceMdx('Window Cleaning Maintenance Tips'),
+      { primary_keyword: 'window cleaning tips' },
+    ),
+  ];
+
+  it('caps links between 1 and 3', () => {
+    const faqPages = [
+      makePage(
+        '/faq/how-much-does-window-cleaning-cost',
+        'faq',
+        'How Much Does Window Cleaning Cost?',
+        buildLargeBody(['window cleaning', 'gutter cleaning', 'window cleaning tips']),
+        { primary_keyword: 'window cleaning cost' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: infoPages });
+    const result = injectInternalLinks(bundle);
+    const linkCount = countLinks(result.faq_pages[0]!.mdx);
+    expect(linkCount).toBeGreaterThanOrEqual(1);
+    expect(linkCount).toBeLessThanOrEqual(3);
+  });
+
+  it('never links a faq page to itself', () => {
+    const faqPages = [
+      makePage(
+        '/faq/how-much-does-window-cleaning-cost',
+        'faq',
+        'How Much Does Window Cleaning Cost?',
+        buildLargeBody(['window cleaning', 'gutter cleaning']),
+        { primary_keyword: 'window cleaning cost' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: infoPages });
+    const result = injectInternalLinks(bundle);
+    expect(result.faq_pages[0]!.mdx).not.toContain('](/faq/how-much-does-window-cleaning-cost)');
+  });
+
+  it('preferentially targets the single most-related service or info page', () => {
+    const faqPages = [
+      makePage(
+        '/faq/how-much-does-window-cleaning-cost',
+        'faq',
+        'How Much Does Window Cleaning Cost?',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'window cleaning cost' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: faqPages, info_pages: infoPages });
+    const result = injectInternalLinks(bundle);
+    const slugs = extractLinkSlugsInOrder(result.faq_pages[0]!.mdx);
+    // Both /window-cleaning (service) and /pages/window-cleaning-tips (info)
+    // share "window"+"cleaning" with the FAQ's primary_keyword; the service
+    // was declared first in the combined candidate list so it wins ties.
+    expect(slugs[0]).toBe('/window-cleaning');
+    expect(slugs.indexOf('/window-cleaning')).toBeLessThan(slugs.indexOf('/gutter-cleaning'));
+  });
+});
+
+describe('injectInternalLinks — info_pages', () => {
+  const services = [
+    makePage('/window-cleaning', 'service', 'Window Cleaning', buildServiceMdx('Window Cleaning'), {
+      primary_keyword: 'window cleaning',
+    }),
+    makePage('/gutter-cleaning', 'service', 'Gutter Cleaning', buildServiceMdx('Gutter Cleaning'), {
+      primary_keyword: 'gutter cleaning',
+    }),
+  ];
+
+  it('caps links between 2 and 4', () => {
+    const infoPages = [
+      makePage(
+        '/pages/window-cleaning-safety',
+        'info',
+        'Window Cleaning Safety Guide',
+        buildLargeBody(['window cleaning', 'gutter cleaning']),
+        { primary_keyword: 'window cleaning safety' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: [], info_pages: infoPages });
+    const result = injectInternalLinks(bundle);
+    const linkCount = countLinks(result.info_pages[0]!.mdx);
+    expect(linkCount).toBeGreaterThanOrEqual(2);
+    expect(linkCount).toBeLessThanOrEqual(4);
+  });
+
+  it('never links an info page to itself', () => {
+    const infoPages = [
+      makePage(
+        '/pages/window-cleaning-safety',
+        'info',
+        'Window Cleaning Safety Guide',
+        buildLargeBody(['window cleaning', 'gutter cleaning']),
+        { primary_keyword: 'window cleaning safety' },
+      ),
+    ];
+    const bundle = makeBundle({ services, service_areas: [], faq_pages: [], info_pages: infoPages });
+    const result = injectInternalLinks(bundle);
+    expect(result.info_pages[0]!.mdx).not.toContain('](/pages/window-cleaning-safety)');
+  });
+
+  it('links related service pages plus 0-1 related blog/info page', () => {
+    const infoPages = [
+      makePage(
+        '/pages/window-cleaning-safety',
+        'info',
+        'Window Cleaning Safety Guide',
+        buildUnrelatedFillerMdx(),
+        { primary_keyword: 'window cleaning safety' },
+      ),
+    ];
+    const blogPosts = [
+      makePage(
+        '/blog/window-cleaning-frequency',
+        'blog',
+        'How Often Should You Clean Your Windows?',
+        buildServiceMdx('Window Cleaning Frequency'),
+        { primary_keyword: 'window cleaning frequency' },
+      ),
+    ];
+    const bundle = makeBundle({
+      services,
+      service_areas: [],
+      faq_pages: [],
+      info_pages: infoPages,
+      blog_posts: blogPosts,
+    });
+    const result = injectInternalLinks(bundle);
+    const mdx = result.info_pages[0]!.mdx;
+    const relatedBlogOrInfoLinks = [blogPosts[0]!.slug].filter((slug) => mdx.includes(`](${slug})`));
+    // At most 1 related blog/info page is linked from an info page.
+    expect(relatedBlogOrInfoLinks.length).toBeLessThanOrEqual(1);
+    // The related service must still be linked (preferred target).
+    expect(mdx).toContain('](/window-cleaning)');
   });
 });
