@@ -218,6 +218,7 @@ export async function writeSiteToSanity(
       articleImage: articleAssetId
         ? { _type: 'image', asset: { _type: 'reference', _ref: articleAssetId } }
         : undefined,
+      articleImageAlt: ref.page.article_image_alt ?? undefined,
       // Article `dateModified` — stamped to this generation. Prefer a per-page
       // value the pipeline set on the bundle, else the build-wide timestamp.
       dateModified: ref.page.date_modified ?? dateModified,
@@ -287,6 +288,7 @@ export async function writeSiteToSanity(
       googleMapsUrl: n.google_maps_url,
     })),
     heroImagePrompt: bundle.hero_image_prompt ?? undefined,
+    heroImageAlt: bundle.hero_image_alt ?? undefined,
     // heroImage asset is patched separately after generation — see SiteBuilder step 6.
     videoUrl,
     videoDescription,

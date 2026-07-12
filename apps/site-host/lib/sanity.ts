@@ -44,16 +44,18 @@ export function urlForImage(source: SanityImageSource) {
  * gives the whole render bundle. Slicing arrays at [0...50] guards against
  * pathological page counts blowing the GROQ projection size.
  */
-const PAGE_PROJECTION = `{ _id, kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url, "articleImageUrl": articleImage.asset->url, "dateModified": dateModified }`;
+const PAGE_PROJECTION = `{ _id, kind, slug, title, metaDescription, mdx, jsonLd, faqs[]{ q, a }, "pageOgImageUrl": pageOgImage.asset->url, "articleImageUrl": articleImage.asset->url, articleImageAlt, "dateModified": dateModified }`;
 
 const SITE_PROJECTION = `{
   _id, siteId, "slug": slug.current, businessName, niche, city, state, siteMode,
   gaMeasurementId, robotsDisallow, indexnowKey, generatedAt,
   latitude, longitude, sameAs,
+  openingHours{ opens, closes, closedDays },
   trustSignals, nearbyCities,
   "neighborhoods": neighborhoods[]{ name, "googleMapsUrl": googleMapsUrl },
   heroImagePrompt,
   "heroImageUrl": heroImage.asset->url,
+  heroImageAlt,
   videoUrl, videoDescription, longformBody,
   "logoUrl": logo.asset->url,
   "faviconUrl": favicon.asset->url,
@@ -91,6 +93,7 @@ export interface SanitySitePage {
   faqs?: Array<{ q: string; a: string }> | null;
   pageOgImageUrl?: string | null;
   articleImageUrl?: string | null;
+  articleImageAlt?: string | null;
   /** ISO timestamp surfaced as Article `dateModified`. Phase 2 populates it. */
   dateModified?: string | null;
 }
@@ -112,11 +115,13 @@ export interface SanitySite {
   latitude?: number | null;
   longitude?: number | null;
   sameAs?: string[] | null;
+  openingHours?: { opens?: string | null; closes?: string | null; closedDays?: string[] | null } | null;
   trustSignals?: string[] | null;
   nearbyCities?: string[] | null;
   neighborhoods?: Array<{ name: string; googleMapsUrl: string }> | null;
   heroImagePrompt?: string | null;
   heroImageUrl?: string | null;
+  heroImageAlt?: string | null;
   videoUrl?: string | null;
   videoDescription?: string | null;
   longformBody?: string | null;

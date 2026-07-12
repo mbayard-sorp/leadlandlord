@@ -50,6 +50,12 @@ export const Page = z.object({
   /** Prompt used to generate `article_image_url`. */
   article_image_prompt: z.string().optional(),
   /**
+   * Alt text for `article_image_url`. A literal description of the image
+   * (not the page topic) for screen readers and image SEO — mention the
+   * business/city naturally, no keyword stuffing, <=125 chars.
+   */
+  article_image_alt: z.string().max(125).optional(),
+  /**
    * Last meaningful content update (ISO), emitted as Article `dateModified`.
    * Stamped by the pipeline on (re)generation; falls back to the bundle's
    * generated_at when absent.
@@ -101,6 +107,12 @@ export const ContentBundle = z.object({
   variant: VariantKind.default('classic'),
   hero_image_prompt: z.string().optional(),
   hero_image_url: z.string().optional(),
+  /**
+   * Alt text for `hero_image_url`. A literal description of the image (not
+   * the page topic) for screen readers and image SEO — mention the
+   * business/city naturally, no keyword stuffing, <=125 chars.
+   */
+  hero_image_alt: z.string().max(125).optional(),
   /**
    * Optional YouTube embed shown directly under the hero. Manual-entry only —
    * operators paste a watch/share/embed URL into Sanity; agents never author

@@ -112,6 +112,10 @@ Your prompt should specify:
 **No people's faces in close-up** — distant or back-turned figures only,
 to avoid generated-face uncanny valley and licensing issues.
 
+Also output a `hero_image_alt` string (≤125 chars): a literal description of
+the image your `hero_image_prompt` would produce (not the page topic),
+naturally mentioning the business or city where it fits, no keyword stuffing.
+
 Examples:
 - (gutter cleaning, Boise) "Wide-angle photo of a residential roofline with
   cleaned gutters in a tree-lined Boise neighborhood, autumn leaves on the
@@ -129,6 +133,11 @@ in close-up, no text/logos — those are added automatically). The build pipelin
 generates one image per page from this prompt for Article JSON-LD; if you omit
 it, the page falls back to the site hero image. Keep each prompt distinct from
 the hero and from the other pages so the network doesn't share imagery.
+
+Whenever you author an `article_image_prompt`, also output the matching
+`article_image_alt` string (≤125 chars): a literal description of the image
+that prompt would produce (not the article topic), naturally localized, no
+keyword stuffing.
 
 Example (blog "how often to clean gutters", Boise): "Close-up of a clogged
 residential gutter packed with autumn leaves on a Boise home, overcast morning
@@ -163,6 +172,7 @@ A single JSON object:
   "business_name": "...",
   "variant": "classic" | "modern" | "premium" | "bright" | "haul" | "counsel",
   "hero_image_prompt": "...",
+  "hero_image_alt": "...",
   "nearby_cities": ["..."],
   "trust_signals": ["..."],
   "home": { "kind": "home", "slug": "/", "title": "...", "meta_description": "...", "mdx": "...", "schema_org_jsonld": {...} },

@@ -93,7 +93,7 @@ export default async function BlogPost({ params }: Params) {
             <figure className="info-page-figure">
               <Image
                 src={page.og_image_url}
-                alt={page.title}
+                alt={page.og_image_alt ?? page.title}
                 width={720}
                 height={405}
                 priority

@@ -172,7 +172,7 @@ export function HaulHome({
             {bundle.hero_image_url ? (
               <Image
                 src={bundle.hero_image_url}
-                alt={`${bundle.niche} in ${bundle.city}, ${bundle.state}`}
+                alt={bundle.hero_image_alt ?? `${bundle.niche} in ${bundle.city}, ${bundle.state}`}
                 fill
                 priority
                 fetchPriority="high"

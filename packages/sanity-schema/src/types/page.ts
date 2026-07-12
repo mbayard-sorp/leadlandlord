@@ -77,6 +77,13 @@ export const page = defineType({
         'Primary image for blog / info (Article) JSON-LD `image` — required for article rich-result eligibility. Generated per-page at build time; falls back to OG/hero image when absent.',
     }),
     defineField({
+      name: 'articleImageAlt',
+      title: 'Article Image Alt Text',
+      type: 'string',
+      description:
+        'Alt text for articleImage — a literal description of the image (not the page topic), for screen readers and image SEO.',
+    }),
+    defineField({
       name: 'dateModified',
       title: 'Date Modified',
       type: 'datetime',

@@ -276,6 +276,13 @@ export const site = defineType({
       rows: 3,
     }),
     defineField({
+      name: 'heroImageAlt',
+      title: 'Hero Image Alt Text',
+      type: 'string',
+      description:
+        'Alt text for heroImage — a literal description of the image (not the page topic), for screen readers and image SEO.',
+    }),
+    defineField({
       name: 'videoUrl',
       title: 'Hero Video URL (YouTube)',
       type: 'string',

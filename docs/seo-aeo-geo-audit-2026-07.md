@@ -106,7 +106,7 @@ geo-aeo-auditor. The gaps that separate it from world-class fall into four group
 | C3 buildsell logo → next/image | next-engineer | S |
 | robots.txt → llms.txt reference (best-effort; skip if typed API can't express) | next-engineer | S |
 
-### Phase 2 — structured-data parity + contract additions
+### Phase 2 — structured-data parity + contract additions ✅ implemented 2026-07-12 (ADR 0032)
 
 | Item | Owner | Size |
 |------|-------|------|
