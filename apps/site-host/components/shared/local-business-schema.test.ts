@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { serviceAreaLocality, subtypeFor } from './local-business-schema';
+import { openingHoursSpecification, serviceAreaLocality, subtypeFor } from './local-business-schema';
 
 describe('subtypeFor', () => {
   it('maps the canonical single-word trades', () => {
@@ -88,5 +88,41 @@ describe('serviceAreaLocality', () => {
 
   it('returns empty for a blank title', () => {
     expect(serviceAreaLocality('', 'roofing', 'NV')).toBe('');
+  });
+});
+
+describe('openingHoursSpecification', () => {
+  it('falls back to the hardcoded 07:00-21:00 all-week range when unset', () => {
+    expect(openingHoursSpecification(undefined)).toEqual([
+      {
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        opens: '07:00',
+        closes: '21:00',
+      },
+    ]);
+  });
+
+  it('uses the operator-entered opens/closes range', () => {
+    const out = openingHoursSpecification({ opens: '08:00', closes: '17:00' });
+    expect(out[0]?.opens).toBe('08:00');
+    expect(out[0]?.closes).toBe('17:00');
+    expect(out[0]?.dayOfWeek).toEqual([
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+    ]);
+  });
+
+  it('excludes closed_days from dayOfWeek', () => {
+    const out = openingHoursSpecification({
+      opens: '09:00',
+      closes: '18:00',
+      closed_days: ['Sunday', 'Monday'],
+    });
+    expect(out[0]?.dayOfWeek).toEqual(['Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+  });
+
+  it('handles an empty closed_days array the same as unset', () => {
+    const out = openingHoursSpecification({ opens: '09:00', closes: '18:00', closed_days: [] });
+    expect(out[0]?.dayOfWeek).toHaveLength(7);
   });
 });

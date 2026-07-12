@@ -382,6 +382,10 @@ function buildProprietaryInitial(row: SiteOriginalDataInputs | null) {
   const socials = sameAsRaw.filter((u) => u !== gbpUrl);
   const factsWithoutSameAs = { ...facts };
   delete (factsWithoutSameAs as Record<string, unknown>).sameAs;
+  const openingHoursRaw = factsWithoutSameAs.openingHours as
+    | { opens?: unknown; closes?: unknown; closedDays?: unknown }
+    | undefined;
+  delete (factsWithoutSameAs as Record<string, unknown>).openingHours;
 
   const pretty = (v: unknown): string =>
     v == null || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0)
@@ -396,6 +400,11 @@ function buildProprietaryInitial(row: SiteOriginalDataInputs | null) {
     expertiseProfile: pretty(row?.expertiseProfile),
     gbpUrl,
     socials: socials.join('\n'),
+    openingHoursOpens: typeof openingHoursRaw?.opens === 'string' ? openingHoursRaw.opens : '',
+    openingHoursCloses: typeof openingHoursRaw?.closes === 'string' ? openingHoursRaw.closes : '',
+    openingHoursClosedDays: Array.isArray(openingHoursRaw?.closedDays)
+      ? (openingHoursRaw.closedDays as unknown[]).map(String)
+      : [],
   };
 }
 

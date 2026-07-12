@@ -1,5 +1,5 @@
 import type { Bundle } from '../../lib/content';
-import { serviceAreaLocality, subtypeFor } from './local-business-schema';
+import { openingHoursSpecification, serviceAreaLocality, subtypeFor } from './local-business-schema';
 
 interface Props {
   bundle: Bundle;
@@ -76,14 +76,7 @@ export function LocalBusinessJsonLd({ bundle, phone, url }: Props) {
     ]
       .filter((c, i, arr) => c && arr.indexOf(c) === i)
       .map((name) => ({ '@type': 'City', name })),
-    openingHoursSpecification: [
-      {
-        '@type': 'OpeningHoursSpecification',
-        dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-        opens: '07:00',
-        closes: '21:00',
-      },
-    ],
+    openingHoursSpecification: openingHoursSpecification(bundle.opening_hours),
     aggregateRating,
     review: reviewNodes,
   };
