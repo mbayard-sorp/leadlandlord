@@ -117,7 +117,7 @@ geo-aeo-auditor. The gaps that separate it from world-class fall into four group
 | H1 opening-hours field (Sanity → theme-bundle → both LocalBusiness emitters + operator UI) | next-engineer | M |
 | Image alt in ContentBundle (Zod + prompt + both mappers + renderers, one coordinated PR) | next-engineer + agent-prompt-engineer | M |
 
-### Phase 3 — content-layer / agent work ✅ core items implemented 2026-07-12 (pillar architecture + live citation probe remain deferred)
+### Phase 3 — content-layer / agent work ✅ core items implemented 2026-07-12
 
 | Item | Owner | Size |
 |------|-------|------|
@@ -128,5 +128,16 @@ geo-aeo-auditor. The gaps that separate it from world-class fall into four group
 | M6 typed credentials → `hasCredential` JSON-LD | next-engineer | S |
 | M3 pillar→cluster topical architecture (exploratory, defer) | agent-prompt-engineer | L |
 | geo-aeo-auditor live citation probe (deferred; low priority) | next-engineer | M |
+
+### Phase 4 — deferred + flagged follow-ups ✅ implemented 2026-07-12
+
+| Item | Notes |
+|------|-------|
+| M3 pillar→cluster topical architecture | `pillar_key` on clusters (planner → Sanity → read-clusters → internal-linker); spoke pages link their pillar first, pillars link back to top spokes; no ContentBundle change |
+| Live citation probe | Typed seam in geo-aeo-auditor, persisted per run; SDK 0.39.0 lacks web-search, so status is honestly `unavailable` until a search backend lands — never fabricated |
+| geo-aeo-auditor cron fix | Monday-only cron + day-of-week hash spread left ~6/7 of the fleet unaudited; now daily |
+| BL-021 cross-site footprint checks | FAQ overlap (>40% of smaller set) + internal-link signature similarity (>80% identical per-kind signatures) across network members, surfaced on the operator network page |
+
+Remaining open threads: seo-operator $4/day budget now also covers freshness rewrites (reassess with real cost data via fleet-performance-analyst); citation probe awaits an SDK upgrade or search-API integration.
 
 Not recommended: Google Indexing API integration (rejected, see H7).
