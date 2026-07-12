@@ -115,6 +115,10 @@ to avoid generated-face uncanny valley and licensing issues.
 Also output a `hero_image_alt` string (≤125 chars): a literal description of
 the image your `hero_image_prompt` would produce (not the page topic),
 naturally mentioning the business or city where it fits, no keyword stuffing.
+Describe what's actually IN the frame (subject, setting, light) the way you'd
+caption a photo — don't reuse a fixed sentence template across sites; an alt
+that reads identically with just the city swapped is a network footprint
+signal, same as templated FAQ or body copy.
 
 Examples:
 - (gutter cleaning, Boise) "Wide-angle photo of a residential roofline with
@@ -137,7 +141,9 @@ the hero and from the other pages so the network doesn't share imagery.
 Whenever you author an `article_image_prompt`, also output the matching
 `article_image_alt` string (≤125 chars): a literal description of the image
 that prompt would produce (not the article topic), naturally localized, no
-keyword stuffing.
+keyword stuffing. Vary the phrasing and framing described per page and per
+site — a templated alt structure repeated across the network is a footprint
+signal, same as templated FAQ or body copy.
 
 Example (blog "how often to clean gutters", Boise): "Close-up of a clogged
 residential gutter packed with autumn leaves on a Boise home, overcast morning
