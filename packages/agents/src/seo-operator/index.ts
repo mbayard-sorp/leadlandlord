@@ -19,7 +19,7 @@
  * crashing the run, so one bad page can't block a batch.
  */
 import { z } from 'zod';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import {
   getDb,
   seoMetricsDaily,
@@ -31,6 +31,12 @@ import {
   type SeoRecommendation,
 } from '@leadlandlord/db';
 import { getAnthropicClient, estimateCostUsd } from '@leadlandlord/integrations/anthropic';
+import {
+  FRESHNESS_PAGE_KINDS,
+  dedupeStalePages,
+  normalizeSlug,
+  selectStalePages,
+} from './freshness';
 
 // Lazy-imported below to keep the test surface (schema + pure helpers) free
 // of the sanity module graph (which pulls in CSS via the sanity package and
@@ -73,6 +79,12 @@ export const SeoOperatorInput = z.discriminatedUnion('mode', [
     mode: z.literal('apply'),
     recommendationId: z.string().uuid(),
   }),
+  z.object({
+    mode: z.literal('freshness'),
+    siteId: z.string().uuid(),
+    /** Roadmap default: pages older than ~4 months are candidates. */
+    staleDays: z.number().int().positive().default(120),
+  }),
 ]);
 export type SeoOperatorInput = z.infer<typeof SeoOperatorInput>;
 
@@ -86,6 +98,11 @@ export const SeoOperatorOutput = z.discriminatedUnion('mode', [
     mode: z.literal('apply'),
     recommendationId: z.string().uuid(),
     status: z.enum(['auto_applied', 'awaiting_review', 'blocked', 'failed']),
+  }),
+  z.object({
+    mode: z.literal('freshness'),
+    siteId: z.string().uuid(),
+    recommendationsWritten: z.number().int().nonnegative(),
   }),
 ]);
 export type SeoOperatorOutput = z.infer<typeof SeoOperatorOutput>;
@@ -111,7 +128,11 @@ export function normalizeSeoOperatorInput(raw: unknown): unknown {
   if (raw == null || typeof raw !== 'object') return raw;
   const r = raw as Record<string, unknown>;
   if (typeof r.mode === 'string') {
-    if (r.mode === 'review' && typeof r.site_id === 'string' && r.siteId == null) {
+    if (
+      (r.mode === 'review' || r.mode === 'freshness') &&
+      typeof r.site_id === 'string' &&
+      r.siteId == null
+    ) {
       return { ...r, siteId: r.site_id };
     }
     if (r.mode === 'apply' && typeof r.recommendation_id === 'string' && r.recommendationId == null) {
@@ -146,6 +167,9 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
         if (input.mode === 'review') {
           return `review:${input.siteId}:${isoWeekKey(new Date())}`;
         }
+        if (input.mode === 'freshness') {
+          return `freshness:${input.siteId}:${isoWeekKey(new Date())}`;
+        }
         return `apply:${input.recommendationId}`;
       },
     });
@@ -169,6 +193,9 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
   ): Promise<SeoOperatorOutput> {
     if (input.mode === 'review') {
       return this.runReview(input.siteId, input.lookbackDays, ctx);
+    }
+    if (input.mode === 'freshness') {
+      return this.runFreshness(input.siteId, input.staleDays, ctx);
     }
     return this.runApply(input.recommendationId, ctx);
   }
@@ -392,6 +419,141 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
   }
 
   // ──────────────────────────────────────────────────────────
+  // FRESHNESS (content-freshness loop — ADR 0032 D2)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Scan the site's home/service/service-area/faq pages for staleness
+   * (dateModified — or the site's generatedAt when the page never set it —
+   * older than `staleDays`) and write two recommendations per stale page:
+   *
+   *  - `freshness_flag` (low): informational only, auto-applies as a no-op
+   *    (no dateModified bump without a real content change — that's fake
+   *    freshness and answer engines penalize it).
+   *  - `freshness_rewrite` (medium): proposes an LLM body refresh, gated
+   *    behind operator approval in /operator/seo like any other medium-risk
+   *    rec. We auto-fire the apply pass for *both* tiers here (not just
+   *    low, unlike runReview's GSC candidates) so the medium row flips from
+   *    'pending' to 'awaiting_review' and actually surfaces the Approve/
+   *    Reject controls — see dispatchApply's risk gate in runApply.
+   *
+   * Dedupe: skip pages that already have a freshness_flag/freshness_rewrite
+   * rec created within the last `staleDays` — re-running weekly is a no-op
+   * until either the rec resolves and the page goes stale again, or the
+   * window elapses.
+   */
+  private async runFreshness(
+    siteId: string,
+    staleDays: number,
+    ctx: AgentContext,
+  ): Promise<SeoOperatorOutput> {
+    const db = getDb();
+    ctx.progress({ label: `scanning conversion pages for content older than ${staleDays}d` });
+
+    const { createWriteClient, siteDocId } = await loadSanity();
+    const client = createWriteClient();
+    const siteRef = siteDocId(siteId);
+
+    const siteDoc = await client.fetch<{ generatedAt?: string } | null>(
+      `*[_id == $siteRef][0]{ generatedAt }`,
+      { siteRef },
+    );
+    const pages = await client.fetch<
+      Array<{ _id: string; kind: string; slug?: string; title?: string; dateModified?: string }>
+    >(
+      `*[_type == "page" && site._ref == $siteRef && kind in $kinds]{ _id, kind, slug, title, dateModified }`,
+      { siteRef, kinds: FRESHNESS_PAGE_KINDS },
+    );
+
+    const now = new Date();
+    const stale = selectStalePages(
+      pages.map((p) => ({
+        pageId: p._id,
+        slug: normalizeSlug(p.slug, p.kind),
+        kind: p.kind,
+        title: p.title ?? '',
+        dateModified: p.dateModified ?? null,
+      })),
+      siteDoc?.generatedAt ?? null,
+      staleDays,
+      now,
+    );
+
+    const recentRecs = await db
+      .select({ type: seoRecommendations.type, targetPage: seoRecommendations.targetPage })
+      .from(seoRecommendations)
+      .where(
+        and(
+          eq(seoRecommendations.siteId, siteId),
+          inArray(seoRecommendations.type, ['freshness_flag', 'freshness_rewrite']),
+          gte(seoRecommendations.createdAt, new Date(now.getTime() - staleDays * 86_400_000)),
+        ),
+      );
+
+    const fresh = dedupeStalePages(stale, recentRecs);
+    ctx.progress({
+      label: `writing freshness recs for ${fresh.length} stale page(s) (skipped ${stale.length - fresh.length} already-queued)`,
+    });
+
+    let written = 0;
+    for (const page of fresh) {
+      const rationale = `Page '${page.slug}' (kind=${page.kind}) last meaningfully updated ${page.ageDays}d ago (threshold ${staleDays}d) — flagged for freshness review.`;
+      const shared = {
+        siteId,
+        targetPage: page.slug,
+        actionPayload: {
+          pageId: page.pageId,
+          slug: page.slug,
+          kind: page.kind,
+          ageDays: page.ageDays,
+          staleDays,
+        },
+      };
+      const candidateRows: NewSeoRecommendation[] = [
+        {
+          ...shared,
+          type: 'freshness_flag',
+          riskLevel: 'low',
+          rationale,
+          estImpactScore: clampedScore(page.ageDays / 3),
+        },
+        {
+          ...shared,
+          type: 'freshness_rewrite',
+          riskLevel: 'medium',
+          rationale: `${rationale} Proposing an LLM-drafted body refresh — requires operator approval before applying; dateModified is only bumped when the body actually changes.`,
+          estImpactScore: clampedScore(page.ageDays / 2),
+        },
+      ];
+
+      for (const c of candidateRows) {
+        const [row] = await db
+          .insert(seoRecommendations)
+          .values(c)
+          .returning({ id: seoRecommendations.id });
+        if (!row) continue;
+        written += 1;
+
+        // Auto-fire apply for both tiers. Low-risk applies as a no-op flag;
+        // medium-risk hits the risk gate in runApply and flips to
+        // 'awaiting_review' so it's actionable in /operator/seo. Raw insert
+        // (not emitNextStepEvent) — see runReview's identical fan-out note.
+        await db.execute(sql`
+          INSERT INTO agent_events (agent, type, target_agent, payload)
+          VALUES (
+            'seo-operator',
+            'seo.recommendation.created',
+            'seo-operator',
+            ${JSON.stringify({ mode: 'apply', recommendationId: row.id, site_id: siteId })}::jsonb
+          )
+        `);
+      }
+    }
+
+    return { mode: 'freshness', siteId, recommendationsWritten: written };
+  }
+
+  // ──────────────────────────────────────────────────────────
   // APPLY
   // ──────────────────────────────────────────────────────────
 
@@ -506,6 +668,19 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
       const path = slug.startsWith('/') ? slug : `/${slug}`;
       return [`https://${siteRow.domain}${path}`];
     }
+    if (rec.type === 'freshness_rewrite') {
+      const slug = typeof payload.slug === 'string' ? payload.slug : rec.targetPage;
+      if (!slug) return [];
+      const db = getDb();
+      const [siteRow] = await db
+        .select({ domain: sites.domain })
+        .from(sites)
+        .where(eq(sites.id, rec.siteId))
+        .limit(1);
+      if (!siteRow?.domain) return [];
+      const path = slug === '/' ? '' : slug.startsWith('/') ? slug : `/${slug}`;
+      return [`https://${siteRow.domain}${path}`];
+    }
     return [];
   }
 
@@ -537,6 +712,19 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
       case 'lighthouse_perf':
         // Perf fixes usually need code changes; operator review required.
         return 'awaiting_review';
+      case 'freshness_flag':
+        // Low-risk content-freshness signal: informational only. No Sanity
+        // write and no dateModified bump — bumping without a real content
+        // change is fake freshness (ADR 0032 D2 / roadmap Phase 3 item 2).
+        ctx.log.info(
+          { recId: rec.id, targetPage: rec.targetPage },
+          'freshness_flag acknowledged (no content change made)',
+        );
+        return 'auto_applied';
+      case 'freshness_rewrite':
+        // Medium-risk → only reaches here once status='approved' (the
+        // medium-risk gate in runApply enforces this).
+        return this.applyFreshnessRewrite(rec, ctx);
       default:
         ctx.log.warn({ type: rec.type, recId: rec.id }, 'unknown recommendation type');
         return 'failed';
@@ -814,6 +1002,141 @@ export class SeoOperator extends BaseAgent<typeof SeoOperatorInput, typeof SeoOp
     const client = createWriteClient();
     await client.patch(pageDoc._id).set({ jsonLd }).commit();
     return 'auto_applied';
+  }
+
+  /**
+   * Apply an approved `freshness_rewrite`: draft a refreshed body for a
+   * stale page via Claude, run it through compliance-guard, and only then
+   * patch Sanity — bumping `dateModified` alongside the mdx write, since
+   * this is the one case where the freshness signal is genuinely earned.
+   */
+  private async applyFreshnessRewrite(
+    rec: SeoRecommendation,
+    ctx: AgentContext,
+  ): Promise<'auto_applied' | 'failed'> {
+    const payload = (rec.actionPayload ?? {}) as Record<string, unknown>;
+    const pageId = typeof payload.pageId === 'string' ? payload.pageId : undefined;
+    if (!pageId) {
+      ctx.log.warn({ recId: rec.id }, 'freshness_rewrite missing pageId');
+      return 'failed';
+    }
+
+    const { createWriteClient } = await loadSanity();
+    const client = createWriteClient();
+    const pageDoc = await client.fetch<
+      { _id: string; title?: string; metaDescription?: string; mdx?: string } | null
+    >(`*[_id == $id][0]{ _id, title, metaDescription, mdx }`, { id: pageId });
+    if (!pageDoc || !pageDoc.mdx) {
+      ctx.log.warn({ recId: rec.id, pageId }, 'freshness_rewrite: page doc or mdx not found');
+      return 'failed';
+    }
+
+    const db = getDb();
+    const [siteRow] = await db.select().from(sites).where(eq(sites.id, rec.siteId)).limit(1);
+    if (!siteRow) {
+      ctx.log.warn({ recId: rec.id, siteId: rec.siteId }, 'freshness_rewrite: site row not found');
+      return 'failed';
+    }
+
+    const newMdx = await this.draftFreshnessBody(
+      pageDoc.mdx,
+      pageDoc.title ?? '',
+      siteRow.niche,
+      siteRow.city,
+      siteRow.state,
+      ctx,
+    );
+    if (!newMdx) return 'failed';
+
+    const compliance = await this.compliance.run(
+      {
+        scope: 'site_content',
+        text: `${pageDoc.title ?? ''}\n${pageDoc.metaDescription ?? ''}\n${newMdx}`,
+      },
+      { siteId: rec.siteId, parentRunId: ctx.runId },
+    );
+    if (!compliance.ok) {
+      ctx.log.warn(
+        { recId: rec.id, violations: compliance.violations },
+        'freshness_rewrite: compliance-guard blocked drafted content',
+      );
+      await db
+        .update(seoRecommendations)
+        .set({
+          status: 'failed',
+          appliedRunId: ctx.runId,
+          appliedAt: new Date(),
+          rationale: `${rec.rationale}\n\n[compliance blocked: ${compliance.violations
+            .filter((v) => v.severity === 'blocker')
+            .map((v) => v.rule)
+            .join(', ')}]`,
+        })
+        .where(eq(seoRecommendations.id, rec.id));
+      // Match applyNewInfoPage's contract: we already wrote the failure row;
+      // return 'failed' and let runApply's unconditional markStatus stamp it.
+      return 'failed';
+    }
+
+    await client
+      .patch(pageDoc._id)
+      .set({ mdx: newMdx, dateModified: new Date().toISOString() })
+      .commit();
+    ctx.log.info(
+      { recId: rec.id, pageId: pageDoc._id },
+      'freshness_rewrite: body refreshed, dateModified bumped',
+    );
+    return 'auto_applied';
+  }
+
+  private async draftFreshnessBody(
+    currentMdx: string,
+    title: string,
+    niche: string,
+    city: string,
+    state: string,
+    ctx: AgentContext,
+  ): Promise<string | null> {
+    if (process.env.MOCK_AI === '1') {
+      return `${currentMdx}\n\n_Updated ${new Date().toISOString().slice(0, 10)} to reflect current information._`;
+    }
+    try {
+      const client = getAnthropicClient();
+      const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+      const resp = await client.messages.create({
+        model,
+        max_tokens: 4000,
+        temperature: 0.4,
+        system: [
+          'You refresh stale local-SEO page copy for a small local business. Preserve the structure, headings, and factual claims of the original body — do not invent new facts, credentials, awards, reviews, or license numbers.',
+          'Tighten weak or dated-sounding phrasing so the page reads as genuinely current, but only make changes justified by the existing text or general, non-fabricated best practice. Never add a fake "since <year>" claim, testimonial, or statistic.',
+          'CRITICAL — phone numbers: never write a literal phone number. Preserve the {{phone}} placeholder token wherever it appears; never introduce a literal number.',
+          'Output ONLY the revised Markdown/MDX body — no commentary, no code fences.',
+        ].join('\n'),
+        messages: [
+          {
+            role: 'user',
+            content: `Business: ${niche} serving ${city}, ${state}.\nPage title: "${title}"\n\nCurrent body:\n\n${currentMdx}\n\nReturn the refreshed body only.`,
+          },
+        ],
+      });
+      const usage = resp.usage;
+      ctx.recordUsage({
+        model,
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cost_usd: estimateCostUsd(model, {
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+        }),
+      });
+      const block = resp.content.find((b) => b.type === 'text');
+      if (!block || block.type !== 'text') return null;
+      const out = block.text.trim();
+      return out.length > 0 ? out : null;
+    } catch (err) {
+      ctx.log.warn({ err: err instanceof Error ? err.message : err }, 'draftFreshnessBody failed');
+      return null;
+    }
   }
 
   private async draftTitle(

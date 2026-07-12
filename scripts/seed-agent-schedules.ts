@@ -58,6 +58,10 @@ const SEED: SeedRow[] = [
   // off-peak slot; per-site weekly day-of-week staggering happens in-scheduler.
   { schedulerName: 'network-link-requests', targetAgent: 'network-linker', cadenceKind: 'cron', cronExpr: '0 5 * * *' },
   { schedulerName: 'geo-aeo-auditor', targetAgent: 'geo-aeo-auditor', cadenceKind: 'cron', cronExpr: '0 6 * * 1' },
+  // content-freshness (Phase 3 SEO roadmap item 2 / ADR 0032 D2): daily cron,
+  // day-of-week fleet-spread inside the scheduler (same pattern as
+  // local-content-scout), targets the existing seo-operator agent/budget.
+  { schedulerName: 'content-freshness', targetAgent: 'seo-operator', cadenceKind: 'cron', cronExpr: '0 8 * * *' },
   { schedulerName: 'local-seo-optimizer', targetAgent: 'local-seo-optimizer', cadenceKind: 'cron', cronExpr: '0 6 * * 2' },
   // fleet-digest (orchestrator Phase 5): 0 13 * * * UTC ~= 6am MST. Avoids the
   // 14:00 molly-digest slot. Not in vercel.json — DB-driven from the start.

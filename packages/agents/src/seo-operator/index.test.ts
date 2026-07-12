@@ -22,6 +22,17 @@ describe('seo-operator schema', () => {
     expect(parsed.mode).toBe('apply');
   });
 
+  it('accepts freshness input with default staleDays', () => {
+    const parsed = SeoOperatorInput.parse({
+      mode: 'freshness',
+      siteId: '11111111-1111-1111-1111-111111111111',
+    });
+    expect(parsed.mode).toBe('freshness');
+    if (parsed.mode === 'freshness') {
+      expect(parsed.staleDays).toBe(120);
+    }
+  });
+
   it('rejects unknown mode', () => {
     expect(() =>
       SeoOperatorInput.parse({
