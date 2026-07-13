@@ -16,8 +16,12 @@
  * The review pass is deterministic and near-zero cost (defaultDailyCapUsd: 1).
  * Sanity is lazy-imported (loadSanity) to keep the checks test surface free of
  * the Sanity module graph (CSS import breaks vitest) — same pattern as
- * seo-operator. Live answer-engine probing is deliberately out of scope here
- * (deferred to geo_seo_audits.liveCitationProbe).
+ * seo-operator. Live answer-engine probing (geo_seo_audits.liveCitationProbe)
+ * runs via ./citation-probe.ts — as of 2026-07-12 it always returns
+ * status='unavailable' (no web_search tool in the installed Anthropic SDK,
+ * no search-capable integration in packages/integrations) but the seam is
+ * real: deterministic query sampling + citation classification are wired in
+ * and persisted every review run, ready for a real backend to drop in.
  */
 import { z } from 'zod';
 import { and, eq, gte, sql } from 'drizzle-orm';
@@ -42,6 +46,7 @@ import {
   type FetchedMarkdownPage,
   type RecommendationCandidate,
 } from './checks';
+import { runLiveCitationProbe } from './citation-probe';
 
 // Lazy-imported to keep the test surface free of the Sanity module graph (it
 // pulls in CSS and breaks vitest's default loader). See seo-operator's note.
@@ -228,6 +233,23 @@ export class GeoAeoAuditor extends BaseAgent<typeof GeoAeoAuditorInput, typeof G
     const allFindings = [...fetchFindings, ...result.findings];
     const score = computeGeoScore(result.subscores);
 
+    // Live citation probe (deferred seam — see ./citation-probe.ts header).
+    // Budget-aware by construction: no network calls today, tiny sample size,
+    // and it never blocks or fails the review pass.
+    ctx.progress({ label: 'running live citation probe' });
+    const week = isoWeek(new Date());
+    const liveCitationProbe = await runLiveCitationProbe({
+      domain: siteRow.domain,
+      pages: pages.map((p) => ({ url: p.url, html: p.html })),
+      week,
+    });
+    if (liveCitationProbe.status !== 'ok') {
+      ctx.log.info(
+        { siteId, status: liveCitationProbe.status, reason: liveCitationProbe.reason },
+        'geo-aeo-auditor live citation probe unavailable',
+      );
+    }
+
     // Snapshot the audit.
     ctx.progress({ label: 'writing audit snapshot' });
     const [auditRow] = await db
@@ -240,6 +262,7 @@ export class GeoAeoAuditor extends BaseAgent<typeof GeoAeoAuditorInput, typeof G
         subscores: result.subscores as unknown as Record<string, number>,
         findings: allFindings as unknown as Array<Record<string, unknown>>,
         recommendationCount: 0,
+        liveCitationProbe: liveCitationProbe as unknown as Record<string, unknown>,
       })
       .returning({ id: geoSeoAudits.id });
     const auditId = auditRow!.id;

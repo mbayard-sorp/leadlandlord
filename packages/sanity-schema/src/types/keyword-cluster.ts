@@ -57,9 +57,17 @@ export const keywordCluster = defineType({
           { title: 'Service Area', value: 'service_area' },
           { title: 'Blog', value: 'blog' },
           { title: 'Info', value: 'info' },
+          { title: 'FAQ', value: 'faq' },
         ],
       },
       validation: (r) => r.required(),
+    }),
+    defineField({
+      name: 'pillarKey',
+      title: 'Pillar Cluster Key',
+      type: 'string',
+      description:
+        'clusterKey of the service cluster this blog/info/faq cluster supports (topical pillar). Null/absent for service and home clusters or genuinely general topics.',
     }),
     defineField({
       name: 'intent',

@@ -69,6 +69,16 @@ export const ClusterSchema = z.object({
   primary_keyword: z.string(),
   supporting_keywords: z.array(z.string()).default([]),
   rationale: z.string().optional(),
+  /**
+   * Topical pillar architecture (SEO audit M3). The cluster_key of the
+   * SERVICE cluster this blog/info/faq cluster supports, or null when the
+   * cluster is genuinely general or is itself a home/service cluster.
+   * Claude-emitted — validated post-output by resolvePillarKeys(), which
+   * nulls out any reference that doesn't resolve to an emitted service
+   * cluster (e.g. one dropped by capClusters) rather than retrying the
+   * whole clustering call.
+   */
+  pillar_key: z.string().nullable().optional(),
 });
 
 export const KeywordPlannerOutput = z.object({
@@ -124,6 +134,11 @@ const CLUSTER_TOOL_SCHEMA = {
             type: 'string',
             description: 'One sentence on why this cluster is worth a dedicated page.',
           },
+          pillar_key: {
+            type: ['string', 'null'],
+            description:
+              'For page_kind "blog", "info", or "faq" ONLY: the cluster_key of the SERVICE cluster in this same submission that this content most directly supports (e.g. an FAQ "how much does gutter cleaning cost" pairs with cluster_key "service-gutter-cleaning"). Use null when the content is genuinely general and has no clear single-service tie-in, or for "home"/"service" clusters themselves (pillars don\'t point to other pillars). Must reference a cluster_key that exists elsewhere in this submission\'s clusters array.',
+          },
         },
         required: ['cluster_key', 'page_kind', 'intent', 'primary_keyword', 'supporting_keywords'],
       },
@@ -156,6 +171,13 @@ Cluster types:
 Output discipline:
 - cluster_key is lowercase, kebab-case, prefixed by page_kind (home-, service-, service_area-, blog-, info-, faq-).
 - Inside a page_kind, cluster keys are unique and descriptive ("blog-cost-guide" not "blog-1").
+
+Topical pillar architecture (pillar_key):
+- For every blog, info, or faq cluster, set pillar_key to the cluster_key of the SERVICE cluster it most directly supports. This groups your informational/answer content under the commercial service it exists to reinforce, so the site's link graph expresses topical authority instead of a flat hub-spoke.
+- Example: an faq cluster "faq-gutter-cleaning-cost" (primary_keyword "how much does gutter cleaning cost") should set pillar_key to "service-gutter-cleaning" if that service cluster exists in this same submission.
+- Set pillar_key to null only when the content is genuinely general and doesn't map cleanly to one service (e.g. "how to choose a local contractor" or a company-wide FAQ like "do you offer financing").
+- Never set pillar_key on a "home" or "service" cluster itself — those ARE the pillars, they don't point to another pillar.
+- pillar_key must exactly match a cluster_key you emit elsewhere in this same clusters array. Don't invent one.
 
 Pass the cluster list back via the submit_keyword_clusters tool exactly once.`;
 
@@ -273,7 +295,11 @@ export class KeywordPlanner extends BaseAgent<typeof KeywordPlannerInput, typeof
     //     Selection: always keep the `home` cluster, then fill remaining slots
     //     with highest totalVolume. Drop the rest; log what was dropped.
     const cap = input.site_mode === 'content_rich' ? 28 : 8;
-    const enriched = capClusters(enrichedRaw, cap, ctx);
+    const capped = capClusters(enrichedRaw, cap, ctx);
+
+    // 5c. Pillar architecture (SEO audit M3) — null out any pillar_key that
+    //     doesn't resolve to a service cluster surviving the cap.
+    const enriched = resolvePillarKeys(capped);
 
     // 6. Persist to Sanity. createOrReplace so re-runs overwrite.
     ctx.progress({ label: `persisting ${enriched.length} clusters to Sanity` });
@@ -426,6 +452,7 @@ Cluster these into ${derivedTarget} (±3) page-mapped keyword clusters per the r
           source: k.source as KeywordSource,
         })),
         totalVolume: c.totalVolume,
+        pillarKey: c.pillar_key ?? null,
         status: 'planned',
         fetchedAt: new Date().toISOString(),
       });
@@ -491,6 +518,28 @@ interface EnrichedCluster {
   keywords: Array<KeywordCandidate & { role: 'primary' | 'secondary' | 'supporting' }>;
   totalVolume: number;
   rationale?: string;
+  /** cluster_key of the service cluster this cluster is a topical spoke of, or null. */
+  pillar_key: string | null;
+}
+
+/**
+ * Post-output validation for pillar_key (SEO audit M3). Nulls out any
+ * pillar_key that doesn't resolve to an emitted "service" cluster in the
+ * final (post-cap) cluster set, rather than retrying the whole clustering
+ * call — capClusters can drop the referenced service cluster, and Claude
+ * can hallucinate a cluster_key that was never emitted. Deterministic, pure.
+ */
+export function resolvePillarKeys(clusters: EnrichedCluster[]): EnrichedCluster[] {
+  const serviceKeys = new Set(
+    clusters.filter((c) => c.page_kind === 'service').map((c) => c.cluster_key),
+  );
+  return clusters.map((c) => {
+    if (!c.pillar_key) return { ...c, pillar_key: null };
+    if (c.pillar_key === c.cluster_key || !serviceKeys.has(c.pillar_key)) {
+      return { ...c, pillar_key: null };
+    }
+    return c;
+  });
 }
 
 function capClusters(
@@ -565,6 +614,7 @@ function enrichClusterWithMetrics(
     keywords,
     totalVolume,
     rationale: cluster.rationale,
+    pillar_key: cluster.pillar_key ?? null,
   };
 }
 

@@ -40,3 +40,13 @@ export {
   type FootprintScore,
   type FootprintRating,
 } from './audit/cross-link-footprint';
+// Content-similarity checks (BL-021): FAQ overlap + internal-link-pattern
+// signature comparison across a network's own sites. Read-only; surfaced
+// alongside scoreNetworkFootprint in the operator UI.
+export {
+  analyzeNetworkFaqOverlap,
+  analyzeNetworkLinkPatternSimilarity,
+  type FaqOverlapPairResult,
+  type LinkSignatureComparison,
+} from './audit/content-similarity';
+export { scoreNetworkContentFootprint, type ContentFootprintResult } from './audit/content-footprint';

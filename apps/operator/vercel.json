@@ -28,7 +28,7 @@
 
     { "path": "/api/cron/schedule/network-metrics-aggregator", "schedule": "0 4 * * 1,3,5" },
     { "path": "/api/cron/schedule/network-link-requests", "schedule": "0 5 * * *" },
-    { "path": "/api/cron/schedule/geo-aeo-auditor", "schedule": "0 6 * * 1" },
+    { "path": "/api/cron/schedule/geo-aeo-auditor", "schedule": "0 6 * * *" },
     { "path": "/api/cron/schedule/local-seo-optimizer", "schedule": "0 6 * * 2" },
     { "path": "/api/cron/schedule/data-inputs-scaffolder", "schedule": "30 8 * * 2" },
     { "path": "/api/cron/schedule/content-data-auditor", "schedule": "0 10 * * 3" },

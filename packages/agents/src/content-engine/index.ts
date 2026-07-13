@@ -569,9 +569,11 @@ Invoke ${OUTPUT_TOOL_NAME} exactly once.`;
       }
     }
 
-    // Internal linker — inject deterministic cross-page links.
+    // Internal linker — inject deterministic cross-page links. Passing
+    // keyword_clusters lets pages whose cluster has a pillar_key (SEO audit
+    // M3) link to their pillar service page first.
     ctx.progress({ label: 'injecting internal links' });
-    parsed = injectInternalLinks(parsed);
+    parsed = injectInternalLinks(parsed, input.keyword_clusters ?? []);
 
     // Coverage check — every input cluster must be claimed by some page.
     const coverage = checkClusterCoverage(parsed, input.keyword_clusters ?? []);
