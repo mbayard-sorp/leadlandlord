@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
+import { bustSiteHostTags } from '@/lib/site-host-revalidate';
 import { and, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -87,6 +88,11 @@ export async function assignPhone(formData: FormData): Promise<PhoneAssignmentRe
       updatedAt: new Date(),
     })
     .where(eq(sites.id, v.site_id));
+
+  // site-host caches the tracking-number read for 1h (Track C); bust so the
+  // new number shows on the live site immediately. Before the twilio branch
+  // so its early-return path is covered too.
+  await bustSiteHostTags([`site:tracking:${v.site_id}`]);
 
   let twilioUpdated = false;
   if (
