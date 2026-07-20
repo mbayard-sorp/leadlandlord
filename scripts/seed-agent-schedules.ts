@@ -10,6 +10,14 @@ import { schedulers } from '@leadlandlord/agents/scheduler';
  * definition (managed_by='human') but preserves runtime state (last_enqueued_at,
  * paused) so it never clobbers an orchestrator-applied pause.
  *
+ * SOURCE OF TRUTH: apps/operator/vercel.json `crons` is authoritative for cron
+ * cadences (poll-tick.ts calls the DB the "safety net during cutover"). When a
+ * cron changes in vercel.json, the matching cronExpr below MUST be updated in
+ * the same PR — otherwise the DB-driven tick (poll-tick.ts) re-encodes the old
+ * cadence and fires agents on the wrong days. (BL-023: this exact drift caused
+ * maintenance/portfolio-analyst/network-metrics-aggregator to over-run and
+ * geo-aeo-auditor to under-run 6/7 of the fleet.)
+ *
  * Keyed on SCHEDULER name (the runScheduler() argument), not agent kind.
  * Phase 4 (seed-fleet-disposition) layers the ON/OFF + intended cadence on top.
  */
@@ -34,7 +42,7 @@ const SEED: SeedRow[] = [
   // Daily/weekly crons — verbatim from apps/operator/vercel.json.
   { schedulerName: 'seo-ingest-gsc', targetAgent: 'seo-ingest-gsc', cadenceKind: 'cron', cronExpr: '0 6 * * *' },
   { schedulerName: 'seo-ingest-ga4', targetAgent: 'seo-ingest-ga4', cadenceKind: 'cron', cronExpr: '15 6 * * *' },
-  { schedulerName: 'maintenance', targetAgent: 'maintenance', cadenceKind: 'cron', cronExpr: '0 7 * * *' },
+  { schedulerName: 'maintenance', targetAgent: 'maintenance', cadenceKind: 'cron', cronExpr: '0 7 * * 1,3,5,6' },
   { schedulerName: 'lighthouse-audit', targetAgent: 'lighthouse-audit', cadenceKind: 'cron', cronExpr: '0 7 * * 1' },
   { schedulerName: 'seo-operator', targetAgent: 'seo-operator', cadenceKind: 'cron', cronExpr: '0 8 * * 1' },
   { schedulerName: 'local-content-scout', targetAgent: 'local-content-scout', cadenceKind: 'cron', cronExpr: '0 9 * * *' },
@@ -48,16 +56,19 @@ const SEED: SeedRow[] = [
   { schedulerName: 'trial-manager', targetAgent: 'trial-manager', cadenceKind: 'cron', cronExpr: '0 16 * * *' },
   { schedulerName: 'billing-dunning', targetAgent: 'billing-dunning', cadenceKind: 'cron', cronExpr: '0 17 * * *' },
   { schedulerName: 'churn-recovery', targetAgent: 'churn-recovery', cadenceKind: 'cron', cronExpr: '30 17 * * *' },
-  { schedulerName: 'portfolio-analyst', targetAgent: 'portfolio-analyst', cadenceKind: 'cron', cronExpr: '0 18 * * *' },
+  { schedulerName: 'portfolio-analyst', targetAgent: 'portfolio-analyst', cadenceKind: 'cron', cronExpr: '0 18 * * 5' },
   // Niche calibration feedback loop (Phase 2): calibrator Monday, suggester
   // Tuesday (a day later so a full week of fresh snapshots exists to pool).
   { schedulerName: 'niche-calibrator', targetAgent: 'niche-calibrator', cadenceKind: 'cron', cronExpr: '0 9 * * 1' },
   { schedulerName: 'niche-prior-suggester', targetAgent: 'niche-prior-suggester', cadenceKind: 'cron', cronExpr: '0 9 * * 2' },
-  { schedulerName: 'network-metrics-aggregator', targetAgent: 'network-metrics-aggregator', cadenceKind: 'cron', cronExpr: '0 4 * * *' },
+  { schedulerName: 'network-metrics-aggregator', targetAgent: 'network-metrics-aggregator', cadenceKind: 'cron', cronExpr: '0 4 * * 1,3,5' },
   // network-link-requests seeds network-linker runs (siteId-mode) on a daily
   // off-peak slot; per-site weekly day-of-week staggering happens in-scheduler.
   { schedulerName: 'network-link-requests', targetAgent: 'network-linker', cadenceKind: 'cron', cronExpr: '0 5 * * *' },
-  { schedulerName: 'geo-aeo-auditor', targetAgent: 'geo-aeo-auditor', cadenceKind: 'cron', cronExpr: '0 6 * * 1' },
+  // geo-aeo-auditor: daily (vercel.json), matching PR #259 which fixed the
+  // Monday-only cron so the scheduler's day-of-week fleet-spread (1/7 of sites
+  // per day) actually covers the whole fleet weekly instead of ~1/7 of it.
+  { schedulerName: 'geo-aeo-auditor', targetAgent: 'geo-aeo-auditor', cadenceKind: 'cron', cronExpr: '0 6 * * *' },
   // content-freshness (Phase 3 SEO roadmap item 2 / ADR 0032 D2): daily cron,
   // day-of-week fleet-spread inside the scheduler (same pattern as
   // local-content-scout), targets the existing seo-operator agent/budget.
