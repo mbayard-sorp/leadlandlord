@@ -8,6 +8,7 @@ import { listAvailableNumbers } from '@leadlandlord/integrations/twilio/availabl
 import { provisionNumber } from '@leadlandlord/integrations/twilio';
 import { getAnthropicClient } from '@leadlandlord/integrations/anthropic';
 import { log } from '@leadlandlord/shared/log';
+import { bustSiteHostTags } from '@/lib/site-host-revalidate';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,7 @@ export async function provisionChosenNumber(
   }
 
   log.info({ siteId, e164, trackingNumber: tracking.number, provider: tracking.provider }, 'phone provisioned');
+  await bustSiteHostTags([`site:tracking:${siteId}`]);
   revalidatePath(`/operator/sites/${siteId}`);
   revalidatePath('/operator/portfolio');
   return { ok: true, trackingNumber: tracking.number };
