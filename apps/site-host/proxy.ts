@@ -8,7 +8,27 @@ import { NextResponse, type NextRequest } from 'next/server';
 const CORPORATE_HOSTS = new Set(['leadslandlord.com', 'www.leadslandlord.com']);
 
 /**
- * Next 16 proxy.ts — runs before the cache. Three responsibilities:
+ * Custom Sites (ADR 0033) — client-owned standalone sites with zero operator
+ * coupling. `CUSTOM_HOSTS` maps a client's domain(s) to its `csSite.siteKey`.
+ * `?cs=<siteKey>` is the dev fallback, sticky via the `ll_cs` cookie — same
+ * mechanics as `?corporate=1`/`ll_corp` above.
+ */
+const CUSTOM_HOSTS = new Map<string, string>([
+  ['constructionadrservices.com', 'constructionadr'],
+  ['www.constructionadrservices.com', 'constructionadr'],
+]);
+
+/**
+ * siteKey -> internal app/ namespace folder. A small map (not a hardcoded
+ * literal) so site #2 is additive per ADR 0033 D1: add one CUSTOM_HOSTS entry
+ * + one CUSTOM_NAMESPACES entry + one app/ folder, nothing else changes.
+ */
+const CUSTOM_NAMESPACES: Record<string, string> = {
+  constructionadr: 'cadr',
+};
+
+/**
+ * Next 16 proxy.ts — runs before the cache. Four responsibilities:
  *
  *  1. Mirror the Host header into `x-site-host` (always) so server components
  *     can read it via `headers()` even when Next strips/normalizes Host.
@@ -18,6 +38,9 @@ const CORPORATE_HOSTS = new Set(['leadslandlord.com', 'www.leadslandlord.com']);
  *  3. Route corporate hosts (leadslandlord.com) into the /leadslandlord/*
  *     internal namespace so they don't collide with tenant routes at /, /about,
  *     /contact. Browser URLs stay clean — this is an internal rewrite.
+ *  4. Route Custom Sites hosts (CUSTOM_HOSTS) into their own internal
+ *     namespace (e.g. /cadr/*) the same way, tagging the request
+ *     `x-site-mode: custom` + `x-cs-site: <siteKey>` for downstream resolvers.
  *
  * In production the Host header alone is enough — the site-doc has
  * `domains: [{ host }]` for every attached domain.
@@ -66,6 +89,72 @@ export default function proxy(req: NextRequest) {
         path: '/',
         // Session cookie — clears when the browser closes. Long enough to
         // browse the preview, short enough not to follow you forever.
+      });
+    }
+    return res;
+  }
+
+  // Custom Sites (ADR 0033): host match, or dev fallback via ?cs=<siteKey>
+  // made sticky via the ll_cs cookie so internal nav links (bare
+  // `/practice-areas`, `/contact`, etc.) stay routed after the first click
+  // drops the query param.
+  const customQueryKey = req.nextUrl.searchParams.get('cs');
+  const customCookieKey = req.cookies.get('ll_cs')?.value ?? null;
+  const csSiteKey = CUSTOM_HOSTS.get(hostNoPort) ?? customQueryKey ?? customCookieKey ?? null;
+  const csNamespace = csSiteKey ? CUSTOM_NAMESPACES[csSiteKey] : undefined;
+
+  if (csSiteKey && csNamespace) {
+    headers.set('x-site-mode', 'custom');
+    headers.set('x-cs-site', csSiteKey);
+
+    // IndexNow key file, replicated ahead of the namespace rewrite below —
+    // same pattern as the shared handler further down, but this branch
+    // returns early so it can't fall through to it.
+    const csKeyMatch = req.nextUrl.pathname.match(/^\/([a-f0-9]{32})\.txt$/);
+    if (csKeyMatch) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/api/indexnow-key';
+      url.searchParams.set('k', csKeyMatch[1]!);
+      return NextResponse.rewrite(url, { request: { headers } });
+    }
+
+    // .md rewrite, replicated ahead of the namespace rewrite for the same
+    // reason. /index.md -> /md (home), /foo.md -> /md/foo.
+    const csMdMatch = req.nextUrl.pathname.match(/^(\/.*?)\.md$/);
+    if (csMdMatch) {
+      const inner = csMdMatch[1] === '/index' ? '' : csMdMatch[1];
+      const url = req.nextUrl.clone();
+      url.pathname = `/md${inner}`;
+      return NextResponse.rewrite(url, { request: { headers } });
+    }
+
+    const path = req.nextUrl.pathname;
+    const passthrough =
+      path.startsWith('/_next') ||
+      path.startsWith('/api/revalidate') ||
+      path.startsWith('/api/cs-lead') ||
+      path.startsWith(`/${csNamespace}`) ||
+      path === '/favicon.ico' ||
+      path === '/sitemap.xml' ||
+      path === '/robots.txt' ||
+      path === '/llms.txt' ||
+      path === '/llms-full.txt' ||
+      path === '/md' ||
+      path.startsWith('/md/');
+    let res: NextResponse;
+    if (!passthrough) {
+      const url = req.nextUrl.clone();
+      url.pathname = `/${csNamespace}${path === '/' ? '' : path}`;
+      res = NextResponse.rewrite(url, { request: { headers } });
+    } else {
+      res = NextResponse.next({ request: { headers } });
+    }
+    if (customQueryKey && customQueryKey !== customCookieKey) {
+      res.cookies.set('ll_cs', customQueryKey, {
+        httpOnly: false,
+        sameSite: 'lax',
+        path: '/',
+        // Session cookie — same rationale as ll_corp/ll_site above.
       });
     }
     return res;

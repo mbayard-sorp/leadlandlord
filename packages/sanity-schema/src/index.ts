@@ -12,6 +12,17 @@ export {
 // Build & Sell schema types + presets (all bs-prefixed).
 export { buildsellSchemaTypes, buildsellSite, buildsellTheme, bsReview, BUILDSELL_PRESETS, BUILDSELL_PRESET_NAMES, presetByName } from './types/buildsell';
 export type { BuildsellPreset } from './types/buildsell';
+// Custom Sites (CS) schema types — all cs-prefixed.
+export {
+  customSitesSchemaTypes,
+  csSite,
+  csPage,
+  csPracticeArea,
+  csPublication,
+  csAttorney,
+  csTestimonial,
+  csBadge,
+} from './types/customsites';
 export {
   siteDocId,
   pageDocId,
@@ -21,6 +32,13 @@ export {
   keywordClusterDocId,
   buildsellSiteDocId,
   buildsellReviewDocId,
+  csSiteDocId,
+  csPageDocId,
+  csPracticeAreaDocId,
+  csPublicationDocId,
+  csAttorneyDocId,
+  csTestimonialDocId,
+  csBadgeDocId,
   CORPORATE_PAGE_KINDS,
   THEME_NAMES,
   type PageKind,

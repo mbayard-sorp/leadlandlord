@@ -4,6 +4,12 @@ import { resolveCurrentSite } from '../lib/site-context';
 import { resolveCurrentBuildSellSite } from '../lib/buildsell-context';
 import { sanityToBundle } from '../lib/theme-bundle';
 import { fetchCorporatePageList, fetchBuildSellSitemapEntries } from '../lib/sanity';
+import {
+  fetchCustomSiteByKey,
+  fetchCustomSitePages,
+  fetchCustomSitePracticeAreas,
+  fetchCustomSitePublications,
+} from '../lib/customsites-sanity';
 import type { Page } from '../lib/content';
 import { pageHref } from '../lib/content';
 
@@ -63,6 +69,76 @@ async function corporateSitemap(base: string): Promise<MetadataRoute.Sitemap> {
   return [...corporateEntries, ...buildsellEntries];
 }
 
+// Heuristic-only: csPage has no "kind"/category field to distinguish a legal
+// or utility page (privacy, terms, etc.) from a regular content page, so this
+// slug allowlist stands in until Phase 3's page model settles. Revisit if the
+// real slugs diverge from this set.
+const CUSTOM_UTILITY_PAGE_SLUGS = new Set([
+  'privacy',
+  'privacy-policy',
+  'terms',
+  'terms-of-service',
+  'terms-and-conditions',
+  'disclaimer',
+  'accessibility',
+  'cookie-policy',
+]);
+
+/**
+ * Custom Sites sitemap (ADR 0033). No pagination assumed yet — Phase 3's
+ * route tree isn't built, so page paths here are the provisional convention
+ * (flat /<slug> for csPage, /practice-areas/<slug>, /publications/<slug>).
+ * Returns [] when the site doesn't resolve or is robots-disallowed, matching
+ * the tenant/B&S warming-site behavior above.
+ */
+async function customSitemap(base: string, siteKey: string): Promise<MetadataRoute.Sitemap> {
+  const site = await fetchCustomSiteByKey(siteKey);
+  if (!site || site.robotsDisallow) return [];
+
+  const [pages, practiceAreas, publications] = await Promise.all([
+    fetchCustomSitePages(siteKey),
+    fetchCustomSitePracticeAreas(siteKey),
+    fetchCustomSitePublications(siteKey),
+  ]);
+
+  const lastModifiedOf = (modifiedAt?: string | null, publishedAt?: string | null): Date =>
+    modifiedAt ? new Date(modifiedAt) : publishedAt ? new Date(publishedAt) : new Date();
+
+  const home: MetadataRoute.Sitemap[number] = {
+    url: canonical(base, '/'),
+    lastModified: new Date(),
+    changeFrequency: 'monthly',
+    priority: 1.0,
+  };
+
+  const pageEntries: MetadataRoute.Sitemap = pages.map((p) => ({
+    url: canonical(base, `/${p.slug}`),
+    lastModified: lastModifiedOf(p.modifiedAt, p.publishedAt),
+    changeFrequency: 'monthly' as const,
+    priority: CUSTOM_UTILITY_PAGE_SLUGS.has(p.slug) ? 0.3 : 0.6,
+  }));
+
+  const practiceAreaEntries: MetadataRoute.Sitemap = practiceAreas.map((p) => ({
+    url: canonical(base, `/practice-areas/${p.slug}`),
+    lastModified: lastModifiedOf(p.modifiedAt, p.publishedAt),
+    changeFrequency: 'monthly' as const,
+    priority: 0.9,
+  }));
+
+  const publicationsIndex: MetadataRoute.Sitemap = publications.length
+    ? [{ url: canonical(base, '/publications'), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.7 }]
+    : [];
+
+  const publicationEntries: MetadataRoute.Sitemap = publications.map((p) => ({
+    url: canonical(base, `/${p.slug}`),
+    lastModified: lastModifiedOf(p.modifiedAt, p.publishedAt),
+    changeFrequency: 'monthly' as const,
+    priority: 0.5,
+  }));
+
+  return [home, ...pageEntries, ...practiceAreaEntries, ...publicationsIndex, ...publicationEntries];
+}
+
 // Cache the rendered sitemap for an hour. Without this, every Googlebot
 // fetch is a server-rendered round-trip through Sanity, and a cold start +
 // slow Sanity call can exceed Google's fetch budget — surfacing in GSC as
@@ -91,6 +167,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // resolveCurrentSite() returns null here and the tenant branch can't serve it.
   if (h.get('x-site-mode') === 'corporate') {
     return corporateSitemap(base);
+  }
+
+  // Custom Sites (ADR 0033) — resolved by siteKey, not a `site`/`buildsellSite`
+  // doc, so it needs its own branch ahead of the tenant resolver below.
+  if (h.get('x-site-mode') === 'custom') {
+    const siteKey = h.get('x-cs-site');
+    if (!siteKey) return [];
+    return customSitemap(base, siteKey);
   }
 
   const site = await resolveCurrentSite();
