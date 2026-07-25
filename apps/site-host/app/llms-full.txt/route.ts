@@ -3,6 +3,8 @@ import { resolveCurrentSite } from '../../lib/site-context';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { currentRequestBaseUrl } from '../../lib/seo-meta';
 import { pageToMarkdown } from '../../lib/page-markdown';
+import { fetchCustomSiteByHost, fetchCustomSiteByKey } from '../../lib/customsites-sanity';
+import { customSiteFullMarkdown } from '../../lib/customsites-markdown';
 import type { Bundle, Page } from '../../lib/content';
 
 export const revalidate = 3600;
@@ -23,6 +25,19 @@ export async function GET(): Promise<Response> {
 
   if (h.get('x-site-mode') === 'corporate') {
     return new Response('', { status: 404 });
+  }
+
+  // Custom Sites (ADR 0033). Body rendering is delegated to
+  // lib/customsites-markdown.ts (see its TODO(phase-3) note re: the real
+  // Portable Text serializer).
+  if (h.get('x-site-mode') === 'custom') {
+    const key = h.get('x-cs-site');
+    const host = h.get('x-site-host') ?? h.get('host') ?? '';
+    const csSite = key ? await fetchCustomSiteByKey(key) : await fetchCustomSiteByHost(host);
+    if (!csSite) return new Response('', { status: 404 });
+    if (csSite.robotsDisallow) return new Response('', { status: 404 });
+    const body = await customSiteFullMarkdown(csSite);
+    return new Response(body, { headers: MD_HEADERS });
   }
 
   const site = await resolveCurrentSite();

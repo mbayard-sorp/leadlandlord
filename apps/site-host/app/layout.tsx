@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import Script from 'next/script';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
@@ -78,6 +79,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const h = await headers();
+  // Custom Sites (ADR 0033 D5): client-owned hosts must never load
+  // LeadLandlord's central GA4 property or inherit tenant-line font/theme
+  // defaults — that traffic and branding belong to the client, not to us.
+  // The /cadr layout (Phase 3) injects the site's own GTM container instead.
+  const isCustomMode = h.get('x-site-mode') === 'custom';
   const site = await resolveCurrentSite();
   const theme = site?.theme ?? 'classic';
   const palette = site?.colorPalette ?? 'default';
@@ -85,12 +92,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // with `site_id`. Per-tenant `gaMeasurementId` on a Sanity site doc
   // overrides for tenants who want their own analytics (rare; mostly for
   // white-label-future). If neither is set, skip injection entirely.
-  const ga = site?.gaMeasurementId ?? process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? undefined;
+  const ga = isCustomMode
+    ? undefined
+    : (site?.gaMeasurementId ?? process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? undefined);
   const siteId = site?.siteId;
   const bundle = site ? sanityToBundle(site) : null;
   const baseUrl = await currentRequestBaseUrl();
   return (
-    <html lang="en" className={fontVarsForTheme(theme)} data-theme={theme} data-palette={palette}>
+    <html
+      lang="en"
+      className={isCustomMode ? '' : fontVarsForTheme(theme)}
+      data-theme={theme}
+      data-palette={palette}
+    >
       <body>
         <a href="#main" className="skip-to-content">Skip to main content</a>
         {bundle && <WebSiteJsonLd name={bundle.business_name} url={baseUrl} />}
