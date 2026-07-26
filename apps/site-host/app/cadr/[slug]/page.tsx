@@ -7,7 +7,7 @@ import {
 } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
 import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
-import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
+import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageBuilder } from '@/components/customsites/PageBuilder';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ArticleLayout } from '@/components/customsites/ArticleLayout';
@@ -110,13 +110,14 @@ export async function generateMetadata({ params }: RouteParams) {
   if (!site) return {};
 
   const { page, pub } = await fetchCustomSiteRouteBundle(site.siteKey, slug);
+  const baseUrl = await currentRequestBaseUrl();
 
   if (page) {
     const meta = buildPageMetadata({
       title: page.seo?.metaTitle ?? page.title,
       description: page.seo?.metaDescription ?? site.tagline ?? '',
       path: `/${slug}`,
-      image: page.seo?.ogImageUrl ?? undefined,
+      image: page.seo?.ogImageUrl ?? csOgFallbackImage(baseUrl, site.siteKey),
       siteName: site.name,
       mdPath: `/${slug}.md`,
     });
@@ -129,7 +130,7 @@ export async function generateMetadata({ params }: RouteParams) {
       description: pub.seo?.metaDescription ?? pub.excerpt ?? '',
       path: `/${slug}`,
       ogType: 'article',
-      image: pub.seo?.ogImageUrl ?? pub.featuredImageUrl ?? undefined,
+      image: pub.seo?.ogImageUrl ?? pub.featuredImageUrl ?? csOgFallbackImage(baseUrl, site.siteKey),
       publishedTime: pub.publishedAt,
       siteName: site.name,
       mdPath: `/${slug}.md`,

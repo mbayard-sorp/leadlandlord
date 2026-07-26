@@ -8,7 +8,7 @@ import {
 } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
 import { buildAreaServed, buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
-import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
+import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { Prose } from '@/components/customsites/Prose';
 import { RelatedServices } from '@/components/customsites/RelatedServices';
@@ -145,11 +145,12 @@ export async function generateMetadata({ params }: RouteParams) {
   const area = await fetchCustomSitePracticeAreaFull(site.siteKey, slug);
   if (!area) return {};
 
+  const baseUrl = await currentRequestBaseUrl();
   const meta = buildPageMetadata({
     title: area.seo?.metaTitle ?? area.title,
     description: area.seo?.metaDescription ?? area.excerpt ?? '',
     path: `/practice-areas/${slug}`,
-    image: area.seo?.ogImageUrl ?? area.heroImageUrl ?? undefined,
+    image: area.seo?.ogImageUrl ?? area.heroImageUrl ?? csOgFallbackImage(baseUrl, site.siteKey),
     siteName: site.name,
     mdPath: `/practice-areas/${slug}.md`,
   });

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 import { fetchCustomSiteAttorneys, fetchCustomSiteTestimonials } from '@/lib/customsites-sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
+import { csOgFallbackImage } from '@/lib/customsites-metadata';
 import { customSiteFontVars } from '@/lib/customsites-fonts';
 import { TopBar } from '@/components/customsites/TopBar';
 import { SiteHeader } from '@/components/customsites/SiteHeader';
@@ -98,7 +99,14 @@ export async function generateMetadata(): Promise<Metadata> {
     // noindexed by default too (ADR 0033 D6) but flip index:true here once
     // csSite.robotsDisallow is explicitly set to false at DNS cutover.
     robots: site.robotsDisallow ? { index: false, follow: false } : { index: true, follow: true },
-    ...(site.ogImageUrl ? { openGraph: { images: [{ url: site.ogImageUrl }] } } : {}),
+    // Every leaf route under app/cadr/* sets its own openGraph.images via
+    // buildPageMetadata (which overrides this at merge time), so this is
+    // really only the base default for routes with no own generateMetadata
+    // (e.g. not-found.tsx). Falls back to the generated OG card when no
+    // client-uploaded ogImage is set — never leave og:image empty.
+    openGraph: {
+      images: [site.ogImageUrl ? { url: site.ogImageUrl } : csOgFallbackImage(baseUrl, site.siteKey)],
+    },
     ...(site.faviconUrl
       ? {
           icons: {
