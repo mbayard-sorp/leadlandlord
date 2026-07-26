@@ -725,14 +725,33 @@
   z-index: 0;
 }
 
-/* Narrow screens have no room to sit copy beside the portrait, so the scrim
-   goes flat and heavy there and only becomes a left-to-right falloff once
-   there is width to keep the two apart. */
+/* Narrow screens have no room to sit copy *beside* the portrait, so the scrim
+   runs top-to-bottom instead: the upper band stays light enough to read the
+   subject, and the copy sits on a near-solid base at the foot of the band.
+   A flat wash across the whole image was the earlier approach and it greyed
+   the portrait into a ghost — visible enough to notice, too dim to read.
+   Becomes a left-to-right falloff at >=900px, where there is width to keep
+   the copy and the subject genuinely apart. */
 .cs-adr .cs-page-header-bg::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(19, 38, 60, 0.82);
+  background: linear-gradient(
+    180deg,
+    rgba(19, 38, 60, 0.3) 0%,
+    rgba(19, 38, 60, 0.42) 45%,
+    rgba(19, 38, 60, 0.88) 84%,
+    rgba(19, 38, 60, 0.94) 100%
+  );
+}
+
+/* Taller band + bottom-anchored copy below 900px, so the vertical falloff
+   above has room to resolve: portrait up top, heading on the dark base. */
+@media (max-width: 899px) {
+  .cs-adr .cs-page-header--banner {
+    min-height: 320px;
+    align-items: flex-end;
+  }
 }
 
 @media (min-width: 900px) {
