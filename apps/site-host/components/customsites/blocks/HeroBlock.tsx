@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import type { CsHeroBlock } from '@/lib/customsites-sanity';
+import { csImageUrl, type CsHeroBlock } from '@/lib/customsites-sanity';
 
 interface Props {
   block: CsHeroBlock;
@@ -16,7 +16,7 @@ export function HeroBlock({ block, phone }: Props) {
       {block.backgroundImageUrl ? (
         <div className="cs-hero-bg">
           <Image
-            src={block.backgroundImageUrl}
+            src={csImageUrl(block.backgroundImageUrl, { w: 2048 })}
             alt={block.backgroundImageAlt ?? ''}
             fill
             priority

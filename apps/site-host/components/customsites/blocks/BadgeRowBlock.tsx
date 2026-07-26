@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import type { CsBadgeRowBlock } from '@/lib/customsites-sanity';
+import { csImageUrl, type CsBadgeRowBlock } from '@/lib/customsites-sanity';
 
 interface Props {
   block: CsBadgeRowBlock;
@@ -17,7 +17,7 @@ export function BadgeRowBlock({ block }: Props) {
           const img = badge.imageUrl ? (
             <span className="cs-badge-img">
               <Image
-                src={badge.imageUrl}
+                src={csImageUrl(badge.imageUrl, { w: 440 })}
                 alt={badge.imageAlt ?? badge.name}
                 fill
                 sizes="220px"

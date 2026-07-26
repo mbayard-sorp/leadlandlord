@@ -1,4 +1,5 @@
 import type { CustomSitePracticeAreaCard } from '@/lib/customsites-sanity';
+import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 
 interface Props {
   areas: CustomSitePracticeAreaCard[];
@@ -13,9 +14,14 @@ interface Props {
 }
 
 /** Sibling practice-area links. Aside variant is the navy "Other ADR Services" rail. */
-export function RelatedServices({ areas, currentSlug, heading, variant = 'section' }: Props) {
+export async function RelatedServices({ areas, currentSlug, heading, variant = 'section' }: Props) {
   if (variant === 'aside') {
     if (areas.length === 0) return null;
+
+    // React.cache-deduped — the page this rail lives on has already resolved
+    // the site once, so this is a free lookup, not a second Sanity round trip.
+    const site = await resolveCurrentCustomSite();
+
     return (
       <aside className="cs-services-rail" aria-labelledby="other-services-heading">
         <h2 id="other-services-heading">{heading ?? 'Other ADR Services'}</h2>
@@ -35,6 +41,26 @@ export function RelatedServices({ areas, currentSlug, heading, variant = 'sectio
             );
           })}
         </ul>
+
+        {/* Fills the dead space below a short service list on tall viewports
+            with a second, lower-commitment CTA than the page's own contact
+            form further down. Phone is read from the resolved site — never
+            hardcoded. */}
+        <div className="cs-services-rail-cta">
+          <span className="cs-eyebrow cs-eyebrow--inverse">Free Case Review</span>
+          <p>Have a construction dispute? Talk to our team before you decide your next step.</p>
+          {site?.phone ? (
+            <a href={`tel:${site.phone}`} className="cs-btn cs-btn-primary">
+              Call {site.phone}
+            </a>
+          ) : null}
+          <a href="/contact" className="cs-link">
+            Request a Consultation
+            <span className="cs-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </div>
       </aside>
     );
   }

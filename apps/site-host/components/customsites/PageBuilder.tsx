@@ -10,6 +10,7 @@ import { CalloutBlock } from './blocks/CalloutBlock';
 import { RichTextBlock } from './blocks/RichTextBlock';
 import { ContactCtaBlock } from './blocks/ContactCtaBlock';
 import { CtaBannerBlock } from './blocks/CtaBannerBlock';
+import { FaqBlock } from './blocks/FaqBlock';
 
 interface Props {
   blocks: CsPageBuilderBlock[] | null | undefined;
@@ -17,7 +18,7 @@ interface Props {
   phone?: string | null;
 }
 
-/** Switches over csPage.pageBuilder[]._type — the 11 Custom Sites blocks,
+/** Switches over csPage.pageBuilder[]._type — the 12 Custom Sites blocks,
  * rendered in Sanity array order. Mirrors BuildSellHome's section switch. */
 export function PageBuilder({ blocks, siteKey, phone }: Props) {
   if (!blocks || blocks.length === 0) return null;
@@ -48,6 +49,8 @@ export function PageBuilder({ blocks, siteKey, phone }: Props) {
             return <ContactCtaBlock key={block._key} block={block} siteKey={siteKey} />;
           case 'csCtaBannerBlock':
             return <CtaBannerBlock key={block._key} block={block} phone={phone} />;
+          case 'csFaqBlock':
+            return <FaqBlock key={block._key} block={block} phone={phone} />;
           default:
             return null;
         }

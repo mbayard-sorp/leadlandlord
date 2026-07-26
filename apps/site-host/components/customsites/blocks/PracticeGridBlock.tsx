@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { CsPracticeGridBlock, CustomSitePracticeAreaCard } from '@/lib/customsites-sanity';
-import { fetchCustomSitePracticeAreaCards } from '@/lib/customsites-sanity';
+import { csImageUrl, fetchCustomSitePracticeAreaCards } from '@/lib/customsites-sanity';
 
 interface Props {
   block: CsPracticeGridBlock;
@@ -31,7 +31,7 @@ export async function PracticeGridBlock({ block, siteKey }: Props) {
               {area.cardImageUrl ? (
                 <div className="cs-card-media">
                   <Image
-                    src={area.cardImageUrl}
+                    src={csImageUrl(area.cardImageUrl, { w: 720 })}
                     alt={area.cardImageAlt ?? ''}
                     fill
                     sizes="(max-width: 899px) 100vw, 360px"

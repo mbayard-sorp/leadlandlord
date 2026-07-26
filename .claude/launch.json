@@ -31,6 +31,17 @@
       }
     },
     {
+      "name": "site-host-dev-autoport",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@leadlandlord/site-host", "exec", "next", "dev"],
+      "port": 3002,
+      "autoPort": true,
+      "env": {
+        "SANITY_DATASET": "development",
+        "NEXT_PUBLIC_SANITY_DATASET": "development"
+      }
+    },
+    {
       "name": "studio",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@leadlandlord/studio", "dev"],

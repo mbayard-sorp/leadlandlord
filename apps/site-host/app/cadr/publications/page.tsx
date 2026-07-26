@@ -2,7 +2,9 @@ import { notFound } from 'next/navigation';
 import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 import type { CustomSitePublicationFull } from '@/lib/customsites-sanity';
 import { fetchCustomSitePublicationsFull, fetchCustomSitePageBySlug } from '@/lib/customsites-sanity';
-import { buildPageMetadata, breadcrumbsJsonLd } from '@/lib/seo-meta';
+import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
+import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
+import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ContactCtaBlock } from '@/components/customsites/blocks/ContactCtaBlock';
 
@@ -26,9 +28,39 @@ export default async function PublicationsIndexPage() {
     { name: 'Publications', path: '/publications' },
   ]);
 
+  const baseUrl = await currentRequestBaseUrl();
+  const origin = csOrigin(baseUrl);
+  const webPage = buildWebPageJsonLd({
+    origin,
+    path: '/publications',
+    name: pageDoc?.seo?.metaTitle ?? pageDoc?.title ?? 'Publications',
+    description: pageDoc?.seo?.metaDescription ?? `Articles, publications, and presentations from ${site.name}.`,
+  });
+  // ItemList of the two buckets, mirroring app/blog/page.tsx / app/faq/page.tsx's
+  // ItemList pattern for the tenant line. Both buckets link out to a PDF only
+  // (matching the live site), so itemListElement.url points at the PDF, not an
+  // internal detail page.
+  const itemList = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `Publications — ${site.name}`,
+    itemListElement: [...written, ...presentations]
+      .filter((p) => p.pdfUrl)
+      .map((p, idx) => ({
+        '@type': 'ListItem',
+        position: idx + 1,
+        url: p.pdfUrl,
+        name: p.title,
+      })),
+  };
+
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }} />
+      {itemList.itemListElement.length > 0 ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemList) }} />
+      ) : null}
 
       <PageHeader
         eyebrow="Insights"
@@ -102,11 +134,14 @@ export async function generateMetadata() {
   const site = await resolveCurrentCustomSite();
   if (!site) return {};
 
-  return buildPageMetadata({
-    title: 'Publications',
-    description: `Articles, publications, and presentations from ${site.name}.`,
+  const pageDoc = await fetchCustomSitePageBySlug(site.siteKey, 'publications');
+  const meta = buildPageMetadata({
+    title: pageDoc?.seo?.metaTitle ?? pageDoc?.title ?? 'Publications',
+    description: pageDoc?.seo?.metaDescription ?? `Articles, publications, and presentations from ${site.name}.`,
     path: '/publications',
+    image: pageDoc?.seo?.ogImageUrl ?? site.ogImageUrl ?? undefined,
     siteName: site.name,
     mdPath: '/publications.md',
   });
+  return applyCsSeoOverrides(meta, pageDoc?.seo);
 }

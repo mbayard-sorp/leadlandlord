@@ -1,7 +1,7 @@
 import { defineType, defineField } from 'sanity';
 
 /**
- * The 11 Custom Sites page-builder blocks. They are members of
+ * The 12 Custom Sites page-builder blocks. They are members of
  * `csPage.pageBuilder[]` and render in array order. Each is `cs`-prefixed.
  */
 
@@ -200,6 +200,31 @@ export const csCtaBannerBlock = defineType({
   preview: { select: { title: 'heading' }, prepare: ({ title }) => ({ title: title ? `CTA Banner — ${title}` : 'CTA Banner' }) },
 });
 
+/**
+ * A standalone FAQ surface for any csPage, wrapping the existing csFaqItem
+ * type (previously reachable only from csPracticeArea.faqs). Lets a generic
+ * page (e.g. a standalone "Why Arbitration" page) carry FAQPage JSON-LD
+ * content. csPracticeArea.faqs is unrelated and unchanged.
+ */
+export const csFaqBlock = defineType({
+  name: 'csFaqBlock',
+  title: 'FAQ',
+  type: 'object',
+  fields: [
+    defineField({
+      name: 'heading',
+      title: 'Heading',
+      type: 'string',
+      description: 'Defaults to "Frequently Asked Questions" at render time when left empty.',
+    }),
+    defineField({ name: 'items', title: 'Items', type: 'array', of: [{ type: 'csFaqItem' }] }),
+  ],
+  preview: {
+    select: { title: 'heading' },
+    prepare: ({ title }) => ({ title: title ? `FAQ — ${title}` : 'FAQ' }),
+  },
+});
+
 export const customSitesSectionTypes = [
   csHeroBlock,
   csIntroBlock,
@@ -212,4 +237,5 @@ export const customSitesSectionTypes = [
   csRichTextBlock,
   csContactCtaBlock,
   csCtaBannerBlock,
+  csFaqBlock,
 ];

@@ -7,6 +7,8 @@ import {
   fetchCustomSiteTestimonials,
 } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
+import { buildAreaServed, buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
+import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { Prose } from '@/components/customsites/Prose';
 import { RelatedServices } from '@/components/customsites/RelatedServices';
@@ -31,12 +33,14 @@ export default async function PracticeAreaPage({ params }: RouteParams) {
   if (!area) notFound();
 
   const baseUrl = await currentRequestBaseUrl();
-  const origin = baseUrl.replace(/\/$/, '');
+  const origin = csOrigin(baseUrl);
   const crumbs = await breadcrumbsJsonLd([
     { name: 'Home', path: '/' },
     { name: 'ADR Services', path: '/adr-services' },
     { name: area.title, path: `/practice-areas/${slug}` },
   ]);
+
+  const areaServed = buildAreaServed(site);
 
   const serviceJsonLd = {
     '@context': 'https://schema.org',
@@ -44,13 +48,21 @@ export default async function PracticeAreaPage({ params }: RouteParams) {
     name: area.title,
     ...(area.excerpt ? { description: area.excerpt } : {}),
     provider: { '@id': `${origin}/#organization` },
-    areaServed: 'Los Angeles',
+    ...(areaServed ? { areaServed } : {}),
   };
+
+  const webPage = buildWebPageJsonLd({
+    origin,
+    path: `/practice-areas/${slug}`,
+    name: area.seo?.metaTitle ?? area.title,
+    description: area.seo?.metaDescription ?? area.excerpt,
+  });
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }} />
 
       <PageHeader
         eyebrow="ADR Services"
@@ -133,7 +145,7 @@ export async function generateMetadata({ params }: RouteParams) {
   const area = await fetchCustomSitePracticeAreaFull(site.siteKey, slug);
   if (!area) return {};
 
-  return buildPageMetadata({
+  const meta = buildPageMetadata({
     title: area.seo?.metaTitle ?? area.title,
     description: area.seo?.metaDescription ?? area.excerpt ?? '',
     path: `/practice-areas/${slug}`,
@@ -141,4 +153,5 @@ export async function generateMetadata({ params }: RouteParams) {
     siteName: site.name,
     mdPath: `/practice-areas/${slug}.md`,
   });
+  return applyCsSeoOverrides(meta, area.seo);
 }

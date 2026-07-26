@@ -80,13 +80,15 @@ export async function GET(): Promise<Response> {
     ]);
 
     const csSummary = csSite.tagline ? `> ${csSite.tagline}` : '';
-    const paLinks = practiceAreas.map((p) => `- [${p.title}](${base}/practice-areas/${p.slug}.md)`);
-    const pubLinks = publications.map((p) => `- [${p.title}](${base}/${p.slug}.md)`);
+    const csLink = (title: string, url: string, description?: string | null): string =>
+      description ? `- [${title}](${url}): ${description}` : `- [${title}](${url})`;
+    const paLinks = practiceAreas.map((p) => csLink(p.title, `${base}/practice-areas/${p.slug}.md`, p.excerpt));
+    const pubLinks = publications.map((p) => csLink(p.title, `${base}/${p.slug}.md`, p.excerpt));
     const aboutPage = pages.find((p) => p.slug === 'about');
     const contactPage = pages.find((p) => p.slug === 'contact');
     const moreLinks = [
-      aboutPage ? `- [${aboutPage.title}](${base}/about.md)` : null,
-      contactPage ? `- [${contactPage.title}](${base}/contact.md)` : null,
+      aboutPage ? csLink(aboutPage.title, `${base}/about.md`, aboutPage.description) : null,
+      contactPage ? csLink(contactPage.title, `${base}/contact.md`, contactPage.description) : null,
     ];
 
     const csBody = [

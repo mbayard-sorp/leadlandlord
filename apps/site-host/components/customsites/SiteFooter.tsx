@@ -5,16 +5,34 @@ interface Props {
   site: CustomSite;
 }
 
-/** Structural default, same rationale as SiteHeader's DEFAULT_NAV. */
+/** Structural default, same rationale as SiteHeader's DEFAULT_NAV — labels
+ * mirror the header's fallback nav so Quick Links never drifts from what the
+ * header calls the same destination (e.g. "Mike's Story", not "About Us"). */
 const DEFAULT_FOOTER_LINKS: CustomSiteNavLink[] = [
-  { label: 'About Us', href: '/mikes-story' },
-  { label: 'Practice Areas', href: '/adr-services' },
+  { label: "Mike's Story", href: '/mikes-story' },
+  { label: 'ADR Services', href: '/adr-services' },
+  { label: 'Construction Industry', href: '/construction-industry' },
   { label: 'Publications', href: '/publications' },
-  { label: 'Contact Us', href: '/contact' },
+  { label: 'Contact', href: '/contact' },
 ];
 
+/** The bottom utility bar below (cs-footer-legal-links) always owns these —
+ * stripped out of Quick Links so they never render in both places. */
+const UTILITY_HREFS = new Set(['/sitemap.xml', '/disclaimer', '/privacy-policy']);
+
 export function SiteFooter({ site }: Props) {
-  const links = site.footerNav && site.footerNav.length > 0 ? site.footerNav : DEFAULT_FOOTER_LINKS;
+  // `navigation` is the header's own source and is what's actually correct
+  // and current on the live site; `footerNav` is a separate editorial field
+  // that can drift from it (stale "About Us" label, missing nav items). Prefer
+  // navigation so Quick Links stays in lockstep with the header by
+  // construction, falling back to footerNav, then the structural default.
+  const source =
+    site.navigation && site.navigation.length > 0
+      ? site.navigation
+      : site.footerNav && site.footerNav.length > 0
+        ? site.footerNav
+        : DEFAULT_FOOTER_LINKS;
+  const links = source.filter((link) => !UTILITY_HREFS.has(link.href ?? ''));
   const addr = site.address;
   const hasAddress = Boolean(addr?.street || addr?.city);
 

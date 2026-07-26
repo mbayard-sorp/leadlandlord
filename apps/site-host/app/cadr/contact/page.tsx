@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 import { fetchCustomSitePageBySlug } from '@/lib/customsites-sanity';
-import { buildPageMetadata, breadcrumbsJsonLd } from '@/lib/seo-meta';
+import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
+import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
+import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ContactForm } from '@/components/customsites/ContactForm';
 import { PageBuilder } from '@/components/customsites/PageBuilder';
@@ -20,6 +22,13 @@ export default async function ContactPage() {
     { name: 'Home', path: '/' },
     { name: 'Contact', path: '/contact' },
   ]);
+  const baseUrl = await currentRequestBaseUrl();
+  const webPage = buildWebPageJsonLd({
+    origin: csOrigin(baseUrl),
+    path: '/contact',
+    name: pageDoc?.seo?.metaTitle ?? pageDoc?.title ?? 'Contact Us',
+    description: pageDoc?.seo?.metaDescription ?? `Get in touch with ${site.name}.`,
+  });
 
   const addr = site.address;
   const hasAddress = Boolean(addr?.street || addr?.city);
@@ -27,6 +36,7 @@ export default async function ContactPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }} />
 
       <PageHeader
         eyebrow="Get in Touch"
@@ -105,11 +115,14 @@ export async function generateMetadata() {
   const site = await resolveCurrentCustomSite();
   if (!site) return {};
 
-  return buildPageMetadata({
-    title: 'Contact Us',
-    description: `Get in touch with ${site.name}.`,
+  const pageDoc = await fetchCustomSitePageBySlug(site.siteKey, 'contact');
+  const meta = buildPageMetadata({
+    title: pageDoc?.seo?.metaTitle ?? pageDoc?.title ?? 'Contact Us',
+    description: pageDoc?.seo?.metaDescription ?? `Get in touch with ${site.name}.`,
     path: '/contact',
+    image: pageDoc?.seo?.ogImageUrl ?? site.ogImageUrl ?? undefined,
     siteName: site.name,
     mdPath: '/contact.md',
   });
+  return applyCsSeoOverrides(meta, pageDoc?.seo);
 }

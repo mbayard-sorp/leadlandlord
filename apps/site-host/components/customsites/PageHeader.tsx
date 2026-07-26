@@ -1,4 +1,6 @@
 import Image from 'next/image';
+import { csImageUrl } from '@/lib/customsites-sanity';
+import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 import { Breadcrumbs } from '@/components/shared/Breadcrumbs';
 
 interface Crumb {
@@ -19,23 +21,33 @@ interface Props {
   bannerReverse?: boolean;
 }
 
-/** Navy interior-page band: eyebrow + Spectral H1 + optional breadcrumb trail. */
-export function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, bannerImageAlt, bannerReverse }: Props) {
-  const hasBanner = Boolean(bannerImageUrl);
-
+/**
+ * Navy interior-page band: eyebrow + Spectral H1 + optional breadcrumb trail.
+ *
+ * Every current caller falls back to `csSite.bannerImage` (the attorney
+ * portrait) whenever its own page doesn't have a distinct banner authored,
+ * which means the same photo repeats across every interior page a visitor
+ * lands on in a row. There's no per-page banner field to key off beyond that
+ * fallback, so this component resolves the site itself (React.cache-deduped,
+ * free) and compares: a `bannerImageUrl` identical to `site.bannerImageUrl`
+ * is treated as "no distinct banner" and gets a flat navy field with the
+ * footer's skyline lockup as a decorative motif instead of the portrait. A
+ * `bannerImageUrl` that differs (a genuinely page-specific photo, if one is
+ * ever authored) still gets the original photo band with Phase 1's
+ * directional scrim below, untouched.
+ */
+export async function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, bannerImageAlt, bannerReverse }: Props) {
+  const site = await resolveCurrentCustomSite();
+  const isDistinctBanner = Boolean(bannerImageUrl) && bannerImageUrl !== site?.bannerImageUrl;
   const hasCrumbs = Boolean(breadcrumbs && breadcrumbs.length > 0);
-
-  const bandClass = hasBanner
-    ? `cs-page-header cs-page-header--banner${bannerReverse ? ' cs-page-header--banner-reverse' : ''}`
-    : 'cs-page-header';
 
   return (
     <>
-      <div className={bandClass}>
-        {hasBanner ? (
+      {isDistinctBanner ? (
+        <div className={`cs-page-header cs-page-header--banner${bannerReverse ? ' cs-page-header--banner-reverse' : ''}`}>
           <div className="cs-page-header-bg">
             <Image
-              src={bannerImageUrl!}
+              src={csImageUrl(bannerImageUrl!, { w: 2048 })}
               alt={bannerImageAlt ?? ''}
               fill
               priority
@@ -43,12 +55,30 @@ export function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, banner
               style={{ objectFit: 'cover', objectPosition: bannerReverse ? 'left top' : 'right top' }}
             />
           </div>
-        ) : null}
-        <div className="cs-container cs-page-header-inner">
-          {eyebrow ? <span className="cs-eyebrow cs-eyebrow--inverse">{eyebrow}</span> : null}
-          <h1>{title}</h1>
+          <div className="cs-container cs-page-header-inner">
+            {eyebrow ? <span className="cs-eyebrow cs-eyebrow--inverse">{eyebrow}</span> : null}
+            <h1>{title}</h1>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="cs-page-header">
+          {site?.footerLogoUrl ? (
+            <span className="cs-page-header-skyline" aria-hidden="true">
+              <Image
+                src={site.footerLogoUrl}
+                alt=""
+                fill
+                sizes="420px"
+                style={{ objectFit: 'contain', objectPosition: 'right bottom' }}
+              />
+            </span>
+          ) : null}
+          <div className="cs-container cs-page-header-inner">
+            {eyebrow ? <span className="cs-eyebrow cs-eyebrow--inverse">{eyebrow}</span> : null}
+            <h1>{title}</h1>
+          </div>
+        </div>
+      )}
       {/* The trail always sits in a light bar directly below the header band,
           whether or not the band carries a banner photo. */}
       {hasCrumbs ? (

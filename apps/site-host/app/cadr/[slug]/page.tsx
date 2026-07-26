@@ -6,6 +6,8 @@ import {
   type CustomSitePublicationFull,
 } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
+import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
+import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
 import { PageBuilder } from '@/components/customsites/PageBuilder';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ArticleLayout } from '@/components/customsites/ArticleLayout';
@@ -23,8 +25,16 @@ export default async function CustomSiteSlugPage({ params }: RouteParams) {
 
   if (page) {
     const startsWithHero = page.pageBuilder?.[0]?._type === 'csHeroBlock';
+    const baseUrl = await currentRequestBaseUrl();
+    const webPage = buildWebPageJsonLd({
+      origin: csOrigin(baseUrl),
+      path: `/${slug}`,
+      name: page.seo?.metaTitle ?? page.title,
+      description: page.seo?.metaDescription,
+    });
     return (
       <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }} />
         {/* Page-specific banners all put the subject on the left; the site
             fallback banner puts it on the right. bannerReverse flips the scrim
             to match so the portrait never sits under the dark side. */}
@@ -51,9 +61,17 @@ export default async function CustomSiteSlugPage({ params }: RouteParams) {
       { name: pub.title, path: `/${slug}` },
     ]);
     const baseUrl = await currentRequestBaseUrl();
+    const origin = csOrigin(baseUrl);
+    const webPage = buildWebPageJsonLd({
+      origin,
+      path: `/${slug}`,
+      name: pub.seo?.metaTitle ?? pub.title,
+      description: pub.seo?.metaDescription ?? pub.excerpt,
+    });
     return (
       <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }} />
         <ArticleJsonLd pub={pub} slug={slug} baseUrl={baseUrl} />
         <ArticleLayout pub={pub} related={related} phone={site.phone} />
       </>
@@ -94,7 +112,7 @@ export async function generateMetadata({ params }: RouteParams) {
   const { page, pub } = await fetchCustomSiteRouteBundle(site.siteKey, slug);
 
   if (page) {
-    return buildPageMetadata({
+    const meta = buildPageMetadata({
       title: page.seo?.metaTitle ?? page.title,
       description: page.seo?.metaDescription ?? site.tagline ?? '',
       path: `/${slug}`,
@@ -102,10 +120,11 @@ export async function generateMetadata({ params }: RouteParams) {
       siteName: site.name,
       mdPath: `/${slug}.md`,
     });
+    return applyCsSeoOverrides(meta, page.seo);
   }
 
   if (pub) {
-    return buildPageMetadata({
+    const meta = buildPageMetadata({
       title: pub.seo?.metaTitle ?? pub.title,
       description: pub.seo?.metaDescription ?? pub.excerpt ?? '',
       path: `/${slug}`,
@@ -115,6 +134,7 @@ export async function generateMetadata({ params }: RouteParams) {
       siteName: site.name,
       mdPath: `/${slug}.md`,
     });
+    return applyCsSeoOverrides(meta, pub.seo);
   }
 
   return {};

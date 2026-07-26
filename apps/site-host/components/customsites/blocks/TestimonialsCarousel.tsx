@@ -39,20 +39,25 @@ export function TestimonialsCarousel({ items, autoRotate }: Props) {
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
     >
-      <blockquote className="cs-testimonial-quote">&ldquo;{current.quote}&rdquo;</blockquote>
-      {current.author ? (
-        <p className="cs-testimonial-author">
-          {current.author}
-          {current.role ? `, ${current.role}` : ''}
-        </p>
-      ) : null}
+      {/* aria-live, not a tabs pattern — there's exactly one quote visible at
+          a time and no tabpanels, so a polite live region announces each
+          rotation instead of `role="tablist"`/`"tab"`, which doesn't apply
+          here. */}
+      <div aria-live="polite" aria-atomic="true">
+        <blockquote className="cs-testimonial-quote">&ldquo;{current.quote}&rdquo;</blockquote>
+        {current.author ? (
+          <p className="cs-testimonial-author">
+            {current.author}
+            {current.role ? `, ${current.role}` : ''}
+          </p>
+        ) : null}
+      </div>
       {items.length > 1 ? (
-        <div className="cs-testimonial-dots" role="tablist" aria-label="Testimonials">
+        <div className="cs-testimonial-dots" role="group" aria-label="Testimonials">
           {items.map((item, i) => (
             <button
               key={item._id}
               type="button"
-              role="tab"
               className="cs-testimonial-dot"
               aria-current={i === index}
               aria-label={`Show testimonial ${i + 1} of ${items.length}`}

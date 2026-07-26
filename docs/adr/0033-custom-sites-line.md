@@ -184,3 +184,232 @@ modification this project avoids in favor of an additive new route.
 - No new Postgres migration, no new agent, no new `agent_events` trigger, no
   `crossSiteLinks` rows, no Klaviyo/Twilio provisioning — this line is intentionally
   invisible to the operator-platform DB and the improvement loop.
+
+---
+
+## Amendment 1 — AIO/GEO/SEO enablement (2026-07-25)
+
+**Author:** leadlandlord-architect
+
+**Why an amendment, not a new ADR (0034):** every decision below is downstream of D4
+("no Postgres row, no new agent, no `agent_events` trigger" — the line's defining
+constraint) and D2 (the generic `cs`-prefixed schema built for growth past site #1).
+None of them introduces a new architectural pattern; they resolve gaps in applying
+existing SEO/AEO infrastructure (ADR 0014/0015 IndexNow, the `geo-aeo-auditor` agent,
+ADR 0032 freshness layering) to a line whose entire premise is "no DB coupling." Keeping
+them here means the rationale stays next to the constraint it has to satisfy, instead of
+forcing a reader to cross-reference a second document to understand why, e.g., the
+IndexNow submitter can't just be reused. Numbering continues from D6.
+
+### D7 — IndexNow for Custom Sites: Sanity-only script, not the DB-keyed agent
+
+**Problem confirmed.** `proxy.ts`'s `/{32hex}.txt` rewrite and `/api/indexnow-key/route.ts`
+both predate Custom Sites and only call `resolveCurrentSite()` (tenant `site` doc).
+`csSite` has no `indexnowKey` field, so the verification file 404s on
+`constructionadrservices.com` today, and `indexnow-submitter` (`packages/agents/src/
+indexnow-submitter/index.ts`) is hard-keyed to `sites.id` (Postgres uuid) end to end —
+input schema, `getDb().select().from(sites)`, `geoSeoAudits`/`seoRecommendations`-style
+FK writes. Bending it to accept an optional non-DB path would be exactly the load-bearing
+in-place modification this project avoids (same reasoning as D4's rejection of forking
+`/api/lead`).
+
+**Decision: validated as proposed.**
+1. Add `csSite.indexnowKey` (string, `readOnly: true`, group `seo`) — mirrors
+   `sites.indexnow_key`'s role but lives entirely in Sanity, consistent with `csSite`
+   being the complete source of truth for this line.
+2. Add a custom branch to `apps/site-host/app/api/indexnow-key/route.ts`: branch on the
+   `x-site-mode` header (already set by `proxy.ts` for every mode) and call
+   `resolveCurrentCustomSite()` instead of `resolveCurrentSite()` when `x-site-mode ===
+   'custom'`. This is not a new seam violation — ADR 0033's original Consequences section
+   already anticipated this exact edit ("every fallthrough chain that currently branches
+   on `x-site-mode` ... gains a third branch for `custom`"), the same way `robots.ts` and
+   `sitemap.ts` already do. The route keeps single responsibility ("serve the IndexNow key
+   file for whatever host resolved"); it gains a second resolver call, not a second
+   purpose.
+3. Add `scripts/customsites-indexnow.ts`, following the existing `scripts/backfill-
+   indexnow.ts` shape (dry-run by default, `--execute` to submit, `tsx` entrypoint, a
+   `pnpm customsites-indexnow` script alias). It queries `csSite` for all sites via GROQ,
+   generates + patches `indexnowKey` on first run if absent (same lazy pattern the agent
+   uses for tenant sites, same `randomBytes(16).toString('hex')` convention), derives the
+   URL set from the live `/sitemap.xml` (same technique as the agent's
+   `fetchSitemapUrls`), and calls the existing `submitUrls()` from
+   `packages/integrations/src/indexnow/index.ts` directly — that function is already
+   generic over `{ host, key, urls }` with no Postgres dependency, so it needed zero
+   changes to be reused here.
+4. **Gate:** the script skips (logs, does not submit) any `csSite` where
+   `robotsDisallow !== false`. This enforces D6's launch-noindexed invariant at the
+   submission layer too, not just at the metadata layer — submitting a noindexed site's
+   URLs to IndexNow would burn crawl signal on pages that 403/noindex at fetch time,
+   the same harm ADR 0014 §1 called out for the `site.deployed` (too-early) trigger.
+
+**Trigger model — manual, not automatic.** Unlike the tenant line, there is no
+`agent_events` row to hang a trigger on (that's D4, deliberately). The script is
+operator-run: once at DNS cutover (when `robotsDisallow` flips to `false`), and again
+after any content edit worth a recrawl ping. This is documented as a step in the Custom
+Sites go-live runbook, not automated via Vercel Cron — a handful of sites doesn't justify
+a new scheduled-function surface. **Revisit trigger:** if the line passes 3 live custom
+sites, add a Vercel Cron route that re-runs the same script's logic on a schedule; still
+no Postgres, no agent, no `agent_events` — cron is just a clock, not a coupling.
+
+### D8 — GEO/AEO auditing for Custom Sites: standalone script, ephemeral results
+
+**Decision: (b) — a standalone script under `scripts/`, not an extension of the
+`geo-aeo-auditor` agent.** The agent is unusable as a base: `runReview` selects from
+`sites`/`tenants`, writes to `geoSeoAudits` (siteId FK), writes to `seoRecommendations`
+(siteId FK, drives an `awaiting_review` operator queue that has no Custom Sites concept
+of "approve"), and its low-risk auto-apply path raw-inserts `agent_events` rows targeting
+itself. Every one of those is a Postgres write keyed to a row that D4 says must not exist
+for a custom site. Adding a `csSite`-keyed branch would mean either (i) relaxing the FK/
+schema to accept a non-uuid site key — a load-bearing migration to a table three other
+agents and an operator UI page depend on, for one client's site — or (ii) forking the
+apply/write path with `if (mode === 'custom') { skip db }` scattered through a 700-line
+agent. Both are the load-bearing-modification anti-pattern; neither is proportionate to
+one auditor's worth of coverage.
+
+What *is* reusable, and cleanly: `packages/agents/src/geo-aeo-auditor/checks.ts` is
+already a pure, dependency-free module — no DB import, no Sanity import (the agent
+itself lazy-imports Sanity specifically to keep this file's test surface clean). Every
+scoring function (`runChecks`, `geoScore`, `llmsTxtCompleteness`, `schemaCoverage`,
+`answerExtractability`, `entityConsistency`, `markdownCoverage`, `isoWeek`) is exported
+and importable standalone. `scripts/customsites-geo-audit.ts` imports these directly,
+fetches `llms.txt` + a few live pages + their `.md` twins over plain `fetch` (same
+approach as the agent's `fetchLiveAssets`/`fetchMarkdownTwins`), and runs the identical
+deterministic checks — full parity on all five subscores, zero new agent code, zero DB
+touch.
+
+**Where results go — explicit ruling: nowhere durable.** The script prints a
+human-readable report (score, subscores, findings) to stdout on each manual run. It does
+**not** write to `geoSeoAudits`, does not create a new `csAudit` Sanity doc type, and does
+not emit an `agent_events` row. This is a deliberate scope cut, not an oversight:
+- Writing to `geoSeoAudits` or `agent_events` would directly break ADR 0033's stated
+  consequence that this line is "invisible to the operator-platform DB and the
+  improvement loop" — those tables *are* what the improvement loop and fleet-metrics
+  read.
+- A new persisted `csAudit` Sanity doc type was considered and rejected for now: nothing
+  in the operator UI or improvement loop would consume it (there is no Custom Sites
+  operator surface at all), and this codebase has already burned the "mirrors a decision
+  nothing consumes" mistake once — the old generic `agentApprovals`/`autoApproveRules`
+  inbox, removed 2026-06-09 for exactly that reason. Building a report nobody reads
+  repeats it.
+- The consequence accepted: no trend history, no auto-recommendation, no auto-apply — an
+  operator has to actually run the script and read the terminal output to know a custom
+  site's GEO score. For a single client site with no revenue-scale pressure, that's an
+  acceptable trade against building unused persistence.
+
+**Trigger condition to revisit:** persist audit runs (new `csAudit` Sanity doc, timestamp
++ score + subscores, no FK to anything Postgres) once either (a) the line has ≥3 live
+sites, making manual terminal-reading impractical, or (b) an operator UI for Custom Sites
+gets built for other reasons (at which point a `csAudit` list becomes cheap to surface
+there). Until then, this is intentionally a CLI tool, not a monitored system — consistent
+with `DEPRECATIONS.md` deferring "monitoring" fleet-wide pending revenue evidence.
+
+### D9 — Freshness loop for Custom Sites: defer
+
+ADR 0032 built a `riskLevel`-tiered freshness/staleness loop on top of `seoRecommendations`
+— which, per D8, custom sites cannot write to without breaking D4. A GROQ staleness report
+over `csPage` / `csPracticeArea` / `csPublication` (`modifiedAt` vs. now, flagging pages
+untouched for N months) is cheap to write as a **read-only** script — no different in kind
+from D8's audit script. But there is no action to attach to its output yet: ADR 0032's
+model routes `low` risk through `operator-tick` auto-apply and `medium`/`high` through the
+`seoRecommendations` `awaiting_review` queue, and neither exists for this line (again,
+D4/D8). A staleness report with nowhere to route its findings is a report nobody consumes
+— the same anti-pattern D8 just rejected.
+
+**Decision: defer.** Do not build the staleness script now. **Trigger condition to
+revisit:** either (a) D8's audit script gets built out with persistence (line ≥3 sites),
+at which point a staleness check is a cheap additive check inside the same script rather
+than a separate one, or (b) a Custom Sites operator UI is built, giving staleness findings
+somewhere to surface as a manual worklist (no auto-apply required — even a "last touched
+14 months ago" list rendered read-only would be enough to close the loop, unlike D8's
+score which has no natural manual-review surface without one). Record this explicitly so
+the next person auditing SEO/AEO/GEO coverage doesn't rediscover D8's "report nobody
+consumes" trap independently.
+
+### D10 — Schema additions: approved with two structural amendments
+
+The proposed additive list is approved, with `barAdmissions[]` given structure instead of
+being left as a plain string array (the rest of the list is approved exactly as proposed):
+
+- **`csSite.indexnowKey`** (string, `readOnly: true`, group `seo`) — per D7.
+- **`csSite.titleTemplate`** (string, group `seo`, e.g. `"%s | Michael J. Bayard
+  Construction ADR"`) — approved. `apps/site-host/app/cadr/layout.tsx`'s
+  `generateMetadata` currently hardcodes this string as a template literal; it becomes
+  `site.titleTemplate ?? `%s | ${site.name}`` (site-name fallback, not a hardcoded string,
+  so an empty field never breaks site #2). This is the one code change this amendment
+  actually requires outside net-new files — a one-line fallback swap in an existing
+  `generateMetadata`, not a rewrite of the metadata seam itself; `seo-meta.ts` is
+  untouched (Custom Sites already has its own `generateMetadata`, not `seo-meta.ts`'s, per
+  D1/D3's scoping).
+- **`csSite.areaServed[]`** (array of string, group `seo`) — approved, feeds
+  `LegalService.areaServed` in `CustomSiteJsonLd`. Distinct from `csAddress` (the office
+  location); a mediator/arbitrator practice serves a wider region than its office city.
+- **`csAttorney.barAdmissions[]`** — approved, but as a new object type
+  `csBarAdmission { jurisdiction: string (required), barNumber?: string, admittedYear?:
+  number }`, not a plain string array like the existing `credentials[]`. Rationale: this
+  is the field that maps most directly to `hasCredential`'s
+  `credentialCategory: 'license'` + `recognizedBy` schema.org shape, and jurisdiction is
+  the one sub-value a consumer (or a future E-E-A-T checker) will want to query on its
+  own; a flat string ("California") loses that. This is the only deviation from the
+  proposal as stated — flagged explicitly per instructions, not silently substituted.
+- **`csAttorney.credentials[]{name, issuer, year, url}`** — approved exactly as proposed,
+  as object type `csCredential`. Feeds `hasCredential` generically for anything that
+  isn't a bar admission (AAA/ICC certifications, judicial-reference appointments, etc.).
+- **`csAttorney.arbitratorPanels[]`** (array of string) — approved as proposed. Simple
+  roster-membership strings (e.g. "AAA Panel of Arbitrators", "JAMS Neutral") feed
+  `memberOf`; no sub-structure needed since panel membership doesn't carry a per-entry
+  date/issuer the way `credentials[]` does.
+- **`csSeo.noindex`** (boolean, optional) and **`csSeo.canonicalOverride`** (url,
+  optional) — approved. These add page-level overrides on top of `csSite.robotsDisallow`
+  (site-wide default per D6); a live site can still want one page noindexed (e.g. a
+  disclaimer page) or canonicalized to a syndicated original (legal publications are
+  often cross-posted).
+- **`csFaqBlock`** page-builder block, reusing `csFaqItem` (`{ heading?: string, items:
+  csFaqItem[] }`) — approved, added only to `csPage.pageBuilder`'s `of` array. FAQs
+  today exist only on `csPracticeArea` (a plain `faqs` array, not a page-builder block);
+  a generic page (e.g. a standalone "Why Arbitration" page) has no way to carry FAQPage
+  content. `csPracticeArea.faqs` is unchanged — this is additive, not a replacement.
+- **`csTestimonial.rating`** (number, optional, `validation: r => r.min(1).max(5)`) —
+  approved, feeds `Review`/`AggregateRating` JSON-LD once a testimonial-rendering
+  component reads it (that renderer change is out of scope here; the field is the
+  prerequisite).
+
+None of these fields touch `packages/shared/src/types.ts` (`ContentBundle`) — they are
+`cs*`-scoped Sanity schema only, consistent with D2/D3's scoping of Portable Text and the
+generic schema to Custom Sites exclusively. ADR 0032 Decision 1's operational-facts-are-
+passthrough rule (never `ContentBundle`) applies here by the same logic even though these
+are Custom Sites, not R&R: none of this is LLM-generated copy, all of it is
+operator/client-entered fact.
+
+---
+
+## Amendment 1 consequences
+
+- `packages/sanity-schema/src/types/customsites/custom-site.ts` gains `indexnowKey`,
+  `titleTemplate`, `areaServed`; `custom-attorney.ts` gains `barAdmissions` (new
+  `csBarAdmission` object), restructures `credentials` to the new `csCredential` object
+  shape (breaking change to the existing plain-string `credentials[]` field — see
+  migration note below); `custom-testimonial.ts` gains `rating`; `objects.ts` gains
+  `csSeo.noindex`/`csSeo.canonicalOverride`, a new `csBarAdmission` type, a new
+  `csCredential` type, and a new `csFaqBlock` type; `custom-page.ts`'s `pageBuilder.of`
+  gains `csFaqBlock`.
+- **Migration note:** `csAttorney.credentials` already exists today as `array of string`.
+  Changing it to `array of csCredential` is a breaking schema change for any already-
+  authored content (currently just constructionadrservices.com's attorney docs, if
+  populated). `next-engineer` must check for existing string-array data on that field
+  before deploying the schema change and, if any exists, write a one-time Studio-side or
+  script-side migration (`{name: <string>}` at minimum) rather than silently dropping
+  data — this is a hand-written-migration-discipline concern even though it's a Sanity
+  field, not a Postgres column.
+- `apps/site-host/app/api/indexnow-key/route.ts` gains a mode branch (D7) — the one
+  existing-file edit beyond the metadata title-template fallback (D10).
+  `apps/site-host/app/cadr/layout.tsx`'s `generateMetadata` gains a
+  `site.titleTemplate ?? ...` fallback (D10) — the other.
+- Two new scripts (`scripts/customsites-indexnow.ts`, `scripts/customsites-geo-audit.ts`)
+  and two new `package.json` script aliases. No new agent, no new agent registry entry,
+  no new migration, no new `agent_events` type — D4 holds through this amendment.
+- Custom Sites GEO/AEO coverage remains **manually triggered and ephemeral** by design
+  (D7's script is operator-run, D8's results are not persisted, D9 is deferred outright).
+  This is a real gap relative to the tenant line's fully automated freshness/IndexNow
+  loop, accepted deliberately for a low-volume, non-revenue-scored line rather than
+  building unused automation — tracked via the two explicit trigger conditions in D8/D9
+  so it doesn't get silently forgotten.
