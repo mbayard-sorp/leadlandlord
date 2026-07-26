@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { notFound } from 'next/navigation';
 import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
-import { fetchCustomSiteAttorneys } from '@/lib/customsites-sanity';
+import { fetchCustomSiteAttorneys, fetchCustomSiteTestimonials } from '@/lib/customsites-sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
 import { customSiteFontVars } from '@/lib/customsites-fonts';
 import { TopBar } from '@/components/customsites/TopBar';
@@ -25,8 +25,10 @@ export default async function CustomSiteLayout({ children }: { children: React.R
   const site = await resolveCurrentCustomSite();
   if (!site) notFound();
 
-  const attorneys = await fetchCustomSiteAttorneys(site.siteKey);
-  const attorney = attorneys[0] ?? null;
+  const [attorneys, testimonials] = await Promise.all([
+    fetchCustomSiteAttorneys(site.siteKey),
+    fetchCustomSiteTestimonials(site.siteKey),
+  ]);
   const baseUrl = await currentRequestBaseUrl();
 
   return (
@@ -35,7 +37,7 @@ export default async function CustomSiteLayout({ children }: { children: React.R
         Skip to main content
       </a>
 
-      <CustomSiteJsonLd site={site} attorney={attorney} baseUrl={baseUrl} />
+      <CustomSiteJsonLd site={site} attorneys={attorneys} testimonials={testimonials} baseUrl={baseUrl} />
       <CustomSiteNavigationJsonLd site={site} baseUrl={baseUrl} />
 
       <TopBar site={site} />
@@ -86,7 +88,9 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(baseUrl),
     title: {
       default: site.seo?.metaTitle ?? site.name,
-      template: `%s | Michael J. Bayard Construction ADR`,
+      // Site-name fallback, never a hardcoded brand string (ADR 0033 Amendment 1
+      // D10) — so a future custom site #2 isn't accidentally branded as CADR.
+      template: site.titleTemplate ?? `%s | ${site.name}`,
     },
     description,
     // Explicit override: the root layout (app/layout.tsx) defaults to

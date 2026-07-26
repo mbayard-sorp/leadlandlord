@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import type { CsAttorneyBlock } from '@/lib/customsites-sanity';
+import { csImageUrl, type CsAttorneyBlock } from '@/lib/customsites-sanity';
 import { Prose } from '../Prose';
 
 interface Props {
@@ -25,7 +25,7 @@ export function AttorneyBlock({ block }: Props) {
           <div className="cs-attorney-photo">
             {attorney.photoUrl ? (
               <Image
-                src={attorney.photoUrl}
+                src={csImageUrl(attorney.photoUrl, { w: 900 })}
                 alt={`Portrait of ${attorney.name}`}
                 fill
                 sizes="(max-width: 899px) 100vw, 260px"
@@ -73,7 +73,16 @@ export function AttorneyBlock({ block }: Props) {
             {attorney.credentials && attorney.credentials.length > 0 ? (
               <ul className="cs-attorney-credentials">
                 {attorney.credentials.map((c) => (
-                  <li key={c}>{c}</li>
+                  <li key={c.name}>
+                    {c.url ? (
+                      <a href={c.url} target="_blank" rel="noopener noreferrer">
+                        {c.name}
+                      </a>
+                    ) : (
+                      c.name
+                    )}
+                    {c.issuer ? ` — ${c.issuer}` : ''}
+                  </li>
                 ))}
               </ul>
             ) : null}

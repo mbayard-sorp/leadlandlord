@@ -8,6 +8,27 @@ interface Props {
   className?: string;
 }
 
+/** Pulls the plain text out of a PortableText mark's children when it's a
+ * single text node — used to detect "the link text is literally the URL"
+ * (e.g. a raw calawyers.org/... address dropped straight into a bio) so it
+ * can be rendered more legibly than a full URL sitting mid-sentence. */
+function extractPlainText(node: React.ReactNode): string | null {
+  if (typeof node === 'string') return node;
+  if (Array.isArray(node) && node.length === 1) return extractPlainText(node[0]);
+  return null;
+}
+
+const BARE_URL_RE = /^(?:https?:\/\/|www\.)\S+$/i;
+
+/** Shortens a bare-URL link label to a readable host + partial path instead
+ * of dumping the full address into running text. The `href` itself is never
+ * touched — only what's visibly rendered. */
+function shortenUrlLabel(text: string, max = 40): string {
+  const stripped = text.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  if (stripped.length <= max) return stripped;
+  return `${stripped.slice(0, max - 1)}…`;
+}
+
 const components: PortableTextComponents = {
   block: {
     h2: ({ children }) => <h2>{children}</h2>,
@@ -23,12 +44,18 @@ const components: PortableTextComponents = {
       const href: string | undefined = value?.href;
       if (!href) return <>{children}</>;
       const isInternal = href.startsWith('/') || href.startsWith('#');
+      const plainText = extractPlainText(children);
+      const isBareUrlLabel = Boolean(plainText && BARE_URL_RE.test(plainText.trim()));
+      // Content note: the graceful fix belongs here (rendering), but the
+      // cleaner long-term fix is authoring descriptive link text in Sanity
+      // instead of pasting a raw URL as the label — flagged, not changed here.
+      const label = isBareUrlLabel ? shortenUrlLabel(plainText!.trim()) : children;
       if (isInternal) {
-        return <Link href={href}>{children}</Link>;
+        return <Link href={href}>{label}</Link>;
       }
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {children}
+        <a href={href} target="_blank" rel="noopener noreferrer" className={isBareUrlLabel ? 'cs-prose-url-link' : undefined}>
+          {label}
         </a>
       );
     },

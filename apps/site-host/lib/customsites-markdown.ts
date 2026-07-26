@@ -4,6 +4,7 @@ import {
   fetchCustomSitePracticeAreaFull,
   fetchCustomSitePublications,
   fetchCustomSitePublicationFull,
+  fetchCustomSitePublicationsFull,
   fetchCustomSitePageBySlug,
   type CustomSite,
   type CustomSitePageFull,
@@ -181,10 +182,19 @@ function blockTitleLines(heading?: string | null, eyebrow?: string | null): stri
 }
 
 /** One csPage.pageBuilder member -> markdown. Every block type renders
- * something reasonable; blocks with no textual content (badges, publications
- * teasers that are rendered as a live list elsewhere) render an empty string
- * and are filtered out by the caller. */
-function pageBuilderBlockToMarkdown(block: CsPageBuilderBlock): string {
+ * something reasonable; blocks with no textual content (badges) render an
+ * empty string and are filtered out by the caller.
+ *
+ * `publications` is the site's full publication list, pre-fetched by the
+ * caller (kept a plain parameter, not a live fetch inside this function, so
+ * pageBuilderToMarkdown stays synchronous — required by its existing test
+ * suite, which calls it with no siteKey/fetch in scope). Defaults to []
+ * so a csPublicationsBlock renders its heading only when the caller has no
+ * publication data to inline (the pre-Phase-3 behavior). */
+function pageBuilderBlockToMarkdown(
+  block: CsPageBuilderBlock,
+  publications: CustomSitePublicationFull[] = [],
+): string {
   switch (block._type) {
     case 'csHeroBlock': {
       const lines = [`# ${block.heading}`];
@@ -224,8 +234,29 @@ function pageBuilderBlockToMarkdown(block: CsPageBuilderBlock): string {
     }
     case 'csBadgeRowBlock':
       return '';
-    case 'csPublicationsBlock':
-      return blockTitleLines(block.heading, block.eyebrow).join('\n\n');
+    case 'csPublicationsBlock': {
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      // Mirrors PublicationsBlock.tsx's render rule: an explicit `limit` is a
+      // teaser of the N most recent items of any kind; no limit is the full
+      // article index (kind === "article"). Kept in sync so the markdown
+      // mirror never diverges from what the live block actually renders.
+      const items =
+        block.limit && block.limit > 0
+          ? publications.slice(0, block.limit)
+          : publications.filter((p) => p.kind === 'article');
+      const itemLines = items.map((p) => `- [${p.title}](/${p.slug})`);
+      if (itemLines.length) lines.push(itemLines.join('\n'));
+      return lines.join('\n\n');
+    }
+    case 'csFaqBlock': {
+      const items = block.items ?? [];
+      if (!items.length) return '';
+      const lines = [`## ${block.heading ?? 'Frequently Asked Questions'}`];
+      for (const item of items) {
+        lines.push(`**${item.question}**`, item.answer);
+      }
+      return lines.join('\n\n');
+    }
     case 'csCalloutBlock': {
       const lines: string[] = [];
       if (block.label) lines.push(`**${block.label}**`);
@@ -246,18 +277,90 @@ function pageBuilderBlockToMarkdown(block: CsPageBuilderBlock): string {
   }
 }
 
-export function pageBuilderToMarkdown(blocks: CsPageBuilderBlock[] | null | undefined): string {
+export function pageBuilderToMarkdown(
+  blocks: CsPageBuilderBlock[] | null | undefined,
+  publications: CustomSitePublicationFull[] = [],
+): string {
   if (!blocks || blocks.length === 0) return '';
   return blocks
-    .map(pageBuilderBlockToMarkdown)
+    .map((b) => pageBuilderBlockToMarkdown(b, publications))
     .filter((s) => s.length > 0)
     .join('\n\n');
 }
 
-function pageToMarkdown(page: CustomSitePageFull): string {
+function pageToMarkdown(page: CustomSitePageFull, publications: CustomSitePublicationFull[] = []): string {
   const parts = [frontMatter(page.title, [page.modifiedAt ? `Last modified: ${page.modifiedAt}` : null])];
-  const body = pageBuilderToMarkdown(page.pageBuilder);
+  const body = pageBuilderToMarkdown(page.pageBuilder, publications);
   if (body) parts.push(body);
+  return parts.join('\n\n');
+}
+
+/** True when a pageBuilder array carries a csPublicationsBlock — gates the
+ * extra fetchCustomSitePublicationsFull round trip so most pages (which don't
+ * embed a publications teaser) don't pay for it. */
+function needsPublications(blocks: CsPageBuilderBlock[] | null | undefined): boolean {
+  return (blocks ?? []).some((b) => b._type === 'csPublicationsBlock');
+}
+
+/**
+ * Explicit /contact.md serializer (ADR 0033 Amendment 1 D10). The rendered
+ * /contact route is custom-coded (address/phone/email + a form), not a plain
+ * pageBuilder walk, so relying on the generic csPage lookup would either 404
+ * (no matching csPage) or omit the contact details entirely (a csPage exists
+ * but its pageBuilder holds only intro copy + testimonials). This mirrors what
+ * app/cadr/contact/page.tsx actually renders.
+ */
+function contactMarkdown(site: CustomSite): string {
+  const lines = ['# Contact Us'];
+  if (site.tagline) lines.push(site.tagline);
+
+  const addr = site.address;
+  const details: string[] = [];
+  if (addr?.street || addr?.city) {
+    const addressLines = [
+      addr?.street,
+      addr?.unit,
+      [addr?.city, addr?.state, addr?.zip].filter(Boolean).join(', '),
+    ].filter((l): l is string => Boolean(l));
+    if (addressLines.length) details.push(addressLines.join('  \n'));
+  }
+  if (site.phone) details.push(`Phone: ${site.phone}`);
+  if (site.email) details.push(`Email: ${site.email}`);
+  if (details.length) lines.push(details.join('\n\n'));
+
+  return lines.join('\n\n');
+}
+
+/**
+ * Explicit /publications.md serializer (ADR 0033 Amendment 1 D10). Mirrors
+ * app/cadr/publications/page.tsx's two-bucket layout (written works, then
+ * presentations) rather than relying on the (today near-empty) generic
+ * csPage lookup for the "publications" slug.
+ */
+function publicationsIndexMarkdown(site: CustomSite, publications: CustomSitePublicationFull[]): string {
+  const written = publications.filter((p) => p.kind === 'publication');
+  const presentations = publications.filter((p) => p.kind === 'presentation');
+
+  const bucket = (heading: string, items: CustomSitePublicationFull[]): string => {
+    if (items.length === 0) return '';
+    const entries = items.map((p) => {
+      const meta = [p.externalEvent, p.externalDate].filter(Boolean).join(' — ');
+      const parts = [`### ${p.title}`];
+      if (meta) parts.push(`*${meta}*`);
+      if (p.coAuthors) parts.push(`With ${p.coAuthors}`);
+      if (p.excerpt) parts.push(p.excerpt);
+      if (p.pdfUrl) parts.push(`[Download PDF](${p.pdfUrl})`);
+      return parts.join('\n\n');
+    });
+    return [`## ${heading}`, ...entries].join('\n\n');
+  };
+
+  const parts = [
+    frontMatter('Publications', [`Articles, publications, and presentations from ${site.name}.`]),
+    bucket('Publications', written),
+    bucket('Expert Seminar Guest Speaker / Presentations', presentations),
+  ].filter((s) => s.length > 0);
+
   return parts.join('\n\n');
 }
 
@@ -303,6 +406,8 @@ function titleBlock(title: string, tagline?: string | null): string {
 /**
  * Resolve the markdown for a single path on a Custom Site.
  *   "/"                          -> home csPage (pageBuilder), else site name + tagline
+ *   "/contact"                   -> explicit serializer (address/phone/email; not a pageBuilder walk)
+ *   "/publications"              -> explicit serializer (two-bucket index; not a pageBuilder walk)
  *   "/<slug>"                    -> matching csPage (pageBuilder)
  *   "/practice-areas/<slug>"     -> matching csPracticeArea (body + FAQs)
  *   "/publications/<slug>"       -> matching csPublication (body + metadata)
@@ -313,12 +418,27 @@ export async function customSiteMarkdownForPath(site: CustomSite, path: string):
 
   if (segments.length === 0) {
     const home = await fetchCustomSitePageBySlug(site.siteKey, 'home');
-    return home ? pageToMarkdown(home) : titleBlock(site.name, site.tagline);
+    if (!home) return titleBlock(site.name, site.tagline);
+    const publications = needsPublications(home.pageBuilder) ? await fetchCustomSitePublicationsFull(site.siteKey) : [];
+    return pageToMarkdown(home, publications);
   }
 
   if (segments.length === 1) {
+    // /contact.md and /publications.md are advertised via generateMetadata's
+    // mdPath on every site regardless of whether a same-slug csPage exists or
+    // has enough pageBuilder content to be useful — resolve them explicitly
+    // rather than falling through to the generic csPage lookup below.
+    if (segments[0] === 'contact') return contactMarkdown(site);
+    if (segments[0] === 'publications') {
+      const publications = await fetchCustomSitePublicationsFull(site.siteKey);
+      return publicationsIndexMarkdown(site, publications);
+    }
+
     const page = await fetchCustomSitePageBySlug(site.siteKey, segments[0]!);
-    if (page) return pageToMarkdown(page);
+    if (page) {
+      const publications = needsPublications(page.pageBuilder) ? await fetchCustomSitePublicationsFull(site.siteKey) : [];
+      return pageToMarkdown(page, publications);
+    }
     const pub = await fetchCustomSitePublicationFull(site.siteKey, segments[0]!);
     return pub ? publicationToMarkdown(pub) : null;
   }
@@ -351,12 +471,21 @@ export async function customSiteFullMarkdown(site: CustomSite): Promise<string> 
     Promise.all(practiceAreaCards.map((p) => fetchCustomSitePracticeAreaFull(site.siteKey, p.slug))),
     Promise.all(pubStubs.map((p) => fetchCustomSitePublicationFull(site.siteKey, p.slug))),
   ]);
+  const validPages = pages.filter((p): p is CustomSitePageFull => p !== null);
+  const validPublications = publications.filter((p): p is CustomSitePublicationFull => p !== null);
 
   const sections = [
     titleBlock(site.name, site.tagline),
-    ...pages.filter((p): p is CustomSitePageFull => p !== null).map(pageToMarkdown),
+    // /contact and /publications get the same explicit serializers as
+    // customSiteMarkdownForPath, rather than a generic pageBuilder walk, so
+    // llms-full.txt doesn't diverge from the single-page /md mirrors.
+    ...validPages.map((p) => {
+      if (p.slug === 'contact') return contactMarkdown(site);
+      if (p.slug === 'publications') return publicationsIndexMarkdown(site, validPublications);
+      return pageToMarkdown(p, validPublications);
+    }),
     ...practiceAreas.filter((p): p is CustomSitePracticeAreaFull => p !== null).map(practiceAreaToMarkdown),
-    ...publications.filter((p): p is CustomSitePublicationFull => p !== null).map(publicationToMarkdown),
+    ...validPublications.map(publicationToMarkdown),
   ];
 
   return sections.join('\n\n---\n\n') + '\n';

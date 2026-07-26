@@ -32,18 +32,55 @@ interface MobileDrawerProps {
 export function MobileDrawer({ links, phone }: MobileDrawerProps) {
   const [open, setOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+
+    // Move focus into the dialog on open — without this, keyboard/SR users
+    // stay parked on the (now visually covered) toggle button.
+    closeButtonRef.current?.focus();
+
+    function getFocusable(): HTMLElement[] {
+      if (!drawerRef.current) return [];
+      return Array.from(
+        drawerRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
     }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // Trap Tab/Shift+Tab inside the dialog so focus never leaks to the
+      // (visually hidden behind the overlay) rest of the page.
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
+      // Runs on every close path (Escape, overlay click, close button, link
+      // click, unmount) — hand focus back to the control that opened us.
+      toggleRef.current?.focus();
     };
   }, [open]);
 
@@ -51,6 +88,7 @@ export function MobileDrawer({ links, phone }: MobileDrawerProps) {
     <>
       <button
         type="button"
+        ref={toggleRef}
         className="cs-nav-toggle"
         aria-label={open ? 'Close menu' : 'Open menu'}
         aria-expanded={open}
@@ -73,7 +111,13 @@ export function MobileDrawer({ links, phone }: MobileDrawerProps) {
             aria-modal="true"
             aria-label="Site menu"
           >
-            <button type="button" className="cs-drawer-close" aria-label="Close menu" onClick={() => setOpen(false)}>
+            <button
+              type="button"
+              ref={closeButtonRef}
+              className="cs-drawer-close"
+              aria-label="Close menu"
+              onClick={() => setOpen(false)}
+            >
               &times;
             </button>
             {phone ? (

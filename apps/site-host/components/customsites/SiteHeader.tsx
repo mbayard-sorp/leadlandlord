@@ -64,7 +64,25 @@ export function SiteHeader({ site }: Props) {
 
         {site.phone ? (
           <a href={`tel:${site.phone}`} className="cs-btn cs-btn-primary cs-header-phone" aria-label={`Call ${site.phone}`}>
-            Call {site.phone}
+            {/* Below ~420px this is icon-only (see .cs-header-phone-icon /
+                .cs-header-phone-text in adr.css) — the aria-label above
+                already carries the full number, so the icon is decorative. */}
+            <svg
+              className="cs-header-phone-icon"
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 20 20"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4.2 3h2.6l1.3 3.4-1.8 1.4a10.6 10.6 0 0 0 4.9 4.9l1.4-1.8L16 12.2v2.6a1.4 1.4 0 0 1-1.5 1.4A13.6 13.6 0 0 1 2.8 4.5 1.4 1.4 0 0 1 4.2 3Z" />
+            </svg>
+            <span className="cs-header-phone-text">Call {site.phone}</span>
           </a>
         ) : null}
 

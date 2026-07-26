@@ -16,15 +16,17 @@
  * Brass  #A9793B on Navy  #1C3A5E → ~3.02:1   borderline AA-Large only — do
  *   not use brass-on-navy for anything smaller than a large heading; use
  *   brass-light on navy instead.
- * White  #FFFFFF on Brass #A9793B → ~3.83:1   below normal-text AA; primary
- *   button label is kept bold/16px+ per the design brief's fixed brass value.
- *   Every primary-button occurrence uses font-weight 600 to mitigate — flag
- *   for a follow-up design decision if a true 4.5:1 button is required.
+ * White  #FFFFFF on Brass #A9793B → ~3.83:1   FAILS AA normal text. This is
+ *   why `.cs-btn-primary` uses `--cs-brass-ink`, not raw `--cs-brass`, as its
+ *   background — see the next line.
+ * White  #FFFFFF on Brass-ink #8C6530 → ~5.22:1  PASS. This is the primary-
+ *   button background everywhere the button appears (header/hero/mid-page/
+ *   sticky-mobile call CTAs, Send Message, drawer).
  *
- * `--cs-brass-ink` (#8C6530, darkened) is the AA-safe brass-on-paper text
- * token — used for the eyebrow label and the brass text-link, which are both
- * small/normal-weight text on the paper surface. It is NOT one of the raw
- * design tokens; it is derived here so small brass text passes 4.5:1.
+ * `--cs-brass-ink` (#8C6530, darkened) is the AA-safe brass token — used for
+ * the eyebrow label, the brass text-link, and the primary-button background
+ * (all small/normal-weight text or a filled control on a light surface). It
+ * is NOT one of the raw design tokens; it is derived here.
  */
 
 .cs-adr {
@@ -205,12 +207,15 @@
 }
 
 .cs-adr .cs-btn-primary {
-  background: var(--cs-brass);
+  /* --cs-brass-ink, not --cs-brass: see the contrast audit at the top of
+     this file — white-on-brass fails AA, white-on-brass-ink passes 5.22:1. */
+  background: var(--cs-brass-ink);
   color: #fff;
 }
 
-.cs-adr .cs-btn-primary:hover {
-  background: color-mix(in srgb, var(--cs-brass) 92%, black);
+.cs-adr .cs-btn-primary:hover,
+.cs-adr .cs-btn-primary:focus-visible {
+  background: color-mix(in srgb, var(--cs-brass-ink) 92%, black);
 }
 
 .cs-adr .cs-btn-secondary {
@@ -270,7 +275,11 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--cs-space-3);
-  padding: var(--cs-space-2) 0;
+  /* padding-block only — this element also carries .cs-container, which
+     already sets the horizontal padding. A plain `padding: v 0` shorthand
+     here would zero that out and clip the phone number/tagline against the
+     viewport edge below ~1200px. */
+  padding-block: var(--cs-space-2);
 }
 
 .cs-adr .cs-topbar-contact {
@@ -294,18 +303,35 @@
 }
 
 @media (max-width: 639px) {
-  .cs-adr .cs-topbar-email,
-  .cs-adr .cs-topbar-tagline {
+  /* Below 640px the header Call button and the sticky bottom bar already
+     cover the phone CTA, so the whole utility bar (phone/email/tagline) is
+     a third concurrent call CTA plus dead weight — hide it entirely instead
+     of leaving an empty strip once its children are gone. */
+  .cs-adr .cs-topbar {
     display: none;
   }
 }
 
 /* ── Header / nav ───────────────────────────────────────────────────────── */
 
+/* z-index scale (higher = closer to viewer). Kept in one place because the
+   mobile drawer's stacking is a common trap: the drawer/overlay are rendered
+   *inside* .cs-header's DOM subtree (see NavClient.tsx), and .cs-header is a
+   sticky-positioned stacking-context root. A descendant's z-index only wins
+   against elements OUTSIDE that subtree if the subtree root's own z-index is
+   higher than theirs — the drawer's local 150/151 can't out-stack the sticky
+   bar just by being numerically bigger. So .cs-header must sit above
+   .cs-sticky-bar for the drawer to ever render on top of it.
+     10  cs-page-header-bg / cs-hero-bg image + scrim layers (local contexts)
+     100 cs-sticky-bar         — mobile call bar, fixed to viewport bottom
+     130 cs-header             — sticky top nav (holds the drawer subtree)
+     150 cs-drawer-overlay     — mobile nav backdrop
+     151 cs-drawer             — mobile nav panel
+     200 cs-skip-link          — must never be obscured when focused */
 .cs-adr .cs-header {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 130;
   background: var(--cs-paper);
   border-bottom: 1px solid var(--cs-hairline);
 }
@@ -315,7 +341,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--cs-space-4);
-  padding: var(--cs-space-3) 0;
+  /* padding-block only — see the comment on .cs-topbar-inner above, same
+     .cs-container-clobbering bug. */
+  padding-block: var(--cs-space-3);
 }
 
 .cs-adr .cs-brand {
@@ -423,14 +451,34 @@
 
 .cs-adr .cs-header-phone {
   display: none;
+  gap: 8px;
+}
+
+.cs-adr .cs-header-phone-icon {
+  display: none;
+  flex-shrink: 0;
 }
 
 .cs-adr .cs-nav-toggle {
   display: none;
+  /* column, not row: the three bar spans need to stack vertically to read as
+     a hamburger icon — flex defaults to row, which would lay them out
+     side-by-side instead. */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: 1px solid var(--cs-hairline);
   border-radius: var(--cs-radius-control);
   padding: 8px 10px;
+  /* Measured 42x40 against the 44x44 WCAG target-size minimum with the box
+     sized by padding + content alone. min-width/min-height grow the tap
+     target to 44x44 without changing the visual bar-icon size — the header
+     row at 320px has ~12px of spare width past its content minimum (checked
+     against the icon-only phone control below), so this doesn't reintroduce
+     the horizontal-overflow regression Phase 1 fixed. */
+  min-width: 44px;
+  min-height: 44px;
   cursor: pointer;
 }
 
@@ -447,10 +495,40 @@
     display: none;
   }
   .cs-adr .cs-nav-toggle {
-    display: block;
+    /* inline-flex (not block) so align-items/justify-content on the base
+       rule above can center the bars once min-width/min-height grow the box
+       past the bars' own footprint to the 44x44 touch-target minimum. */
+    display: inline-flex;
   }
   .cs-adr .cs-header-phone {
     display: inline-flex;
+    /* The number was wrapping to two lines against the logo + hamburger in
+       this width band — keep it one line and shrink the control to fit. */
+    white-space: nowrap;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  /* Below ~420px, logo + full "Call (213) 383-9399" + hamburger no longer
+     fit on one row even at nowrap — the row overflowed the viewport by
+     9.4px (measured: toggle right edge 384.39 vs 375 viewport) and forced
+     horizontal page scroll. Collapse the header call control to an
+     icon-only 44px target; the anchor's aria-label still carries the full
+     number to assistive tech, and the sticky bottom bar + drawer both keep
+     the full "Call (213) 383-9399" label where there's room for it. */
+  .cs-adr .cs-header-phone {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .cs-adr .cs-header-phone-icon {
+    display: inline-flex;
+  }
+  .cs-adr .cs-header-phone-text {
+    display: none;
   }
 }
 
@@ -629,8 +707,11 @@
   margin-top: var(--cs-space-2);
 }
 
-/* Banner variant: wide photo behind the band, subject anchored right, copy
-   centered over the dark left side (matches the WP interior header). */
+/* Banner variant: wide photo behind the band. Below 900px there's no room to
+   keep copy off the subject, so it stays centered over a flat overlay (see
+   cs-page-header-bg::after). At >=900px it becomes a left-aligned column in
+   roughly the left half, sitting on a directional scrim, so the heading
+   never lands on the portrait regardless of where the subject is framed. */
 .cs-adr .cs-page-header--banner {
   min-height: 260px;
   display: flex;
@@ -655,23 +736,47 @@
 }
 
 @media (min-width: 900px) {
-  /* Reverse variant: for banners whose subject sits on the LEFT, flip the
-     falloff so the dark side is on the right and the left stays fully clear
-     (transparent by ~15% in) so the portrait reads without a filter. */
+  /* Reverse variant: subject on the LEFT, so the dark side (and the text
+     column) is on the right. Falls fully transparent by ~64% in, well clear
+     of the copy column, so the portrait on the left reads without a filter. */
   .cs-adr .cs-page-header--banner-reverse .cs-page-header-bg::after {
-    background: linear-gradient(270deg, rgba(19, 38, 60, 0.9) 22%, rgba(19, 38, 60, 0.4) 58%, rgba(19, 38, 60, 0) 85%);
+    background: linear-gradient(270deg, rgba(19, 38, 60, 0.92) 0%, rgba(19, 38, 60, 0.55) 38%, rgba(19, 38, 60, 0) 64%);
   }
 
-  /* Default variant: subject on the RIGHT, so the dark side is on the left and
-     the right stays fully clear. Mirror of the reverse falloff above. */
+  /* Default variant: subject on the RIGHT, dark side (and text column) on
+     the left. Mirror of the reverse falloff above. */
   .cs-adr .cs-page-header-bg::after {
-    background: linear-gradient(90deg, rgba(19, 38, 60, 0.9) 22%, rgba(19, 38, 60, 0.4) 58%, rgba(19, 38, 60, 0) 85%);
+    background: linear-gradient(90deg, rgba(19, 38, 60, 0.92) 0%, rgba(19, 38, 60, 0.55) 38%, rgba(19, 38, 60, 0) 64%);
   }
 }
 
 .cs-adr .cs-page-header-inner {
   position: relative;
   z-index: 1;
+}
+
+/* Decorative skyline motif for the flat (non-photo) interior-header state —
+   see PageHeader.tsx for when this renders instead of the portrait band.
+   Reuses the footer's skyline lockup logo, which is already art-directed for
+   a navy backdrop, so it reads as a brand mark rather than a stock asset.
+   Sits behind .cs-page-header-inner (z-index 1 above wins the stacking order
+   regardless of DOM order), same approach as cs-page-header-bg. */
+.cs-adr .cs-page-header-skyline {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  width: min(420px, 55vw);
+  height: 160px;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+@media (max-width: 639px) {
+  .cs-adr .cs-page-header-skyline {
+    width: min(260px, 68vw);
+    height: 100px;
+  }
 }
 
 .cs-adr .cs-page-header--banner .cs-page-header-inner {
@@ -687,14 +792,21 @@
     min-height: 460px;
   }
 
-  /* Keep the centered copy clear of the portrait on the right. */
+  /* Left-aligned column anchored to the darkest part of the scrim, roughly
+     the left half of the band, so the heading always sits on a dark field
+     instead of centering into wherever the fade happens to be lightest. */
   .cs-adr .cs-page-header--banner .cs-page-header-inner {
-    max-width: 62%;
+    text-align: left;
+    max-width: 50%;
+    margin-left: 0;
+    margin-right: auto;
   }
 
-  /* Reverse variant: portrait is on the left, so push the copy to the right. */
+  /* Reverse variant: portrait is on the left, so the column (and its scrim)
+     mirror to the right half. */
   .cs-adr .cs-page-header--banner-reverse .cs-page-header-inner {
     margin-left: auto;
+    margin-right: 0;
   }
 }
 
@@ -772,6 +884,38 @@
 .cs-adr .cs-services-rail a.is-current {
   color: var(--cs-brass-light);
   font-weight: 600;
+}
+
+/* Fills the dead space below a short service list on tall viewports with a
+   second, lower-commitment CTA than the page's own contact form further
+   down the page. */
+.cs-adr .cs-services-rail-cta {
+  margin-top: var(--cs-space-5);
+  padding: var(--cs-space-4);
+  background: rgba(247, 244, 239, 0.08);
+  border: 1px solid rgba(247, 244, 239, 0.18);
+  border-radius: var(--cs-radius-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-2);
+}
+
+.cs-adr .cs-services-rail-cta p {
+  color: rgba(247, 244, 239, 0.82);
+  font-size: 14px;
+  margin: 0 0 var(--cs-space-1);
+}
+
+.cs-adr .cs-services-rail-cta .cs-btn-primary {
+  justify-content: center;
+}
+
+.cs-adr .cs-services-rail-cta .cs-link {
+  justify-content: center;
+  /* .cs-link's default brass-ink is tuned for the paper background — on this
+     navy card it fails contrast (~3:1, see the audit note at the top of this
+     file), so it needs the same brass-light swap `.cs-section--navy` gets. */
+  color: var(--cs-brass-light);
 }
 
 @media (min-width: 900px) {
@@ -872,13 +1016,24 @@
   z-index: 0;
 }
 
-/* Light scrim only. The portrait is the point of this hero, so the overlay
-   just buys contrast for the centered copy instead of hiding the photo. */
+/* Below 900px there's no room to keep the copy off the subject, so it stays
+   centered under a flat top-to-bottom scrim. */
 .cs-adr .cs-hero-bg::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(19, 38, 60, 0.42), rgba(19, 38, 60, 0.58));
+}
+
+@media (min-width: 900px) {
+  /* At >=900px the centered headline was running straight across the
+     subject's torso. Switch to a directional scrim (dark at the left,
+     transparent by ~64% in) so a left-aligned copy column always sits on a
+     dark field while the portrait stays fully visible on the right —
+     art-directed instead of a flat box over the photo. */
+  .cs-adr .cs-hero-bg::after {
+    background: linear-gradient(90deg, rgba(19, 38, 60, 0.88) 0%, rgba(19, 38, 60, 0.55) 40%, rgba(19, 38, 60, 0) 64%);
+  }
 }
 
 .cs-adr .cs-hero-inner {
@@ -888,6 +1043,14 @@
   margin: 0 auto;
   text-align: center;
   text-shadow: 0 1px 12px rgba(11, 22, 36, 0.45);
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-hero-inner {
+    max-width: 50%;
+    margin: 0;
+    text-align: left;
+  }
 }
 
 /* Over a photo the brass eyebrow loses contrast, so the hero runs it white
@@ -904,6 +1067,13 @@
   font-size: 19px;
   line-height: 1.6;
   color: rgba(247, 244, 239, 0.92);
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-hero-subheading {
+    margin-left: 0;
+    margin-right: 0;
+  }
 }
 
 .cs-adr .cs-hero-cta {
@@ -982,6 +1152,24 @@
   aspect-ratio: 3 / 2;
   margin: calc(var(--cs-space-4) * -1) calc(var(--cs-space-4) * -1) var(--cs-space-3);
   background: var(--cs-paper);
+  overflow: hidden;
+}
+
+/* Unifying navy wash over the practice-area stock photos — sourced from
+   several different shoots, they clash in color temperature (warm sunset
+   construction shots next to cool corporate handshakes) sitting side by
+   side. `color` blend mode takes hue/saturation from this layer but keeps
+   the backdrop's own luminosity, so every card reads as one cohesive navy
+   duotone without crushing highlights/shadows into mud the way a flat
+   opacity overlay or `multiply` would. */
+.cs-adr .cs-card-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--cs-navy);
+  mix-blend-mode: color;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .cs-adr .cs-card h3 {
@@ -991,6 +1179,10 @@
 .cs-adr .cs-card-excerpt {
   color: var(--cs-muted);
   flex: 1;
+  /* Caps the measure so a teaser in a full-width single-column card (grid
+     collapses to 1 column below 900px — see .cs-grid-3) doesn't run 95+
+     characters per line; comfortable reading tops out around 70ch. */
+  max-width: 70ch;
 }
 
 /* ── Attorney block ─────────────────────────────────────────────────────── */
@@ -1061,6 +1253,12 @@
 
 .cs-adr .cs-reach-us a:hover {
   text-decoration: underline;
+}
+
+.cs-adr .cs-reach-us-note {
+  margin: var(--cs-space-2) 0 0;
+  font-size: 14px;
+  color: var(--cs-muted);
 }
 
 .cs-adr .cs-attorney-credentials {
@@ -1180,6 +1378,7 @@
 }
 
 .cs-adr .cs-testimonial-dot {
+  position: relative;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -1189,8 +1388,21 @@
   padding: 0;
 }
 
+/* The visual dot stays a small 9px mark (matches the design), but the tap
+   target grows to the 44px WCAG minimum via a transparent pseudo-element so
+   touch users don't need pixel precision to switch slides. */
+.cs-adr .cs-testimonial-dot::before {
+  content: '';
+  position: absolute;
+  inset: -17.5px;
+}
+
 .cs-adr .cs-testimonial-dot[aria-current='true'] {
+  /* Non-color active affordance (WCAG 1.4.1): the current dot widens into a
+     pill instead of relying on the brass fill alone to signal state. */
   background: var(--cs-brass);
+  width: 22px;
+  border-radius: 5px;
 }
 
 /* ── Badge row ──────────────────────────────────────────────────────────── */
@@ -1345,8 +1557,18 @@
 
 .cs-adr .cs-prose figcaption {
   font-size: 13px;
+  font-style: italic;
+  line-height: 1.5;
   color: var(--cs-muted);
   margin-top: var(--cs-space-2);
+}
+
+/* Bare-URL link labels (see Prose.tsx's shortenUrlLabel) get a slightly
+   smaller, break-friendly treatment instead of reading as body copy — a
+   civilized stand-in for the full address rather than the raw URL string. */
+.cs-adr .cs-prose-url-link {
+  font-size: 0.92em;
+  word-break: break-word;
 }
 
 /* ── Contact CTA / forms ────────────────────────────────────────────────── */
@@ -1394,6 +1616,17 @@
 .cs-adr .cs-form-input:focus,
 .cs-adr .cs-form-textarea:focus {
   border-color: var(--cs-brass);
+}
+
+.cs-adr .cs-form-input[aria-invalid='true'],
+.cs-adr .cs-form-textarea[aria-invalid='true'] {
+  border-color: #A03B3B;
+}
+
+.cs-adr .cs-form-field-error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #A03B3B;
 }
 
 .cs-adr .cs-form-honeypot {
@@ -1536,7 +1769,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 120;
+    z-index: 100;
     background: var(--cs-navy);
     padding: var(--cs-space-2) var(--cs-space-3);
     box-shadow: 0 -4px 16px rgba(19, 38, 60, 0.2);
