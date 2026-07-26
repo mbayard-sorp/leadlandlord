@@ -3,7 +3,7 @@ import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 import { fetchCustomSitePageBySlug } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
 import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
-import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
+import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ContactForm } from '@/components/customsites/ContactForm';
 import { PageBuilder } from '@/components/customsites/PageBuilder';
@@ -116,11 +116,12 @@ export async function generateMetadata() {
   if (!site) return {};
 
   const pageDoc = await fetchCustomSitePageBySlug(site.siteKey, 'contact');
+  const baseUrl = await currentRequestBaseUrl();
   const meta = buildPageMetadata({
     title: pageDoc?.seo?.metaTitle ?? pageDoc?.title ?? 'Contact Us',
     description: pageDoc?.seo?.metaDescription ?? `Get in touch with ${site.name}.`,
     path: '/contact',
-    image: pageDoc?.seo?.ogImageUrl ?? site.ogImageUrl ?? undefined,
+    image: pageDoc?.seo?.ogImageUrl ?? site.ogImageUrl ?? csOgFallbackImage(baseUrl, site.siteKey),
     siteName: site.name,
     mdPath: '/contact.md',
   });
