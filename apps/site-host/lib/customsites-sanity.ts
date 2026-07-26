@@ -531,6 +531,29 @@ export async function fetchCustomSiteAttorneys(siteKey: string): Promise<CustomS
   return result ?? [];
 }
 
+export interface CustomSiteOgAttorney {
+  name: string;
+  jobTitle?: string | null;
+  photoUrl?: string | null;
+  photoAlt?: string | null;
+}
+
+const CS_OG_ATTORNEY_QUERY = `*[_type=="csAttorney" && site->siteKey==$siteKey] | order(_createdAt asc)[0]{
+  name, jobTitle, "photoUrl": photo.asset->url, "photoAlt": photo.alt
+}`;
+
+/**
+ * Primary attorney (oldest-first, same ordering as fetchCustomSiteAttorneys /
+ * attorneyJsonLdId's `#attorney` convention) with just enough fields for the
+ * generated OG image fallback (app/cadr/og/route.tsx) — name/jobTitle/photo,
+ * nothing else. Kept separate from CS_ATTORNEY_LIST_QUERY so the layout's
+ * JSON-LD fetch doesn't pay for the photo field it never uses.
+ */
+export async function fetchCustomSiteOgAttorney(siteKey: string): Promise<CustomSiteOgAttorney | null> {
+  const result = await sanity.fetch<CustomSiteOgAttorney | null>(CS_OG_ATTORNEY_QUERY, { siteKey });
+  return result ?? null;
+}
+
 export async function fetchCustomSitePublicationFull(
   siteKey: string,
   slug: string,

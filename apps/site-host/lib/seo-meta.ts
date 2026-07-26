@@ -31,6 +31,16 @@ export function canonicalPath(path: string): string {
   return stripped === '' ? '/' : stripped;
 }
 
+/** Optional image dimensions — when present, Next emits og:image:width /
+ * og:image:height so crawlers can size a large card without fetching the
+ * image first. Additive: existing callers passing a plain string are
+ * unaffected (no width/height tags emitted for those). */
+export interface PageMetaImage {
+  url: string;
+  width?: number;
+  height?: number;
+}
+
 interface PageMetaInput {
   title: string;
   description: string;
@@ -39,13 +49,13 @@ interface PageMetaInput {
   /** OG type. Defaults to 'website'; use 'article' for blog/info pages. */
   ogType?: 'website' | 'article';
   /**
-   * Absolute or relative image URL.
+   * Absolute or relative image URL, or an object carrying known dimensions.
    * Prefer page.og_image_url when present (Phase 1 adds this field to
    * PageSchema). Callers should pass:
    *   image: (page as any).og_image_url ?? bundle.hero_image_url
    * so this works whether Phase 1 has merged yet.
    */
-  image?: string | null;
+  image?: string | PageMetaImage | null;
   /** ISO timestamp for OG article publishedTime. */
   publishedTime?: string;
   siteName?: string;
@@ -64,7 +74,12 @@ interface PageMetaInput {
 export function buildPageMetadata(opts: PageMetaInput): Metadata {
   const { title, description, path, ogType = 'website', image, publishedTime, siteName, mdPath } = opts;
   const canonical = canonicalPath(path);
-  const images = image ? [image] : undefined;
+  const normalizedImage: PageMetaImage | undefined = image
+    ? typeof image === 'string'
+      ? { url: image }
+      : image
+    : undefined;
+  const images = normalizedImage ? [normalizedImage] : undefined;
 
   const og: NonNullable<Metadata['openGraph']> = {
     type: ogType,
@@ -85,7 +100,10 @@ export function buildPageMetadata(opts: PageMetaInput): Metadata {
     },
     openGraph: og,
     twitter: {
-      card: 'summary_large_image',
+      // Only promise a large-image card when there's actually an image to
+      // show — a page with no image still gets a 'summary' card instead of
+      // an empty large-card slot.
+      card: images ? 'summary_large_image' : 'summary',
       title,
       description,
       ...(images ? { images } : {}),

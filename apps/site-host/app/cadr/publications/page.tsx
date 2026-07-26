@@ -4,7 +4,7 @@ import type { CustomSitePublicationFull } from '@/lib/customsites-sanity';
 import { fetchCustomSitePublicationsFull, fetchCustomSitePageBySlug } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
 import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
-import { applyCsSeoOverrides } from '@/lib/customsites-metadata';
+import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ContactCtaBlock } from '@/components/customsites/blocks/ContactCtaBlock';
 
@@ -135,11 +135,12 @@ export async function generateMetadata() {
   if (!site) return {};
 
   const pageDoc = await fetchCustomSitePageBySlug(site.siteKey, 'publications');
+  const baseUrl = await currentRequestBaseUrl();
   const meta = buildPageMetadata({
     title: pageDoc?.seo?.metaTitle ?? pageDoc?.title ?? 'Publications',
     description: pageDoc?.seo?.metaDescription ?? `Articles, publications, and presentations from ${site.name}.`,
     path: '/publications',
-    image: pageDoc?.seo?.ogImageUrl ?? site.ogImageUrl ?? undefined,
+    image: pageDoc?.seo?.ogImageUrl ?? site.ogImageUrl ?? csOgFallbackImage(baseUrl, site.siteKey),
     siteName: site.name,
     mdPath: '/publications.md',
   });

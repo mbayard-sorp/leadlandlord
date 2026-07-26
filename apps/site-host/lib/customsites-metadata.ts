@@ -1,5 +1,23 @@
 import type { Metadata } from 'next';
 import type { CustomSiteSeo } from './customsites-sanity';
+import type { PageMetaImage } from './seo-meta';
+
+/**
+ * Absolute URL (as a PageMetaImage, with known 1200x630 dims) to the
+ * generated OG image fallback at app/cadr/og/route.tsx — used when neither a
+ * page nor csSite has an explicit ogImage (a client-uploaded ogImage always
+ * wins; callers must put this last in their `??` fallback chain). The
+ * `?cs=` query param makes the URL self-resolving through proxy.ts
+ * regardless of Host header — needed for the dev `?cs=`/`ll_cs` bypass,
+ * harmless (redundant) once the real domain is attached in CUSTOM_HOSTS.
+ */
+export function csOgFallbackImage(baseUrl: string, siteKey: string): PageMetaImage {
+  return {
+    url: `${baseUrl}/cadr/og?cs=${encodeURIComponent(siteKey)}`,
+    width: 1200,
+    height: 630,
+  };
+}
 
 /**
  * Layers csSeo.noindex / csSeo.canonicalOverride on top of a Metadata object
