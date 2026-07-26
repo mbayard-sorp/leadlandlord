@@ -15,6 +15,19 @@ export const csSeo = defineType({
     defineField({ name: 'metaTitle', title: 'Meta Title', type: 'string' }),
     defineField({ name: 'metaDescription', title: 'Meta Description', type: 'text', rows: 3 }),
     defineField({ name: 'ogImage', title: 'OG Image', type: 'image' }),
+    defineField({
+      name: 'noindex',
+      title: 'Noindex',
+      type: 'boolean',
+      initialValue: false,
+      description: 'Page-level noindex override, e.g. a disclaimer page. The site-wide default is csSite.robotsDisallow — this only overrides a single page.',
+    }),
+    defineField({
+      name: 'canonicalOverride',
+      title: 'Canonical Override',
+      type: 'url',
+      description: 'Explicit canonical URL when this page should point elsewhere, e.g. a legal publication that is a cross-post of a syndicated original.',
+    }),
   ],
 });
 
@@ -167,6 +180,49 @@ export const csRedirect = defineType({
   },
 });
 
+/**
+ * A single non-bar-admission credential on csAttorney.credentials (AAA/ICC
+ * certifications, judicial-reference appointments, etc.). Feeds
+ * `hasCredential` JSON-LD generically.
+ */
+export const csCredential = defineType({
+  name: 'csCredential',
+  title: 'Credential',
+  type: 'object',
+  fields: [
+    defineField({ name: 'name', title: 'Name', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'issuer', title: 'Issuer', type: 'string' }),
+    defineField({ name: 'year', title: 'Year', type: 'number' }),
+    defineField({ name: 'url', title: 'URL', type: 'url' }),
+  ],
+  preview: {
+    select: { title: 'name', subtitle: 'issuer' },
+    prepare: ({ title, subtitle }) => ({ title: title ?? '(unnamed)', subtitle }),
+  },
+});
+
+/**
+ * A single bar admission on csAttorney.barAdmissions. Kept structured
+ * (rather than a plain string like credentials predates) because
+ * jurisdiction is the sub-value most useful to query independently when
+ * mapping to schema.org `hasCredential` (`credentialCategory: 'license'` +
+ * `recognizedBy`).
+ */
+export const csBarAdmission = defineType({
+  name: 'csBarAdmission',
+  title: 'Bar Admission',
+  type: 'object',
+  fields: [
+    defineField({ name: 'jurisdiction', title: 'Jurisdiction', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'barNumber', title: 'Bar Number', type: 'string' }),
+    defineField({ name: 'admittedYear', title: 'Admitted Year', type: 'number' }),
+  ],
+  preview: {
+    select: { title: 'jurisdiction', subtitle: 'barNumber' },
+    prepare: ({ title, subtitle }) => ({ title: title ?? '(unnamed)', subtitle }),
+  },
+});
+
 export const customSitesObjectTypes = [
   csSeo,
   csNavChildLink,
@@ -175,4 +231,6 @@ export const customSitesObjectTypes = [
   csFaqItem,
   csBody,
   csRedirect,
+  csCredential,
+  csBarAdmission,
 ];

@@ -19,10 +19,11 @@ export { csTestimonial } from './custom-testimonial';
 export { csBadge } from './custom-badge';
 
 // customSitesObjectTypes (csSeo, csNavChildLink, csNavLink, csAddress,
-// csFaqItem, csBody, csRedirect) must be registered before the section
-// blocks and documents that use them (e.g. csFaqItem in csPracticeArea,
-// csBody in csIntroBlock/csRichTextBlock/csPracticeArea/csPublication/
-// csAttorney).
+// csFaqItem, csBody, csRedirect, csCredential, csBarAdmission) must be
+// registered before the section blocks and documents that use them (e.g.
+// csFaqItem in csPracticeArea and csFaqBlock, csBody in
+// csIntroBlock/csRichTextBlock/csPracticeArea/csPublication/csAttorney,
+// csCredential/csBarAdmission in csAttorney).
 
 /** All Custom Sites schema types, ready to spread into `schemaTypes`. */
 export const customSitesSchemaTypes = [

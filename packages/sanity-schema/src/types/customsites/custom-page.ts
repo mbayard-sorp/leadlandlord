@@ -34,6 +34,7 @@ export const csPage = defineType({
         { type: 'csRichTextBlock' },
         { type: 'csContactCtaBlock' },
         { type: 'csCtaBannerBlock' },
+        { type: 'csFaqBlock' },
       ],
     }),
     defineField({ name: 'seo', title: 'SEO', type: 'csSeo' }),
