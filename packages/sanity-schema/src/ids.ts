@@ -91,3 +91,63 @@ export function buildsellSiteDocId(id: string): string {
 export function buildsellReviewDocId(id: string): string {
   return `bs-review-${id}`;
 }
+
+// ────────────────────────────────────────────────────────────
+// Custom Sites deterministic ids. `cs-` prefix guarantees no
+// collision with R&R `site-`/`page-`/`theme-` or B&S `bs-` ids in
+// the shared dataset.
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Sanity rejects document IDs longer than 128 chars. WP article slugs can
+ * exceed that, so slug-keyed cs ids are capped: overlong slugs are truncated
+ * and suffixed with a short FNV-1a hash of the full slug. Deterministic, so
+ * createOrReplace re-runs stay idempotent. Routing is unaffected because the
+ * frontend queries by slug.current, never by document id.
+ */
+const MAX_SANITY_DOC_ID_LENGTH = 128;
+
+function fnv1aHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+function cappedSlugDocId(prefix: string, slug: string): string {
+  const id = `${prefix}${slug}`;
+  if (id.length <= MAX_SANITY_DOC_ID_LENGTH) return id;
+  const hash = fnv1aHash(slug);
+  const keep = MAX_SANITY_DOC_ID_LENGTH - prefix.length - hash.length - 1;
+  return `${prefix}${slug.slice(0, keep).replace(/-+$/, '')}-${hash}`;
+}
+
+export function csSiteDocId(siteKey: string): string {
+  return `cs-site-${siteKey}`;
+}
+
+export function csPageDocId(siteKey: string, slug: string): string {
+  return cappedSlugDocId(`cs-page-${siteKey}-`, slug);
+}
+
+export function csPracticeAreaDocId(siteKey: string, slug: string): string {
+  return cappedSlugDocId(`cs-pa-${siteKey}-`, slug);
+}
+
+export function csPublicationDocId(siteKey: string, slug: string): string {
+  return cappedSlugDocId(`cs-pub-${siteKey}-`, slug);
+}
+
+export function csAttorneyDocId(siteKey: string, slug: string): string {
+  return `cs-attorney-${siteKey}-${slug}`;
+}
+
+export function csTestimonialDocId(siteKey: string, key: string): string {
+  return `cs-testimonial-${siteKey}-${key}`;
+}
+
+export function csBadgeDocId(siteKey: string, key: string): string {
+  return `cs-badge-${siteKey}-${key}`;
+}

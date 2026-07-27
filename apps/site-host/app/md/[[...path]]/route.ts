@@ -5,6 +5,8 @@ import { sanityToBundle } from '../../../lib/theme-bundle';
 import { currentRequestBaseUrl } from '../../../lib/seo-meta';
 import { pageToMarkdown, indexToMarkdown } from '../../../lib/page-markdown';
 import { buildSellToMarkdown } from '../../../lib/buildsell-markdown';
+import { fetchCustomSiteByHost, fetchCustomSiteByKey } from '../../../lib/customsites-sanity';
+import { customSiteMarkdownForPath } from '../../../lib/customsites-markdown';
 import { pageHref } from '../../../lib/content';
 import type { Bundle, Page } from '../../../lib/content';
 
@@ -22,6 +24,22 @@ interface RouteParams {
 
 export async function GET(_req: Request, { params }: RouteParams): Promise<Response> {
   const h = await headers();
+
+  // Custom Sites (ADR 0033) — checked first so a custom-mode request is never
+  // mistaken for the corporate hard-404 guard below (x-site-mode is always
+  // exactly one of tenant/corporate/custom, but this branch order keeps the
+  // guard from ever being able to eat custom traffic on a future refactor).
+  if (h.get('x-site-mode') === 'custom') {
+    const key = h.get('x-cs-site');
+    const host = h.get('x-site-host') ?? h.get('host') ?? '';
+    const csSite = key ? await fetchCustomSiteByKey(key) : await fetchCustomSiteByHost(host);
+    if (!csSite) return new Response('', { status: 404 });
+    if (csSite.robotsDisallow) return new Response('', { status: 404 });
+    const { path: segments = [] } = await params;
+    const markdown = await customSiteMarkdownForPath(csSite, segments.length ? `/${segments.join('/')}` : '/');
+    if (!markdown) return new Response('', { status: 404 });
+    return new Response(markdown, { headers: MD_HEADERS });
+  }
 
   // Block corporate hosts
   if (h.get('x-site-mode') === 'corporate') {

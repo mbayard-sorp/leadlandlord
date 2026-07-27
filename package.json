@@ -22,10 +22,17 @@
     "backfill-structured-data": "tsx scripts/backfill-structured-data.ts",
     "backfill-faq": "tsx scripts/backfill-faq.ts",
     "backfill-buildsell-noindex": "tsx scripts/backfill-buildsell-noindex.ts",
-    "backfill-caller-names": "tsx scripts/backfill-caller-names.ts"
+    "backfill-caller-names": "tsx scripts/backfill-caller-names.ts",
+    "customsites-geo-audit": "tsx scripts/customsites-geo-audit.ts",
+    "customsites-indexnow": "tsx scripts/customsites-indexnow.ts"
   },
   "devDependencies": {
+    "@portabletext/block-tools": "^5.1.12",
+    "@sanity/schema": "5.24.0",
+    "@types/jsdom": "^28.0.3",
     "@types/node": "^22.10.0",
+    "fast-xml-parser": "^5.10.1",
+    "jsdom": "^29.1.1",
     "prettier": "^3.4.0",
     "tsx": "^4.19.0",
     "turbo": "^2.3.0",

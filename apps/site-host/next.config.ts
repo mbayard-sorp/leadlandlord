@@ -44,6 +44,7 @@ const config: NextConfig = {
   // Workspace packages are imported as source — Next.js needs to know to transpile them.
   transpilePackages: [
     '@leadlandlord/db',
+    '@leadlandlord/integrations',
     '@leadlandlord/sanity-schema',
     '@leadlandlord/shared',
   ],

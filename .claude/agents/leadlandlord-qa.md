@@ -22,6 +22,7 @@ Type-checking verifies code correctness, not feature correctness. A page that bu
 2. **Preview verification** (only for UI-observable changes):
    - `preview_start` (skip if already running).
    - For multi-tenant routes: simulate the tenant by setting `x-site-slug` or `x-site-host` via dev-only mechanisms, OR hit a known seeded tenant.
+   - For Custom Sites (ADR 0033, `x-site-mode: custom`, no Postgres row — e.g. siteKey `constructionadr`): simulate via the `?cs=<siteKey>` query param, not `x-site-slug` (that header resolves the tenant `site` doc, which doesn't exist for this line). GEO/AEO scoring is verified separately via `pnpm customsites-geo-audit --site <siteKey>`, not this agent's SEO-sanity step below.
    - `preview_eval` `window.location.reload()` if HMR isn't catching.
    - `preview_console_logs` and `preview_network` — check for errors.
    - `preview_snapshot` — confirm content + structure.

@@ -3,6 +3,13 @@ import { resolveCurrentSite } from '../../lib/site-context';
 import { resolveCurrentBuildSellSite } from '../../lib/buildsell-context';
 import { sanityToBundle } from '../../lib/theme-bundle';
 import { fetchCorporatePageList, fetchCorporateSite } from '../../lib/sanity';
+import {
+  fetchCustomSiteByHost,
+  fetchCustomSiteByKey,
+  fetchCustomSitePages,
+  fetchCustomSitePracticeAreas,
+  fetchCustomSitePublications,
+} from '../../lib/customsites-sanity';
 import { pageHref } from '../../lib/content';
 import { siteMarkdownPaths } from '../../lib/page-markdown';
 import { buildSellToLlmsTxt } from '../../lib/buildsell-markdown';
@@ -55,6 +62,45 @@ export async function GET(): Promise<Response> {
       .filter((b) => b.length > 0)
       .join('\n\n');
     return new Response(`${body}\n`, { headers: TEXT_HEADERS });
+  }
+
+  // Custom Sites (ADR 0033) — resolved by siteKey (proxy.ts sets x-cs-site),
+  // falling back to host. Not a `site`/`buildsellSite` doc, so this needs its
+  // own branch ahead of the tenant resolver below.
+  if (h.get('x-site-mode') === 'custom') {
+    const key = h.get('x-cs-site');
+    const csSite = key ? await fetchCustomSiteByKey(key) : await fetchCustomSiteByHost(host);
+    if (!csSite) return new Response('', { status: 404 });
+    if (csSite.robotsDisallow) return new Response('', { status: 404 });
+
+    const [practiceAreas, publications, pages] = await Promise.all([
+      fetchCustomSitePracticeAreas(csSite.siteKey),
+      fetchCustomSitePublications(csSite.siteKey),
+      fetchCustomSitePages(csSite.siteKey),
+    ]);
+
+    const csSummary = csSite.tagline ? `> ${csSite.tagline}` : '';
+    const csLink = (title: string, url: string, description?: string | null): string =>
+      description ? `- [${title}](${url}): ${description}` : `- [${title}](${url})`;
+    const paLinks = practiceAreas.map((p) => csLink(p.title, `${base}/practice-areas/${p.slug}.md`, p.excerpt));
+    const pubLinks = publications.map((p) => csLink(p.title, `${base}/${p.slug}.md`, p.excerpt));
+    const aboutPage = pages.find((p) => p.slug === 'about');
+    const contactPage = pages.find((p) => p.slug === 'contact');
+    const moreLinks = [
+      aboutPage ? csLink(aboutPage.title, `${base}/about.md`, aboutPage.description) : null,
+      contactPage ? csLink(contactPage.title, `${base}/contact.md`, contactPage.description) : null,
+    ];
+
+    const csBody = [
+      `# ${csSite.name}`,
+      csSummary,
+      section('Practice Areas', paLinks),
+      section('Publications', pubLinks),
+      section('More', moreLinks),
+    ]
+      .filter((b) => b.length > 0)
+      .join('\n\n');
+    return new Response(`${csBody}\n`, { headers: TEXT_HEADERS });
   }
 
   const site = await resolveCurrentSite();

@@ -1,7 +1,15 @@
 'use client';
 
 import { useTransition, useState, useEffect } from 'react';
-import { runBuildSellSearch, buildDraft, markCalled, saveLeadNote, setFollowUp } from './actions';
+import { useRouter } from 'next/navigation';
+import {
+  runBuildSellSearch,
+  buildDraft,
+  markCalled,
+  saveLeadNote,
+  setFollowUp,
+  getBuildSellBuildState,
+} from './actions';
 import type { SearchLead } from './types';
 
 const STORAGE_KEY = 'buildsell:lastSearch';
@@ -201,10 +209,13 @@ function LeadCard({
   lead: SearchLead;
   onUpdate: (placeId: string, patch: Partial<SearchLead>) => void;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [building, startBuild] = useTransition();
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
   const [buildOk, setBuildOk] = useState<boolean | null>(null);
+  // Site id to watch while spec-site-builder runs; null when nothing is in flight.
+  const [watchId, setWatchId] = useState<string | null>(null);
 
   // CRM local state (seeded from initial lead data, kept in sync via onUpdate)
   const [callingPending, startCalling] = useTransition();
@@ -216,6 +227,52 @@ function LeadCard({
   const [followUpSaved, setFollowUpSaved] = useState(false);
   const [crmError, setCrmError] = useState<string | null>(null);
 
+  // Watch the build to completion. buildDraft's revalidatePath only repaints the
+  // pre-build snapshot (row present, status 'building', no slug yet), so without
+  // this the row sits at 'building' until a manual reload and its Preview link
+  // 404s. Poll until the slug lands — that write is what makes the preview real.
+  useEffect(() => {
+    if (!watchId) return;
+    let cancelled = false;
+    const deadline = Date.now() + 5 * 60_000;
+
+    const timer = setInterval(async () => {
+      // A failed poll (blip, expired session) must not reject unhandled or kill
+      // the watcher — treat it as "not done yet" and let the deadline end it.
+      let state: Awaited<ReturnType<typeof getBuildSellBuildState>>;
+      try {
+        state = await getBuildSellBuildState(watchId);
+      } catch {
+        state = { ok: false };
+      }
+      if (cancelled) return;
+
+      // Repaint the sites list on every tick — status badge, then slug + price.
+      router.refresh();
+
+      const done = state.ok && (state.hasSlug || state.status === 'failed');
+      if (!done && Date.now() < deadline) return;
+
+      clearInterval(timer);
+      setWatchId(null);
+      if (done) {
+        setBuildOk(state.status !== 'failed');
+        setBuildMessage(
+          state.status === 'failed'
+            ? 'Build failed — open the site detail page for the error.'
+            : 'Draft ready — the Preview link below is live.',
+        );
+      } else {
+        setBuildMessage('Still building after 5 min — check the sites list.');
+      }
+    }, 4000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [watchId, router]);
+
   async function handleBuild(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -223,8 +280,10 @@ function LeadCard({
       const result = await buildDraft(fd);
       setBuildOk(result.ok);
       if (result.ok) {
-        setBuildMessage(`Draft created (${result.buildsellSiteId?.slice(0, 8)}…). Reload the sites list.`);
+        setBuildMessage(`Draft created (${result.buildsellSiteId?.slice(0, 8)}…) — building, ~1 min.`);
         setOpen(false);
+        router.refresh();
+        setWatchId(result.buildsellSiteId ?? null);
       } else {
         setBuildMessage(result.message ?? 'Failed.');
       }
@@ -431,6 +490,12 @@ function LeadCard({
           <input type="hidden" name="city"              value={lead.city} />
           <input type="hidden" name="state"             value={lead.state} />
           <input type="hidden" name="place_id"          value={lead.placeId} />
+          {/* NAP snapshot. buildDraft prefers the buildsell_leads cache, but that
+              row only exists once a lead has been worked (called/noted) — build a
+              fresh search result and the cache misses. Without these the site is
+              generated with no phone at all: every tel: href renders empty. */}
+          <input type="hidden" name="national_phone"    value={lead.nationalPhone ?? ''} />
+          <input type="hidden" name="formatted_address" value={lead.formattedAddress ?? ''} />
           {lead.rating != null && (
             <input type="hidden" name="rating"          value={String(lead.rating)} />
           )}

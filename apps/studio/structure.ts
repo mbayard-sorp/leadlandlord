@@ -38,4 +38,19 @@ export const structure: StructureResolver = (S) =>
               S.documentTypeListItem('bsReview').title('Reviews'),
             ]),
         ),
+      S.listItem()
+        .title('Custom Sites')
+        .child(
+          S.list()
+            .title('Custom Sites')
+            .items([
+              S.documentTypeListItem('csSite').title('Sites'),
+              S.documentTypeListItem('csPage').title('Pages'),
+              S.documentTypeListItem('csPracticeArea').title('Practice Areas'),
+              S.documentTypeListItem('csPublication').title('Publications'),
+              S.documentTypeListItem('csAttorney').title('Attorneys'),
+              S.documentTypeListItem('csTestimonial').title('Testimonials'),
+              S.documentTypeListItem('csBadge').title('Badges'),
+            ]),
+        ),
     ]);

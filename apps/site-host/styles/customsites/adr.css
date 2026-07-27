@@ -1,0 +1,1820 @@
+/* Custom Sites — constructionadrservices.com (ADR 0033, Phase 3)
+ * Editorial legal-services theme. Navy + brass on warm paper, Spectral serif
+ * display over Public Sans body. Scoped entirely to `.cs-adr` — never leaks
+ * onto tenant/corporate/B&S hosts. Imported ONLY by app/cadr/layout.tsx.
+ */
+
+/* ── Contrast audit (WCAG AA threshold 4.5:1 normal text, 3:1 large/UI) ────
+ * Ink   #13263C on Paper #F7F4EF  → ~13.97:1  PASS
+ * Text  #26313D on Paper #F7F4EF  → ~12.04:1  PASS
+ * Muted #667181 on Paper #F7F4EF  → ~4.51:1   PASS (normal text, at threshold)
+ * Paper #F7F4EF on Navy  #1C3A5E  → ~10.55:1  PASS (header/footer copy)
+ * Brass-light #D3A55F on Navy #1C3A5E → ~5.13:1  PASS (links/accents on dark)
+ * Brass  #A9793B on Paper #F7F4EF → ~3.49:1   FAILS AA normal text (18-24px
+ *   bold headings only — AA Large 3:1 passes). NOT used for small brass body
+ *   text or the eyebrow label.
+ * Brass  #A9793B on Navy  #1C3A5E → ~3.02:1   borderline AA-Large only — do
+ *   not use brass-on-navy for anything smaller than a large heading; use
+ *   brass-light on navy instead.
+ * White  #FFFFFF on Brass #A9793B → ~3.83:1   FAILS AA normal text. This is
+ *   why `.cs-btn-primary` uses `--cs-brass-ink`, not raw `--cs-brass`, as its
+ *   background — see the next line.
+ * White  #FFFFFF on Brass-ink #8C6530 → ~5.22:1  PASS. This is the primary-
+ *   button background everywhere the button appears (header/hero/mid-page/
+ *   sticky-mobile call CTAs, Send Message, drawer).
+ *
+ * `--cs-brass-ink` (#8C6530, darkened) is the AA-safe brass token — used for
+ * the eyebrow label, the brass text-link, and the primary-button background
+ * (all small/normal-weight text or a filled control on a light surface). It
+ * is NOT one of the raw design tokens; it is derived here.
+ */
+
+.cs-adr {
+  --cs-ink: #13263C;
+  --cs-navy: #1C3A5E;
+  --cs-brass: #A9793B;
+  --cs-brass-light: #D3A55F;
+  --cs-brass-ink: #8C6530; /* AA-safe brass for small text on paper */
+  --cs-paper: #F7F4EF;
+  --cs-text: #26313D;
+  --cs-muted: #667181;
+  --cs-hairline: #E6DFD3;
+
+  --cs-radius-control: 7px;
+  --cs-radius-card: 12px;
+  --cs-radius-card-lg: 14px;
+
+  --cs-space-1: 4px;
+  --cs-space-2: 8px;
+  --cs-space-3: 16px;
+  --cs-space-4: 24px;
+  --cs-space-5: 40px;
+  --cs-space-6: 64px;
+
+  --cs-container-max: 1160px;
+  --cs-section-pad: 64px;
+
+  color: var(--cs-text);
+  background: var(--cs-paper);
+  font-family: var(--cs-font-body), 'Public Sans', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (max-width: 899px) {
+  .cs-adr {
+    --cs-section-pad: 48px;
+  }
+}
+
+@media (max-width: 639px) {
+  .cs-adr {
+    --cs-section-pad: 40px;
+  }
+}
+
+.cs-adr * {
+  box-sizing: border-box;
+}
+
+.cs-adr ::selection {
+  background: var(--cs-brass);
+  color: #fff;
+}
+
+.cs-adr :focus-visible {
+  outline: 2px solid var(--cs-brass);
+  outline-offset: 2px;
+}
+
+.cs-adr .cs-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  background: var(--cs-navy);
+  color: var(--cs-paper);
+  padding: var(--cs-space-2) var(--cs-space-3);
+  border-radius: 0 0 var(--cs-radius-control) 0;
+}
+
+.cs-adr .cs-skip-link:focus {
+  left: 0;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+
+.cs-adr h1,
+.cs-adr h2,
+.cs-adr h3 {
+  font-family: var(--cs-font-display), 'Spectral', Georgia, serif;
+  font-weight: 700;
+  color: var(--cs-ink);
+  margin: 0;
+}
+
+.cs-adr h1 {
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 1.08;
+}
+
+.cs-adr h2 {
+  font-size: clamp(26px, 3.6vw, 38px);
+  line-height: 1.12;
+}
+
+.cs-adr h3 {
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.cs-adr .cs-lead {
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--cs-text);
+}
+
+.cs-adr .cs-eyebrow {
+  display: inline-block;
+  font-family: var(--cs-font-body), 'Public Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cs-brass-ink);
+  margin-bottom: var(--cs-space-2);
+}
+
+.cs-adr .cs-eyebrow--inverse {
+  color: var(--cs-brass-light);
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-container {
+  max-width: var(--cs-container-max);
+  margin: 0 auto;
+  padding: 0 var(--cs-space-4);
+}
+
+.cs-adr .cs-section {
+  padding: var(--cs-section-pad) 0;
+}
+
+.cs-adr .cs-section--navy {
+  background: var(--cs-navy);
+  color: var(--cs-paper);
+}
+
+.cs-adr .cs-section--navy h1,
+.cs-adr .cs-section--navy h2,
+.cs-adr .cs-section--navy h3,
+.cs-adr .cs-hero h1,
+.cs-adr .cs-hero h2,
+.cs-adr .cs-page-header h1 {
+  color: var(--cs-paper);
+}
+
+.cs-adr .cs-section--muted {
+  background: var(--cs-paper);
+  border-top: 1px solid var(--cs-hairline);
+  border-bottom: 1px solid var(--cs-hairline);
+}
+
+/* Headless section following another section: its top padding would stack with
+   the previous section's bottom padding into a double gap. */
+.cs-adr .cs-section--flush-top {
+  padding-top: 0;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cs-space-2);
+  font-family: var(--cs-font-body), sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  padding: 12px 24px;
+  border-radius: var(--cs-radius-control);
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.cs-adr .cs-btn-primary {
+  /* --cs-brass-ink, not --cs-brass: see the contrast audit at the top of
+     this file — white-on-brass fails AA, white-on-brass-ink passes 5.22:1. */
+  background: var(--cs-brass-ink);
+  color: #fff;
+}
+
+.cs-adr .cs-btn-primary:hover,
+.cs-adr .cs-btn-primary:focus-visible {
+  background: color-mix(in srgb, var(--cs-brass-ink) 92%, black);
+}
+
+.cs-adr .cs-btn-secondary {
+  background: transparent;
+  color: var(--cs-navy);
+  border-color: var(--cs-navy);
+}
+
+.cs-adr .cs-btn-secondary:hover {
+  background: color-mix(in srgb, var(--cs-navy) 8%, transparent);
+}
+
+.cs-adr .cs-section--navy .cs-btn-secondary {
+  color: var(--cs-paper);
+  border-color: var(--cs-paper);
+}
+
+.cs-adr .cs-section--navy .cs-btn-secondary:hover {
+  background: color-mix(in srgb, var(--cs-paper) 12%, transparent);
+}
+
+.cs-adr .cs-link {
+  color: var(--cs-brass-ink);
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-adr .cs-link:hover {
+  text-decoration: underline;
+}
+
+.cs-adr .cs-section--navy .cs-link {
+  color: var(--cs-brass-light);
+}
+
+.cs-adr .cs-link-arrow {
+  transition: transform 0.15s ease;
+}
+
+.cs-adr .cs-link:hover .cs-link-arrow {
+  transform: translateX(3px);
+}
+
+/* ── Top bar ────────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-topbar {
+  background: var(--cs-ink);
+  color: var(--cs-paper);
+  font-size: 13px;
+}
+
+.cs-adr .cs-topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  /* padding-block only — this element also carries .cs-container, which
+     already sets the horizontal padding. A plain `padding: v 0` shorthand
+     here would zero that out and clip the phone number/tagline against the
+     viewport edge below ~1200px. */
+  padding-block: var(--cs-space-2);
+}
+
+.cs-adr .cs-topbar-contact {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-4);
+}
+
+.cs-adr .cs-topbar a {
+  color: var(--cs-paper);
+  text-decoration: none;
+}
+
+.cs-adr .cs-topbar a:hover {
+  color: var(--cs-brass-light);
+}
+
+.cs-adr .cs-topbar-tagline {
+  color: var(--cs-brass-light);
+  font-style: italic;
+}
+
+@media (max-width: 639px) {
+  /* Below 640px the header Call button and the sticky bottom bar already
+     cover the phone CTA, so the whole utility bar (phone/email/tagline) is
+     a third concurrent call CTA plus dead weight — hide it entirely instead
+     of leaving an empty strip once its children are gone. */
+  .cs-adr .cs-topbar {
+    display: none;
+  }
+}
+
+/* ── Header / nav ───────────────────────────────────────────────────────── */
+
+/* z-index scale (higher = closer to viewer). Kept in one place because the
+   mobile drawer's stacking is a common trap: the drawer/overlay are rendered
+   *inside* .cs-header's DOM subtree (see NavClient.tsx), and .cs-header is a
+   sticky-positioned stacking-context root. A descendant's z-index only wins
+   against elements OUTSIDE that subtree if the subtree root's own z-index is
+   higher than theirs — the drawer's local 150/151 can't out-stack the sticky
+   bar just by being numerically bigger. So .cs-header must sit above
+   .cs-sticky-bar for the drawer to ever render on top of it.
+     10  cs-page-header-bg / cs-hero-bg image + scrim layers (local contexts)
+     100 cs-sticky-bar         — mobile call bar, fixed to viewport bottom
+     130 cs-header             — sticky top nav (holds the drawer subtree)
+     150 cs-drawer-overlay     — mobile nav backdrop
+     151 cs-drawer             — mobile nav panel
+     200 cs-skip-link          — must never be obscured when focused */
+.cs-adr .cs-header {
+  position: sticky;
+  top: 0;
+  z-index: 130;
+  background: var(--cs-paper);
+  border-bottom: 1px solid var(--cs-hairline);
+}
+
+.cs-adr .cs-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-4);
+  /* padding-block only — see the comment on .cs-topbar-inner above, same
+     .cs-container-clobbering bug. */
+  padding-block: var(--cs-space-3);
+}
+
+.cs-adr .cs-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-decoration: none;
+  color: var(--cs-ink);
+}
+
+.cs-adr .cs-brand-name {
+  font-family: var(--cs-font-display), serif;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.cs-adr .cs-brand-sub {
+  font-size: 13px;
+  color: var(--cs-brass-ink);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cs-adr .cs-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-5);
+}
+
+.cs-adr .cs-nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cs-adr .cs-nav-links > li {
+  position: relative;
+}
+
+.cs-adr .cs-nav-link {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--cs-text);
+  text-decoration: none;
+  padding: var(--cs-space-2) 0;
+  border-bottom: 2px solid transparent;
+}
+
+.cs-adr .cs-nav-link:hover,
+.cs-adr .cs-nav-link[aria-current='page'] {
+  color: var(--cs-ink);
+  border-bottom-color: var(--cs-brass);
+}
+
+.cs-adr .cs-nav-caret {
+  display: inline-block;
+  margin-left: 4px;
+  border: solid var(--cs-brass);
+  border-width: 0 2px 2px 0;
+  padding: 3px;
+  transform: rotate(45deg);
+  vertical-align: middle;
+}
+
+.cs-adr .cs-nav-dropdown {
+  list-style: none;
+  margin: 0;
+  padding: var(--cs-space-2) 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 260px;
+  background: #fff;
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-radius-card);
+  box-shadow: 0 12px 24px rgba(19, 38, 60, 0.12);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.cs-adr .cs-nav-item--dropdown:hover .cs-nav-dropdown,
+.cs-adr .cs-nav-item--dropdown:focus-within .cs-nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.cs-adr .cs-nav-dropdown a {
+  display: block;
+  padding: var(--cs-space-2) var(--cs-space-3);
+  color: var(--cs-text);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.cs-adr .cs-nav-dropdown a:hover {
+  background: var(--cs-paper);
+  color: var(--cs-brass-ink);
+}
+
+.cs-adr .cs-header-phone {
+  display: none;
+  gap: 8px;
+}
+
+.cs-adr .cs-header-phone-icon {
+  display: none;
+  flex-shrink: 0;
+}
+
+.cs-adr .cs-nav-toggle {
+  display: none;
+  /* column, not row: the three bar spans need to stack vertically to read as
+     a hamburger icon — flex defaults to row, which would lay them out
+     side-by-side instead. */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-radius-control);
+  padding: 8px 10px;
+  /* Measured 42x40 against the 44x44 WCAG target-size minimum with the box
+     sized by padding + content alone. min-width/min-height grow the tap
+     target to 44x44 without changing the visual bar-icon size — the header
+     row at 320px has ~12px of spare width past its content minimum (checked
+     against the icon-only phone control below), so this doesn't reintroduce
+     the horizontal-overflow regression Phase 1 fixed. */
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.cs-adr .cs-nav-toggle-bar {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--cs-ink);
+  margin: 4px 0;
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-nav-desktop {
+    display: none;
+  }
+  .cs-adr .cs-nav-toggle {
+    /* inline-flex (not block) so align-items/justify-content on the base
+       rule above can center the bars once min-width/min-height grow the box
+       past the bars' own footprint to the 44x44 touch-target minimum. */
+    display: inline-flex;
+  }
+  .cs-adr .cs-header-phone {
+    display: inline-flex;
+    /* The number was wrapping to two lines against the logo + hamburger in
+       this width band — keep it one line and shrink the control to fit. */
+    white-space: nowrap;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  /* Below ~420px, logo + full "Call (213) 383-9399" + hamburger no longer
+     fit on one row even at nowrap — the row overflowed the viewport by
+     9.4px (measured: toggle right edge 384.39 vs 375 viewport) and forced
+     horizontal page scroll. Collapse the header call control to an
+     icon-only 44px target; the anchor's aria-label still carries the full
+     number to assistive tech, and the sticky bottom bar + drawer both keep
+     the full "Call (213) 383-9399" label where there's room for it. */
+  .cs-adr .cs-header-phone {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .cs-adr .cs-header-phone-icon {
+    display: inline-flex;
+  }
+  .cs-adr .cs-header-phone-text {
+    display: none;
+  }
+}
+
+/* Mobile drawer */
+.cs-adr .cs-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(19, 38, 60, 0.5);
+  z-index: 150;
+}
+
+.cs-adr .cs-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(320px, 88vw);
+  background: var(--cs-paper);
+  z-index: 151;
+  padding: var(--cs-space-4);
+  overflow-y: auto;
+  box-shadow: -12px 0 32px rgba(19, 38, 60, 0.2);
+}
+
+.cs-adr .cs-drawer-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--cs-ink);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.cs-adr .cs-drawer-links {
+  list-style: none;
+  margin: var(--cs-space-4) 0 0;
+  padding: 0;
+}
+
+.cs-adr .cs-drawer-links li {
+  border-bottom: 1px solid var(--cs-hairline);
+}
+
+.cs-adr .cs-drawer-links a {
+  display: block;
+  padding: var(--cs-space-3) 0;
+  color: var(--cs-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cs-adr .cs-drawer-sublinks {
+  list-style: none;
+  margin: 0 0 var(--cs-space-2);
+  padding: 0 0 0 var(--cs-space-3);
+}
+
+.cs-adr .cs-drawer-sublinks a {
+  font-weight: 400;
+  padding: var(--cs-space-2) 0;
+  font-size: 14px;
+  color: var(--cs-muted);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-footer {
+  background: var(--cs-navy);
+  color: var(--cs-paper);
+  padding: var(--cs-space-6) 0 var(--cs-space-4);
+}
+
+.cs-adr .cs-footer-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: var(--cs-space-5);
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-footer-grid {
+    grid-template-columns: 1fr;
+    gap: var(--cs-space-4);
+  }
+}
+
+.cs-adr .cs-footer h3 {
+  color: var(--cs-brass-light);
+  font-size: 16px;
+  font-family: var(--cs-font-body), sans-serif;
+  font-weight: 700;
+  margin-bottom: var(--cs-space-3);
+}
+
+/* Stacked skyline-over-wordmark lockup: needs height, not width, to read. */
+.cs-adr .cs-header-logo {
+  position: relative;
+  display: block;
+  width: 124px;
+  height: 64px;
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-header-logo {
+    width: 152px;
+    height: 78px;
+  }
+}
+
+.cs-adr .cs-footer-logo {
+  position: relative;
+  display: block;
+  width: 200px;
+  height: 96px;
+}
+
+.cs-adr .cs-footer-tagline {
+  color: var(--cs-brass-light);
+  font-style: italic;
+  margin-top: var(--cs-space-2);
+}
+
+.cs-adr .cs-footer ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cs-adr .cs-footer li {
+  margin-bottom: var(--cs-space-2);
+}
+
+.cs-adr .cs-footer a {
+  color: var(--cs-paper);
+  text-decoration: none;
+  opacity: 0.9;
+}
+
+.cs-adr .cs-footer a:hover {
+  color: var(--cs-brass-light);
+  opacity: 1;
+}
+
+.cs-adr .cs-footer-legal {
+  margin-top: var(--cs-space-5);
+  padding-top: var(--cs-space-4);
+  border-top: 1px solid rgba(247, 244, 239, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-space-3);
+  font-size: 13px;
+  color: rgba(247, 244, 239, 0.72);
+  flex-wrap: wrap;
+}
+
+.cs-adr .cs-footer-legal-links {
+  display: flex;
+  gap: var(--cs-space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Page header (interior pages) ───────────────────────────────────────── */
+
+.cs-adr .cs-page-header {
+  position: relative;
+  background: var(--cs-navy);
+  color: var(--cs-paper);
+  padding: var(--cs-space-5) 0;
+  overflow: hidden;
+}
+
+.cs-adr .cs-page-header h1 {
+  margin-top: var(--cs-space-2);
+}
+
+/* Banner variant: wide photo behind the band. Below 900px there's no room to
+   keep copy off the subject, so it stays centered over a flat overlay (see
+   cs-page-header-bg::after). At >=900px it becomes a left-aligned column in
+   roughly the left half, sitting on a directional scrim, so the heading
+   never lands on the portrait regardless of where the subject is framed. */
+.cs-adr .cs-page-header--banner {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  padding: var(--cs-space-6) 0;
+}
+
+.cs-adr .cs-page-header-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Narrow screens have no room to sit copy *beside* the portrait, so the scrim
+   runs top-to-bottom instead: the upper band stays light enough to read the
+   subject, and the copy sits on a near-solid base at the foot of the band.
+   A flat wash across the whole image was the earlier approach and it greyed
+   the portrait into a ghost — visible enough to notice, too dim to read.
+   Becomes a left-to-right falloff at >=900px, where there is width to keep
+   the copy and the subject genuinely apart. */
+.cs-adr .cs-page-header-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(19, 38, 60, 0.3) 0%,
+    rgba(19, 38, 60, 0.42) 45%,
+    rgba(19, 38, 60, 0.88) 84%,
+    rgba(19, 38, 60, 0.94) 100%
+  );
+}
+
+/* Taller band + bottom-anchored copy below 900px, so the vertical falloff
+   above has room to resolve: portrait up top, heading on the dark base. */
+@media (max-width: 899px) {
+  .cs-adr .cs-page-header--banner {
+    min-height: 320px;
+    align-items: flex-end;
+  }
+}
+
+@media (min-width: 900px) {
+  /* Reverse variant: subject on the LEFT, so the dark side (and the text
+     column) is on the right. Falls fully transparent by ~64% in, well clear
+     of the copy column, so the portrait on the left reads without a filter. */
+  .cs-adr .cs-page-header--banner-reverse .cs-page-header-bg::after {
+    background: linear-gradient(270deg, rgba(19, 38, 60, 0.92) 0%, rgba(19, 38, 60, 0.55) 38%, rgba(19, 38, 60, 0) 64%);
+  }
+
+  /* Default variant: subject on the RIGHT, dark side (and text column) on
+     the left. Mirror of the reverse falloff above. */
+  .cs-adr .cs-page-header-bg::after {
+    background: linear-gradient(90deg, rgba(19, 38, 60, 0.92) 0%, rgba(19, 38, 60, 0.55) 38%, rgba(19, 38, 60, 0) 64%);
+  }
+}
+
+.cs-adr .cs-page-header-inner {
+  position: relative;
+  z-index: 1;
+}
+
+/* Decorative skyline motif for the flat (non-photo) interior-header state —
+   see PageHeader.tsx for when this renders instead of the portrait band.
+   Reuses the footer's skyline lockup logo, which is already art-directed for
+   a navy backdrop, so it reads as a brand mark rather than a stock asset.
+   Sits behind .cs-page-header-inner (z-index 1 above wins the stacking order
+   regardless of DOM order), same approach as cs-page-header-bg. */
+.cs-adr .cs-page-header-skyline {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  width: min(420px, 55vw);
+  height: 160px;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+@media (max-width: 639px) {
+  .cs-adr .cs-page-header-skyline {
+    width: min(260px, 68vw);
+    height: 100px;
+  }
+}
+
+.cs-adr .cs-page-header--banner .cs-page-header-inner {
+  text-align: center;
+}
+
+.cs-adr .cs-page-header--banner h1 {
+  font-size: clamp(30px, 4.4vw, 46px);
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-page-header--banner {
+    min-height: 460px;
+  }
+
+  /* Left-aligned column anchored to the darkest part of the scrim, roughly
+     the left half of the band, so the heading always sits on a dark field
+     instead of centering into wherever the fade happens to be lightest. */
+  .cs-adr .cs-page-header--banner .cs-page-header-inner {
+    text-align: left;
+    max-width: 50%;
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  /* Reverse variant: portrait is on the left, so the column (and its scrim)
+     mirror to the right half. */
+  .cs-adr .cs-page-header--banner-reverse .cs-page-header-inner {
+    margin-left: auto;
+    margin-right: 0;
+  }
+}
+
+/* ── Practice area layout ───────────────────────────────────────────────── */
+
+.cs-adr .cs-pa-wrap {
+  background: var(--cs-bg-alt, #ece7dd);
+  padding: var(--cs-space-6) 0;
+}
+
+.cs-adr .cs-pa-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  align-items: stretch;
+}
+
+.cs-adr .cs-pa-main {
+  background: #fff;
+  padding: var(--cs-space-5) var(--cs-space-4);
+}
+
+.cs-adr .cs-pa-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--cs-space-5);
+  overflow: hidden;
+}
+
+.cs-adr .cs-pa-faq {
+  margin-top: var(--cs-space-5);
+  padding-top: var(--cs-space-5);
+  border-top: 1px solid var(--cs-hairline);
+}
+
+/* Navy "Other ADR Services" rail. */
+.cs-adr .cs-services-rail {
+  background: var(--cs-navy);
+  color: var(--cs-paper);
+  padding: var(--cs-space-5) var(--cs-space-4);
+}
+
+.cs-adr .cs-services-rail h2 {
+  color: var(--cs-paper);
+  font-size: 24px;
+  line-height: 1.3;
+  margin-bottom: var(--cs-space-4);
+}
+
+.cs-adr .cs-services-rail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cs-adr .cs-services-rail li + li {
+  border-top: 1px solid rgba(247, 244, 239, 0.18);
+}
+
+.cs-adr .cs-services-rail a {
+  display: block;
+  padding: 14px 0;
+  color: rgba(247, 244, 239, 0.86);
+  text-decoration: none;
+  font-size: 15px;
+  transition: color 0.15s ease;
+}
+
+.cs-adr .cs-services-rail a:hover,
+.cs-adr .cs-services-rail a:focus-visible {
+  color: var(--cs-brass-light);
+}
+
+.cs-adr .cs-services-rail a.is-current {
+  color: var(--cs-brass-light);
+  font-weight: 600;
+}
+
+/* Fills the dead space below a short service list on tall viewports with a
+   second, lower-commitment CTA than the page's own contact form further
+   down the page. */
+.cs-adr .cs-services-rail-cta {
+  margin-top: var(--cs-space-5);
+  padding: var(--cs-space-4);
+  background: rgba(247, 244, 239, 0.08);
+  border: 1px solid rgba(247, 244, 239, 0.18);
+  border-radius: var(--cs-radius-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-2);
+}
+
+.cs-adr .cs-services-rail-cta p {
+  color: rgba(247, 244, 239, 0.82);
+  font-size: 14px;
+  margin: 0 0 var(--cs-space-1);
+}
+
+.cs-adr .cs-services-rail-cta .cs-btn-primary {
+  justify-content: center;
+}
+
+.cs-adr .cs-services-rail-cta .cs-link {
+  justify-content: center;
+  /* .cs-link's default brass-ink is tuned for the paper background — on this
+     navy card it fails contrast (~3:1, see the audit note at the top of this
+     file), so it needs the same brass-light swap `.cs-section--navy` gets. */
+  color: var(--cs-brass-light);
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-pa-layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .cs-adr .cs-pa-main {
+    padding: var(--cs-space-6) var(--cs-space-6);
+  }
+
+  .cs-adr .cs-services-rail {
+    padding: var(--cs-space-6) var(--cs-space-5);
+  }
+}
+
+/* ── Practice area quotes + contact ─────────────────────────────────────── */
+
+.cs-adr .cs-pa-quotes {
+  background: var(--cs-paper);
+  text-align: center;
+}
+
+.cs-adr .cs-quote-mark {
+  display: block;
+  font-family: var(--cs-font-display), 'Spectral', Georgia, serif;
+  font-size: 96px;
+  line-height: 0.6;
+  color: var(--cs-brass);
+  margin-bottom: var(--cs-space-3);
+}
+
+.cs-adr .cs-pa-contact {
+  background: #fff;
+  border-top: 1px solid var(--cs-hairline);
+}
+
+.cs-adr .cs-pa-contact-head {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto var(--cs-space-5);
+}
+
+.cs-adr .cs-pa-contact-head h2 {
+  margin-top: var(--cs-space-2);
+}
+
+.cs-adr .cs-pa-contact-head p {
+  margin-top: var(--cs-space-3);
+  color: var(--cs-muted);
+}
+
+.cs-adr .cs-pa-contact form {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* Paired fields sit side by side once there is room. */
+.cs-adr .cs-form-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 var(--cs-space-3);
+}
+
+@media (min-width: 640px) {
+  .cs-adr .cs-form-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cs-adr .cs-pa-contact .cs-btn-primary {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 560px;
+  background: var(--cs-navy);
+  color: var(--cs-paper);
+  overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-hero {
+    min-height: min(84vh, 780px);
+  }
+}
+
+.cs-adr .cs-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Below 900px there's no room to keep the copy off the subject, so it stays
+   centered under a flat top-to-bottom scrim. */
+.cs-adr .cs-hero-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(19, 38, 60, 0.42), rgba(19, 38, 60, 0.58));
+}
+
+@media (min-width: 900px) {
+  /* At >=900px the centered headline was running straight across the
+     subject's torso. Switch to a directional scrim (dark at the left,
+     transparent by ~64% in) so a left-aligned copy column always sits on a
+     dark field while the portrait stays fully visible on the right —
+     art-directed instead of a flat box over the photo. */
+  .cs-adr .cs-hero-bg::after {
+    background: linear-gradient(90deg, rgba(19, 38, 60, 0.88) 0%, rgba(19, 38, 60, 0.55) 40%, rgba(19, 38, 60, 0) 64%);
+  }
+}
+
+.cs-adr .cs-hero-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 860px;
+  margin: 0 auto;
+  text-align: center;
+  text-shadow: 0 1px 12px rgba(11, 22, 36, 0.45);
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-hero-inner {
+    max-width: 50%;
+    margin: 0;
+    text-align: left;
+  }
+}
+
+/* Over a photo the brass eyebrow loses contrast, so the hero runs it white
+   like the rest of the stack. Brass eyebrows stay on solid backgrounds. */
+.cs-adr .cs-hero-inner .cs-eyebrow--inverse {
+  color: var(--cs-paper);
+}
+
+.cs-adr .cs-hero-subheading {
+  margin-top: var(--cs-space-3);
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 620px;
+  font-size: 19px;
+  line-height: 1.6;
+  color: rgba(247, 244, 239, 0.92);
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-hero-subheading {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+.cs-adr .cs-hero-cta {
+  margin-top: var(--cs-space-5);
+}
+
+.cs-adr .cs-hero-cta .cs-btn {
+  text-shadow: none;
+}
+
+/* ── Intro (two-column) ─────────────────────────────────────────────────── */
+
+.cs-adr .cs-intro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--cs-space-6);
+  align-items: start;
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-intro-grid {
+    grid-template-columns: 1fr;
+    gap: var(--cs-space-4);
+  }
+}
+
+/* Stacked variant: heading above a full-width body. */
+.cs-adr .cs-intro-stacked h2 {
+  margin-top: var(--cs-space-2);
+  margin-bottom: var(--cs-space-5);
+}
+
+/* Closing note below a grid: hairline rule above the block. */
+.cs-adr .cs-intro-stacked--rule {
+  padding-top: var(--cs-space-6);
+  border-top: 1px solid var(--cs-hairline);
+}
+
+/* Hairline rules between body paragraphs (opt-in via bodyDividers). */
+.cs-adr .cs-prose--dividers > p + p {
+  margin-top: var(--cs-space-5);
+  padding-top: var(--cs-space-5);
+  border-top: 1px solid var(--cs-hairline);
+}
+
+/* ── Practice areas grid ────────────────────────────────────────────────── */
+
+.cs-adr .cs-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--cs-space-4);
+  margin-top: var(--cs-space-5);
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cs-adr .cs-card {
+  background: #fff;
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-radius-card);
+  padding: var(--cs-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-2);
+  overflow: hidden;
+}
+
+/* Card image bleeds to the card edges above the padded text. Negative margins
+   cancel the card padding; the 3:2 box keeps every card in a row aligned. */
+.cs-adr .cs-card-media {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  margin: calc(var(--cs-space-4) * -1) calc(var(--cs-space-4) * -1) var(--cs-space-3);
+  background: var(--cs-paper);
+  overflow: hidden;
+}
+
+/* Unifying navy wash over the practice-area stock photos — sourced from
+   several different shoots, they clash in color temperature (warm sunset
+   construction shots next to cool corporate handshakes) sitting side by
+   side. `color` blend mode takes hue/saturation from this layer but keeps
+   the backdrop's own luminosity, so every card reads as one cohesive navy
+   duotone without crushing highlights/shadows into mud the way a flat
+   opacity overlay or `multiply` would. */
+.cs-adr .cs-card-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--cs-navy);
+  mix-blend-mode: color;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.cs-adr .cs-card h3 {
+  font-size: 20px;
+}
+
+.cs-adr .cs-card-excerpt {
+  color: var(--cs-muted);
+  flex: 1;
+  /* Caps the measure so a teaser in a full-width single-column card (grid
+     collapses to 1 column below 900px — see .cs-grid-3) doesn't run 95+
+     characters per line; comfortable reading tops out around 70ch. */
+  max-width: 70ch;
+}
+
+/* ── Attorney block ─────────────────────────────────────────────────────── */
+
+.cs-adr .cs-attorney {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: var(--cs-space-6);
+  align-items: start;
+}
+
+/* Photo is the first DOM element; order:2 moves it to the right column so the
+   name and bio read on the left, matching the live site. */
+.cs-adr .cs-attorney-photo {
+  order: 2;
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-attorney {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stack photo first on mobile for a natural intro. */
+  .cs-adr .cs-attorney-photo {
+    order: 0;
+  }
+}
+
+.cs-adr .cs-attorney-photo {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--cs-radius-card-lg);
+  overflow: hidden;
+  background: var(--cs-paper-2, #ECE5D8);
+}
+
+/* Reach Us contact block on the full attorney profile. */
+.cs-adr .cs-reach-us {
+  margin: var(--cs-space-4) 0;
+}
+
+.cs-adr .cs-reach-us dl {
+  margin: var(--cs-space-2) 0 0;
+}
+
+.cs-adr .cs-reach-us dl > div {
+  display: flex;
+  gap: var(--cs-space-2);
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.cs-adr .cs-reach-us dt {
+  color: var(--cs-muted);
+  font-weight: 600;
+  min-width: 56px;
+}
+
+.cs-adr .cs-reach-us dd {
+  margin: 0;
+}
+
+.cs-adr .cs-reach-us a {
+  color: var(--cs-brass-ink, var(--cs-brass));
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.cs-adr .cs-reach-us a:hover {
+  text-decoration: underline;
+}
+
+.cs-adr .cs-reach-us-note {
+  margin: var(--cs-space-2) 0 0;
+  font-size: 14px;
+  color: var(--cs-muted);
+}
+
+.cs-adr .cs-attorney-credentials {
+  list-style: none;
+  margin: var(--cs-space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cs-space-2);
+}
+
+.cs-adr .cs-attorney-credentials li {
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--cs-paper);
+  border: 1px solid var(--cs-hairline);
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: var(--cs-navy);
+}
+
+/* Full-profile bio sections (Practice Areas, Experience, Education, Awards).
+   Two columns on wide screens, single column on mobile. */
+.cs-adr .cs-attorney-sections {
+  margin-top: var(--cs-space-6);
+  padding-top: var(--cs-space-6);
+  border-top: 1px solid var(--cs-hairline);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cs-space-5) var(--cs-space-6);
+}
+
+/* Live-site layout: Practice Areas | Organizations, then Conflict Resolution
+   Experience full width (it is the long prose section), then Education | Awards.
+   The 3rd section spanning both columns produces that arrangement. */
+.cs-adr .cs-attorney-section:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.cs-adr .cs-attorney-section h3 {
+  margin: 0 0 var(--cs-space-3);
+  padding-bottom: var(--cs-space-2);
+  border-bottom: 1px solid var(--cs-hairline);
+  color: var(--cs-ink);
+}
+
+.cs-adr .cs-attorney-section .cs-prose p {
+  margin: 0 0 var(--cs-space-2);
+}
+
+/* Brass check-circle markers on the credential lists, matching the live site. */
+.cs-adr .cs-attorney-section .cs-prose ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cs-adr .cs-attorney-section .cs-prose li {
+  position: relative;
+  padding-left: 32px;
+  margin-bottom: var(--cs-space-3);
+  line-height: 1.55;
+}
+
+.cs-adr .cs-attorney-section .cs-prose li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 19px;
+  height: 19px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23A9793B' stroke-width='1.4'%3E%3Ccircle cx='10' cy='10' r='8.6'/%3E%3Cpath d='M6 10.4l2.6 2.6 5.2-5.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-attorney-sections {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Testimonials ───────────────────────────────────────────────────────── */
+
+.cs-adr .cs-testimonials {
+  position: relative;
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.cs-adr .cs-testimonial-quote {
+  font-family: var(--cs-font-display), serif;
+  font-size: 24px;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--cs-ink);
+}
+
+.cs-adr .cs-section--navy .cs-testimonial-quote {
+  color: var(--cs-paper);
+}
+
+.cs-adr .cs-testimonial-author {
+  margin-top: var(--cs-space-3);
+  font-weight: 700;
+  color: var(--cs-brass-ink);
+}
+
+.cs-adr .cs-section--navy .cs-testimonial-author {
+  color: var(--cs-brass-light);
+}
+
+.cs-adr .cs-testimonial-dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--cs-space-2);
+  margin-top: var(--cs-space-4);
+}
+
+.cs-adr .cs-testimonial-dot {
+  position: relative;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: none;
+  background: var(--cs-hairline);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* The visual dot stays a small 9px mark (matches the design), but the tap
+   target grows to the 44px WCAG minimum via a transparent pseudo-element so
+   touch users don't need pixel precision to switch slides. */
+.cs-adr .cs-testimonial-dot::before {
+  content: '';
+  position: absolute;
+  inset: -17.5px;
+}
+
+.cs-adr .cs-testimonial-dot[aria-current='true'] {
+  /* Non-color active affordance (WCAG 1.4.1): the current dot widens into a
+     pill instead of relying on the brass fill alone to signal state. */
+  background: var(--cs-brass);
+  width: 22px;
+  border-radius: 5px;
+}
+
+/* ── Badge row ──────────────────────────────────────────────────────────── */
+
+/* Ink band split into equal cells with hairline dividers, matching the live
+   site's award strip. Light/white logo artwork needs the dark backdrop. */
+.cs-adr .cs-badge-section {
+  background: var(--cs-ink);
+  padding: 0;
+}
+
+.cs-adr .cs-badge-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.cs-adr .cs-badge-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cs-space-5) var(--cs-space-4);
+  border-left: 1px solid rgba(247, 244, 239, 0.18);
+}
+
+.cs-adr .cs-badge-row .cs-badge-cell:nth-child(2n + 1) {
+  border-left: none;
+}
+
+.cs-adr .cs-badge-row .cs-badge-cell:nth-child(n + 3) {
+  border-top: 1px solid rgba(247, 244, 239, 0.18);
+}
+
+.cs-adr .cs-badge-img {
+  position: relative;
+  display: block;
+  width: min(220px, 100%);
+  height: 80px;
+}
+
+.cs-adr .cs-badge-row img {
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+  /* Screen blend erases baked-in black backgrounds in the badge scans
+     (black is a no-op in screen mode) so every logo floats on the band. */
+  mix-blend-mode: screen;
+}
+
+.cs-adr .cs-badge-row a:hover img,
+.cs-adr .cs-badge-row img:hover {
+  opacity: 1;
+}
+
+@media (min-width: 900px) {
+  .cs-adr .cs-badge-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .cs-adr .cs-badge-row .cs-badge-cell:nth-child(2n + 1) {
+    border-left: 1px solid rgba(247, 244, 239, 0.18);
+  }
+
+  .cs-adr .cs-badge-row .cs-badge-cell:first-child {
+    border-left: none;
+  }
+
+  .cs-adr .cs-badge-row .cs-badge-cell:nth-child(n + 3) {
+    border-top: none;
+  }
+}
+
+/* ── Publications ───────────────────────────────────────────────────────── */
+
+.cs-adr .cs-pub-card {
+  padding: var(--cs-space-4) 0;
+  border-bottom: 1px solid var(--cs-hairline);
+}
+
+.cs-adr .cs-pub-meta {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+
+/* ── Callout ────────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-callout {
+  border-left: 4px solid var(--cs-brass);
+  background: #fff;
+  border-radius: 0 var(--cs-radius-card) var(--cs-radius-card) 0;
+  padding: var(--cs-space-4);
+}
+
+.cs-adr .cs-callout-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-brass-ink);
+}
+
+.cs-adr .cs-callout-quote {
+  font-family: var(--cs-font-display), serif;
+  font-size: 20px;
+  margin-top: var(--cs-space-2);
+}
+
+/* ── Prose (Portable Text body) ─────────────────────────────────────────── */
+
+.cs-adr .cs-prose h2 {
+  margin-top: var(--cs-space-5);
+  margin-bottom: var(--cs-space-2);
+}
+
+.cs-adr .cs-prose h3,
+.cs-adr .cs-prose h4 {
+  margin-top: var(--cs-space-4);
+  margin-bottom: var(--cs-space-2);
+}
+
+.cs-adr .cs-prose p {
+  margin: 0 0 var(--cs-space-3);
+}
+
+.cs-adr .cs-prose ul,
+.cs-adr .cs-prose ol {
+  margin: 0 0 var(--cs-space-3);
+  padding-left: 1.4em;
+}
+
+.cs-adr .cs-prose li {
+  margin-bottom: var(--cs-space-1);
+}
+
+.cs-adr .cs-prose blockquote {
+  border-left: 3px solid var(--cs-brass);
+  margin: var(--cs-space-4) 0;
+  padding-left: var(--cs-space-3);
+  font-style: italic;
+  color: var(--cs-muted);
+}
+
+.cs-adr .cs-prose a {
+  color: var(--cs-brass-ink);
+  text-decoration: underline;
+}
+
+.cs-adr .cs-prose figure {
+  margin: var(--cs-space-4) 0;
+}
+
+.cs-adr .cs-prose figcaption {
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--cs-muted);
+  margin-top: var(--cs-space-2);
+}
+
+/* Bare-URL link labels (see Prose.tsx's shortenUrlLabel) get a slightly
+   smaller, break-friendly treatment instead of reading as body copy — a
+   civilized stand-in for the full address rather than the raw URL string. */
+.cs-adr .cs-prose-url-link {
+  font-size: 0.92em;
+  word-break: break-word;
+}
+
+/* ── Contact CTA / forms ────────────────────────────────────────────────── */
+
+.cs-adr .cs-contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--cs-space-6);
+}
+
+@media (max-width: 899px) {
+  .cs-adr .cs-contact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cs-adr .cs-form-field {
+  margin-bottom: var(--cs-space-3);
+}
+
+.cs-adr .cs-form-label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--cs-ink);
+}
+
+.cs-adr .cs-form-required {
+  color: var(--cs-brass-ink);
+}
+
+.cs-adr .cs-form-input,
+.cs-adr .cs-form-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-radius-control);
+  background: #fff;
+  color: var(--cs-text);
+}
+
+.cs-adr .cs-form-input:focus,
+.cs-adr .cs-form-textarea:focus {
+  border-color: var(--cs-brass);
+}
+
+.cs-adr .cs-form-input[aria-invalid='true'],
+.cs-adr .cs-form-textarea[aria-invalid='true'] {
+  border-color: #A03B3B;
+}
+
+.cs-adr .cs-form-field-error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #A03B3B;
+}
+
+.cs-adr .cs-form-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cs-adr .cs-form-message {
+  margin-top: var(--cs-space-3);
+  font-size: 14px;
+}
+
+.cs-adr .cs-form-message--error {
+  color: #A03B3B;
+}
+
+.cs-adr .cs-form-message--success {
+  color: var(--cs-navy);
+  font-weight: 600;
+}
+
+/* ── CTA banner ─────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-cta-banner {
+  background: var(--cs-brass);
+  color: #fff;
+  text-align: center;
+}
+
+.cs-adr .cs-cta-banner h2 {
+  color: #fff;
+}
+
+.cs-adr .cs-cta-banner .cs-btn-primary {
+  background: #fff;
+  color: var(--cs-brass-ink);
+}
+
+.cs-adr .cs-cta-banner .cs-btn-primary:hover {
+  background: var(--cs-paper);
+}
+
+/* ── FAQ (shared PageFaq component, themed via info-page vars) ──────────── */
+
+.cs-adr .info-page-faq-heading {
+  font-family: var(--cs-font-display), serif;
+  color: var(--cs-ink);
+}
+
+.cs-adr .info-page-faq-item {
+  border-bottom: 1px solid var(--cs-hairline);
+  padding: var(--cs-space-3) 0;
+}
+
+.cs-adr .info-page-faq-q {
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--cs-ink);
+}
+
+.cs-adr .info-page-faq-a {
+  color: var(--cs-muted);
+  margin-top: var(--cs-space-2);
+}
+
+/* ── Related services / breadcrumbs ─────────────────────────────────────── */
+
+.cs-adr .cs-related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--cs-space-2);
+}
+
+.cs-adr .cs-breadcrumbs {
+  font-size: 13px;
+  color: rgba(247, 244, 239, 0.72);
+}
+
+.cs-adr .cs-breadcrumbs a {
+  color: rgba(247, 244, 239, 0.86);
+  text-decoration: none;
+}
+
+.cs-adr .cs-breadcrumbs a:hover {
+  color: var(--cs-brass-light);
+}
+
+/* Banner variant: the trail moves out of the photo band into a light strip
+   directly below it, so dark-on-paper colors instead of light-on-navy. */
+.cs-adr .cs-breadcrumb-bar {
+  background: var(--cs-paper);
+  border-bottom: 1px solid var(--cs-hairline);
+  padding: var(--cs-space-3) 0;
+  font-size: 13px;
+  color: var(--cs-muted);
+}
+
+.cs-adr .cs-breadcrumb-bar a {
+  color: var(--cs-text);
+  text-decoration: none;
+}
+
+.cs-adr .cs-breadcrumb-bar a:hover {
+  color: var(--cs-brass-ink);
+}
+
+/* ── Article layout (publications) ─────────────────────────────────────── */
+
+.cs-adr .cs-article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cs-space-3);
+  font-size: 13px;
+  color: var(--cs-muted);
+  margin-bottom: var(--cs-space-4);
+}
+
+.cs-adr .cs-article-related {
+  border-top: 1px solid var(--cs-hairline);
+  margin-top: var(--cs-space-6);
+  padding-top: var(--cs-space-5);
+}
+
+/* ── Sticky mobile CTA bar ──────────────────────────────────────────────── */
+
+.cs-adr .cs-sticky-bar {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .cs-adr .cs-sticky-bar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background: var(--cs-navy);
+    padding: var(--cs-space-2) var(--cs-space-3);
+    box-shadow: 0 -4px 16px rgba(19, 38, 60, 0.2);
+  }
+  .cs-adr .cs-sticky-bar .cs-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .cs-adr .cs-sticky-spacer {
+    height: 64px;
+  }
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-adr * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── Not found ──────────────────────────────────────────────────────────── */
+
+.cs-adr .cs-notfound {
+  text-align: center;
+  padding: var(--cs-space-6) 0;
+}

@@ -120,14 +120,26 @@ export default async function BuildSellPage() {
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex flex-col gap-1">
-                        <a
-                          href={`https://${siteHost}/preview/${site.slug ?? site.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-sky-400 hover:text-sky-300 underline"
-                        >
-                          Preview
-                        </a>
+                        {/* The slug is written in the same update that ends the
+                            build, so no slug means the Sanity doc does not exist
+                            yet and /preview would 404. Don't offer the link. */}
+                        {site.slug ? (
+                          <a
+                            href={`https://${siteHost}/preview/${site.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-sky-400 hover:text-sky-300 underline"
+                          >
+                            Preview
+                          </a>
+                        ) : (
+                          <span
+                            className="text-xs text-slate-600"
+                            title="Preview becomes available once the build finishes."
+                          >
+                            Preview
+                          </span>
+                        )}
                         {site.status === 'live' && site.slug && (
                           <a
                             href={`https://${siteHost}/buildsell/${site.slug}`}
