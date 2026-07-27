@@ -65,7 +65,8 @@ export default function proxy(req: NextRequest) {
     const path = req.nextUrl.pathname;
     const passthrough =
       path.startsWith('/_next') ||
-      path.startsWith('/api/revalidate') ||
+      // See the Custom Sites branch below: all route handlers are top-level.
+      path.startsWith('/api') ||
       path.startsWith('/leadslandlord') ||
       path.startsWith('/preview') ||
       path.startsWith('/buildsell') ||
@@ -131,9 +132,17 @@ export default function proxy(req: NextRequest) {
     const path = req.nextUrl.pathname;
     const passthrough =
       path.startsWith('/_next') ||
-      path.startsWith('/api/revalidate') ||
-      path.startsWith('/api/cs-lead') ||
+      // Every route handler lives at top-level /api/* — no namespace has an
+      // api/ folder — so rewriting /api/x to /<ns>/api/x is always a 404.
+      path.startsWith('/api') ||
       path.startsWith(`/${csNamespace}`) ||
+      // Shared-host escapes, same as the corporate branch above. `ll_cs` is a
+      // sticky session cookie, so once a browser has previewed a Custom Site on
+      // leadlandlord-sites.vercel.app every later request on that host lands
+      // here — including B&S draft/live links, which live outside the namespace
+      // and would otherwise rewrite to /<ns>/preview/... and 404.
+      path.startsWith('/preview') ||
+      path.startsWith('/buildsell') ||
       path === '/favicon.ico' ||
       path === '/sitemap.xml' ||
       path === '/robots.txt' ||
