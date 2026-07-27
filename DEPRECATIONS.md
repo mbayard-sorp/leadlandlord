@@ -13,3 +13,4 @@
 | `billing-dunning` | Gated off | Built; disposition-gated OFF until paying tenants exist (Stripe; Phase-6 outbound) | 6 | 2026-07-20 |
 | `churn-recovery` | Gated off | Built; disposition-gated OFF until paying tenants exist (Phase-6 outbound) | 6 | 2026-07-20 |
 | `molly-digest` | Superseded | Superseded by fleet-digest; disposition OFF. Vercel/seed cron still present — full cron/seed removal tracked as BL-025 (blocked on PR #262 which owns seed-agent-schedules.ts). | 5 | 2026-07-20 |
+| `wave-launcher` | Gated off | Built; disposition-gated OFF (`skips backlinks; revisit later`) — see orchestrator/disposition.ts:93. Registered but not launched. Row added to close the same reconciliation gap BL-004 fixed for the closer/billing/churn trio. | 5 | 2026-07-27 |
