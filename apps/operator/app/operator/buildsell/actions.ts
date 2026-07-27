@@ -308,6 +308,32 @@ export async function buildDraft(formData: FormData): Promise<BuildDraftResult> 
   return { ok: true, buildsellSiteId: row.id };
 }
 
+/**
+ * Poll target for the "building…" watcher in SearchPanel.
+ *
+ * buildDraft returns as soon as the row + event exist, but spec-site-builder
+ * runs for ~a minute after that in a background waitUntil. The revalidatePath
+ * buildDraft fires therefore only ever repaints the pre-build snapshot: the row
+ * shows `building` with no slug, and its Preview link points at
+ * /preview/<uuid>, which 404s until the Sanity doc lands. `slug` is written in
+ * the same update that sets the final status, so it is the completion marker.
+ */
+export async function getBuildSellBuildState(
+  siteId: string,
+): Promise<{ ok: boolean; status?: string; hasSlug?: boolean }> {
+  try { await requireOperatorSession(); } catch { return { ok: false }; }
+  if (!siteId) return { ok: false };
+
+  const [row] = await getDb()
+    .select({ status: buildsellSites.status, slug: buildsellSites.slug })
+    .from(buildsellSites)
+    .where(eq(buildsellSites.id, siteId))
+    .limit(1);
+
+  if (!row) return { ok: false };
+  return { ok: true, status: row.status, hasSlug: !!row.slug };
+}
+
 // ─── Send invoice ─────────────────────────────────────────────────────────────
 
 interface SendInvoiceResult {
