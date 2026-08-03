@@ -23,11 +23,15 @@ export async function PracticeGridBlock({ block, siteKey }: Props) {
   return (
     <section className={hasHead ? 'cs-section' : 'cs-section cs-section--flush-top'} id="practice-areas">
       <div className="cs-container">
-        {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
-        {block.heading ? <h2>{block.heading}</h2> : null}
+        {hasHead ? (
+          <div className="cs-section-head" data-cs-reveal>
+            {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
+            {block.heading ? <h2>{block.heading}</h2> : null}
+          </div>
+        ) : null}
         <div className="cs-grid-3">
           {areas.map((area) => (
-            <div key={area._id} className="cs-card">
+            <div key={area._id} className="cs-card" data-cs-reveal>
               {area.cardImageUrl ? (
                 <div className="cs-card-media">
                   <Image
