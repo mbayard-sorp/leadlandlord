@@ -188,9 +188,28 @@ async function main() {
   section('Top failure errors', report.top_errors);
 }
 
+// Postgres SQLSTATE 42P01 = undefined_table. A reachable DB missing agent_runs
+// (e.g. a fresh/unmigrated Neon branch) is a degrade-not-fail case for this
+// read-only tool, same as NO_DB — the improvement loop should fall back to
+// repo-only analysis rather than treating it as a hard failure. Check both
+// the driver's error code (NeonDbError from @neondatabase/serverless exposes
+// `.code`) and the message text as a fallback, since the exact error surface
+// can vary across drivers/versions.
+function isUnmigratedSchemaError(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | undefined;
+  if (err?.code === '42P01') return true;
+  return /relation .* does not exist/i.test(err?.message ?? '');
+}
+
 main().then(
   () => process.exit(0),
   (e) => {
+    if (isUnmigratedSchemaError(e)) {
+      console.error(
+        `NO_DB: database reachable but missing agent schema (${e?.message ?? e}); likely unmigrated — falling back to repo-only analysis.`
+      );
+      process.exit(2);
+    }
     console.error('fleet-metrics failed:', e?.message ?? e);
     process.exit(1);
   }
