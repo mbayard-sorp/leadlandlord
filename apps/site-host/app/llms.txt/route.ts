@@ -13,6 +13,7 @@ import {
 import { pageHref } from '../../lib/content';
 import { siteMarkdownPaths } from '../../lib/page-markdown';
 import { buildSellToLlmsTxt } from '../../lib/buildsell-markdown';
+import { csSitePaths } from '../../lib/customsites-registry';
 
 // Cache for an hour, same rationale as sitemap.ts: avoid a cold-start Sanity
 // round-trip on every crawler/agent fetch.
@@ -82,7 +83,16 @@ export async function GET(): Promise<Response> {
     const csSummary = csSite.tagline ? `> ${csSite.tagline}` : '';
     const csLink = (title: string, url: string, description?: string | null): string =>
       description ? `- [${title}](${url}): ${description}` : `- [${title}](${url})`;
-    const paLinks = practiceAreas.map((p) => csLink(p.title, `${base}/practice-areas/${p.slug}.md`, p.excerpt));
+    // Per-site URL vocabulary (registry): /practice-areas + "Practice Areas"
+    // for the legal site, /services + "Services" for the financial one. The
+    // section heading is derived from the segment so the two never drift.
+    const { servicesPath, insightsPath } = csSitePaths(csSite.siteKey);
+    const segmentTitle = (segment: string): string =>
+      segment
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    const paLinks = practiceAreas.map((p) => csLink(p.title, `${base}/${servicesPath}/${p.slug}.md`, p.excerpt));
     const pubLinks = publications.map((p) => csLink(p.title, `${base}/${p.slug}.md`, p.excerpt));
     const aboutPage = pages.find((p) => p.slug === 'about');
     const contactPage = pages.find((p) => p.slug === 'contact');
@@ -94,8 +104,8 @@ export async function GET(): Promise<Response> {
     const csBody = [
       `# ${csSite.name}`,
       csSummary,
-      section('Practice Areas', paLinks),
-      section('Publications', pubLinks),
+      section(segmentTitle(servicesPath), paLinks),
+      section(segmentTitle(insightsPath), pubLinks),
       section('More', moreLinks),
     ]
       .filter((b) => b.length > 0)

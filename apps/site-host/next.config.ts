@@ -23,18 +23,32 @@ if (envLocal) loadEnv({ path: envLocal, override: true });
 const config: NextConfig = {
   reactStrictMode: true,
   async redirects() {
+    // Sprint 1: R&R service URLs moved from /services/<slug> to /<slug>
+    // (flat). 301 = permanent; old URLs remain crawlable during transition.
+    //
+    // Config redirects run BEFORE proxy.ts, so without a guard they also fire
+    // on Custom Sites hosts whose public URL vocabulary legitimately uses
+    // /services (alignedadvisors.com — lib/customsites-registry.ts). The
+    // `missing` conditions are ANDed: the redirect applies only when the
+    // request is NOT identifiable as that custom site by host (prod), sticky
+    // cookie, or ?cs= query (dev preview).
+    const notAlignedAdvisors = [
+      { type: 'host' as const, value: '(www\\.)?alignedadvisors\\.com' },
+      { type: 'cookie' as const, key: 'll_cs', value: 'alignedadvisors' },
+      { type: 'query' as const, key: 'cs', value: 'alignedadvisors' },
+    ];
     return [
-      // Sprint 1: service URLs moved from /services/<slug> to /<slug> (flat).
-      // 301 = permanent redirect; old URLs remain crawlable during transition.
       {
         source: '/services/:slug',
         destination: '/:slug',
         permanent: true,
+        missing: notAlignedAdvisors,
       },
       {
         source: '/services',
         destination: '/',
         permanent: true,
+        missing: notAlignedAdvisors,
       },
     ];
   },

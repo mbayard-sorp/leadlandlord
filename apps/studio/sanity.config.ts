@@ -5,6 +5,7 @@ import { colorInput } from '@sanity/color-input';
 import { presentationTool } from 'sanity/presentation';
 import { schemaTypes } from '@leadlandlord/sanity-schema';
 import { structure } from './structure';
+import { customSiteTemplates } from './templates';
 import { resolve } from './presentation/resolve';
 
 const projectId = process.env.SANITY_STUDIO_PROJECT_ID ?? 'ybdv5za2';
@@ -25,7 +26,7 @@ export default defineConfig([
     projectId,
     dataset: 'production',
     plugins: [structureTool({ structure }), visionTool(), colorInput(), presentation],
-    schema: { types: schemaTypes },
+    schema: { types: schemaTypes, templates: (prev) => [...prev, ...customSiteTemplates] },
   },
   {
     name: 'development',
@@ -34,6 +35,6 @@ export default defineConfig([
     projectId,
     dataset: 'development',
     plugins: [structureTool({ structure }), visionTool(), colorInput(), presentation],
-    schema: { types: schemaTypes },
+    schema: { types: schemaTypes, templates: (prev) => [...prev, ...customSiteTemplates] },
   },
 ]);
