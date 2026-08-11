@@ -2559,3 +2559,271 @@ a.bs-ugc-card:hover {
   .bs-root .bs-btn-primary:hover { transform: none; }
   .bs-cta-arrow, .bs-btn:hover .bs-cta-arrow { transition: none; transform: none; }
 }
+
+/* ==========================================================================
+ * BEFORE / AFTER GALLERY (bsBeforeAfterSection)
+ *
+ * Two layouts off one markup contract:
+ *   .bs-ba-frame  — slider: after-photo base + before-photo clipped to
+ *                   --bs-ba-pos, driven by an invisible full-frame range input.
+ *   .bs-ba-pair   — grid: the two photos side by side under labels.
+ * Both sit inside .bs-ba-item (figure + caption) in the .bs-ba-gallery grid.
+ * Frames are locked to an aspect-ratio set inline from Sanity, so nothing
+ * reflows while the images load.
+ * ======================================================================== */
+
+.bs-ba-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+/* Grid layout puts two photos inside one cell, so hold a single column longer
+   — otherwise each half collapses to a thumbnail on mid-width screens. */
+.bs-ba-gallery--pairs {
+  grid-template-columns: repeat(auto-fit, minmax(560px, 1fr));
+}
+
+/* One project: give it the room it deserves rather than a lonely half-row. */
+.bs-ba-gallery--single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 780px;
+  margin-inline: auto;
+}
+
+.bs-ba-item {
+  margin: 0;
+  min-width: 0;
+}
+
+/* ---- Shared image frame -------------------------------------------------- */
+.bs-ba-frame,
+.bs-ba-half {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--bs-radius-card);
+  background-color: color-mix(in srgb, var(--bs-text) 6%, var(--bs-surface));
+  border: var(--bs-hairline);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.bs-ba-frame {
+  /* The whole frame is the control. */
+  touch-action: pan-y;
+  isolation: isolate;
+}
+
+.bs-ba-img {
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ---- Slider: the "before" layer, clipped to the handle position ---------- */
+.bs-ba-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  clip-path: inset(0 calc(100% - var(--bs-ba-pos, 50%)) 0 0);
+}
+
+/* ---- Before / After chips ------------------------------------------------ */
+.bs-ba-chip {
+  position: absolute;
+  top: 0.75rem;
+  z-index: 3;
+  padding: 0.3rem 0.6rem;
+  border-radius: calc(var(--bs-radius-btn) * 0.75);
+  font-family: var(--bs-font-heading);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Muted "before" vs branded "after" — the colour itself carries the story. */
+.bs-ba-chip--before {
+  left: 0.75rem;
+  background-color: color-mix(in srgb, #101418 72%, transparent);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.bs-ba-chip--after {
+  right: 0.75rem;
+  background-color: var(--bs-primary);
+  color: var(--bs-on-primary);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+/* In the grid layout each chip sits inside its own half, both bottom-left. */
+.bs-ba-pair .bs-ba-chip {
+  top: auto;
+  bottom: 0.625rem;
+  left: 0.625rem;
+  right: auto;
+}
+
+/* ---- Slider: divider + handle ------------------------------------------- */
+.bs-ba-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--bs-ba-pos, 50%);
+  z-index: 2;
+  width: 2px;
+  margin-left: -1px;
+  background-color: color-mix(in srgb, #fff 88%, transparent);
+  box-shadow: 0 0 0 1px rgba(0 0 0 / 0.16);
+  pointer-events: none;
+}
+
+.bs-ba-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px meets the touch-target minimum even though the whole frame drags. */
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background-color: var(--bs-surface);
+  color: var(--bs-primary);
+  box-shadow: var(--bs-shadow-md), 0 0 0 1px color-mix(in srgb, var(--bs-text) 10%, transparent);
+  transition: scale 0.18s ease, box-shadow 0.18s ease;
+}
+
+.bs-ba-frame:hover .bs-ba-handle {
+  scale: 1.06;
+}
+
+/* ---- Slider: the actual control (invisible, covers the frame) ------------ */
+.bs-ba-range {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: ew-resize;
+  outline: none;
+}
+
+.bs-ba-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  cursor: ew-resize;
+}
+
+.bs-ba-range::-moz-range-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  cursor: ew-resize;
+}
+
+.bs-ba-range::-moz-range-track {
+  background: transparent;
+  border: 0;
+}
+
+/* Keyboard focus lands on the invisible input, so draw the ring on the handle. */
+.bs-ba-frame:has(.bs-ba-range:focus-visible) .bs-ba-handle {
+  box-shadow:
+    var(--bs-shadow-md),
+    0 0 0 3px var(--bs-surface),
+    0 0 0 6px var(--bs-primary);
+}
+
+/* Visually-hidden label — the slider still needs a real accessible name. */
+.bs-ba-srlabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Grid layout: two halves side by side ------------------------------- */
+.bs-ba-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
+}
+
+/* ---- Caption rail -------------------------------------------------------- */
+.bs-ba-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.875rem;
+}
+
+.bs-ba-title {
+  font-family: var(--bs-font-heading);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: var(--bs-text);
+}
+
+.bs-ba-note {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--bs-muted);
+  max-width: 60ch;
+}
+
+.bs-ba-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: clamp(2rem, 4vw, 3rem);
+}
+
+/* ---- Small screens ------------------------------------------------------- */
+@media (max-width: 599px) {
+  .bs-ba-gallery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bs-ba-chip {
+    top: 0.5rem;
+    font-size: 0.625rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .bs-ba-chip--before { left: 0.5rem; }
+  .bs-ba-chip--after { right: 0.5rem; }
+  .bs-ba-pair {
+    gap: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-ba-handle,
+  .bs-ba-frame:hover .bs-ba-handle {
+    transition: none;
+    scale: 1;
+  }
+}
