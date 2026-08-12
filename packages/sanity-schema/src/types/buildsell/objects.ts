@@ -53,6 +53,72 @@ export const bsServiceCard = defineType({
 });
 
 /**
+ * One before/after project inside a bsBeforeAfterSection.
+ *
+ * Both images are required — a pair with only one half has nothing to compare,
+ * so the renderer skips it. Shoot the two frames from the same angle: the
+ * slider layout overlays them in one box, so a matching crop is what sells the
+ * transformation. Alt text is per-image because "muddy driveway" and "new
+ * paver driveway" are genuinely different pictures to a screen reader.
+ */
+export const bsBeforeAfterPair = defineType({
+  name: 'bsBeforeAfterPair',
+  title: 'Before / After Project',
+  type: 'object',
+  fields: [
+    defineField({
+      name: 'before',
+      title: 'Before Image',
+      type: 'image',
+      options: { hotspot: true },
+      validation: (r) => r.required(),
+      description: 'The "before" state. Shoot from the same angle as the after photo.',
+    }),
+    defineField({
+      name: 'after',
+      title: 'After Image',
+      type: 'image',
+      options: { hotspot: true },
+      validation: (r) => r.required(),
+      description: 'The finished work, framed to match the before photo.',
+    }),
+    defineField({
+      name: 'title',
+      title: 'Project Title',
+      type: 'string',
+      description: 'Short label under the image, e.g. "Driveway replacement — Oro Valley".',
+    }),
+    defineField({
+      name: 'caption',
+      title: 'Caption',
+      type: 'text',
+      rows: 2,
+      description: 'One quiet line of detail: scope, materials, or how long it took.',
+    }),
+    defineField({
+      name: 'beforeAlt',
+      title: 'Before Alt Text',
+      type: 'string',
+      description: 'Describes the before image for Google Images + screen readers.',
+    }),
+    defineField({
+      name: 'afterAlt',
+      title: 'After Alt Text',
+      type: 'string',
+      description: 'Describes the after image for Google Images + screen readers.',
+    }),
+  ],
+  preview: {
+    select: { title: 'title', caption: 'caption', media: 'after' },
+    prepare: ({ title, caption, media }) => ({
+      title: title ?? 'Before / After',
+      subtitle: caption ?? '',
+      media,
+    }),
+  },
+});
+
+/**
  * One pricing tier / line item inside a bsPricingSection.
  *
  * `price` is a free string ("$250", "From $99", "Call for quote") so it works
@@ -337,6 +403,7 @@ export const bsCustomerLayout = defineType({
 export const buildsellObjectTypes = [
   bsCtaButton,
   bsServiceCard,
+  bsBeforeAfterPair,
   bsPricingTier,
   bsProcessStep,
   bsTrustBadge,

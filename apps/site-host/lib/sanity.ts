@@ -332,6 +332,16 @@ const BUILDSELL_PROJECTION = `{
       "thumbnailUrl": thumbnail.asset->url,
       question,
       answer
+    },
+    "pairs": pairs[]{
+      title,
+      caption,
+      beforeAlt,
+      afterAlt,
+      "beforeUrl": before.asset->url,
+      "beforeDims": before.asset->metadata.dimensions{ width, height },
+      "afterUrl": after.asset->url,
+      "afterDims": after.asset->metadata.dimensions{ width, height }
     }
   }
 }`;
@@ -441,6 +451,21 @@ export interface BuildSellSection {
     badge?: string | null;
     cta?: { label?: string | null; href?: string | null; style?: string | null } | null;
   }> | null;
+  // bsBeforeAfterSection — `layout` is 'slider' | 'grid'; `aspect` is a raw CSS
+  // aspect-ratio value ('4/3' | '16/9' | '1/1' | '3/4') written into a style prop.
+  aspect?: string | null;
+  beforeLabel?: string | null;
+  afterLabel?: string | null;
+  pairs?: Array<{
+    title?: string | null;
+    caption?: string | null;
+    beforeAlt?: string | null;
+    afterAlt?: string | null;
+    beforeUrl?: string | null;
+    beforeDims?: { width?: number | null; height?: number | null } | null;
+    afterUrl?: string | null;
+    afterDims?: { width?: number | null; height?: number | null } | null;
+  }> | null;
   // bsFooterSection
   tagline?: string | null;
   columns?: Array<{
@@ -520,6 +545,8 @@ export interface BuildSellSite {
  *   theme.fontBody       — resolveBsFont() lookup + CSS var reference
  *   section._type        — switch statement in BuildSellHome render loop
  *   section._key         — React key prop (must be stable identifier)
+ *   section.layout       — 'table'/'grid' branch in PricingBlock + BeforeAfterBlock
+ *   section.aspect       — written straight into an aspect-ratio style value
  *   badge.icon / step.icon / service.icon — lucide icon lookup via Icon.tsx
  *   social[].platform    — socialIconName() map lookup in FooterBlock
  *   ugc items[].platform — platformIcon() map lookup in UgcBlock
@@ -556,6 +583,10 @@ export function stegaCleanStructural(site: BuildSellSite): BuildSellSite {
       ...section,
       _type: stegaClean(section._type),
       _key: stegaClean(section._key),
+      // Layout switches and the raw CSS aspect-ratio value — watermarks here
+      // silently break the === comparison / produce an invalid style value.
+      layout: section.layout != null ? stegaClean(section.layout) : section.layout,
+      aspect: section.aspect != null ? stegaClean(section.aspect) : section.aspect,
       // icon fields in badges, steps, services
       badges: section.badges?.map((b) => ({
         ...b,
