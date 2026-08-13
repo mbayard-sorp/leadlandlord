@@ -223,6 +223,7 @@ export function seedSection(type: BsSectionType): Record<string, unknown> {
         _type: 'bsFaqSection',
         eyebrow: '',
         heading: 'Frequently Asked Questions',
+        defaultOpen: 'first',
         // One starter item so the added section is editable via the portal's
         // per-item field helper; question/answer are required by the schema.
         items: [

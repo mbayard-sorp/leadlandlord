@@ -2827,3 +2827,185 @@ a.bs-ugc-card:hover {
     scale: 1;
   }
 }
+
+/* ====================================================================
+   FAQ BLOCK — native <details> accordion, per-variant framing
+   ====================================================================== */
+
+.bs-faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* The row reads off its border, not its fill: an accordion sits on both the
+   --bs-bg and --bs-surface sections (the nth-child alternation), so a surface
+   fill would vanish on half of them. A slightly stronger-than-hairline rule
+   stays legible on either ground. */
+.bs-faq-item {
+  background-color: var(--bs-surface);
+  border: 1px solid color-mix(in srgb, var(--bs-text) 14%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bs-faq-item:hover {
+  border-color: color-mix(in srgb, var(--bs-primary) 35%, transparent);
+}
+
+.bs-faq-item[open] {
+  border-color: color-mix(in srgb, var(--bs-primary) 30%, transparent);
+  box-shadow: 0 6px 18px -14px var(--bs-primary);
+}
+
+/* The question row. list-style rules kill the native disclosure triangle in
+   both the WebKit (::-webkit-details-marker) and standards (display: block)
+   spellings so only .bs-faq-marker shows. */
+.bs-faq-q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--bs-font-heading);
+  font-weight: 600;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--bs-text);
+}
+
+.bs-faq-q::-webkit-details-marker { display: none; }
+.bs-faq-q::marker { content: ''; }
+
+.bs-faq-q:hover .bs-faq-q-text { color: var(--bs-primary); }
+.bs-faq-item[open] .bs-faq-q-text { color: var(--bs-primary); }
+
+.bs-faq-q:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: -2px;
+}
+
+.bs-faq-q-text { transition: color 0.2s ease; }
+
+.bs-faq-marker {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--bs-primary);
+  background-color: color-mix(in srgb, var(--bs-primary) 10%, transparent);
+  transition: transform 0.25s ease, background-color 0.2s ease;
+}
+
+.bs-faq-item[open] .bs-faq-marker {
+  transform: rotate(180deg);
+  background-color: color-mix(in srgb, var(--bs-primary) 16%, transparent);
+}
+
+.bs-faq-a {
+  padding: 0 1.25rem 1.25rem;
+}
+
+.bs-faq-a p {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--bs-muted);
+}
+
+/* ---- split: heading rail beside the accordion --------------------------- */
+.bs-faq-split {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: start;
+}
+
+.bs-faq-split .bs-faq-head {
+  margin-bottom: 0;
+  position: sticky;
+  top: 6rem;
+}
+
+@media (max-width: 899px) {
+  .bs-faq-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .bs-faq-split .bs-faq-head {
+    position: static;
+  }
+}
+
+/* ---- bold: rules instead of cards, oversized questions ------------------ */
+[data-bs-layout='bold'] .bs-faq-list {
+  gap: 0;
+  max-width: 860px;
+}
+
+[data-bs-layout='bold'] .bs-faq-item {
+  background-color: transparent;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--bs-text) 14%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-bs-layout='bold'] .bs-faq-item:last-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-text) 14%, transparent);
+}
+
+/* Bold has no card fill to tint, so hover/open read on the rule itself. */
+[data-bs-layout='bold'] .bs-faq-item:hover,
+[data-bs-layout='bold'] .bs-faq-item[open] {
+  border-top-color: color-mix(in srgb, var(--bs-primary) 45%, transparent);
+}
+
+[data-bs-layout='bold'] .bs-faq-q {
+  padding-inline: 0;
+  padding-block: 1.375rem;
+  font-size: clamp(1.0625rem, 2vw, 1.25rem);
+}
+
+[data-bs-layout='bold'] .bs-faq-a {
+  padding: 0 0 1.5rem;
+}
+
+[data-bs-layout='bold'] .bs-faq-marker {
+  color: var(--bs-text);
+  background-color: color-mix(in srgb, var(--bs-accent) 30%, transparent);
+}
+
+[data-bs-layout='bold'] .bs-faq-item[open] .bs-faq-marker {
+  background-color: var(--bs-accent);
+}
+
+/* ---- trust: centered card column ---------------------------------------- */
+[data-bs-layout='trust'] .bs-faq-list {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+[data-bs-layout='trust'] .bs-faq-item {
+  border-left: 3px solid color-mix(in srgb, var(--bs-primary) 25%, transparent);
+}
+
+[data-bs-layout='trust'] .bs-faq-item[open] {
+  border-left-color: var(--bs-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-faq-item,
+  .bs-faq-marker,
+  .bs-faq-q-text {
+    transition: none;
+  }
+}
