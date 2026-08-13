@@ -14,6 +14,7 @@ import { ProcessBlock } from './blocks/ProcessBlock';
 import { ReviewsBlock } from './blocks/ReviewsBlock';
 import { PricingBlock } from './blocks/PricingBlock';
 import { BeforeAfterBlock } from './blocks/BeforeAfterBlock';
+import { FaqBlock } from './blocks/FaqBlock';
 import { ContactBlock } from './blocks/ContactBlock';
 import { FooterBlock } from './blocks/FooterBlock';
 import { UgcBlock } from './blocks/UgcBlock';
@@ -225,6 +226,14 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
           case 'bsUgcSection':
             return (
               <UgcBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
+          case 'bsFaqSection':
+            return (
+              <FaqBlock
                 key={section._key}
                 section={section}
                 layoutVariant={layoutVariant}

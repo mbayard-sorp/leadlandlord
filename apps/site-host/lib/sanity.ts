@@ -434,6 +434,8 @@ export interface BuildSellSection {
   showMap?: boolean | null;
   // bsFaqSection
   /** FAQ items — shared `items` array, each with question + answer (bsFaqItem). */
+  /** Which answers start expanded: 'first' (default) | 'all' | 'none'. */
+  defaultOpen?: string | null;
   // bsHtmlSection — freeform operator-authored HTML rendered as-is.
   html?: string | null;
   label?: string | null;

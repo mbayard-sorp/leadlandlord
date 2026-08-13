@@ -217,6 +217,22 @@ export const bsFaqSection = defineType({
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string' }),
     defineField({
+      name: 'defaultOpen',
+      title: 'Open By Default',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'First item only', value: 'first' },
+          { title: 'All expanded', value: 'all' },
+          { title: 'All collapsed', value: 'none' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'first',
+      description:
+        'Which answers are already showing when the page loads. Every answer is in the page either way — collapsing only hides it visually, so this does not affect the FAQ rich result.',
+    }),
+    defineField({
       name: 'items',
       title: 'FAQ Items',
       type: 'array',
