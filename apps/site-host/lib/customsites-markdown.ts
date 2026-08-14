@@ -1,4 +1,6 @@
 import {
+  fetchCustomSiteJourneyStages,
+  fetchCustomSiteAttorneyFull,
   fetchCustomSitePages,
   fetchCustomSitePracticeAreaCards,
   fetchCustomSitePracticeAreaFull,
@@ -13,6 +15,7 @@ import {
   type CsPageBuilderBlock,
   type CsPortableTextBlock,
 } from './customsites-sanity';
+import { csSitePaths, csSiteFeatures } from './customsites-registry';
 
 /**
  * Portable Text -> markdown serializer for Custom Sites (ADR 0033 D3), backing
@@ -194,6 +197,7 @@ function blockTitleLines(heading?: string | null, eyebrow?: string | null): stri
 function pageBuilderBlockToMarkdown(
   block: CsPageBuilderBlock,
   publications: CustomSitePublicationFull[] = [],
+  servicesPath = 'practice-areas',
 ): string {
   switch (block._type) {
     case 'csHeroBlock': {
@@ -209,7 +213,7 @@ function pageBuilderBlockToMarkdown(
     }
     case 'csPracticeGridBlock': {
       const lines = blockTitleLines(block.heading, block.eyebrow);
-      const items = (block.areas ?? []).map((a) => `- [${a.title}](/practice-areas/${a.slug})`);
+      const items = (block.areas ?? []).map((a) => `- [${a.title}](/${servicesPath}/${a.slug})`);
       if (items.length) lines.push(items.join('\n'));
       return lines.join('\n\n');
     }
@@ -272,6 +276,119 @@ function pageBuilderBlockToMarkdown(
     }
     case 'csCtaBannerBlock':
       return block.heading ? `## ${block.heading}` : '';
+    case 'csStatRailBlock': {
+      const items = block.items ?? [];
+      if (!items.length) return '';
+      const lines = block.eyebrow ? [`**${block.eyebrow}**`] : [];
+      lines.push(items.map((i) => `- **${i.value}** ${i.label}${i.footnote ? ` (${i.footnote})` : ''}`).join('\n'));
+      return lines.join('\n\n');
+    }
+    case 'csValuePropsBlock': {
+      const items = block.items ?? [];
+      if (!items.length) return '';
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      for (const item of items) lines.push(`**${item.heading}**`, item.body);
+      return lines.join('\n\n');
+    }
+    case 'csJourneyBlock': {
+      const stages = block.stages ?? [];
+      if (!stages.length) return '';
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      if (block.intro) lines.push(block.intro);
+      lines.push(stages.map((st) => `${st.order}. [${st.title}](/journey/${st.slug}) — ${st.summary}`).join('\n'));
+      return lines.join('\n\n');
+    }
+    case 'csCompareBlock': {
+      const rows = block.rows ?? [];
+      if (!rows.length) return '';
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      if (block.intro) lines.push(block.intro);
+      for (const row of rows) {
+        lines.push(`**${row.leftWho}:** "${row.leftQuote}"\n\n**${block.rightLabel ?? 'Us'}:** "${row.rightQuote}"`);
+      }
+      return lines.join('\n\n');
+    }
+    case 'csTeamGridBlock': {
+      const members = block.members ?? [];
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      if (block.intro) lines.push(block.intro);
+      if (members.length) {
+        lines.push(members.map((m) => `- ${m.name}${m.jobTitle ? ` — ${m.jobTitle}` : ''}`).join('\n'));
+      }
+      return lines.length ? lines.join('\n\n') : '';
+    }
+    case 'csFocusAreaListBlock': {
+      const areas = block.areas ?? [];
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      if (block.summaryLine) lines.push(block.summaryLine);
+      // The services path segment differs per site; links here use the block's
+      // resolved area slugs against the caller-provided servicesPath.
+      if (areas.length) {
+        lines.push(
+          areas
+            .map((a, i) => {
+              const count = a.deliverables?.length ?? 0;
+              return `${i + 1}. [${a.title}](/${servicesPath}/${a.slug})${count ? ` — ${count} deliverables` : ''}`;
+            })
+            .join('\n'),
+        );
+      }
+      return lines.length ? lines.join('\n\n') : '';
+    }
+    case 'csCaseStudyGridBlock': {
+      const items = block.items ?? [];
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      for (const cs of items) {
+        const figures = cs.afterValue ? `${cs.beforeValue} → ${cs.afterValue}` : cs.beforeValue;
+        lines.push(`**${figures}** (${cs.metricLabel})\n\n${cs.headline}`);
+      }
+      if (block.disclaimer) lines.push(`*${block.disclaimer}*`);
+      return lines.length ? lines.join('\n\n') : '';
+    }
+    case 'csNumbersIqBlock': {
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      const body = portableTextToMarkdown(block.body);
+      if (body) lines.push(body);
+      return lines.join('\n\n');
+    }
+    case 'csLeadMagnetBlock': {
+      const items = block.items ?? [];
+      if (!items.length) return '';
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      for (const item of items) lines.push(`**${item.title}**`, item.body);
+      return lines.join('\n\n');
+    }
+    case 'csTabbedInsightsBlock':
+      return '';
+    case 'csEpisodeListBlock': {
+      // Mirrors EpisodeListBlock's filter: kind-filtered, newest-first, limited.
+      const filtered = block.kind ? publications.filter((p) => p.kind === block.kind) : publications;
+      const items = filtered.slice(0, block.limit && block.limit > 0 ? block.limit : 12);
+      if (!items.length) return '';
+      const lines = blockTitleLines(block.heading, block.eyebrow);
+      lines.push(
+        items
+          .map((p) => {
+            const prefix = p.episodeNumber != null ? `Ep. ${p.episodeNumber}: ` : '';
+            const duration = p.durationMinutes != null ? ` (${p.durationMinutes} min)` : '';
+            return `- ${prefix}${p.title}${duration}${p.excerpt ? ` — ${p.excerpt}` : ''}`;
+          })
+          .join('\n'),
+      );
+      return lines.join('\n\n');
+    }
+    case 'csAssessmentBlock': {
+      const lines = [`## ${block.introHeading ?? 'Assessment'}`];
+      if (block.introBody) lines.push(block.introBody);
+      return lines.join('\n\n');
+    }
+    case 'csDisclosureBlock': {
+      const lines = block.heading ? [`## ${block.heading}`] : [];
+      const content = portableTextToMarkdown(block.content);
+      if (content) lines.push(content);
+      if (block.note) lines.push(`*${block.note}*`);
+      return lines.join('\n\n');
+    }
     default:
       return '';
   }
@@ -280,17 +397,22 @@ function pageBuilderBlockToMarkdown(
 export function pageBuilderToMarkdown(
   blocks: CsPageBuilderBlock[] | null | undefined,
   publications: CustomSitePublicationFull[] = [],
+  servicesPath = 'practice-areas',
 ): string {
   if (!blocks || blocks.length === 0) return '';
   return blocks
-    .map((b) => pageBuilderBlockToMarkdown(b, publications))
+    .map((b) => pageBuilderBlockToMarkdown(b, publications, servicesPath))
     .filter((s) => s.length > 0)
     .join('\n\n');
 }
 
-function pageToMarkdown(page: CustomSitePageFull, publications: CustomSitePublicationFull[] = []): string {
+function pageToMarkdown(
+  page: CustomSitePageFull,
+  publications: CustomSitePublicationFull[] = [],
+  servicesPath = 'practice-areas',
+): string {
   const parts = [frontMatter(page.title, [page.modifiedAt ? `Last modified: ${page.modifiedAt}` : null])];
-  const body = pageBuilderToMarkdown(page.pageBuilder, publications);
+  const body = pageBuilderToMarkdown(page.pageBuilder, publications, servicesPath);
   if (body) parts.push(body);
   return parts.join('\n\n');
 }
@@ -415,21 +537,25 @@ function titleBlock(title: string, tagline?: string | null): string {
  */
 export async function customSiteMarkdownForPath(site: CustomSite, path: string): Promise<string | null> {
   const segments = path.replace(/^\/+/, '').replace(/\/+$/, '').split('/').filter(Boolean);
+  // Per-site URL vocabulary (registry): the legal site serves
+  // /practice-areas + /publications, the financial site /services + /insights.
+  const { servicesPath, insightsPath } = csSitePaths(site.siteKey);
 
   if (segments.length === 0) {
     const home = await fetchCustomSitePageBySlug(site.siteKey, 'home');
     if (!home) return titleBlock(site.name, site.tagline);
     const publications = needsPublications(home.pageBuilder) ? await fetchCustomSitePublicationsFull(site.siteKey) : [];
-    return pageToMarkdown(home, publications);
+    return pageToMarkdown(home, publications, servicesPath);
   }
 
   if (segments.length === 1) {
-    // /contact.md and /publications.md are advertised via generateMetadata's
-    // mdPath on every site regardless of whether a same-slug csPage exists or
-    // has enough pageBuilder content to be useful — resolve them explicitly
-    // rather than falling through to the generic csPage lookup below.
+    // /contact.md and the publications-index .md are advertised via
+    // generateMetadata's mdPath on every site regardless of whether a
+    // same-slug csPage exists or has enough pageBuilder content to be useful
+    // — resolve them explicitly rather than falling through to the generic
+    // csPage lookup below.
     if (segments[0] === 'contact') return contactMarkdown(site);
-    if (segments[0] === 'publications') {
+    if (segments[0] === insightsPath) {
       const publications = await fetchCustomSitePublicationsFull(site.siteKey);
       return publicationsIndexMarkdown(site, publications);
     }
@@ -437,20 +563,48 @@ export async function customSiteMarkdownForPath(site: CustomSite, path: string):
     const page = await fetchCustomSitePageBySlug(site.siteKey, segments[0]!);
     if (page) {
       const publications = needsPublications(page.pageBuilder) ? await fetchCustomSitePublicationsFull(site.siteKey) : [];
-      return pageToMarkdown(page, publications);
+      return pageToMarkdown(page, publications, servicesPath);
     }
     const pub = await fetchCustomSitePublicationFull(site.siteKey, segments[0]!);
     return pub ? publicationToMarkdown(pub) : null;
   }
 
-  if (segments.length === 2 && segments[0] === 'practice-areas') {
+  if (segments.length === 2 && segments[0] === servicesPath) {
     const area = await fetchCustomSitePracticeAreaFull(site.siteKey, segments[1]!);
     return area ? practiceAreaToMarkdown(area) : null;
   }
 
-  if (segments.length === 2 && segments[0] === 'publications') {
+  if (segments.length === 2 && segments[0] === insightsPath) {
     const pub = await fetchCustomSitePublicationFull(site.siteKey, segments[1]!);
     return pub ? publicationToMarkdown(pub) : null;
+  }
+
+  // Optional per-site surfaces (registry-gated): journey stage pages and
+  // team profiles. Sites without the feature fall through to the 404 below.
+  const features = csSiteFeatures(site.siteKey);
+  if (segments.length === 2 && segments[0] === 'journey' && features.journeyPages) {
+    const stages = await fetchCustomSiteJourneyStages(site.siteKey);
+    const stage = stages.find((st) => st.slug === segments[1]);
+    if (!stage) return null;
+    const parts = [frontMatter(`Stage ${stage.order}: ${stage.title}`, [null]), stage.summary];
+    const body = portableTextToMarkdown(stage.body);
+    if (body) parts.push(body);
+    if (stage.nextStageTeaser) parts.push(stage.nextStageTeaser);
+    return parts.join('\n\n');
+  }
+  if (segments.length === 2 && segments[0] === 'team' && features.teamPages) {
+    const member = await fetchCustomSiteAttorneyFull(site.siteKey, segments[1]!);
+    if (!member) return null;
+    const parts = [frontMatter(member.name, [member.jobTitle ?? null])];
+    const bio = portableTextToMarkdown(member.bio);
+    if (bio) parts.push(bio);
+    for (const section of member.bioSections ?? []) {
+      const content = portableTextToMarkdown(section.content);
+      if (section.heading || content) {
+        parts.push([section.heading ? `## ${section.heading}` : null, content || null].filter(Boolean).join('\n\n'));
+      }
+    }
+    return parts.join('\n\n');
   }
 
   return null;
@@ -474,15 +628,17 @@ export async function customSiteFullMarkdown(site: CustomSite): Promise<string> 
   const validPages = pages.filter((p): p is CustomSitePageFull => p !== null);
   const validPublications = publications.filter((p): p is CustomSitePublicationFull => p !== null);
 
+  const { servicesPath, insightsPath } = csSitePaths(site.siteKey);
   const sections = [
     titleBlock(site.name, site.tagline),
-    // /contact and /publications get the same explicit serializers as
-    // customSiteMarkdownForPath, rather than a generic pageBuilder walk, so
-    // llms-full.txt doesn't diverge from the single-page /md mirrors.
+    // /contact and the publications/insights index get the same explicit
+    // serializers as customSiteMarkdownForPath, rather than a generic
+    // pageBuilder walk, so llms-full.txt doesn't diverge from the
+    // single-page /md mirrors.
     ...validPages.map((p) => {
       if (p.slug === 'contact') return contactMarkdown(site);
-      if (p.slug === 'publications') return publicationsIndexMarkdown(site, validPublications);
-      return pageToMarkdown(p, validPublications);
+      if (p.slug === insightsPath) return publicationsIndexMarkdown(site, validPublications);
+      return pageToMarkdown(p, validPublications, servicesPath);
     }),
     ...practiceAreas.filter((p): p is CustomSitePracticeAreaFull => p !== null).map(practiceAreaToMarkdown),
     ...validPublications.map(publicationToMarkdown),

@@ -11,22 +11,66 @@ import { RichTextBlock } from './blocks/RichTextBlock';
 import { ContactCtaBlock } from './blocks/ContactCtaBlock';
 import { CtaBannerBlock } from './blocks/CtaBannerBlock';
 import { FaqBlock } from './blocks/FaqBlock';
+import { StatRailBlock } from './blocks/StatRailBlock';
+import { ValuePropsBlock } from './blocks/ValuePropsBlock';
+import { JourneyBlock } from './blocks/JourneyBlock';
+import { CompareBlock } from './blocks/CompareBlock';
+import { TeamGridBlock } from './blocks/TeamGridBlock';
+import { FocusAreaListBlock } from './blocks/FocusAreaListBlock';
+import { CaseStudyGridBlock } from './blocks/CaseStudyGridBlock';
+import { NumbersIqBlock } from './blocks/NumbersIqBlock';
+import { LeadMagnetBlock } from './blocks/LeadMagnetBlock';
+import { TabbedInsightsBlock } from './blocks/TabbedInsightsBlock';
+import { EpisodeListBlock } from './blocks/EpisodeListBlock';
+import { AssessmentBlock } from './blocks/AssessmentBlock';
+import { DisclosureBlock } from './blocks/DisclosureBlock';
 
 interface Props {
   blocks: CsPageBuilderBlock[] | null | undefined;
   siteKey: string;
   phone?: string | null;
+  /** Business name — csCompareBlock's "us" column falls back to it. */
+  siteName?: string | null;
+  /** Public path of the page rendering these blocks (e.g. "/insights") —
+   * lets csTabbedInsightsBlock mark the active tab server-side. */
+  currentPath?: string;
 }
 
-/** Switches over csPage.pageBuilder[]._type — the 12 Custom Sites blocks,
+/** Switches over csPage.pageBuilder[]._type — the Custom Sites blocks,
  * rendered in Sanity array order. Mirrors BuildSellHome's section switch. */
-export function PageBuilder({ blocks, siteKey, phone }: Props) {
+export function PageBuilder({ blocks, siteKey, phone, siteName, currentPath }: Props) {
   if (!blocks || blocks.length === 0) return null;
 
   return (
     <>
       {blocks.map((block) => {
         switch (block._type) {
+          case 'csStatRailBlock':
+            return <StatRailBlock key={block._key} block={block} />;
+          case 'csValuePropsBlock':
+            return <ValuePropsBlock key={block._key} block={block} />;
+          case 'csJourneyBlock':
+            return <JourneyBlock key={block._key} block={block} />;
+          case 'csCompareBlock':
+            return <CompareBlock key={block._key} block={block} siteName={siteName} />;
+          case 'csTeamGridBlock':
+            return <TeamGridBlock key={block._key} block={block} siteKey={siteKey} />;
+          case 'csFocusAreaListBlock':
+            return <FocusAreaListBlock key={block._key} block={block} siteKey={siteKey} />;
+          case 'csCaseStudyGridBlock':
+            return <CaseStudyGridBlock key={block._key} block={block} siteKey={siteKey} />;
+          case 'csNumbersIqBlock':
+            return <NumbersIqBlock key={block._key} block={block} />;
+          case 'csLeadMagnetBlock':
+            return <LeadMagnetBlock key={block._key} block={block} siteKey={siteKey} />;
+          case 'csTabbedInsightsBlock':
+            return <TabbedInsightsBlock key={block._key} block={block} currentPath={currentPath} />;
+          case 'csEpisodeListBlock':
+            return <EpisodeListBlock key={block._key} block={block} siteKey={siteKey} />;
+          case 'csAssessmentBlock':
+            return <AssessmentBlock key={block._key} block={block} siteKey={siteKey} />;
+          case 'csDisclosureBlock':
+            return <DisclosureBlock key={block._key} block={block} />;
           case 'csHeroBlock':
             return <HeroBlock key={block._key} block={block} phone={phone} />;
           case 'csIntroBlock':

@@ -20,10 +20,23 @@ export async function ContactCtaBlock({ block, siteKey }: Props) {
     <section className="cs-section cs-section--muted" id="contact">
       <div className="cs-container">
         <div className="cs-contact-grid">
-          <div>
+          <div className={block.formVariant === 'consultation' ? 'cs-contact-aside' : undefined}>
             {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
             {block.heading ? <h2>{block.heading}</h2> : null}
             {block.body ? <p className="cs-lead">{block.body}</p> : null}
+
+            {/* Consultation "Here's what we'll cover" checklist beside the
+                form (csContactCtaBlock.checklist). */}
+            {block.checklist && block.checklist.length > 0 ? (
+              <ul className="cs-contact-checklist">
+                {block.checklist.map((item) => (
+                  <li key={item._key}>
+                    <strong>{item.heading}</strong>
+                    {item.body ? <p>{item.body}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
             {/* The left column was empty dead space while the form carried the
                 whole section on its own — fill it with the firm's actual NAP,
@@ -73,7 +86,15 @@ export async function ContactCtaBlock({ block, siteKey }: Props) {
               </div>
             ) : null}
           </div>
-          {block.showForm !== false ? <ContactForm siteKey={siteKey} /> : null}
+          {block.showForm !== false ? (
+            <div className="cs-contact-form-panel">
+              <ContactForm
+                siteKey={siteKey}
+                variant={block.formVariant === 'consultation' ? 'consultation' : 'standard'}
+                footnote={block.formFootnote}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

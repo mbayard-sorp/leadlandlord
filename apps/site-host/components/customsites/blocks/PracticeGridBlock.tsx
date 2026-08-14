@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import type { CsPracticeGridBlock, CustomSitePracticeAreaCard } from '@/lib/customsites-sanity';
 import { csImageUrl, fetchCustomSitePracticeAreaCards } from '@/lib/customsites-sanity';
+import { csSitePaths } from '@/lib/customsites-registry';
 
 interface Props {
   block: CsPracticeGridBlock;
@@ -16,6 +17,8 @@ export async function PracticeGridBlock({ block, siteKey }: Props) {
 
   if (areas.length === 0) return null;
 
+  const { servicesPath } = csSitePaths(siteKey);
+
   // With no eyebrow or heading the section's top padding just doubles up with
   // the preceding section's bottom padding, so drop it in that case.
   const hasHead = Boolean(block.eyebrow || block.heading);
@@ -23,11 +26,15 @@ export async function PracticeGridBlock({ block, siteKey }: Props) {
   return (
     <section className={hasHead ? 'cs-section' : 'cs-section cs-section--flush-top'} id="practice-areas">
       <div className="cs-container">
-        {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
-        {block.heading ? <h2>{block.heading}</h2> : null}
+        {hasHead ? (
+          <div className="cs-section-head" data-cs-reveal>
+            {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
+            {block.heading ? <h2>{block.heading}</h2> : null}
+          </div>
+        ) : null}
         <div className="cs-grid-3">
           {areas.map((area) => (
-            <div key={area._id} className="cs-card">
+            <div key={area._id} className="cs-card" data-cs-reveal>
               {area.cardImageUrl ? (
                 <div className="cs-card-media">
                   <Image
@@ -41,7 +48,7 @@ export async function PracticeGridBlock({ block, siteKey }: Props) {
               ) : null}
               <h3>{area.title}</h3>
               {area.excerpt ? <p className="cs-card-excerpt">{area.excerpt}</p> : null}
-              <a href={`/practice-areas/${area.slug}`} className="cs-link">
+              <a href={`/${servicesPath}/${area.slug}`} className="cs-link">
                 Learn more
                 <span className="cs-link-arrow" aria-hidden="true">
                   →

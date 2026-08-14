@@ -40,11 +40,11 @@ export function IntroBlock({ block }: Props) {
     <section className="cs-section">
       <div className="cs-container">
         <div className="cs-intro-grid">
-          <div>
+          <div className="cs-intro-aside" data-cs-reveal>
             {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
             {block.heading ? <h2>{block.heading}</h2> : null}
           </div>
-          <div>
+          <div data-cs-reveal>
             <Prose value={block.body} />
             {cta}
           </div>
