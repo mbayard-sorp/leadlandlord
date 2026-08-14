@@ -24,7 +24,8 @@
     "backfill-buildsell-noindex": "tsx scripts/backfill-buildsell-noindex.ts",
     "backfill-caller-names": "tsx scripts/backfill-caller-names.ts",
     "customsites-geo-audit": "tsx scripts/customsites-geo-audit.ts",
-    "customsites-indexnow": "tsx scripts/customsites-indexnow.ts"
+    "customsites-indexnow": "tsx scripts/customsites-indexnow.ts",
+    "seed-aligned-advisors": "tsx scripts/seed-aligned-advisors.ts"
   },
   "devDependencies": {
     "@portabletext/block-tools": "^5.1.12",

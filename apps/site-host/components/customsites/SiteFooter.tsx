@@ -91,6 +91,12 @@ export function SiteFooter({ site }: Props) {
         </div>
       </div>
 
+      {site.footerDisclosure ? (
+        <div className="cs-container">
+          <p className="cs-footer-disclosure">{site.footerDisclosure}</p>
+        </div>
+      ) : null}
+
       <div className="cs-container cs-footer-legal">
         <span>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</span>
         <ul className="cs-footer-legal-links">

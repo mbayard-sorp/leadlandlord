@@ -6,6 +6,10 @@ interface Props {
   pub: CustomSitePublicationFull;
   related: CustomSitePublicationFull[];
   phone?: string | null;
+  /** Publications/insights index path + label for the breadcrumb trail.
+   * Defaults are site #1's; pass the site's own from the calling route. */
+  indexPath?: string;
+  indexLabel?: string;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -22,7 +26,7 @@ function formatDate(iso: string): string {
 
 /** Publication detail-page renderer, used by app/cadr/[slug]/page.tsx when
  * the slug resolves to a csPublication. */
-export function ArticleLayout({ pub, related, phone }: Props) {
+export function ArticleLayout({ pub, related, phone, indexPath = '/publications', indexLabel = 'Publications' }: Props) {
   return (
     <>
       <PageHeader
@@ -30,8 +34,8 @@ export function ArticleLayout({ pub, related, phone }: Props) {
         title={pub.title}
         breadcrumbs={[
           { name: 'Home', url: '/' },
-          { name: 'Publications', url: '/publications' },
-          { name: pub.title, url: `/publications/${pub.slug}` },
+          { name: indexLabel, url: indexPath },
+          { name: pub.title, url: `${indexPath}/${pub.slug}` },
         ]}
       />
 

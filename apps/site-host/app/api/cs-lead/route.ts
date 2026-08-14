@@ -2,20 +2,35 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sendEmail } from '@leadlandlord/integrations/resend';
 import {
+  fetchCustomSiteAssessment,
   fetchCustomSiteByHost,
   fetchCustomSiteByKey,
+  fetchCustomSiteLeadMagnetAsset,
   type CustomSite,
 } from '../../../lib/customsites-sanity';
+import { bandForScore, scoreAnswers } from '../../../lib/customsites-assessment';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Custom Sites lead endpoint (ADR 0033 D4).
+ * Custom Sites lead endpoint (ADR 0033 D4). Discriminated on `kind`:
  *
- * Client contract (apps/site-host/components/customsites/ContactForm.tsx):
- *   POST { siteKey, firstName, lastName, email, phone?, message, company }
- *   -> 200 { ok: true } | 4xx/5xx { error: string }
+ *   contact (default) — ContactForm.tsx standard variant.
+ *     { siteKey, firstName, lastName, email, phone?, message, company }
+ *   consultation — ContactForm.tsx consultation variant: message optional,
+ *     plus callTypes[] (goal | tax | profitability | other).
+ *   magnet — LeadMagnetCard.tsx gated download: assetId (Sanity file asset,
+ *     verified against the site's own csLeadMagnetBlock items — a client URL
+ *     is never trusted). Emails the firm the lead, emails the visitor the
+ *     PDF link, and returns { ok, url } so the download starts immediately.
+ *     A non-JS (urlencoded) submit is answered with a 303 to the PDF.
+ *   assessment — AssessmentQuiz.tsx: assessmentSlug + answers[] (option
+ *     index per question). The route RE-SCORES server-side from the
+ *     csAssessment doc — the client total is never trusted. Firm-only email
+ *     (per operator decision); the visitor sees the result on screen.
+ *
+ *   -> 200 { ok: true, ... } | 4xx/5xx { error: string }
  *
  * No Postgres row, no agent_events row — csSite in Sanity is resolved
  * directly and the lead is forwarded to csSite.leadRecipients via Resend.
@@ -86,16 +101,73 @@ function getClientIp(req: Request): string {
   return 'unknown';
 }
 
-const Body = z.object({
+const BaseFields = {
   siteKey: z.string().trim().min(1).max(120),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
   email: z.string().trim().email().max(160),
   phone: z.string().trim().max(40).optional(),
-  message: z.string().trim().min(1).max(4000),
   /** Honeypot — non-empty means bot. */
   company: z.string().nullish(),
+};
+
+const CallType = z.enum(['goal', 'tax', 'profitability', 'other']);
+
+const ContactBody = z.object({
+  kind: z.literal('contact'),
+  ...BaseFields,
+  message: z.string().trim().min(1).max(4000),
 });
+
+const ConsultationBody = z.object({
+  kind: z.literal('consultation'),
+  ...BaseFields,
+  message: z.string().trim().max(4000).optional(),
+  callTypes: z.array(CallType).max(4).optional(),
+});
+
+const MagnetBody = z.object({
+  kind: z.literal('magnet'),
+  ...BaseFields,
+  /** Sanity file-asset id of the requested PDF (e.g. "file-…-pdf"). */
+  assetId: z.string().trim().min(1).max(200),
+});
+
+const AssessmentBody = z.object({
+  kind: z.literal('assessment'),
+  ...BaseFields,
+  assessmentSlug: z.string().trim().min(1).max(200),
+  /** Selected option index per question; -1 = skipped. */
+  answers: z.array(z.number().int().min(-1).max(25)).max(50),
+});
+
+const Body = z.discriminatedUnion('kind', [ContactBody, ConsultationBody, MagnetBody, AssessmentBody]);
+
+const CALL_TYPE_LABELS: Record<z.infer<typeof CallType>, string> = {
+  goal: 'Goal Strategy Call',
+  tax: 'Tax Strategy Call',
+  profitability: 'Practice Profitability Call',
+  other: 'Other',
+};
+
+/** Accepts the pre-kind JSON shape (no `kind` → contact) and non-JS
+ * urlencoded posts from the magnet form's <form method="post"> fallback. */
+async function parseRequestBody(req: Request): Promise<unknown> {
+  const contentType = req.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const raw = (await req.json()) as Record<string, unknown>;
+    if (raw && typeof raw === 'object' && !('kind' in raw)) raw.kind = 'contact';
+    return raw;
+  }
+  const form = await req.formData();
+  const raw: Record<string, unknown> = {};
+  for (const [key, value] of form.entries()) {
+    if (typeof value !== 'string') continue;
+    raw[key] = value;
+  }
+  if (!raw.kind) raw.kind = 'contact';
+  return raw;
+}
 
 /**
  * Resolve the csSite for this request. Prefers the Host header (set by
@@ -114,9 +186,10 @@ async function resolveCsSite(req: Request, siteKey: string): Promise<CustomSite 
 }
 
 export async function POST(req: Request) {
+  const isFormPost = !(req.headers.get('content-type') ?? '').includes('application/json');
   let payload: z.infer<typeof Body>;
   try {
-    payload = Body.parse(await req.json());
+    payload = Body.parse(await parseRequestBody(req));
   } catch (err) {
     console.warn('cs-lead: invalid payload', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
@@ -146,24 +219,75 @@ export async function POST(req: Request) {
 
   const submitterName = `${payload.firstName} ${payload.lastName}`.trim();
   const sourceHost = req.headers.get('x-site-host') ?? req.headers.get('host') ?? 'unknown';
-  const lines = [
+  const fromAddress = process.env.RESEND_FROM_ADDRESS ?? '';
+
+  const contactLines = [
     `Name: ${submitterName}`,
     `Email: ${payload.email}`,
     `Phone: ${payload.phone ?? '—'}`,
-    '',
-    'Message:',
-    payload.message,
-    '',
-    `Source: ${sourceHost}`,
-    `Submitted: ${new Date().toISOString()}`,
   ];
+  const footerLines = ['', `Source: ${sourceHost}`, `Submitted: ${new Date().toISOString()}`];
+
+  let firmSubject = `New inquiry from ${submitterName} - ${csSite.name}`;
+  let firmBody: string[] = [];
+  let magnetUrl: string | null = null;
+  let magnetTitle: string | null = null;
+
+  if (payload.kind === 'contact') {
+    firmBody = [...contactLines, '', 'Message:', payload.message, ...footerLines];
+  } else if (payload.kind === 'consultation') {
+    const callTypes = (payload.callTypes ?? []).map((t) => CALL_TYPE_LABELS[t]);
+    firmSubject = `New consultation request from ${submitterName} - ${csSite.name}`;
+    firmBody = [
+      ...contactLines,
+      `Call type${callTypes.length === 1 ? '' : 's'}: ${callTypes.length ? callTypes.join(', ') : '—'}`,
+      ...(payload.message ? ['', 'Message:', payload.message] : []),
+      ...footerLines,
+    ];
+  } else if (payload.kind === 'magnet') {
+    const asset = await fetchCustomSiteLeadMagnetAsset(csSite.siteKey, payload.assetId);
+    if (!asset) {
+      console.warn('cs-lead: magnet asset not found for site', { siteKey: csSite.siteKey });
+      return NextResponse.json({ error: 'asset_not_found' }, { status: 404 });
+    }
+    magnetUrl = asset.url;
+    magnetTitle = asset.title;
+    firmSubject = `New report download from ${submitterName} - ${csSite.name}`;
+    firmBody = [...contactLines, `Requested report: ${asset.title}`, ...footerLines];
+  } else {
+    // assessment — re-score server-side; never trust a client-computed total.
+    const assessment = await fetchCustomSiteAssessment(csSite.siteKey, payload.assessmentSlug);
+    if (!assessment) {
+      console.warn('cs-lead: assessment not found', { siteKey: csSite.siteKey, slug: payload.assessmentSlug });
+      return NextResponse.json({ error: 'assessment_not_found' }, { status: 404 });
+    }
+    const score = scoreAnswers(assessment, payload.answers);
+    const band = bandForScore(assessment, score);
+    const stageTitle = band?.resultHeading ?? band?.stage?.title ?? 'Unknown';
+    const answerLines = assessment.questions.map((q, i) => {
+      const idx = payload.kind === 'assessment' ? payload.answers[i] : -1;
+      const chosen = idx != null && idx >= 0 ? q.options[idx]?.label : null;
+      return `${i + 1}. ${q.prompt}\n   → ${chosen ?? '(skipped)'}`;
+    });
+    firmSubject = assessment.emailSubject?.trim() || `New assessment result from ${submitterName} - ${csSite.name}`;
+    firmBody = [
+      ...(assessment.emailIntro ? [assessment.emailIntro, ''] : []),
+      ...contactLines,
+      `Score: ${score}`,
+      `Stage: ${stageTitle}`,
+      '',
+      'Answers:',
+      ...answerLines,
+      ...footerLines,
+    ];
+  }
 
   try {
     await sendEmail({
       to: csSite.leadRecipients,
-      from: process.env.RESEND_FROM_ADDRESS ?? '',
-      subject: `New inquiry from ${submitterName} - ${csSite.name}`,
-      text: lines.join('\n'),
+      from: fromAddress,
+      subject: firmSubject,
+      text: firmBody.join('\n'),
       replyTo: payload.email,
     });
   } catch (err) {
@@ -174,6 +298,36 @@ export async function POST(req: Request) {
       err: err instanceof Error ? err.message : String(err),
     });
     return NextResponse.json({ error: 'delivery_failed' }, { status: 502 });
+  }
+
+  // Magnet: also email the visitor their link. Firm email already succeeded;
+  // a visitor-email failure still returns the URL (the download proceeds).
+  if (payload.kind === 'magnet' && magnetUrl) {
+    try {
+      await sendEmail({
+        to: [payload.email],
+        from: fromAddress,
+        subject: `Your report from ${csSite.name}: ${magnetTitle}`,
+        text: [
+          `Hi ${payload.firstName},`,
+          '',
+          `Here's your copy of "${magnetTitle}":`,
+          magnetUrl,
+          '',
+          `— ${csSite.name}`,
+        ].join('\n'),
+      });
+    } catch (err) {
+      console.error('cs-lead: visitor magnet email failed', {
+        siteKey: payload.siteKey,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+    // Non-JS <form> fallback: send the browser straight to the PDF.
+    if (isFormPost) {
+      return NextResponse.redirect(magnetUrl, 303);
+    }
+    return NextResponse.json({ ok: true, url: magnetUrl });
   }
 
   return NextResponse.json({ ok: true });
