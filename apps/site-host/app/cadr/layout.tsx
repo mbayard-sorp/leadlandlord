@@ -10,6 +10,7 @@ import { TopBar } from '@/components/customsites/TopBar';
 import { SiteHeader } from '@/components/customsites/SiteHeader';
 import { SiteFooter } from '@/components/customsites/SiteFooter';
 import { StickyBar } from '@/components/customsites/StickyBar';
+import { RevealOnScroll } from '@/components/customsites/RevealOnScroll';
 import { CustomSiteJsonLd } from '@/components/customsites/CustomSiteJsonLd';
 import { CustomSiteNavigationJsonLd } from '@/components/customsites/CustomSiteNavigationJsonLd';
 import { WebVitalsReporter } from '@/components/shared/WebVitalsReporter';
@@ -46,8 +47,18 @@ export default async function CustomSiteLayout({ children }: { children: React.R
 
       <main id="main">{children}</main>
 
-      <StickyBar phone={site.phone} />
+      <RevealOnScroll />
+
       <SiteFooter site={site} />
+
+      {/* After the footer, not before it. The bar itself is `position: fixed`
+          so its DOM position is visually irrelevant, but it ships a spacer
+          that reserves the bar's height — and that spacer only clears the
+          bar if it is the last thing in the document. Rendered above the
+          footer it reserved space mid-page and left the footer's final ~68px
+          (Sitemap / Disclaimer / Privacy Policy) permanently covered on
+          mobile. */}
+      <StickyBar phone={site.phone} />
 
       {process.env.NODE_ENV === 'production' && <WebVitalsReporter />}
 

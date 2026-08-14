@@ -36,6 +36,17 @@
   --cs-brass-light: #D3A55F;
   --cs-brass-ink: #8C6530; /* AA-safe brass for small text on paper */
   --cs-paper: #F7F4EF;
+  /* Recessed paper — the tone behind raised white cards (practice-area
+     layout, attorney photo well). Previously two undeclared vars with
+     inline hex fallbacks (--cs-bg-alt #ece7dd, --cs-paper-2 #ECE5D8): three
+     hex apart, invisible to the contrast audit above, and unthemeable.
+     Collapsed to one declared token.
+     Ink #13263C on Paper-2 #ECE5D8 → ~12.66:1  PASS
+     Text #26313D on Paper-2 #ECE5D8 → ~10.91:1 PASS
+     Muted #667181 on Paper-2 #ECE5D8 → ~4.09:1 FAILS AA normal text — do not
+       put muted body copy directly on this surface; it exists to sit behind
+       white cards, not to carry small text itself. */
+  --cs-paper-2: #ECE5D8;
   --cs-text: #26313D;
   --cs-muted: #667181;
   --cs-hairline: #E6DFD3;
@@ -53,6 +64,11 @@
 
   --cs-container-max: 1160px;
   --cs-section-pad: 64px;
+  /* Height of the sticky header (.cs-header, position: sticky; top: 0),
+     measured at desktop. Anything else that sticks must clear it — see
+     .cs-intro-aside. The top bar above it is static and scrolls away, so it
+     is deliberately not included. */
+  --cs-header-h: 97px;
 
   color: var(--cs-text);
   background: var(--cs-paper);
@@ -832,7 +848,7 @@
 /* ── Practice area layout ───────────────────────────────────────────────── */
 
 .cs-adr .cs-pa-wrap {
-  background: var(--cs-bg-alt, #ece7dd);
+  background: var(--cs-paper-2);
   padding: var(--cs-space-6) 0;
 }
 
@@ -1119,6 +1135,25 @@
   }
 }
 
+/* Hanging-heading layout: a 2-line heading against 5 paragraphs left ~200px
+   of empty left column at an even 1:1 split, which read as an accident
+   rather than as intent. The heading column is now narrower than the body
+   column, so the whitespace sits where an editorial layout expects it.
+   The body's measure is capped rather than allowed to absorb the extra
+   width — 7fr alone would push it to ~82 characters, past the readable
+   band. Net: heading column loses ~90px, body stays at a 66-72 measure.
+   (A sticky heading was tried here first and reverted: both split intros on
+   the site sit in ~320px-tall grids, leaving sticky no room to travel.) */
+@media (min-width: 900px) {
+  .cs-adr .cs-intro-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+
+  .cs-adr .cs-intro-grid > * + * {
+    max-width: 36em;
+  }
+}
+
 /* Stacked variant: heading above a full-width body. */
 .cs-adr .cs-intro-stacked h2 {
   margin-top: var(--cs-space-2);
@@ -1219,6 +1254,15 @@
   order: 2;
 }
 
+/* The bio column is the widest body copy on the site — it was running ~94
+   characters per line (748px at 16px) while every other section measured 66.
+   The longest read was the hardest one. 36em holds it near 72 characters;
+   the heading and lead are exempt so the name still spans the column. */
+.cs-adr .cs-attorney-body .cs-prose,
+.cs-adr .cs-attorney-body .cs-attorney-credentials {
+  max-width: 36em;
+}
+
 @media (max-width: 899px) {
   .cs-adr .cs-attorney {
     grid-template-columns: 1fr;
@@ -1235,7 +1279,7 @@
   aspect-ratio: 3 / 4;
   border-radius: var(--cs-radius-card-lg);
   overflow: hidden;
-  background: var(--cs-paper-2, #ECE5D8);
+  background: var(--cs-paper-2);
 }
 
 /* Reach Us contact block on the full attorney profile. */
@@ -1389,11 +1433,51 @@
   color: var(--cs-brass-light);
 }
 
+.cs-adr .cs-testimonial-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cs-space-3);
+  margin-top: var(--cs-space-4);
+}
+
 .cs-adr .cs-testimonial-dots {
   display: flex;
   justify-content: center;
-  gap: var(--cs-space-2);
-  margin-top: var(--cs-space-4);
+  /* 20px, not 8px. The dots carry a 44px-tall hit area via ::before; at an
+     8px gap those hit areas overlapped their neighbours by ~27px, so a tap
+     between two dots landed on whichever sibling painted last. The gap now
+     exceeds the horizontal hit-area bleed (see the ::before inset below), so
+     no two targets intersect. */
+  gap: 20px;
+}
+
+.cs-adr .cs-testimonial-playpause {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(247, 244, 239, 0.3);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cs-paper);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.cs-adr .cs-testimonial-playpause::before {
+  /* Same trick as the dots: 32px visual control, 44px effective target. */
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+
+.cs-adr .cs-testimonial-playpause:hover {
+  background: rgba(247, 244, 239, 0.12);
+  border-color: rgba(247, 244, 239, 0.55);
 }
 
 .cs-adr .cs-testimonial-dot {
@@ -1408,12 +1492,17 @@
 }
 
 /* The visual dot stays a small 9px mark (matches the design), but the tap
-   target grows to the 44px WCAG minimum via a transparent pseudo-element so
-   touch users don't need pixel precision to switch slides. */
+   target grows via a transparent pseudo-element so touch users don't need
+   pixel precision to switch slides.
+   Vertical bleed stays 17.5px (9 + 35 = 44px tall). Horizontal bleed is
+   capped at 9px so a dot's target is 27px wide and stops 1px short of its
+   neighbour's at the 20px gap — 27x44 clears WCAG 2.5.8's 24x24 minimum
+   without the targets overlapping each other, which a symmetric 44px box
+   at this spacing could not do. */
 .cs-adr .cs-testimonial-dot::before {
   content: '';
   position: absolute;
-  inset: -17.5px;
+  inset: -17.5px -9px;
 }
 
 .cs-adr .cs-testimonial-dot[aria-current='true'] {
@@ -1462,16 +1551,27 @@
 }
 
 .cs-adr .cs-badge-row img {
-  opacity: 0.8;
+  /* Was 0.8. These are the firm's third-party credentials — the single
+     highest-trust element on the page — and dimming them all read as
+     disabled rather than restrained. */
+  opacity: 1;
   transition: opacity 0.15s ease;
   /* Screen blend erases baked-in black backgrounds in the badge scans
-     (black is a no-op in screen mode) so every logo floats on the band. */
+     (black is a no-op in screen mode) so every logo floats on the band.
+     The trade-off: it also erases dark logo INK, which is why the
+     AV/Martindale-Hubbell scan reads faint against --cs-ink.
+     Do NOT try to compensate with `filter` on this element: filter creates a
+     stacking context, which changes what mix-blend-mode resolves its
+     backdrop against, and the whole strip composites to black-on-black.
+     Verified — it blanked all four badges. The fix is a pre-inverted
+     (light-artwork) asset for that one badge in Sanity, not CSS. */
   mix-blend-mode: screen;
 }
 
-.cs-adr .cs-badge-row a:hover img,
-.cs-adr .cs-badge-row img:hover {
-  opacity: 1;
+/* Base opacity is now 1, so hover feedback dims rather than brightens —
+   the standard logo-wall affordance. Only fires when a badge is linked. */
+.cs-adr .cs-badge-row a:hover img {
+  opacity: 0.75;
 }
 
 @media (min-width: 900px) {
@@ -1758,6 +1858,33 @@
   color: var(--cs-brass-ink);
 }
 
+/* The breadcrumb markup comes from the shared components/shared/Breadcrumbs
+   component, so `styles/components.css` styles it here too — using R&R
+   TENANT tokens (--ink, --ink-2, --ink-3) that resolve from that file's
+   :root. The header of this file promises `.cs-adr` never leaks outward,
+   which holds; it said nothing about R&R leaking IN, which it does. That
+   means an R&R palette change would silently restyle a client-owned site we
+   don't operate. These two rules re-anchor the breadcrumb to Custom Sites
+   tokens so the shared sheet can move without touching this client. */
+.cs-adr .cs-breadcrumb-bar .breadcrumbs a {
+  color: var(--cs-text);
+}
+
+.cs-adr .cs-breadcrumb-bar .breadcrumbs [aria-current='page'] {
+  color: var(--cs-ink);
+}
+
+/* `.breadcrumbs ol` and `li` are `display: flex` in components.css, which
+   drops the leading/trailing whitespace inside the separator's
+   `<span> / </span>` — the trail rendered as "Home/ADR Services/Construction
+   Mediation" with the slashes jammed against both labels. Flex items can't
+   carry that whitespace, so the spacing has to be margin. */
+.cs-adr .cs-breadcrumb-bar .breadcrumbs-sep {
+  margin: 0 var(--cs-space-2);
+  color: var(--cs-muted);
+  opacity: 1;
+}
+
 /* ── Article layout (publications) ─────────────────────────────────────── */
 
 .cs-adr .cs-article-meta {
@@ -1782,6 +1909,13 @@
 }
 
 @media (max-width: 639px) {
+  /* Bar and spacer are both sized from --cs-sticky-h so they cannot drift
+     apart. They previously did: the spacer was a hardcoded 64px against a
+     bar that measured 68.4px (button + 2x space-2 padding), leaving 4px of
+     content under the bar even once the spacer was correctly positioned. */
+  .cs-adr {
+    --cs-sticky-h: 68px;
+  }
   .cs-adr .cs-sticky-bar {
     display: flex;
     position: fixed;
@@ -1789,8 +1923,12 @@
     right: 0;
     bottom: 0;
     z-index: 100;
+    min-height: var(--cs-sticky-h);
+    align-items: center;
     background: var(--cs-navy);
     padding: var(--cs-space-2) var(--cs-space-3);
+    /* Keeps the bar clear of the iOS home indicator. */
+    padding-bottom: max(var(--cs-space-2), env(safe-area-inset-bottom));
     box-shadow: 0 -4px 16px rgba(19, 38, 60, 0.2);
   }
   .cs-adr .cs-sticky-bar .cs-btn {
@@ -1798,17 +1936,109 @@
     justify-content: center;
   }
   .cs-adr .cs-sticky-spacer {
-    height: 64px;
+    height: calc(var(--cs-sticky-h) + env(safe-area-inset-bottom));
   }
 }
 
 /* ── Motion ─────────────────────────────────────────────────────────────── */
+
+/* ── Scroll reveal ──────────────────────────────────────────────────────── */
+
+/* Paired with components/customsites/RevealOnScroll.tsx. The resting state is
+   plain visible: `.cs-reveal-hidden` is added by script only to elements that
+   are off-screen at mount, so a page with no JS — or content already above
+   the fold — is never hidden by this. Transform + opacity only, so the reveal
+   stays on the compositor and cannot cause layout shift (CLS). */
+.cs-adr [data-cs-reveal] {
+  transition: opacity 450ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.cs-adr [data-cs-reveal].cs-reveal-hidden {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+/* Row-wise stagger for the practice grid. The delay resets every third card
+   (3n+1) so each ROW reads as its own sequence — keying off a flat nth-child
+   would give the second row a 120-200ms lag even though it enters the
+   viewport later, which reads as lag rather than rhythm.
+   The grid collapses to one column below 900px, where a per-row stagger is
+   meaningless, so this is desktop-only. */
+@media (min-width: 900px) {
+  .cs-adr .cs-grid-3 > [data-cs-reveal]:nth-child(3n + 2) {
+    transition-delay: 40ms;
+  }
+
+  .cs-adr .cs-grid-3 > [data-cs-reveal]:nth-child(3n + 3) {
+    transition-delay: 80ms;
+  }
+}
+
+/* Publication rows are a single column, so a flat stagger is correct here. */
+.cs-adr .cs-pub-card[data-cs-reveal]:nth-child(2) {
+  transition-delay: 40ms;
+}
+
+.cs-adr .cs-pub-card[data-cs-reveal]:nth-child(3) {
+  transition-delay: 80ms;
+}
+
+/* ── Card hover ─────────────────────────────────────────────────────────── */
+
+/* The unifying navy wash eases back on hover, letting the photograph come
+   forward. Deliberately not a lift/shadow: raising the card is the generic
+   SaaS tell, and this is a law practice. Opacity is safe to transition
+   alongside mix-blend-mode here (unlike `filter` — see the badge row).
+   :focus-within gives keyboard users the same response as the pointer. */
+.cs-adr .cs-card-media::after {
+  transition: opacity 300ms ease;
+}
+
+.cs-adr .cs-card:hover .cs-card-media::after,
+.cs-adr .cs-card:focus-within .cs-card-media::after {
+  opacity: 0.4;
+}
+
+/* The arrow already nudges on link hover; this extends the same response to
+   the whole card so the hover target and the visual feedback agree. */
+.cs-adr .cs-card:hover .cs-link-arrow,
+.cs-adr .cs-card:focus-within .cs-link-arrow {
+  transform: translateX(4px);
+}
+
+/* ── Testimonial cross-fade ─────────────────────────────────────────────── */
+
+/* Quotes previously hard-cut between slides. Keyed on the index in
+   TestimonialsCarousel so React remounts the node and the animation replays.
+   Short and small — a neutral's testimonial should settle, not swoop. */
+@keyframes cs-quote-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cs-adr .cs-testimonial-slide {
+  animation: cs-quote-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .cs-adr * {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+
+  /* Belt and braces. RevealOnScroll already bails under reduce and never adds
+     this class, but if it ever did, the rule above only collapses the
+     duration — the element would still be stuck at opacity 0. */
+  .cs-adr [data-cs-reveal].cs-reveal-hidden {
+    opacity: 1;
+    transform: none;
   }
 }
 

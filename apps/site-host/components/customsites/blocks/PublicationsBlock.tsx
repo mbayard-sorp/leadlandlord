@@ -30,11 +30,15 @@ export async function PublicationsBlock({ block, siteKey }: Props) {
   return (
     <section className="cs-section">
       <div className="cs-container">
-        {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
-        {block.heading ? <h2>{block.heading}</h2> : null}
+        {block.eyebrow || block.heading ? (
+          <div className="cs-section-head" data-cs-reveal>
+            {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
+            {block.heading ? <h2>{block.heading}</h2> : null}
+          </div>
+        ) : null}
         <div>
           {publications.map((pub) => (
-            <article key={pub._id} className="cs-pub-card">
+            <article key={pub._id} className="cs-pub-card" data-cs-reveal>
               <p className="cs-pub-meta">{KIND_LABEL[pub.kind] ?? 'Publication'}</p>
               <h3>{pub.title}</h3>
               {pub.excerpt ? <p className="cs-card-excerpt">{pub.excerpt}</p> : null}

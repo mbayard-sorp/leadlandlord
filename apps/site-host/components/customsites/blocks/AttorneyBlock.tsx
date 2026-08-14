@@ -33,7 +33,7 @@ export function AttorneyBlock({ block }: Props) {
               />
             ) : null}
           </div>
-          <div>
+          <div className="cs-attorney-body">
             <h2>{attorney.name}</h2>
             {attorney.jobTitle ? <p className="cs-lead">{attorney.jobTitle}</p> : null}
             {fullProfile && (attorney.phone || attorney.email || attorney.vCardUrl) ? (
