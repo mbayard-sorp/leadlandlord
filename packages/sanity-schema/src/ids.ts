@@ -151,3 +151,15 @@ export function csTestimonialDocId(siteKey: string, key: string): string {
 export function csBadgeDocId(siteKey: string, key: string): string {
   return `cs-badge-${siteKey}-${key}`;
 }
+
+export function csJourneyStageDocId(siteKey: string, slug: string): string {
+  return cappedSlugDocId(`cs-stage-${siteKey}-`, slug);
+}
+
+export function csCaseStudyDocId(siteKey: string, slug: string): string {
+  return cappedSlugDocId(`cs-case-${siteKey}-`, slug);
+}
+
+export function csAssessmentDocId(siteKey: string, slug: string): string {
+  return cappedSlugDocId(`cs-assessment-${siteKey}-`, slug);
+}

@@ -217,6 +217,22 @@ export const bsFaqSection = defineType({
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string' }),
     defineField({
+      name: 'defaultOpen',
+      title: 'Open By Default',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'First item only', value: 'first' },
+          { title: 'All expanded', value: 'all' },
+          { title: 'All collapsed', value: 'none' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'first',
+      description:
+        'Which answers are already showing when the page loads. Every answer is in the page either way — collapsing only hides it visually, so this does not affect the FAQ rich result.',
+    }),
+    defineField({
       name: 'items',
       title: 'FAQ Items',
       type: 'array',
@@ -276,6 +292,95 @@ export const bsPricingSection = defineType({
 });
 
 /**
+ * Before / After gallery. Two render layouts off the same `pairs` data:
+ *  - 'slider': the two photos stack in one frame with a draggable divider, so
+ *    the visitor wipes between them. Strongest proof, and the reveal itself is
+ *    the interaction.
+ *  - 'grid': the pair sits side by side under Before / After labels. Better
+ *    when the two shots are framed differently, or for print/PDF-style reading.
+ * Both layouts share the same markup contract, so switching is a one-field
+ * change with no re-upload.
+ */
+export const bsBeforeAfterSection = defineType({
+  name: 'bsBeforeAfterSection',
+  title: 'Before / After Gallery',
+  type: 'object',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Uppercase kicker above the heading.' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', initialValue: 'Before & After' }),
+    defineField({ name: 'subhead', title: 'Subhead', type: 'text', rows: 2 }),
+    defineField({
+      name: 'layout',
+      title: 'Layout',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Slider (drag to reveal)', value: 'slider' },
+          { title: 'Grid (side by side)', value: 'grid' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'slider',
+      description: 'Slider = one frame with a draggable divider. Grid = the two photos side by side.',
+    }),
+    defineField({
+      name: 'pairs',
+      title: 'Projects',
+      type: 'array',
+      of: [{ type: 'bsBeforeAfterPair' }],
+      validation: (r) => r.min(1),
+      description: 'One entry per job. Two or three strong pairs beat a long wall of thumbnails.',
+    }),
+    defineField({
+      name: 'beforeLabel',
+      title: 'Before Label',
+      type: 'string',
+      initialValue: 'Before',
+      description: 'Overrides the "Before" chip on every pair.',
+    }),
+    defineField({
+      name: 'afterLabel',
+      title: 'After Label',
+      type: 'string',
+      initialValue: 'After',
+      description: 'Overrides the "After" chip on every pair.',
+    }),
+    defineField({
+      name: 'aspect',
+      title: 'Frame Shape',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Landscape (4:3)', value: '4/3' },
+          { title: 'Wide (16:9)', value: '16/9' },
+          { title: 'Square (1:1)', value: '1/1' },
+          { title: 'Portrait (3:4)', value: '3/4' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: '4/3',
+      description: 'Every frame is locked to this shape so the row stays aligned and the page does not jump while images load.',
+    }),
+    defineField({
+      name: 'cta',
+      title: 'Call-to-action Button',
+      type: 'bsCtaButton',
+      description: 'Optional button centered below the gallery (e.g. "Get a Free Quote" → #contact). Leave empty to hide.',
+    }),
+  ],
+  preview: {
+    select: { layout: 'layout', pairs: 'pairs', media: 'pairs.0.after' },
+    prepare: ({ layout, pairs, media }) => ({
+      title: 'Before / After Gallery',
+      subtitle: [layout === 'grid' ? 'Grid' : 'Slider', pairs?.length ? `${pairs.length} projects` : null]
+        .filter(Boolean)
+        .join(' · '),
+      media,
+    }),
+  },
+});
+
+/**
  * Freeform HTML block. Renders raw markup as-is on the page, in section order.
  * Operator-authored only (not exposed in the customer self-edit portal), so the
  * content is trusted; the site renderer injects it via dangerouslySetInnerHTML.
@@ -325,4 +430,5 @@ export const buildsellSectionTypes = [
   bsUgcSection,
   bsHtmlSection,
   bsPricingSection,
+  bsBeforeAfterSection,
 ];

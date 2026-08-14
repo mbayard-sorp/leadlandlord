@@ -4,11 +4,25 @@ import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   siteKey: string;
+  /** "standard" = name/email/phone/message (site #1's set). "consultation"
+   * adds the call-type checkbox group and makes the message optional
+   * (csContactCtaBlock.formVariant). */
+  variant?: 'standard' | 'consultation';
+  /** Fine print under the submit button (csContactCtaBlock.formFootnote). */
+  footnote?: string | null;
+  submitLabel?: string;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type FieldName = 'firstName' | 'lastName' | 'email' | 'message';
+
+const CALL_TYPES = [
+  { value: 'goal', label: 'Goal Strategy Call' },
+  { value: 'tax', label: 'Tax Strategy Call' },
+  { value: 'profitability', label: 'Practice Profitability Call' },
+  { value: 'other', label: 'Other' },
+] as const;
 
 /**
  * Custom Sites lead form (ADR 0033 D4). Posts to /api/cs-lead (Phase 4 —
@@ -18,7 +32,8 @@ type FieldName = 'firstName' | 'lastName' | 'email' | 'message';
  *   -> 200 { ok: true } | 4xx { error: string }
  * `company` is the honeypot field (hidden via CSS, real users never fill it).
  */
-export function ContactForm({ siteKey }: Props) {
+export function ContactForm({ siteKey, variant = 'standard', footnote, submitLabel }: Props) {
+  const isConsultation = variant === 'consultation';
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +67,7 @@ export function ContactForm({ siteKey }: Props) {
     if (!lastName) nextFieldErrors.lastName = 'Last name is required.';
     if (!email) nextFieldErrors.email = 'Email is required.';
     else if (!EMAIL_RE.test(email)) nextFieldErrors.email = 'Enter a valid email address.';
-    if (!message) nextFieldErrors.message = 'Message is required.';
+    if (!message && !isConsultation) nextFieldErrors.message = 'Message is required.';
 
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors);
@@ -66,12 +81,15 @@ export function ContactForm({ siteKey }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          kind: isConsultation ? 'consultation' : 'contact',
           siteKey,
           firstName,
           lastName,
           email,
           phone: String(fd.get('phone') ?? '').trim() || undefined,
-          message,
+          ...(isConsultation
+            ? { message: message || undefined, callTypes: fd.getAll('callTypes').map(String) }
+            : { message }),
           company: fd.get('company'),
         }),
       });
@@ -172,15 +190,29 @@ export function ContactForm({ siteKey }: Props) {
           <input id="cs-phone" name="phone" type="tel" className="cs-form-input" autoComplete="tel" />
         </div>
       </div>
+      {isConsultation ? (
+        <fieldset className="cs-form-field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="cs-form-label">How can we help?</legend>
+          <div className="cs-form-choice">
+            {CALL_TYPES.map((ct) => (
+              <label key={ct.value}>
+                <input type="checkbox" name="callTypes" value={ct.value} />
+                <span>{ct.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+
       <div className="cs-form-field">
         <label className="cs-form-label" htmlFor="cs-message">
-          Message <span className="cs-form-required">*</span>
+          Message {isConsultation ? null : <span className="cs-form-required">*</span>}
         </label>
         <textarea
           id="cs-message"
           name="message"
-          required
-          rows={5}
+          required={!isConsultation}
+          rows={isConsultation ? 3 : 5}
           className="cs-form-textarea"
           aria-invalid={fieldErrors.message ? true : undefined}
           aria-describedby={fieldErrors.message ? 'cs-message-error' : undefined}
@@ -208,8 +240,13 @@ export function ContactForm({ siteKey }: Props) {
       ) : null}
 
       <button type="submit" disabled={pending} className="cs-btn cs-btn-primary" style={{ marginTop: 8 }}>
-        {pending ? 'Sending…' : 'Send Message'}
+        {pending ? 'Sending…' : (submitLabel ?? (isConsultation ? 'Book My Free Consultation' : 'Send Message'))}
       </button>
+      {footnote ? (
+        <p className="cs-form-footnote" style={{ marginTop: 12 }}>
+          {footnote}
+        </p>
+      ) : null}
     </form>
   );
 }

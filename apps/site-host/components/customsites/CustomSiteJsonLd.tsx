@@ -79,7 +79,22 @@ export function CustomSiteJsonLd({ site, attorneys, testimonials, baseUrl }: Pro
     publisher: { '@id': `${origin}/#organization` },
   };
 
-  const people = attorneys.map((attorney, index) => buildPersonJsonLd(origin, attorney, index));
+  // Person nodes are emitted only for members with professional substance
+  // (credentials, bar admissions, panel memberships, or public profiles) —
+  // plus the primary member (index 0), whose stable `#attorney` @id other
+  // nodes cross-reference. A roster entry with none of those (e.g. an office
+  // dog) renders on the page but never becomes schema.org Person data.
+  const people = attorneys
+    .map((attorney, index) => ({ attorney, index }))
+    .filter(
+      ({ attorney, index }) =>
+        index === 0 ||
+        (attorney.credentials?.length ?? 0) > 0 ||
+        (attorney.barAdmissions?.length ?? 0) > 0 ||
+        (attorney.arbitratorPanels?.length ?? 0) > 0 ||
+        (attorney.sameAs?.length ?? 0) > 0,
+    )
+    .map(({ attorney, index }) => buildPersonJsonLd(origin, attorney, index));
 
   return (
     <>

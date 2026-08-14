@@ -7,6 +7,9 @@ import { csPublication } from './custom-publication';
 import { csAttorney } from './custom-attorney';
 import { csTestimonial } from './custom-testimonial';
 import { csBadge } from './custom-badge';
+import { csJourneyStage } from './custom-journey-stage';
+import { csCaseStudy } from './custom-case-study';
+import { csAssessment } from './custom-assessment';
 
 export * from './objects';
 export * from './sections';
@@ -17,6 +20,9 @@ export { csPublication } from './custom-publication';
 export { csAttorney } from './custom-attorney';
 export { csTestimonial } from './custom-testimonial';
 export { csBadge } from './custom-badge';
+export { csJourneyStage } from './custom-journey-stage';
+export { csCaseStudy } from './custom-case-study';
+export { csAssessment } from './custom-assessment';
 
 // customSitesObjectTypes (csSeo, csNavChildLink, csNavLink, csAddress,
 // csFaqItem, csBody, csRedirect, csCredential, csBarAdmission) must be
@@ -34,6 +40,9 @@ export const customSitesSchemaTypes = [
   csTestimonial,
   csBadge,
   csPublication,
+  csJourneyStage,
+  csCaseStudy,
+  csAssessment,
   csPage,
   csSite,
 ];

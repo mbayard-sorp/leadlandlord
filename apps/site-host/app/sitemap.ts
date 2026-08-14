@@ -9,7 +9,10 @@ import {
   fetchCustomSitePages,
   fetchCustomSitePracticeAreas,
   fetchCustomSitePublications,
+  fetchCustomSiteJourneyStages,
+  fetchCustomSiteAttorneys,
 } from '../lib/customsites-sanity';
+import { csSitePaths, csSiteFeatures } from '../lib/customsites-registry';
 import type { Page } from '../lib/content';
 import { pageHref } from '../lib/content';
 
@@ -95,10 +98,14 @@ async function customSitemap(base: string, siteKey: string): Promise<MetadataRou
   const site = await fetchCustomSiteByKey(siteKey);
   if (!site || site.robotsDisallow) return [];
 
-  const [pages, practiceAreas, publications] = await Promise.all([
+  const { servicesPath, insightsPath } = csSitePaths(siteKey);
+  const { journeyPages, teamPages } = csSiteFeatures(siteKey);
+  const [pages, practiceAreas, publications, journeyStages, teamMembers] = await Promise.all([
     fetchCustomSitePages(siteKey),
     fetchCustomSitePracticeAreas(siteKey),
     fetchCustomSitePublications(siteKey),
+    journeyPages ? fetchCustomSiteJourneyStages(siteKey) : Promise.resolve([]),
+    teamPages ? fetchCustomSiteAttorneys(siteKey) : Promise.resolve([]),
   ]);
 
   const lastModifiedOf = (modifiedAt?: string | null, publishedAt?: string | null): Date =>
@@ -119,14 +126,14 @@ async function customSitemap(base: string, siteKey: string): Promise<MetadataRou
   }));
 
   const practiceAreaEntries: MetadataRoute.Sitemap = practiceAreas.map((p) => ({
-    url: canonical(base, `/practice-areas/${p.slug}`),
+    url: canonical(base, `/${servicesPath}/${p.slug}`),
     lastModified: lastModifiedOf(p.modifiedAt, p.publishedAt),
     changeFrequency: 'monthly' as const,
     priority: 0.9,
   }));
 
   const publicationsIndex: MetadataRoute.Sitemap = publications.length
-    ? [{ url: canonical(base, '/publications'), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.7 }]
+    ? [{ url: canonical(base, `/${insightsPath}`), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.7 }]
     : [];
 
   const publicationEntries: MetadataRoute.Sitemap = publications.map((p) => ({
@@ -136,7 +143,31 @@ async function customSitemap(base: string, siteKey: string): Promise<MetadataRou
     priority: 0.5,
   }));
 
-  return [home, ...pageEntries, ...practiceAreaEntries, ...publicationsIndex, ...publicationEntries];
+  // Optional per-site surfaces (registry-gated) — [] for sites without them,
+  // so site #1's sitemap is byte-identical to its pre-registry output.
+  const journeyEntries: MetadataRoute.Sitemap = journeyStages.map((stage) => ({
+    url: canonical(base, `/journey/${stage.slug}`),
+    lastModified: new Date(),
+    changeFrequency: 'yearly' as const,
+    priority: 0.5,
+  }));
+
+  const teamEntries: MetadataRoute.Sitemap = teamMembers.map((member) => ({
+    url: canonical(base, `/team/${member.slug}`),
+    lastModified: new Date(),
+    changeFrequency: 'yearly' as const,
+    priority: 0.4,
+  }));
+
+  return [
+    home,
+    ...pageEntries,
+    ...practiceAreaEntries,
+    ...publicationsIndex,
+    ...publicationEntries,
+    ...journeyEntries,
+    ...teamEntries,
+  ];
 }
 
 // Cache the rendered sitemap for an hour. Without this, every Googlebot

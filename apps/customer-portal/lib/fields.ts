@@ -74,6 +74,14 @@ const CTA_STYLE_OPTIONS: SelectOption[] = [
   { value: 'secondary', label: 'Outline button' },
 ];
 
+const faqDefaultOpen = z.enum(['first', 'all', 'none']).optional().or(z.literal(''));
+
+const FAQ_DEFAULT_OPEN_OPTIONS: SelectOption[] = [
+  { value: 'first', label: 'First answer showing' },
+  { value: 'all', label: 'All answers showing' },
+  { value: 'none', label: 'All answers hidden' },
+];
+
 // ---------------------------------------------------------------------------
 // Field descriptor types
 // ---------------------------------------------------------------------------
@@ -322,6 +330,7 @@ const sectionTemplates: Record<string, SectionTemplate> = {
     fields: [
       { relKey: 'eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above the FAQ title.' },
       { relKey: 'heading', label: 'FAQ section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Frequently Asked Questions', description: 'Common questions and answers. Helps you appear in Google with an expandable FAQ.' },
+      { relKey: 'defaultOpen', label: 'What visitors see first', control: 'select', schema: faqDefaultOpen, options: FAQ_DEFAULT_OPEN_OPTIONS, description: 'Whether answers start open or closed. Visitors can always click to open a hidden answer, and Google reads them all either way.' },
       // Per-item fields are generated dynamically in buildSectionList().
     ],
   },

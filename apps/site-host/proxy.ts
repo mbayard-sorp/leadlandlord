@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { CUSTOM_HOSTS, csNamespace } from '@/lib/customsites-registry';
 
 /**
  * Hosts that route to the corporate marketing site (leadslandlord.com), not
@@ -7,25 +8,13 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 const CORPORATE_HOSTS = new Set(['leadslandlord.com', 'www.leadslandlord.com']);
 
-/**
+/*
  * Custom Sites (ADR 0033) — client-owned standalone sites with zero operator
- * coupling. `CUSTOM_HOSTS` maps a client's domain(s) to its `csSite.siteKey`.
- * `?cs=<siteKey>` is the dev fallback, sticky via the `ll_cs` cookie — same
- * mechanics as `?corporate=1`/`ll_corp` above.
+ * coupling. Host → siteKey and siteKey → namespace both live in
+ * lib/customsites-registry.ts (shared with sitemap/metadata/markdown so URL
+ * shapes stay in one place). `?cs=<siteKey>` is the dev fallback, sticky via
+ * the `ll_cs` cookie — same mechanics as `?corporate=1`/`ll_corp` below.
  */
-const CUSTOM_HOSTS = new Map<string, string>([
-  ['constructionadrservices.com', 'constructionadr'],
-  ['www.constructionadrservices.com', 'constructionadr'],
-]);
-
-/**
- * siteKey -> internal app/ namespace folder. A small map (not a hardcoded
- * literal) so site #2 is additive per ADR 0033 D1: add one CUSTOM_HOSTS entry
- * + one CUSTOM_NAMESPACES entry + one app/ folder, nothing else changes.
- */
-const CUSTOM_NAMESPACES: Record<string, string> = {
-  constructionadr: 'cadr',
-};
 
 /**
  * Next 16 proxy.ts — runs before the cache. Four responsibilities:
@@ -102,9 +91,9 @@ export default function proxy(req: NextRequest) {
   const customQueryKey = req.nextUrl.searchParams.get('cs');
   const customCookieKey = req.cookies.get('ll_cs')?.value ?? null;
   const csSiteKey = CUSTOM_HOSTS.get(hostNoPort) ?? customQueryKey ?? customCookieKey ?? null;
-  const csNamespace = csSiteKey ? CUSTOM_NAMESPACES[csSiteKey] : undefined;
+  const csNs = csSiteKey ? csNamespace(csSiteKey) : undefined;
 
-  if (csSiteKey && csNamespace) {
+  if (csSiteKey && csNs) {
     headers.set('x-site-mode', 'custom');
     headers.set('x-cs-site', csSiteKey);
 
@@ -135,7 +124,7 @@ export default function proxy(req: NextRequest) {
       // Every route handler lives at top-level /api/* — no namespace has an
       // api/ folder — so rewriting /api/x to /<ns>/api/x is always a 404.
       path.startsWith('/api') ||
-      path.startsWith(`/${csNamespace}`) ||
+      path.startsWith(`/${csNs}`) ||
       // Shared-host escapes, same as the corporate branch above. `ll_cs` is a
       // sticky session cookie, so once a browser has previewed a Custom Site on
       // leadlandlord-sites.vercel.app every later request on that host lands
@@ -153,7 +142,7 @@ export default function proxy(req: NextRequest) {
     let res: NextResponse;
     if (!passthrough) {
       const url = req.nextUrl.clone();
-      url.pathname = `/${csNamespace}${path === '/' ? '' : path}`;
+      url.pathname = `/${csNs}${path === '/' ? '' : path}`;
       res = NextResponse.rewrite(url, { request: { headers } });
     } else {
       res = NextResponse.next({ request: { headers } });

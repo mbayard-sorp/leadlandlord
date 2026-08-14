@@ -13,6 +13,8 @@ import { AboutBlock } from './blocks/AboutBlock';
 import { ProcessBlock } from './blocks/ProcessBlock';
 import { ReviewsBlock } from './blocks/ReviewsBlock';
 import { PricingBlock } from './blocks/PricingBlock';
+import { BeforeAfterBlock } from './blocks/BeforeAfterBlock';
+import { FaqBlock } from './blocks/FaqBlock';
 import { ContactBlock } from './blocks/ContactBlock';
 import { FooterBlock } from './blocks/FooterBlock';
 import { UgcBlock } from './blocks/UgcBlock';
@@ -229,6 +231,14 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
                 layoutVariant={layoutVariant}
               />
             );
+          case 'bsFaqSection':
+            return (
+              <FaqBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
           case 'bsContactSection':
             return (
               <ContactBlock
@@ -242,6 +252,14 @@ export function BuildSellHome({ site, draft, saveToken }: BuildSellHomeProps) {
           case 'bsPricingSection':
             return (
               <PricingBlock
+                key={section._key}
+                section={section}
+                layoutVariant={layoutVariant}
+              />
+            );
+          case 'bsBeforeAfterSection':
+            return (
+              <BeforeAfterBlock
                 key={section._key}
                 section={section}
                 layoutVariant={layoutVariant}

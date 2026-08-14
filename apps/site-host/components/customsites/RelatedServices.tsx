@@ -1,10 +1,15 @@
 import type { CustomSitePracticeAreaCard } from '@/lib/customsites-sanity';
 import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
+import { csSitePaths } from '@/lib/customsites-registry';
 
 interface Props {
   areas: CustomSitePracticeAreaCard[];
   currentSlug: string;
   heading?: string;
+  /** Aside-variant CTA copy. Defaults are site #1's ADR wording — pass
+   * per-site copy from the calling route for any other site. */
+  ctaEyebrow?: string;
+  ctaBody?: string;
   /**
    * "aside" renders the navy rail used alongside practice-area copy and keeps
    * the current page in the list (marked current). "section" is the standalone
@@ -14,13 +19,21 @@ interface Props {
 }
 
 /** Sibling practice-area links. Aside variant is the navy "Other ADR Services" rail. */
-export async function RelatedServices({ areas, currentSlug, heading, variant = 'section' }: Props) {
+export async function RelatedServices({
+  areas,
+  currentSlug,
+  heading,
+  variant = 'section',
+  ctaEyebrow = 'Free Case Review',
+  ctaBody = 'Have a construction dispute? Talk to our team before you decide your next step.',
+}: Props) {
+  // React.cache-deduped — the page this rail lives on has already resolved
+  // the site once, so this is a free lookup, not a second Sanity round trip.
+  const site = await resolveCurrentCustomSite();
+  const { servicesPath } = csSitePaths(site?.siteKey);
+
   if (variant === 'aside') {
     if (areas.length === 0) return null;
-
-    // React.cache-deduped — the page this rail lives on has already resolved
-    // the site once, so this is a free lookup, not a second Sanity round trip.
-    const site = await resolveCurrentCustomSite();
 
     return (
       <aside className="cs-services-rail" aria-labelledby="other-services-heading">
@@ -31,7 +44,7 @@ export async function RelatedServices({ areas, currentSlug, heading, variant = '
             return (
               <li key={area._id}>
                 <a
-                  href={`/practice-areas/${area.slug}`}
+                  href={`/${servicesPath}/${area.slug}`}
                   className={isCurrent ? 'is-current' : undefined}
                   aria-current={isCurrent ? 'page' : undefined}
                 >
@@ -47,8 +60,8 @@ export async function RelatedServices({ areas, currentSlug, heading, variant = '
             form further down. Phone is read from the resolved site — never
             hardcoded. */}
         <div className="cs-services-rail-cta">
-          <span className="cs-eyebrow cs-eyebrow--inverse">Free Case Review</span>
-          <p>Have a construction dispute? Talk to our team before you decide your next step.</p>
+          <span className="cs-eyebrow cs-eyebrow--inverse">{ctaEyebrow}</span>
+          <p>{ctaBody}</p>
           {site?.phone ? (
             <a href={`tel:${site.phone}`} className="cs-btn cs-btn-primary">
               Call {site.phone}
@@ -75,7 +88,7 @@ export async function RelatedServices({ areas, currentSlug, heading, variant = '
         <ul className="cs-related-list">
           {siblings.map((area) => (
             <li key={area._id}>
-              <a href={`/practice-areas/${area.slug}`} className="cs-link">
+              <a href={`/${servicesPath}/${area.slug}`} className="cs-link">
                 {area.title}
                 <span className="cs-link-arrow" aria-hidden="true">
                   →

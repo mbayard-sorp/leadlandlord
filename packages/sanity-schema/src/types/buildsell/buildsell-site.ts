@@ -127,6 +127,7 @@ export const buildsellSite = defineType({
         { type: 'bsProcessSection' },
         { type: 'bsReviewsSection' },
         { type: 'bsPricingSection' },
+        { type: 'bsBeforeAfterSection' },
         { type: 'bsContactSection' },
         { type: 'bsFaqSection' },
         { type: 'bsUgcSection' },
