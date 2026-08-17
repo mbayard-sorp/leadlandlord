@@ -104,7 +104,10 @@ interface NapCheckResult {
 
 /**
  * Fetch the given profileUrl via Firecrawl and check whether the site's
- * business name or phone number appears in the scraped markdown.
+ * business name or phone number appears in the scraped markdown. The phone
+ * match strips non-digit characters from both the target number and the
+ * scraped text before comparing, so formatted numbers in the page (e.g.
+ * "(520) 555-1234") still match against a digits-only phone arg.
  *
  * Returns { found: false, scraped: false } on any network/API failure so
  * callers never throw. The 5 000-char cap keeps Firecrawl cost minimal.
@@ -140,10 +143,11 @@ export async function checkNapPresence(
     const text = json.data.markdown.slice(0, 5000).toLowerCase();
     const nameNeedle = businessName.toLowerCase().trim();
     const phoneDigits = phone.replace(/\D/g, '');
+    const textDigits = text.replace(/\D/g, '');
 
     const found =
       (nameNeedle.length > 2 && text.includes(nameNeedle)) ||
-      (phoneDigits.length >= 7 && text.includes(phoneDigits));
+      (phoneDigits.length >= 7 && textDigits.includes(phoneDigits));
 
     return { found, scraped: true };
   } catch {
@@ -237,8 +241,11 @@ export class CitationRunner extends BaseAgent<
         continue;
       }
       // Insert via onConflictDoNothing as a belt-and-suspenders idempotency
-      // guard against the partial unique index on dedupeKey.
-      await db
+      // guard against the partial unique index on dedupeKey. Use .returning()
+      // so `seeded` reflects actual inserts, not insert attempts — a
+      // concurrent run that hits the conflict-do-nothing path must not
+      // increment the counter.
+      const inserted = await db
         .insert(backlinks)
         .values({
           siteId: input.siteId,
@@ -248,9 +255,12 @@ export class CitationRunner extends BaseAgent<
           dedupeKey: key,
           metadata: { submitUrl: dir.submitUrl, directoryName: dir.name },
         })
-        .onConflictDoNothing();
-      seeded++;
-      ctx.log.info({ siteId: input.siteId, directory: dir.name }, 'citation-runner: seeded');
+        .onConflictDoNothing()
+        .returning();
+      seeded += inserted.length;
+      if (inserted.length > 0) {
+        ctx.log.info({ siteId: input.siteId, directory: dir.name }, 'citation-runner: seeded');
+      }
     }
 
     ctx.progress({ label: `seeded ${seeded} citation(s), checking verifications` });

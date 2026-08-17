@@ -11,7 +11,9 @@
  *    'live' → skipped no-op (neither path inserts/updates anything)
  *  - seeding: idempotent diff against DEFAULT_DIRECTORIES (existing rows
  *    counted as alreadySeeded and never re-inserted; new rows inserted with
- *    the right dedupeKey/status/metadata shape)
+ *    the right dedupeKey/status/metadata shape); `seeded` reflects the
+ *    `.returning()` row count, not insert attempts — a conflicted insert
+ *    (onConflictDoNothing skip) does not inflate the counter
  *  - verification pass: rows without metadata.profileUrl are filtered out
  *    before any Firecrawl call (the expensive step never runs for
  *    unverifiable rows); `found` flips the row to live with acquiredAt set;
@@ -20,7 +22,8 @@
  *    counter bump, no write)
  *  - checkNapPresence (pure, exported): no-API-key skip (zero network
  *    calls), non-ok response, non-JSON/failed `success`, name match, phone
- *    match, no match, and network-throw — all funnel to a safe
+ *    match (contiguous digit run AND realistically formatted, e.g.
+ *    "(520) 555-1234"), no match, and network-throw — all funnel to a safe
  *    {found:false, scraped:false} except real matches
  */
 
@@ -44,6 +47,10 @@ let mockSiteRow: Record<string, unknown> | null = null;
 let backlinksWhereQueue: unknown[][] = [];
 let insertedRows: Array<Record<string, unknown>> = [];
 const updateCalls: Array<Record<string, unknown>> = [];
+// sourceDomains in this set simulate a concurrent-run conflict: the insert
+// attempt is still recorded in insertedRows, but .returning() resolves to
+// [] (as a real onConflictDoNothing() would), so `seeded` must not count it.
+let conflictSourceDomains = new Set<string>();
 
 vi.mock('@leadlandlord/db', () => {
   const sitesTable = { __table: 'sites', id: 'id', status: 'status' };
@@ -84,7 +91,12 @@ vi.mock('@leadlandlord/db', () => {
     insert: () => ({
       values: (row: Record<string, unknown>) => {
         insertedRows.push(row);
-        return { onConflictDoNothing: async () => {} };
+        return {
+          onConflictDoNothing: () => ({
+            returning: async () =>
+              conflictSourceDomains.has(row.sourceDomain as string) ? [] : [row],
+          }),
+        };
       },
     }),
     update: () => ({
@@ -136,6 +148,7 @@ beforeEach(() => {
   backlinksWhereQueue = [];
   insertedRows = [];
   updateCalls.length = 0;
+  conflictSourceDomains = new Set();
   delete process.env.FIRECRAWL_API_KEY;
   vi.unstubAllGlobals();
 });
@@ -247,6 +260,26 @@ describe('CitationRunner.execute — seeding', () => {
     expect(result.seeded).toBe(DEFAULT_DIRECTORIES.length - 2);
     expect(insertedRows.some((r) => r.sourceDomain === 'yelp.com')).toBe(false);
     expect(insertedRows.some((r) => r.sourceDomain === 'bbb.org')).toBe(false);
+  });
+
+  it('seeded reflects actual .returning() rows, not insert attempts — a conflicted insert does not count', async () => {
+    const { execute } = await getAgent();
+    mockSiteRow = makeSiteRow();
+    backlinksWhereQueue = [[], []]; // existingRows=[], pendingRows=[]
+    // Simulate a concurrent run winning the race on 'yelp.com': the insert
+    // is attempted (belt-and-suspenders onConflictDoNothing) but the DB
+    // reports zero rows returned, since the partial unique index already
+    // has that dedupeKey.
+    conflictSourceDomains = new Set(['yelp.com']);
+
+    const result = await execute({ siteId: SITE_ID } as never, NOOP_CTX);
+
+    // The insert was still attempted for every directory (idempotency
+    // guard runs regardless of outcome)...
+    expect(insertedRows).toHaveLength(DEFAULT_DIRECTORIES.length);
+    // ...but the conflicted row must not inflate `seeded`.
+    expect(result.seeded).toBe(DEFAULT_DIRECTORIES.length - 1);
+    expect(result.alreadySeeded).toBe(0);
   });
 });
 
@@ -409,16 +442,32 @@ describe('checkNapPresence', () => {
   });
 
   it('phone digits present as a contiguous run (name absent) → found:true, scraped:true', async () => {
-    // NOTE: matching is text.includes(phoneDigits) against the RAW (non-digit-
-    // stripped) markdown — so this only fires when the digits appear
-    // contiguously, e.g. "5205551234". A realistically formatted phone like
-    // "(520) 555-1234" would NOT match (see real-bug note in the PR report).
+    // NOTE: matching is textDigits.includes(phoneDigits), where textDigits is
+    // the scraped markdown with all non-digit characters stripped. A raw
+    // contiguous digit run like "5205551234" matches directly.
     process.env.FIRECRAWL_API_KEY = 'test-key';
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ success: true, data: { markdown: 'Call us at 5205551234 today.' } }),
+      }),
+    );
+
+    const result = await checkNapPresence('https://yelp.com/biz/x', 'Acme Tree Care', '5205551234');
+    expect(result).toEqual({ found: true, scraped: true });
+  });
+
+  it('formatted phone number in scraped markdown (name absent) → found:true, scraped:true', async () => {
+    // Regression for BL-048: "(520) 555-1234" in the page must match a
+    // digits-only phone arg of "5205551234" — the fix strips non-digit
+    // characters from the scraped text before comparing.
+    process.env.FIRECRAWL_API_KEY = 'test-key';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { markdown: 'Call us at (520) 555-1234 today.' } }),
       }),
     );
 
