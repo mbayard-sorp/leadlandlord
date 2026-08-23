@@ -17,6 +17,24 @@ export const csHeroBlock = defineType({
   fields: [
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    defineField({
+      name: 'headingEmphasis',
+      title: 'Heading Emphasis',
+      type: 'string',
+      description:
+        'Optional. A phrase from the Heading above to set in brass, e.g. "Freedom Plan". It must appear in the Heading verbatim; leave empty for a single-color headline.',
+      validation: (r) =>
+        r
+          .custom((value, context) => {
+            if (typeof value !== 'string' || !value.trim()) return true;
+            const heading = (context.parent as { heading?: unknown } | undefined)?.heading;
+            if (typeof heading !== 'string' || !heading) return true;
+            return heading.toLowerCase().includes(value.trim().toLowerCase())
+              ? true
+              : 'This phrase is not in the Heading, so nothing will be emphasized.';
+          })
+          .warning(),
+    }),
     defineField({ name: 'subheading', title: 'Subheading', type: 'text', rows: 2 }),
     defineField({ name: 'ctaLabel', title: 'CTA Label', type: 'string' }),
     defineField({ name: 'ctaHref', title: 'CTA Href', type: 'string' }),

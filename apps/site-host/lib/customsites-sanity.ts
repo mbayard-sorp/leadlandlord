@@ -490,7 +490,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   _type,
   _key,
   _type == "csHeroBlock" => {
-    eyebrow, heading, subheading, ctaLabel, ctaHref,
+    eyebrow, heading, headingEmphasis, subheading, ctaLabel, ctaHref,
     "backgroundImageUrl": backgroundImage.asset->url,
     "backgroundImageAlt": backgroundImage.alt,
     "backgroundVideoUrl": backgroundVideo.asset->url,
@@ -601,7 +601,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   }
 }`;
 
-export interface CsHeroBlock { _type: 'csHeroBlock'; _key: string; eyebrow?: string | null; heading: string; subheading?: string | null; ctaLabel?: string | null; ctaHref?: string | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null; backgroundVideoUrl?: string | null; backgroundVideoMimeType?: string | null }
+export interface CsHeroBlock { _type: 'csHeroBlock'; _key: string; eyebrow?: string | null; heading: string; headingEmphasis?: string | null; subheading?: string | null; ctaLabel?: string | null; ctaHref?: string | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null; backgroundVideoUrl?: string | null; backgroundVideoMimeType?: string | null }
 export interface CsIntroBlock { _type: 'csIntroBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: CsPortableTextBlock[] | null; ctaLabel?: string | null; ctaHref?: string | null; layout?: 'split' | 'stacked' | null; bodyDividers?: boolean | null; topRule?: boolean | null }
 export interface CsPracticeGridBlock { _type: 'csPracticeGridBlock'; _key: string; eyebrow?: string | null; heading?: string | null; mode?: 'all' | 'selected' | null; areas?: CustomSitePracticeAreaCard[] | null }
 export interface CsAttorneyBlock { _type: 'csAttorneyBlock'; _key: string; showFullProfile?: boolean | null; attorney?: CustomSiteAttorney | null }

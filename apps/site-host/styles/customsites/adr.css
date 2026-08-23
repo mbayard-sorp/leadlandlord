@@ -1109,6 +1109,12 @@
   grid-area: 1 / 1;
 }
 
+/* Heading Emphasis: a phrase of the h1 set in brass. Color only, so it is a
+   <span> rather than <em> — the accent is brand styling, not stress that a
+   screen reader should voice. brass-light is the accent that clears AA on
+   the hero's ink field. */
+.cs-adr .cs-hero-emphasis { color: var(--cs-brass-light); }
+
 .cs-adr .cs-hero-inner {
   position: relative;
   z-index: 1;
