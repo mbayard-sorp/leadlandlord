@@ -214,9 +214,12 @@ describe('POST /api/cs-lead', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
+    // ?dl= is what makes the CDN answer with Content-Disposition: attachment.
+    // Without it Sanity serves the PDF inline and both the client hand-off and
+    // the non-JS 303 navigate the visitor off the site into a PDF viewer.
     await expect(res.json()).resolves.toEqual({
       ok: true,
-      url: 'https://cdn.sanity.io/files/x/production/report.pdf',
+      url: 'https://cdn.sanity.io/files/x/production/report.pdf?dl=dental-practice-benchmark-report.pdf',
     });
     expect(fetchCustomSiteLeadMagnetAssetMock).toHaveBeenCalledWith('alignedadvisors', 'file-abc-pdf');
     // Two sends: firm lead + visitor link.

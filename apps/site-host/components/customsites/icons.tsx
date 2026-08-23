@@ -177,6 +177,15 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+export function CheckCircleIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8.25" />
+      <path d="m8.5 12.25 2.5 2.5 4.5-5" />
+    </svg>
+  );
+}
+
 const VALUE_PROP_ICONS: Record<CsValuePropIcon, (props: IconProps) => React.JSX.Element> = {
   team: TeamIcon,
   practice: PracticeIcon,

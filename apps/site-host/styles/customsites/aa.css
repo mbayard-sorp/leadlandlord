@@ -1226,9 +1226,56 @@
 .cs-aa .cs-magnet-cta:active { transform: translateY(1px); }
 .cs-aa .cs-magnet-cta-icon { width: 18px; height: 18px; flex: none; }
 
-/* The gated form replaces the button in place, so it needs the same top gap. */
-.cs-aa .cs-magnet-card form { margin-top: auto; }
+/* Gated flow: a native <details> that slides open inside the card. Deliberately
+   not a modal — nothing is covered, nothing traps focus, and the card the
+   visitor clicked stays in front of them while they fill it in. */
+.cs-aa .cs-magnet-disclosure { margin-top: auto; }
+.cs-aa .cs-magnet-disclosure > summary {
+  width: 100%;
+  list-style: none;
+  /* summary is not a button, so the .cs-btn inline-flex needs restating. */
+  display: inline-flex;
+}
+.cs-aa .cs-magnet-disclosure > summary::-webkit-details-marker { display: none; }
+.cs-aa .cs-magnet-disclosure[open] > summary { display: none; }
+.cs-aa .cs-magnet-reveal { padding-top: var(--cs-space-3); }
 .cs-aa .cs-magnet-card form .cs-btn { width: 100%; }
+
+/* The slide is progressive enhancement: browsers without ::details-content
+   simply open instantly, which is the old behaviour, not a broken one. */
+@supports selector(details::details-content) {
+  .cs-aa .cs-magnet-disclosure::details-content {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size 320ms ease,
+      opacity 240ms ease,
+      content-visibility 320ms;
+    transition-behavior: allow-discrete;
+  }
+  .cs-aa .cs-magnet-disclosure[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-aa .cs-magnet-disclosure::details-content { transition: none; }
+}
+
+.cs-aa .cs-magnet-footnote {
+  margin-top: var(--cs-space-3);
+  font-size: var(--cs-fs-small);
+  color: var(--cs-muted);
+}
+
+/* Success state — mirrors the card's own rhythm rather than a bare message. */
+.cs-aa .cs-magnet-done { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--cs-space-2); }
+.cs-aa .cs-magnet-done-mark { width: 40px; height: 40px; color: var(--cs-success, #2E7D32); }
+.cs-aa .cs-magnet-done-title { font-family: var(--cs-font-display); font-size: 1.25rem; font-weight: 700; color: var(--cs-ink); }
+.cs-aa .cs-magnet-done-body { color: var(--cs-muted); font-size: var(--cs-fs-small); }
+.cs-aa .cs-magnet-done .cs-btn { width: 100%; margin-top: var(--cs-space-3); }
 
 /* csTabbedInsightsBlock */
 .cs-aa .cs-tabs { display: flex; gap: var(--cs-space-2); }

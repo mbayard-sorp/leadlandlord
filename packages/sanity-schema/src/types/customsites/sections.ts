@@ -715,6 +715,13 @@ export const csLeadMagnetBlock = defineType({
       description: 'Optional sentence under the heading, e.g. what the reports cover and where the data comes from.',
     }),
     defineField({
+      name: 'formFootnote',
+      title: 'Form Footnote',
+      type: 'string',
+      description:
+        'Optional reassurance under the gated form, e.g. "No spam — just the report and occasional insights." Only shown on cards that ask for an email.',
+    }),
+    defineField({
       name: 'items',
       title: 'Reports',
       type: 'array',

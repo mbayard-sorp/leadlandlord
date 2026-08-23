@@ -24,7 +24,13 @@ export function LeadMagnetBlock({ block, siteKey }: Props) {
         </div>
         <div className="cs-magnet-grid">
           {items.map((item, i) => (
-            <LeadMagnetCard key={item._key} item={item} index={i + 1} siteKey={siteKey} />
+            <LeadMagnetCard
+              key={item._key}
+              item={item}
+              index={i + 1}
+              siteKey={siteKey}
+              formFootnote={block.formFootnote}
+            />
           ))}
         </div>
       </div>

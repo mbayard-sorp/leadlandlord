@@ -577,7 +577,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     ctaLabel, ctaHref, illustrative
   },
   _type == "csLeadMagnetBlock" => {
-    eyebrow, heading, intro,
+    eyebrow, heading, intro, formFootnote,
     items[]{
       _key, title, body, gated, ctaLabel,
       "pdfUrl": pdf.asset->url,
@@ -648,7 +648,7 @@ export interface CsNumbersIqMetric { _key: string; label: string; percent: numbe
 export interface CsNumbersIqBlock { _type: 'csNumbersIqBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: CsPortableTextBlock[] | null; metrics?: CsNumbersIqMetric[] | null; ctaLabel?: string | null; ctaHref?: string | null; illustrative?: boolean | null }
 
 export interface CsLeadMagnetItem { _key: string; title: string; body: string; gated?: boolean | null; ctaLabel?: string | null; pdfUrl?: string | null; pdfAssetId?: string | null }
-export interface CsLeadMagnetBlock { _type: 'csLeadMagnetBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; items?: CsLeadMagnetItem[] | null }
+export interface CsLeadMagnetBlock { _type: 'csLeadMagnetBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; formFootnote?: string | null; items?: CsLeadMagnetItem[] | null }
 
 export interface CsInsightsTab { _key: string; label: string; sublabel?: string | null; href: string; icon?: 'podcast' | 'mic' | 'doc' | null }
 export interface CsTabbedInsightsBlock { _type: 'csTabbedInsightsBlock'; _key: string; eyebrow?: string | null; tabs?: CsInsightsTab[] | null }
