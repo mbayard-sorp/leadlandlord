@@ -515,7 +515,8 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   },
   _type == "csBadgeRowBlock" => {
     eyebrow, heading,
-    "badges": badges[]->{ _id, name, "imageUrl": image.asset->url, "imageAlt": image.alt, url }
+    "badges": badges[]->{ _id, name, "imageUrl": image.asset->url, "imageAlt": image.alt, url },
+    scroll
   },
   _type == "csPublicationsBlock" => {
     eyebrow, heading, limit, ctaLabel, ctaHref
@@ -615,7 +616,7 @@ export interface CsTestimonialItem {
 }
 export interface CsTestimonialsBlock { _type: 'csTestimonialsBlock'; _key: string; items?: CsTestimonialItem[] | null; autoRotate?: boolean | null }
 export interface CsBadgeItem { _id: string; name: string; imageUrl?: string | null; imageAlt?: string | null; url?: string | null }
-export interface CsBadgeRowBlock { _type: 'csBadgeRowBlock'; _key: string; eyebrow?: string | null; heading?: string | null; badges?: CsBadgeItem[] | null }
+export interface CsBadgeRowBlock { _type: 'csBadgeRowBlock'; _key: string; eyebrow?: string | null; heading?: string | null; badges?: CsBadgeItem[] | null; scroll?: boolean | null }
 export interface CsPublicationsBlock { _type: 'csPublicationsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; limit?: number | null; ctaLabel?: string | null; ctaHref?: string | null }
 export interface CsCalloutBlock { _type: 'csCalloutBlock'; _key: string; label?: string | null; quote?: string | null; linkLabel?: string | null; linkHref?: string | null }
 export interface CsRichTextBlock { _type: 'csRichTextBlock'; _key: string; content?: CsPortableTextBlock[] | null }

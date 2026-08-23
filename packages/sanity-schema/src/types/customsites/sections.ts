@@ -188,10 +188,21 @@ export const csBadgeRowBlock = defineType({
       type: 'array',
       of: [{ type: 'reference', to: [{ type: 'csBadge' }] }],
     }),
+    defineField({
+      name: 'scroll',
+      title: 'Scroll continuously',
+      type: 'boolean',
+      description:
+        'Slides the logos past in a loop instead of a static centered row. Worth it from about 5 logos up — below that the strip is mostly empty gap. It pauses on hover and holds still for reduced-motion visitors.',
+      initialValue: false,
+    }),
   ],
   preview: {
-    select: { title: 'heading', eyebrow: 'eyebrow' },
-    prepare: ({ title, eyebrow }) => ({ title: title ?? eyebrow ?? 'Badge Row' }),
+    select: { title: 'heading', eyebrow: 'eyebrow', scroll: 'scroll' },
+    prepare: ({ title, eyebrow, scroll }) => ({
+      title: title ?? eyebrow ?? 'Badge Row',
+      subtitle: scroll ? 'Scrolling logo strip' : undefined,
+    }),
   },
 });
 
