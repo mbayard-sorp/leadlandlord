@@ -427,12 +427,22 @@ export const csValuePropsBlock = defineType({
       ],
       validation: (r) => r.min(2).max(3),
     }),
+    defineField({
+      name: 'backgroundImage',
+      title: 'Background Image',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string' })],
+      description:
+        'Optional photo behind the whole section. The section flips to light-on-dark over a scrim when one is set, so pick something with room for text — a busy or light image will fight the copy. Leave empty for the plain paper background.',
+    }),
   ],
   preview: {
-    select: { title: 'heading', items: 'items' },
-    prepare: ({ title, items }) => ({
+    select: { title: 'heading', items: 'items', media: 'backgroundImage' },
+    prepare: ({ title, items, media }) => ({
       title: title ?? 'Value Props',
       subtitle: `${Array.isArray(items) ? items.length : 0} props`,
+      media,
     }),
   },
 });

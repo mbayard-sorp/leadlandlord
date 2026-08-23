@@ -1061,6 +1061,24 @@
 .cs-aa .cs-valueprop h3 { margin: var(--cs-space-3) 0 var(--cs-space-2); }
 .cs-aa .cs-valueprop p { color: var(--cs-muted); }
 
+/* Optional background photo. .cs-section--navy on the section already handles
+   heading/body/link inversion; these rules only add the image, the scrim, and
+   the two colors that class does not reach — the icon and the muted body. */
+.cs-aa .cs-valueprops-section--image { position: relative; overflow: hidden; background: var(--cs-ink); }
+.cs-aa .cs-valueprops-bg { position: absolute; inset: 0; }
+.cs-aa .cs-valueprops-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cs-aa .cs-valueprops-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Heavier than the hero scrim: the copy here runs the full width in three
+     columns, so there is no clear side to keep dark and no quiet side to
+     leave open. */
+  background: linear-gradient(180deg, rgba(10, 29, 48, 0.86), rgba(10, 29, 48, 0.92));
+}
+.cs-aa .cs-valueprops-section--image .cs-valueprop-icon { color: var(--cs-brass-light); }
+.cs-aa .cs-valueprops-section--image .cs-valueprop p { color: var(--cs-muted-inverse); }
+
 /* csJourneyBlock — the Wealth Journey, CSS-only scroll-snap rail */
 .cs-aa .cs-journey { position: relative; }
 .cs-aa .cs-journey-track {

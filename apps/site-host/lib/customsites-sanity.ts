@@ -544,7 +544,9 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   },
   _type == "csValuePropsBlock" => {
     eyebrow, heading,
-    items[]{ _key, icon, heading, body }
+    items[]{ _key, icon, heading, body },
+    "backgroundImageUrl": backgroundImage.asset->url,
+    "backgroundImageAlt": backgroundImage.alt
   },
   _type == "csJourneyBlock" => {
     eyebrow, heading, intro, ctaLabel, ctaHref,
@@ -630,7 +632,7 @@ export interface CsStatRailBlock { _type: 'csStatRailBlock'; _key: string; eyebr
 
 export type CsValuePropIcon = 'team' | 'practice' | 'roadmap' | 'shield' | 'chart' | 'clock';
 export interface CsValuePropItem { _key: string; icon?: CsValuePropIcon | null; heading: string; body: string }
-export interface CsValuePropsBlock { _type: 'csValuePropsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsValuePropItem[] | null }
+export interface CsValuePropsBlock { _type: 'csValuePropsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsValuePropItem[] | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null }
 
 export interface CsJourneyBlock { _type: 'csJourneyBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; ctaLabel?: string | null; ctaHref?: string | null; stages?: CustomSiteJourneyStage[] | null }
 
