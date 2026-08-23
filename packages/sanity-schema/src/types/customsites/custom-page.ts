@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 /**
  * A single page on a Custom Site. Deterministic id `cs-page-${siteKey}-${slug}`.
@@ -10,7 +11,7 @@ export const csPage = defineType({
   fields: [
     defineField({ name: 'site', title: 'Site', type: 'reference', to: [{ type: 'csSite' }], validation: (r) => r.required() }),
     defineField({ name: 'title', title: 'Title', type: 'string', validation: (r) => r.required() }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title' }, validation: (r) => r.required() }),
+    csSlugField('title'),
     defineField({
       name: 'bannerImage',
       title: 'Header Banner',

@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 /**
  * An attorney/mediator profile on the Custom Site. `bioSections` mirrors the
@@ -14,7 +15,7 @@ export const csAttorney = defineType({
   fields: [
     defineField({ name: 'site', title: 'Site', type: 'reference', to: [{ type: 'csSite' }], validation: (r) => r.required() }),
     defineField({ name: 'name', title: 'Name', type: 'string', validation: (r) => r.required() }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'name' }, validation: (r) => r.required() }),
+    csSlugField('name'),
     defineField({
       name: 'jobTitle',
       title: 'Job Title',

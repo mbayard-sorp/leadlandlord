@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 /**
  * One practice area (service) offered by the Custom Site, e.g. "Construction
@@ -11,7 +12,7 @@ export const csPracticeArea = defineType({
   fields: [
     defineField({ name: 'site', title: 'Site', type: 'reference', to: [{ type: 'csSite' }], validation: (r) => r.required() }),
     defineField({ name: 'title', title: 'Title', type: 'string', description: 'Plain text — no <br> or markup.', validation: (r) => r.required() }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title' }, validation: (r) => r.required() }),
+    csSlugField('title'),
     defineField({ name: 'excerpt', title: 'Excerpt', type: 'text', rows: 3 }),
     defineField({
       name: 'heroImage',

@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 interface AssessmentQuestionOption {
   points?: number;
@@ -38,7 +39,7 @@ export const csAssessment = defineType({
       validation: (r) => r.required(),
       description: 'Internal name, e.g. "Wealth Journey Quiz v1".',
     }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title' }, validation: (r) => r.required() }),
+    csSlugField('title'),
     defineField({
       name: 'questions',
       title: 'Questions',
