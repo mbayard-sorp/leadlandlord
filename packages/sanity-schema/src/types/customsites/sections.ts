@@ -20,11 +20,30 @@ export const csHeroBlock = defineType({
     defineField({ name: 'subheading', title: 'Subheading', type: 'text', rows: 2 }),
     defineField({ name: 'ctaLabel', title: 'CTA Label', type: 'string' }),
     defineField({ name: 'ctaHref', title: 'CTA Href', type: 'string' }),
-    defineField({ name: 'backgroundImage', title: 'Background Image', type: 'image', options: { hotspot: true } }),
+    defineField({
+      name: 'backgroundImage',
+      title: 'Background Image',
+      type: 'image',
+      options: { hotspot: true },
+      description:
+        'Shown behind the headline. Also used as the poster frame for a Background Video, and as what reduced-motion visitors see instead of the video — set it even when a video is uploaded.',
+    }),
+    defineField({
+      name: 'backgroundVideo',
+      title: 'Background Video',
+      type: 'file',
+      options: { accept: 'video/mp4,video/webm' },
+      description:
+        'Optional short silent loop that plays over the Background Image. Keep it to 5-15 seconds and under ~5 MB — it downloads on every visit. MP4 (H.264) is the safest format. Audio is never played.',
+    }),
   ],
   preview: {
-    select: { title: 'heading', media: 'backgroundImage' },
-    prepare: ({ title, media }) => ({ title: `Hero — ${title ?? ''}`, media }),
+    select: { title: 'heading', media: 'backgroundImage', video: 'backgroundVideo.asset' },
+    prepare: ({ title, media, video }) => ({
+      title: `Hero — ${title ?? ''}`,
+      subtitle: video ? 'Video background' : undefined,
+      media,
+    }),
   },
 });
 

@@ -805,12 +805,41 @@
 }
 .cs-aa .cs-hero-bg { position: absolute; inset: 0; }
 .cs-aa .cs-hero-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Video sits above the poster image and below the .cs-hero-bg::after scrim. */
+.cs-aa .cs-hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .cs-aa .cs-hero-bg::after {
   content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, rgba(10, 29, 48, 0.95) 0%, rgba(10, 29, 48, 0.78) 48%, rgba(10, 29, 48, 0.42) 100%);
 }
+
+/* Hero with a video background: the section adopts the clip's own aspect ratio
+   so the loop plays uncropped instead of being covered into a taller box. The
+   ::before spacer sets that height; the copy shares the same grid cell, so if
+   the headline ever needs more room than the video gives (narrow viewports),
+   the row grows to fit it and the video crops rather than the text clipping.
+   Scoped to :has(.cs-hero-video) so a reduced-motion visitor — who never gets
+   the video element — keeps the normal padding-driven hero. */
+.cs-aa .cs-hero:has(.cs-hero-video) {
+  display: grid;
+  align-items: center;
+  padding-block: 0;
+}
+.cs-aa .cs-hero:has(.cs-hero-video)::before {
+  content: "";
+  grid-area: 1 / 1;
+  aspect-ratio: var(--cs-hero-video-ar, 16 / 9);
+  /* Past this the ratio would keep growing the hero on ultrawide monitors, so
+     cap it and let the video crop instead. The cap belongs on the spacer, not
+     on the section: the row is still max(spacer, copy), so a long headline can
+     push past the cap rather than being clipped by it. */
+  max-height: var(--cs-hero-video-max, min(86vh, 880px));
+}
+.cs-aa .cs-hero:has(.cs-hero-video) > .cs-container {
+  grid-area: 1 / 1;
+}
+
 .cs-aa .cs-hero-inner { position: relative; z-index: 1; max-width: 720px; }
 .cs-aa .cs-hero h1 { color: var(--cs-white); font-size: var(--cs-fs-display); max-width: 16ch; text-wrap: balance; }
 .cs-aa .cs-hero-sub { margin-top: var(--cs-space-4); max-width: 54ch; font-size: var(--cs-fs-lead); color: var(--cs-muted-inverse); }
