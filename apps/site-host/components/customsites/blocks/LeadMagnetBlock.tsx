@@ -17,9 +17,12 @@ export function LeadMagnetBlock({ block, siteKey }: Props) {
   return (
     <section className="cs-section cs-section--muted">
       <div className="cs-container">
-        {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
-        {block.heading ? <h2>{block.heading}</h2> : null}
-        <div className="cs-magnet-grid" style={{ marginTop: 'var(--cs-space-5)' }}>
+        <div className="cs-magnet-header">
+          {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
+          {block.heading ? <h2>{block.heading}</h2> : null}
+          {block.intro ? <p className="cs-lead cs-magnet-intro">{block.intro}</p> : null}
+        </div>
+        <div className="cs-magnet-grid">
           {items.map((item, i) => (
             <LeadMagnetCard key={item._key} item={item} index={i + 1} siteKey={siteKey} />
           ))}

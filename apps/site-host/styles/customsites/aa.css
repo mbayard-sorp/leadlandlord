@@ -1169,11 +1169,66 @@
 @media (max-width: 639px) { .cs-aa .cs-meter-row { grid-template-columns: 1fr; gap: var(--cs-space-1); } }
 
 /* csLeadMagnetBlock */
+/* csLeadMagnetBlock — centered pitch over a row of report cards. */
+.cs-aa .cs-magnet-header { text-align: center; max-width: 46rem; margin: 0 auto var(--cs-space-6); }
+.cs-aa .cs-magnet-header .cs-eyebrow { justify-content: center; }
+.cs-aa .cs-magnet-intro { margin-top: var(--cs-space-4); color: var(--cs-muted); }
+
 .cs-aa .cs-magnet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--cs-space-4); }
 @media (max-width: 899px) { .cs-aa .cs-magnet-grid { grid-template-columns: 1fr; } }
-.cs-aa .cs-magnet-card { display: flex; flex-direction: column; gap: var(--cs-space-3); padding: var(--cs-space-5); background: var(--cs-white); border: 1px solid var(--cs-hairline); border-radius: var(--cs-radius-card); }
-.cs-aa .cs-magnet-index { font-family: var(--cs-font-mono); font-size: 2.5rem; font-weight: 300; line-height: 1; color: var(--cs-hairline); }
-.cs-aa .cs-magnet-card .cs-btn { margin-top: auto; align-self: flex-start; }
+
+.cs-aa .cs-magnet-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+  padding: var(--cs-space-5);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-radius-card-lg);
+}
+
+/* Brass mark on a tinted plate, the same pairing the value props use. */
+.cs-aa .cs-magnet-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--cs-radius-control);
+  background: var(--cs-brass-wash);
+  color: var(--cs-brass-ink);
+}
+
+/* Small brass ordinal, not the old oversized grey numeral: it labels the card
+   rather than competing with the title for first read. */
+.cs-aa .cs-magnet-index {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-fs-eyebrow);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--cs-brass-ink);
+  margin-bottom: calc(var(--cs-space-2) * -1);
+}
+
+/* Card-local navy pill. Deliberately not a new global .cs-btn variant: the
+   fill only reads as the card's primary action inside this card, and the two
+   existing variants (brass fill, navy outline) stay the site-wide vocabulary. */
+.cs-aa .cs-magnet-cta {
+  margin-top: auto;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--cs-ink);
+  color: var(--cs-white);
+  border-color: var(--cs-ink);
+}
+.cs-aa .cs-magnet-cta:hover { background: var(--cs-navy); border-color: var(--cs-navy); }
+.cs-aa .cs-magnet-cta:active { transform: translateY(1px); }
+.cs-aa .cs-magnet-cta-icon { width: 18px; height: 18px; flex: none; }
+
+/* The gated form replaces the button in place, so it needs the same top gap. */
+.cs-aa .cs-magnet-card form { margin-top: auto; }
+.cs-aa .cs-magnet-card form .cs-btn { width: 100%; }
 
 /* csTabbedInsightsBlock */
 .cs-aa .cs-tabs { display: flex; gap: var(--cs-space-2); }

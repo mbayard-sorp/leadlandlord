@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import type { CsLeadMagnetItem } from '@/lib/customsites-sanity';
+import { DownloadIcon, ReportIcon } from '../icons';
 
 interface Props {
   item: CsLeadMagnetItem;
@@ -57,6 +58,9 @@ export function LeadMagnetCard({ item, index, siteKey }: Props) {
 
   return (
     <article className="cs-magnet-card">
+      <span className="cs-magnet-icon" aria-hidden="true">
+        <ReportIcon />
+      </span>
       <span className="cs-magnet-index" aria-hidden="true">
         {String(index).padStart(2, '0')}
       </span>
@@ -64,11 +68,13 @@ export function LeadMagnetCard({ item, index, siteKey }: Props) {
       <p className="cs-card-excerpt">{item.body}</p>
 
       {!gated ? (
-        <a href={item.pdfUrl ?? '#'} className="cs-btn cs-btn-secondary" target="_blank" rel="noopener noreferrer">
+        <a href={item.pdfUrl ?? '#'} className="cs-btn cs-magnet-cta" target="_blank" rel="noopener noreferrer">
+          <DownloadIcon className="cs-magnet-cta-icon" />
           {ctaLabel}
         </a>
       ) : status === 'idle' ? (
-        <button type="button" className="cs-btn cs-btn-secondary" onClick={() => setStatus('form')}>
+        <button type="button" className="cs-btn cs-magnet-cta" onClick={() => setStatus('form')}>
+          <DownloadIcon className="cs-magnet-cta-icon" />
           {ctaLabel}
         </button>
       ) : status === 'done' ? (

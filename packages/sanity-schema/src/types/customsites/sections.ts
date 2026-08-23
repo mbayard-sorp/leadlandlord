@@ -708,6 +708,13 @@ export const csLeadMagnetBlock = defineType({
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string' }),
     defineField({
+      name: 'intro',
+      title: 'Intro',
+      type: 'text',
+      rows: 2,
+      description: 'Optional sentence under the heading, e.g. what the reports cover and where the data comes from.',
+    }),
+    defineField({
       name: 'items',
       title: 'Reports',
       type: 'array',
