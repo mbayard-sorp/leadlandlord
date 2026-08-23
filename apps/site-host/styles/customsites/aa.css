@@ -1239,7 +1239,18 @@
 .cs-aa .cs-magnet-disclosure > summary::-webkit-details-marker { display: none; }
 .cs-aa .cs-magnet-disclosure[open] > summary { display: none; }
 .cs-aa .cs-magnet-reveal { padding-top: var(--cs-space-3); }
-.cs-aa .cs-magnet-card form .cs-btn { width: 100%; }
+
+/* Space the form's own children rather than leaning on .cs-form-row's
+   margin-bottom: a lone .cs-form-field (Email, with no partner in a row) has
+   no bottom margin, which left the submit button flush against its input. The
+   row margin is zeroed so it does not stack with the gap. */
+.cs-aa .cs-magnet-card form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-4);
+}
+.cs-aa .cs-magnet-card form .cs-form-row { margin-bottom: 0; }
+.cs-aa .cs-magnet-card form .cs-btn { width: 100%; margin-top: var(--cs-space-2); }
 
 /* The slide is progressive enhancement: browsers without ::details-content
    simply open instantly, which is the old behaviour, not a broken one. */
