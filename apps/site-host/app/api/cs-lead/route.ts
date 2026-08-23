@@ -126,6 +126,17 @@ const ConsultationBody = z.object({
   callTypes: z.array(CallType).max(4).optional(),
 });
 
+/** Sanity CDN filename param: turns an inline PDF response into a download. */
+function withDownloadParam(url: string, title?: string | null): string {
+  const slug = (title ?? 'report')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}dl=${encodeURIComponent(`${slug || 'report'}.pdf`)}`;
+}
+
 const MagnetBody = z.object({
   kind: z.literal('magnet'),
   ...BaseFields,
@@ -250,7 +261,11 @@ export async function POST(req: Request) {
       console.warn('cs-lead: magnet asset not found for site', { siteKey: csSite.siteKey });
       return NextResponse.json({ error: 'asset_not_found' }, { status: 404 });
     }
-    magnetUrl = asset.url;
+    // Force an attachment. Sanity serves PDFs inline, so handing back the bare
+    // CDN url meant both paths (location.assign here, the 303 below for non-JS)
+    // navigated the visitor off the site into a PDF viewer. `?dl=` sets
+    // Content-Disposition: attachment, so the file downloads and the page stays.
+    magnetUrl = withDownloadParam(asset.url, asset.title);
     magnetTitle = asset.title;
     firmSubject = `New report download from ${submitterName} - ${csSite.name}`;
     firmBody = [...contactLines, `Requested report: ${asset.title}`, ...footerLines];

@@ -371,7 +371,9 @@ function pageBuilderBlockToMarkdown(
           .map((p) => {
             const prefix = p.episodeNumber != null ? `Ep. ${p.episodeNumber}: ` : '';
             const duration = p.durationMinutes != null ? ` (${p.durationMinutes} min)` : '';
-            return `- ${prefix}${p.title}${duration}${p.excerpt ? ` — ${p.excerpt}` : ''}`;
+            // Linked to the episode page, same as csPublicationsBlock above —
+            // the mirror is a crawl surface, so the rows have to be traversable.
+            return `- [${prefix}${p.title}](/${p.slug})${duration}${p.excerpt ? ` — ${p.excerpt}` : ''}`;
           })
           .join('\n'),
       );

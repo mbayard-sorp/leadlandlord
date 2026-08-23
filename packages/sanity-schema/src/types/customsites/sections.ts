@@ -17,14 +17,51 @@ export const csHeroBlock = defineType({
   fields: [
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    defineField({
+      name: 'headingEmphasis',
+      title: 'Heading Emphasis',
+      type: 'string',
+      description:
+        'Optional. A phrase from the Heading above to set in brass, e.g. "Freedom Plan". It must appear in the Heading verbatim; leave empty for a single-color headline.',
+      validation: (r) =>
+        r
+          .custom((value, context) => {
+            if (typeof value !== 'string' || !value.trim()) return true;
+            const heading = (context.parent as { heading?: unknown } | undefined)?.heading;
+            if (typeof heading !== 'string' || !heading) return true;
+            return heading.toLowerCase().includes(value.trim().toLowerCase())
+              ? true
+              : 'This phrase is not in the Heading, so nothing will be emphasized.';
+          })
+          .warning(),
+    }),
     defineField({ name: 'subheading', title: 'Subheading', type: 'text', rows: 2 }),
     defineField({ name: 'ctaLabel', title: 'CTA Label', type: 'string' }),
     defineField({ name: 'ctaHref', title: 'CTA Href', type: 'string' }),
-    defineField({ name: 'backgroundImage', title: 'Background Image', type: 'image', options: { hotspot: true } }),
+    defineField({
+      name: 'backgroundImage',
+      title: 'Background Image',
+      type: 'image',
+      options: { hotspot: true },
+      description:
+        'Shown behind the headline. Also used as the poster frame for a Background Video, and as what reduced-motion visitors see instead of the video — set it even when a video is uploaded.',
+    }),
+    defineField({
+      name: 'backgroundVideo',
+      title: 'Background Video',
+      type: 'file',
+      options: { accept: 'video/mp4,video/webm' },
+      description:
+        'Optional short silent loop that plays over the Background Image. Keep it to 5-15 seconds and under ~5 MB — it downloads on every visit. MP4 (H.264) is the safest format. Audio is never played.',
+    }),
   ],
   preview: {
-    select: { title: 'heading', media: 'backgroundImage' },
-    prepare: ({ title, media }) => ({ title: `Hero — ${title ?? ''}`, media }),
+    select: { title: 'heading', media: 'backgroundImage', video: 'backgroundVideo.asset' },
+    prepare: ({ title, media, video }) => ({
+      title: `Hero — ${title ?? ''}`,
+      subtitle: video ? 'Video background' : undefined,
+      media,
+    }),
   },
 });
 
@@ -151,10 +188,21 @@ export const csBadgeRowBlock = defineType({
       type: 'array',
       of: [{ type: 'reference', to: [{ type: 'csBadge' }] }],
     }),
+    defineField({
+      name: 'scroll',
+      title: 'Scroll continuously',
+      type: 'boolean',
+      description:
+        'Slides the logos past in a loop instead of a static centered row. Worth it from about 5 logos up — below that the strip is mostly empty gap. It pauses on hover and holds still for reduced-motion visitors.',
+      initialValue: false,
+    }),
   ],
   preview: {
-    select: { title: 'heading', eyebrow: 'eyebrow' },
-    prepare: ({ title, eyebrow }) => ({ title: title ?? eyebrow ?? 'Badge Row' }),
+    select: { title: 'heading', eyebrow: 'eyebrow', scroll: 'scroll' },
+    prepare: ({ title, eyebrow, scroll }) => ({
+      title: title ?? eyebrow ?? 'Badge Row',
+      subtitle: scroll ? 'Scrolling logo strip' : undefined,
+    }),
   },
 });
 
@@ -379,12 +427,22 @@ export const csValuePropsBlock = defineType({
       ],
       validation: (r) => r.min(2).max(3),
     }),
+    defineField({
+      name: 'backgroundImage',
+      title: 'Background Image',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string' })],
+      description:
+        'Optional photo behind the whole section. The section flips to light-on-dark over a scrim when one is set, so pick something with room for text — a busy or light image will fight the copy. Leave empty for the plain paper background.',
+    }),
   ],
   preview: {
-    select: { title: 'heading', items: 'items' },
-    prepare: ({ title, items }) => ({
+    select: { title: 'heading', items: 'items', media: 'backgroundImage' },
+    prepare: ({ title, items, media }) => ({
       title: title ?? 'Value Props',
       subtitle: `${Array.isArray(items) ? items.length : 0} props`,
+      media,
     }),
   },
 });
@@ -659,6 +717,20 @@ export const csLeadMagnetBlock = defineType({
   fields: [
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
     defineField({ name: 'heading', title: 'Heading', type: 'string' }),
+    defineField({
+      name: 'intro',
+      title: 'Intro',
+      type: 'text',
+      rows: 2,
+      description: 'Optional sentence under the heading, e.g. what the reports cover and where the data comes from.',
+    }),
+    defineField({
+      name: 'formFootnote',
+      title: 'Form Footnote',
+      type: 'string',
+      description:
+        'Optional reassurance under the gated form, e.g. "No spam — just the report and occasional insights." Only shown on cards that ask for an email.',
+    }),
     defineField({
       name: 'items',
       title: 'Reports',

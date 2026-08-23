@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 /**
  * A publication, article, or presentation credited to an attorney on the
@@ -17,7 +18,7 @@ export const csPublication = defineType({
   fields: [
     defineField({ name: 'site', title: 'Site', type: 'reference', to: [{ type: 'csSite' }], validation: (r) => r.required() }),
     defineField({ name: 'title', title: 'Title', type: 'string', validation: (r) => r.required() }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title' }, validation: (r) => r.required() }),
+    csSlugField('title'),
     defineField({
       name: 'kind',
       title: 'Kind',

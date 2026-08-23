@@ -25,11 +25,12 @@
     "backfill-caller-names": "tsx scripts/backfill-caller-names.ts",
     "customsites-geo-audit": "tsx scripts/customsites-geo-audit.ts",
     "customsites-indexnow": "tsx scripts/customsites-indexnow.ts",
-    "seed-aligned-advisors": "tsx scripts/seed-aligned-advisors.ts"
+    "seed-aligned-advisors": "tsx scripts/seed-aligned-advisors.ts",
+    "customsites-audit": "tsx scripts/customsites-audit.ts"
   },
   "devDependencies": {
     "@portabletext/block-tools": "^5.1.12",
-    "@sanity/schema": "5.24.0",
+    "@sanity/schema": "5.31.1",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^22.10.0",
     "fast-xml-parser": "^5.10.1",

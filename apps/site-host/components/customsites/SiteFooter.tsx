@@ -16,9 +16,27 @@ const DEFAULT_FOOTER_LINKS: CustomSiteNavLink[] = [
   { label: 'Contact', href: '/contact' },
 ];
 
-/** The bottom utility bar below (cs-footer-legal-links) always owns these —
- * stripped out of Quick Links so they never render in both places. */
-const UTILITY_HREFS = new Set(['/sitemap.xml', '/disclaimer', '/privacy-policy']);
+/** The machine sitemap — the one utility link every site has by construction. */
+const SITEMAP_HREF = '/sitemap.xml';
+
+/**
+ * The bottom utility bar's legal links, derived from the site's own data:
+ * every `footerNav` entry the header nav doesn't already carry — the editorial
+ * extras, which in practice are the legal pages. Their slugs are per-site
+ * (site #1 has /disclaimer + /privacy-policy, site #2 has /privacy + /terms +
+ * /disclosures), so a hardcoded pair 404s on every site but the one it was
+ * written for. The sitemap is rendered separately from SITEMAP_HREF, so a
+ * footerNav sitemap entry drops out here instead of rendering twice.
+ */
+function legalLinksFor(site: CustomSite): CustomSiteNavLink[] {
+  const navHrefs = new Set((site.navigation ?? []).map((link) => link.href));
+  // No header nav means nothing to subtract and every footerNav entry is a
+  // Quick Link — leave the bar to the sitemap rather than guess at legal pages.
+  if (navHrefs.size === 0) return [];
+  return (site.footerNav ?? []).filter(
+    (link) => link.href && !navHrefs.has(link.href) && !link.href.startsWith('/sitemap'),
+  );
+}
 
 export function SiteFooter({ site }: Props) {
   // `navigation` is the header's own source and is what's actually correct
@@ -32,7 +50,11 @@ export function SiteFooter({ site }: Props) {
       : site.footerNav && site.footerNav.length > 0
         ? site.footerNav
         : DEFAULT_FOOTER_LINKS;
-  const links = source.filter((link) => !UTILITY_HREFS.has(link.href ?? ''));
+  // Whatever the utility bar renders is stripped from Quick Links so no
+  // destination shows up in both places.
+  const legalLinks = legalLinksFor(site);
+  const utilityHrefs = new Set<string>([SITEMAP_HREF, ...legalLinks.map((link) => link.href ?? '')]);
+  const links = source.filter((link) => !utilityHrefs.has(link.href ?? ''));
   const addr = site.address;
   const hasAddress = Boolean(addr?.street || addr?.city);
 
@@ -100,9 +122,12 @@ export function SiteFooter({ site }: Props) {
       <div className="cs-container cs-footer-legal">
         <span>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</span>
         <ul className="cs-footer-legal-links">
-          <li><a href="/sitemap.xml">Sitemap</a></li>
-          <li><a href="/disclaimer">Disclaimer</a></li>
-          <li><a href="/privacy-policy">Privacy Policy</a></li>
+          <li><a href={SITEMAP_HREF}>Sitemap</a></li>
+          {legalLinks.map((link) => (
+            <li key={`${link.label}-${link.href}`}>
+              <a href={link.href ?? '#'}>{link.label}</a>
+            </li>
+          ))}
         </ul>
       </div>
     </footer>

@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 /**
  * A client-outcome case study on a Custom Site. A document — not an inline
@@ -21,7 +22,7 @@ export const csCaseStudy = defineType({
       validation: (r) => r.required(),
       description: 'The outcome in one line.',
     }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'headline' }, validation: (r) => r.required() }),
+    csSlugField('headline'),
     defineField({
       name: 'clientDescriptor',
       title: 'Client Descriptor',

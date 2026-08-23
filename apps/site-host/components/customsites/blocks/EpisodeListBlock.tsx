@@ -15,7 +15,8 @@ function formatDate(iso: string): string {
 
 /** Podcast episode / talk list over csPublication docs, filtered by kind.
  * Episode number, duration, and listen links each degrade independently
- * when absent — no "Ep. ?" placeholders. */
+ * when absent — no "Ep. ?" placeholders. Each row links to the episode's own
+ * page at /<slug>, the same destination PublicationsBlock uses. */
 export async function EpisodeListBlock({ block, siteKey }: Props) {
   const all = await fetchCustomSitePublicationsFull(siteKey);
   const filtered: CustomSitePublicationFull[] = block.kind ? all.filter((p) => p.kind === block.kind) : all;
@@ -38,7 +39,14 @@ export async function EpisodeListBlock({ block, siteKey }: Props) {
               </span>
               <div>
                 {ep.episodeNumber != null ? <span className="cs-episode-num">Ep. {ep.episodeNumber}</span> : null}
-                <h3>{ep.title}</h3>
+                {/* The title link stretches over the whole row (see
+                 * .cs-episode-link::after) so the row is clickable, while the
+                 * listen links stay above it and keep their own targets. */}
+                <h3>
+                  <a href={`/${ep.slug}`} className="cs-episode-link">
+                    {ep.title}
+                  </a>
+                </h3>
                 {ep.excerpt ? <p className="cs-card-excerpt">{ep.excerpt}</p> : null}
                 <p className="cs-episode-duration">
                   {formatDate(ep.publishedAt)}

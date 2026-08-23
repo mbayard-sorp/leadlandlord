@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity';
+import { csSlugField } from './slug';
 
 /**
  * One stage of a Custom Site's proprietary client-journey framework (first
@@ -22,7 +23,7 @@ export const csJourneyStage = defineType({
       description: '1-5. Drives numbering everywhere the stage appears.',
     }),
     defineField({ name: 'title', title: 'Title', type: 'string', validation: (r) => r.required() }),
-    defineField({ name: 'slug', title: 'Slug', type: 'slug', options: { source: 'title' }, validation: (r) => r.required() }),
+    csSlugField('title'),
     defineField({
       name: 'shortLabel',
       title: 'Short Label',

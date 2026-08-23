@@ -1051,6 +1051,16 @@
   z-index: 0;
 }
 
+/* Video sits above the poster image and below the .cs-hero-bg::after scrim. */
+.cs-adr .cs-hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 /* Below 900px there's no room to keep the copy off the subject, so it stays
    centered under a flat top-to-bottom scrim. */
 .cs-adr .cs-hero-bg::after {
@@ -1070,6 +1080,40 @@
     background: linear-gradient(90deg, rgba(19, 38, 60, 0.88) 0%, rgba(19, 38, 60, 0.55) 40%, rgba(19, 38, 60, 0) 64%);
   }
 }
+
+
+/* Hero with a video background: the section adopts the clip's own aspect ratio
+   so the loop plays uncropped instead of being covered into a taller box. The
+   ::before spacer sets that height; the copy shares the same grid cell, so if
+   the headline ever needs more room than the video gives (narrow viewports),
+   the row grows to fit it and the video crops rather than the text clipping.
+   Scoped to :has(.cs-hero-video) so a reduced-motion visitor — who never gets
+   the video element — keeps the normal padding-driven hero. */
+.cs-adr .cs-hero:has(.cs-hero-video) {
+  display: grid;
+  align-items: center;
+  padding-block: 0;
+  min-height: 0;
+}
+.cs-adr .cs-hero:has(.cs-hero-video)::before {
+  content: "";
+  grid-area: 1 / 1;
+  aspect-ratio: var(--cs-hero-video-ar, 16 / 9);
+  /* Past this the ratio would keep growing the hero on ultrawide monitors, so
+     cap it and let the video crop instead. The cap belongs on the spacer, not
+     on the section: the row is still max(spacer, copy), so a long headline can
+     push past the cap rather than being clipped by it. */
+  max-height: var(--cs-hero-video-max, min(86vh, 880px));
+}
+.cs-adr .cs-hero:has(.cs-hero-video) > .cs-container {
+  grid-area: 1 / 1;
+}
+
+/* Heading Emphasis: a phrase of the h1 set in brass. Color only, so it is a
+   <span> rather than <em> — the accent is brand styling, not stress that a
+   screen reader should voice. brass-light is the accent that clears AA on
+   the hero's ink field. */
+.cs-adr .cs-hero-emphasis { color: var(--cs-brass-light); }
 
 .cs-adr .cs-hero-inner {
   position: relative;
@@ -2047,4 +2091,44 @@
 .cs-adr .cs-notfound {
   text-align: center;
   padding: var(--cs-space-6) 0;
+}
+
+/* csBadgeRowBlock — optional heading above the strip */
+.cs-adr .cs-badge-header { text-align: center; margin-bottom: var(--cs-space-5); }
+
+/* Scrolling variant. Full-bleed on purpose: the strip should run off both
+   edges like a belt, not sit inside the container with tidy ends. The track
+   holds two identical groups and slides exactly one group-width, so the loop
+   has no visible seam. */
+.cs-adr .cs-badge-marquee {
+  overflow: hidden;
+  /* Fade the cut edges so logos leave and enter instead of being chopped. */
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.cs-adr .cs-badge-track {
+  display: flex;
+  width: max-content;
+  animation: cs-adr-badge-marquee var(--cs-badge-marquee-duration, 40s) linear infinite;
+}
+
+.cs-adr .cs-badge-group {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-5);
+  padding-inline-end: var(--cs-space-5);
+}
+
+/* Let a visitor stop the belt to read a logo or click through. */
+.cs-adr .cs-badge-marquee:hover .cs-badge-track,
+.cs-adr .cs-badge-marquee:focus-within .cs-badge-track {
+  animation-play-state: paused;
+}
+
+@keyframes cs-adr-badge-marquee {
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-adr .cs-badge-track { animation: none; }
 }

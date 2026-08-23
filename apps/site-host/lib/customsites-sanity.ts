@@ -490,9 +490,11 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   _type,
   _key,
   _type == "csHeroBlock" => {
-    eyebrow, heading, subheading, ctaLabel, ctaHref,
+    eyebrow, heading, headingEmphasis, subheading, ctaLabel, ctaHref,
     "backgroundImageUrl": backgroundImage.asset->url,
-    "backgroundImageAlt": backgroundImage.alt
+    "backgroundImageAlt": backgroundImage.alt,
+    "backgroundVideoUrl": backgroundVideo.asset->url,
+    "backgroundVideoMimeType": backgroundVideo.asset->mimeType
   },
   _type == "csIntroBlock" => {
     eyebrow, heading,
@@ -513,7 +515,8 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   },
   _type == "csBadgeRowBlock" => {
     eyebrow, heading,
-    "badges": badges[]->{ _id, name, "imageUrl": image.asset->url, "imageAlt": image.alt, url }
+    "badges": badges[]->{ _id, name, "imageUrl": image.asset->url, "imageAlt": image.alt, url },
+    scroll
   },
   _type == "csPublicationsBlock" => {
     eyebrow, heading, limit, ctaLabel, ctaHref
@@ -541,7 +544,9 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   },
   _type == "csValuePropsBlock" => {
     eyebrow, heading,
-    items[]{ _key, icon, heading, body }
+    items[]{ _key, icon, heading, body },
+    "backgroundImageUrl": backgroundImage.asset->url,
+    "backgroundImageAlt": backgroundImage.alt
   },
   _type == "csJourneyBlock" => {
     eyebrow, heading, intro, ctaLabel, ctaHref,
@@ -574,7 +579,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     ctaLabel, ctaHref, illustrative
   },
   _type == "csLeadMagnetBlock" => {
-    eyebrow, heading,
+    eyebrow, heading, intro, formFootnote,
     items[]{
       _key, title, body, gated, ctaLabel,
       "pdfUrl": pdf.asset->url,
@@ -599,7 +604,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   }
 }`;
 
-export interface CsHeroBlock { _type: 'csHeroBlock'; _key: string; eyebrow?: string | null; heading: string; subheading?: string | null; ctaLabel?: string | null; ctaHref?: string | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null }
+export interface CsHeroBlock { _type: 'csHeroBlock'; _key: string; eyebrow?: string | null; heading: string; headingEmphasis?: string | null; subheading?: string | null; ctaLabel?: string | null; ctaHref?: string | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null; backgroundVideoUrl?: string | null; backgroundVideoMimeType?: string | null }
 export interface CsIntroBlock { _type: 'csIntroBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: CsPortableTextBlock[] | null; ctaLabel?: string | null; ctaHref?: string | null; layout?: 'split' | 'stacked' | null; bodyDividers?: boolean | null; topRule?: boolean | null }
 export interface CsPracticeGridBlock { _type: 'csPracticeGridBlock'; _key: string; eyebrow?: string | null; heading?: string | null; mode?: 'all' | 'selected' | null; areas?: CustomSitePracticeAreaCard[] | null }
 export interface CsAttorneyBlock { _type: 'csAttorneyBlock'; _key: string; showFullProfile?: boolean | null; attorney?: CustomSiteAttorney | null }
@@ -613,7 +618,7 @@ export interface CsTestimonialItem {
 }
 export interface CsTestimonialsBlock { _type: 'csTestimonialsBlock'; _key: string; items?: CsTestimonialItem[] | null; autoRotate?: boolean | null }
 export interface CsBadgeItem { _id: string; name: string; imageUrl?: string | null; imageAlt?: string | null; url?: string | null }
-export interface CsBadgeRowBlock { _type: 'csBadgeRowBlock'; _key: string; eyebrow?: string | null; heading?: string | null; badges?: CsBadgeItem[] | null }
+export interface CsBadgeRowBlock { _type: 'csBadgeRowBlock'; _key: string; eyebrow?: string | null; heading?: string | null; badges?: CsBadgeItem[] | null; scroll?: boolean | null }
 export interface CsPublicationsBlock { _type: 'csPublicationsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; limit?: number | null; ctaLabel?: string | null; ctaHref?: string | null }
 export interface CsCalloutBlock { _type: 'csCalloutBlock'; _key: string; label?: string | null; quote?: string | null; linkLabel?: string | null; linkHref?: string | null }
 export interface CsRichTextBlock { _type: 'csRichTextBlock'; _key: string; content?: CsPortableTextBlock[] | null }
@@ -627,7 +632,7 @@ export interface CsStatRailBlock { _type: 'csStatRailBlock'; _key: string; eyebr
 
 export type CsValuePropIcon = 'team' | 'practice' | 'roadmap' | 'shield' | 'chart' | 'clock';
 export interface CsValuePropItem { _key: string; icon?: CsValuePropIcon | null; heading: string; body: string }
-export interface CsValuePropsBlock { _type: 'csValuePropsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsValuePropItem[] | null }
+export interface CsValuePropsBlock { _type: 'csValuePropsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsValuePropItem[] | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null }
 
 export interface CsJourneyBlock { _type: 'csJourneyBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; ctaLabel?: string | null; ctaHref?: string | null; stages?: CustomSiteJourneyStage[] | null }
 
@@ -645,7 +650,7 @@ export interface CsNumbersIqMetric { _key: string; label: string; percent: numbe
 export interface CsNumbersIqBlock { _type: 'csNumbersIqBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: CsPortableTextBlock[] | null; metrics?: CsNumbersIqMetric[] | null; ctaLabel?: string | null; ctaHref?: string | null; illustrative?: boolean | null }
 
 export interface CsLeadMagnetItem { _key: string; title: string; body: string; gated?: boolean | null; ctaLabel?: string | null; pdfUrl?: string | null; pdfAssetId?: string | null }
-export interface CsLeadMagnetBlock { _type: 'csLeadMagnetBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsLeadMagnetItem[] | null }
+export interface CsLeadMagnetBlock { _type: 'csLeadMagnetBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; formFootnote?: string | null; items?: CsLeadMagnetItem[] | null }
 
 export interface CsInsightsTab { _key: string; label: string; sublabel?: string | null; href: string; icon?: 'podcast' | 'mic' | 'doc' | null }
 export interface CsTabbedInsightsBlock { _type: 'csTabbedInsightsBlock'; _key: string; eyebrow?: string | null; tabs?: CsInsightsTab[] | null }

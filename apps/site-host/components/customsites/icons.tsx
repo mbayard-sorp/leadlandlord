@@ -156,6 +156,36 @@ export function YoutubeGlyph(props: IconProps) {
   );
 }
 
+export function ReportIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6.5 3.5h7L18 8v12.5H6.5Z" />
+      <path d="M13.5 3.5V8H18" />
+      {/* Bars, short to tall — a benchmark report reads as data, not prose. */}
+      <path d="M9.75 16.5v-2.25M12.25 16.5v-4M14.75 16.5v-3" />
+    </svg>
+  );
+}
+
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 4v10" />
+      <path d="M8.25 10.75 12 14.5l3.75-3.75" />
+      <path d="M5 17.5v1.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1.5" />
+    </svg>
+  );
+}
+
+export function CheckCircleIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8.25" />
+      <path d="m8.5 12.25 2.5 2.5 4.5-5" />
+    </svg>
+  );
+}
+
 const VALUE_PROP_ICONS: Record<CsValuePropIcon, (props: IconProps) => React.JSX.Element> = {
   team: TeamIcon,
   practice: PracticeIcon,

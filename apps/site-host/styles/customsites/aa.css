@@ -805,12 +805,47 @@
 }
 .cs-aa .cs-hero-bg { position: absolute; inset: 0; }
 .cs-aa .cs-hero-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Video sits above the poster image and below the .cs-hero-bg::after scrim. */
+.cs-aa .cs-hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .cs-aa .cs-hero-bg::after {
   content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, rgba(10, 29, 48, 0.95) 0%, rgba(10, 29, 48, 0.78) 48%, rgba(10, 29, 48, 0.42) 100%);
 }
+
+/* Hero with a video background: the section adopts the clip's own aspect ratio
+   so the loop plays uncropped instead of being covered into a taller box. The
+   ::before spacer sets that height; the copy shares the same grid cell, so if
+   the headline ever needs more room than the video gives (narrow viewports),
+   the row grows to fit it and the video crops rather than the text clipping.
+   Scoped to :has(.cs-hero-video) so a reduced-motion visitor — who never gets
+   the video element — keeps the normal padding-driven hero. */
+.cs-aa .cs-hero:has(.cs-hero-video) {
+  display: grid;
+  align-items: center;
+  padding-block: 0;
+}
+.cs-aa .cs-hero:has(.cs-hero-video)::before {
+  content: "";
+  grid-area: 1 / 1;
+  aspect-ratio: var(--cs-hero-video-ar, 16 / 9);
+  /* Past this the ratio would keep growing the hero on ultrawide monitors, so
+     cap it and let the video crop instead. The cap belongs on the spacer, not
+     on the section: the row is still max(spacer, copy), so a long headline can
+     push past the cap rather than being clipped by it. */
+  max-height: var(--cs-hero-video-max, min(86vh, 880px));
+}
+.cs-aa .cs-hero:has(.cs-hero-video) > .cs-container {
+  grid-area: 1 / 1;
+}
+
+/* Heading Emphasis: a phrase of the h1 set in brass. Color only, so it is a
+   <span> rather than <em> — the accent is brand styling, not stress that a
+   screen reader should voice. brass-light is the accent that clears AA on
+   the hero's ink field. */
+.cs-aa .cs-hero-emphasis { color: var(--cs-brass-light); }
+
 .cs-aa .cs-hero-inner { position: relative; z-index: 1; max-width: 720px; }
 .cs-aa .cs-hero h1 { color: var(--cs-white); font-size: var(--cs-fs-display); max-width: 16ch; text-wrap: balance; }
 .cs-aa .cs-hero-sub { margin-top: var(--cs-space-4); max-width: 54ch; font-size: var(--cs-fs-lead); color: var(--cs-muted-inverse); }
@@ -864,6 +899,47 @@
 .cs-aa .cs-badge-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--cs-space-5); }
 .cs-aa .cs-badge-row img { height: 40px; width: auto; display: block; filter: grayscale(1); opacity: 0.7; transition: filter 160ms ease, opacity 160ms ease; }
 .cs-aa .cs-badge-row a:hover img { filter: none; opacity: 1; }
+
+
+/* csBadgeRowBlock — optional heading above the strip */
+.cs-aa .cs-badge-header { text-align: center; margin-bottom: var(--cs-space-5); }
+
+/* Scrolling variant. Full-bleed on purpose: the strip should run off both
+   edges like a belt, not sit inside the container with tidy ends. The track
+   holds two identical groups and slides exactly one group-width, so the loop
+   has no visible seam. */
+.cs-aa .cs-badge-marquee {
+  overflow: hidden;
+  /* Fade the cut edges so logos leave and enter instead of being chopped. */
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.cs-aa .cs-badge-track {
+  display: flex;
+  width: max-content;
+  animation: cs-aa-badge-marquee var(--cs-badge-marquee-duration, 40s) linear infinite;
+}
+
+.cs-aa .cs-badge-group {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-5);
+  padding-inline-end: var(--cs-space-5);
+}
+
+/* Let a visitor stop the belt to read a logo or click through. */
+.cs-aa .cs-badge-marquee:hover .cs-badge-track,
+.cs-aa .cs-badge-marquee:focus-within .cs-badge-track {
+  animation-play-state: paused;
+}
+
+@keyframes cs-aa-badge-marquee {
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-aa .cs-badge-track { animation: none; }
+}
 
 /* csPublicationsBlock */
 .cs-aa .cs-pub-card {
@@ -985,6 +1061,24 @@
 .cs-aa .cs-valueprop h3 { margin: var(--cs-space-3) 0 var(--cs-space-2); }
 .cs-aa .cs-valueprop p { color: var(--cs-muted); }
 
+/* Optional background photo. .cs-section--navy on the section already handles
+   heading/body/link inversion; these rules only add the image, the scrim, and
+   the two colors that class does not reach — the icon and the muted body. */
+.cs-aa .cs-valueprops-section--image { position: relative; overflow: hidden; background: var(--cs-ink); }
+.cs-aa .cs-valueprops-bg { position: absolute; inset: 0; }
+.cs-aa .cs-valueprops-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cs-aa .cs-valueprops-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Heavier than the hero scrim: the copy here runs the full width in three
+     columns, so there is no clear side to keep dark and no quiet side to
+     leave open. */
+  background: linear-gradient(180deg, rgba(10, 29, 48, 0.86), rgba(10, 29, 48, 0.92));
+}
+.cs-aa .cs-valueprops-section--image .cs-valueprop-icon { color: var(--cs-brass-light); }
+.cs-aa .cs-valueprops-section--image .cs-valueprop p { color: var(--cs-muted-inverse); }
+
 /* csJourneyBlock — the Wealth Journey, CSS-only scroll-snap rail */
 .cs-aa .cs-journey { position: relative; }
 .cs-aa .cs-journey-track {
@@ -1093,11 +1187,124 @@
 @media (max-width: 639px) { .cs-aa .cs-meter-row { grid-template-columns: 1fr; gap: var(--cs-space-1); } }
 
 /* csLeadMagnetBlock */
+/* csLeadMagnetBlock — centered pitch over a row of report cards. */
+.cs-aa .cs-magnet-header { text-align: center; max-width: 46rem; margin: 0 auto var(--cs-space-6); }
+.cs-aa .cs-magnet-header .cs-eyebrow { justify-content: center; }
+.cs-aa .cs-magnet-intro { margin-top: var(--cs-space-4); color: var(--cs-muted); }
+
 .cs-aa .cs-magnet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--cs-space-4); }
 @media (max-width: 899px) { .cs-aa .cs-magnet-grid { grid-template-columns: 1fr; } }
-.cs-aa .cs-magnet-card { display: flex; flex-direction: column; gap: var(--cs-space-3); padding: var(--cs-space-5); background: var(--cs-white); border: 1px solid var(--cs-hairline); border-radius: var(--cs-radius-card); }
-.cs-aa .cs-magnet-index { font-family: var(--cs-font-mono); font-size: 2.5rem; font-weight: 300; line-height: 1; color: var(--cs-hairline); }
-.cs-aa .cs-magnet-card .cs-btn { margin-top: auto; align-self: flex-start; }
+
+.cs-aa .cs-magnet-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-3);
+  padding: var(--cs-space-5);
+  background: var(--cs-white);
+  border: 1px solid var(--cs-hairline);
+  border-radius: var(--cs-radius-card-lg);
+}
+
+/* Brass mark on a tinted plate, the same pairing the value props use. */
+.cs-aa .cs-magnet-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--cs-radius-control);
+  background: var(--cs-brass-wash);
+  color: var(--cs-brass-ink);
+}
+
+/* Small brass ordinal, not the old oversized grey numeral: it labels the card
+   rather than competing with the title for first read. */
+.cs-aa .cs-magnet-index {
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-fs-eyebrow);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--cs-brass-ink);
+  margin-bottom: calc(var(--cs-space-2) * -1);
+}
+
+/* Card-local navy pill. Deliberately not a new global .cs-btn variant: the
+   fill only reads as the card's primary action inside this card, and the two
+   existing variants (brass fill, navy outline) stay the site-wide vocabulary. */
+.cs-aa .cs-magnet-cta {
+  margin-top: auto;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--cs-ink);
+  color: var(--cs-white);
+  border-color: var(--cs-ink);
+}
+.cs-aa .cs-magnet-cta:hover { background: var(--cs-navy); border-color: var(--cs-navy); }
+.cs-aa .cs-magnet-cta:active { transform: translateY(1px); }
+.cs-aa .cs-magnet-cta-icon { width: 18px; height: 18px; flex: none; }
+
+/* Gated flow: a native <details> that slides open inside the card. Deliberately
+   not a modal — nothing is covered, nothing traps focus, and the card the
+   visitor clicked stays in front of them while they fill it in. */
+.cs-aa .cs-magnet-disclosure { margin-top: auto; }
+.cs-aa .cs-magnet-disclosure > summary {
+  width: 100%;
+  list-style: none;
+  /* summary is not a button, so the .cs-btn inline-flex needs restating. */
+  display: inline-flex;
+}
+.cs-aa .cs-magnet-disclosure > summary::-webkit-details-marker { display: none; }
+.cs-aa .cs-magnet-disclosure[open] > summary { display: none; }
+.cs-aa .cs-magnet-reveal { padding-top: var(--cs-space-3); }
+
+/* Space the form's own children rather than leaning on .cs-form-row's
+   margin-bottom: a lone .cs-form-field (Email, with no partner in a row) has
+   no bottom margin, which left the submit button flush against its input. The
+   row margin is zeroed so it does not stack with the gap. */
+.cs-aa .cs-magnet-card form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-4);
+}
+.cs-aa .cs-magnet-card form .cs-form-row { margin-bottom: 0; }
+.cs-aa .cs-magnet-card form .cs-btn { width: 100%; margin-top: var(--cs-space-2); }
+
+/* The slide is progressive enhancement: browsers without ::details-content
+   simply open instantly, which is the old behaviour, not a broken one. */
+@supports selector(details::details-content) {
+  .cs-aa .cs-magnet-disclosure::details-content {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size 320ms ease,
+      opacity 240ms ease,
+      content-visibility 320ms;
+    transition-behavior: allow-discrete;
+  }
+  .cs-aa .cs-magnet-disclosure[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-aa .cs-magnet-disclosure::details-content { transition: none; }
+}
+
+.cs-aa .cs-magnet-footnote {
+  margin-top: var(--cs-space-3);
+  font-size: var(--cs-fs-small);
+  color: var(--cs-muted);
+}
+
+/* Success state — mirrors the card's own rhythm rather than a bare message. */
+.cs-aa .cs-magnet-done { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--cs-space-2); }
+.cs-aa .cs-magnet-done-mark { width: 40px; height: 40px; color: var(--cs-success, #2E7D32); }
+.cs-aa .cs-magnet-done-title { font-family: var(--cs-font-display); font-size: 1.25rem; font-weight: 700; color: var(--cs-ink); }
+.cs-aa .cs-magnet-done-body { color: var(--cs-muted); font-size: var(--cs-fs-small); }
+.cs-aa .cs-magnet-done .cs-btn { width: 100%; margin-top: var(--cs-space-3); }
 
 /* csTabbedInsightsBlock */
 .cs-aa .cs-tabs { display: flex; gap: var(--cs-space-2); }
@@ -1120,6 +1327,7 @@
 
 /* csEpisodeListBlock */
 .cs-aa .cs-episode {
+  position: relative;
   display: grid;
   grid-template-columns: 48px 1fr auto;
   gap: var(--cs-space-4);
@@ -1133,8 +1341,14 @@
 .cs-aa .cs-episode-play { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--cs-brass-wash); color: var(--cs-brass-ink); }
 .cs-aa .cs-episode-num { font-family: var(--cs-font-mono); font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: 0.06em; color: var(--cs-brass-ink); }
 .cs-aa .cs-episode h3 { font-size: var(--cs-fs-h4); margin: var(--cs-space-1) 0; }
+.cs-aa .cs-episode-link { color: inherit; text-decoration: none; }
+/* Stretched over the row so the whole episode is one target. The listen links
+   sit above it (z-index below) and keep their own hrefs. */
+.cs-aa .cs-episode-link::after { content: ''; position: absolute; inset: 0; }
+.cs-aa .cs-episode:hover .cs-episode-link { color: var(--cs-brass-ink); }
+.cs-aa .cs-episode-link:focus-visible { outline: 2px solid var(--cs-brass-ink); outline-offset: 2px; }
 .cs-aa .cs-episode-duration { font-family: var(--cs-font-mono); font-size: var(--cs-fs-eyebrow); color: var(--cs-muted); white-space: nowrap; }
-.cs-aa .cs-listen-links { display: flex; flex-wrap: wrap; gap: var(--cs-space-2); }
+.cs-aa .cs-listen-links { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--cs-space-2); }
 .cs-aa .cs-listen-link {
   display: inline-flex;
   align-items: center;
