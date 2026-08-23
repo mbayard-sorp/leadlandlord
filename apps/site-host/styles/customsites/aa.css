@@ -1120,6 +1120,7 @@
 
 /* csEpisodeListBlock */
 .cs-aa .cs-episode {
+  position: relative;
   display: grid;
   grid-template-columns: 48px 1fr auto;
   gap: var(--cs-space-4);
@@ -1133,8 +1134,14 @@
 .cs-aa .cs-episode-play { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--cs-brass-wash); color: var(--cs-brass-ink); }
 .cs-aa .cs-episode-num { font-family: var(--cs-font-mono); font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: 0.06em; color: var(--cs-brass-ink); }
 .cs-aa .cs-episode h3 { font-size: var(--cs-fs-h4); margin: var(--cs-space-1) 0; }
+.cs-aa .cs-episode-link { color: inherit; text-decoration: none; }
+/* Stretched over the row so the whole episode is one target. The listen links
+   sit above it (z-index below) and keep their own hrefs. */
+.cs-aa .cs-episode-link::after { content: ''; position: absolute; inset: 0; }
+.cs-aa .cs-episode:hover .cs-episode-link { color: var(--cs-brass-ink); }
+.cs-aa .cs-episode-link:focus-visible { outline: 2px solid var(--cs-brass-ink); outline-offset: 2px; }
 .cs-aa .cs-episode-duration { font-family: var(--cs-font-mono); font-size: var(--cs-fs-eyebrow); color: var(--cs-muted); white-space: nowrap; }
-.cs-aa .cs-listen-links { display: flex; flex-wrap: wrap; gap: var(--cs-space-2); }
+.cs-aa .cs-listen-links { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--cs-space-2); }
 .cs-aa .cs-listen-link {
   display: inline-flex;
   align-items: center;
