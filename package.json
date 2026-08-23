@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@portabletext/block-tools": "^5.1.12",
-    "@sanity/schema": "5.24.0",
+    "@sanity/schema": "5.31.1",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^22.10.0",
     "fast-xml-parser": "^5.10.1",
