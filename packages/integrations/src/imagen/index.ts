@@ -13,19 +13,23 @@ const GOOGLE_AI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  *   1. Google AI Studio direct — if GOOGLE_API_KEY is set (preferred — one
  *      less hop, simpler debugging).
  *      Get a key at https://aistudio.google.com/apikey.
- *      Model controlled by GOOGLE_IMAGEN_MODEL (default:
- *      imagen-4.0-fast-generate-001).
+ *      Model controlled by GOOGLE_IMAGEN_MODEL (default: gemini-2.5-flash-image).
  *
  *   2. Vercel AI Gateway  — if AI_GATEWAY_API_KEY is set.
  *      Get a key at https://vercel.com/dashboard/ai-gateway.
- *      Model controlled by IMAGEN_MODEL (default: google/imagen-4.0-fast-generate-001).
+ *      Model controlled by IMAGEN_MODEL (default: google/gemini-2.5-flash-image).
  *
  *   3. No-op fallback — neither key set. Returns null and the variant
  *      component renders its placeholder background.
  *
  * IMAGEN_PROVIDER=google|ai-gateway forces a specific path (skips fallback).
  *
- * Imagen costs ~$0.02–0.04 per image at Google list pricing. One hero per site.
+ * The Imagen 4 family (imagen-4.0-*) was retired by Google on 2026-08-17 —
+ * do not point either default back at it. gemini-2.5-flash-image ("Nano
+ * Banana") is the replacement: it's a generateContent (chat) model, not a
+ * predict model, so request/response shapes differ from classic Imagen.
+ * Flat-rate $0.039/image at Google list pricing (1290 output tokens @
+ * $30/1M). One hero per site.
  */
 
 export interface HeroImageBuffer {
@@ -85,18 +89,21 @@ export async function generateHeroImageBuffer(
   return null;
 }
 
+/** Flat per-image list price for gemini-2.5-flash-image (1290 output tokens @ $30/1M). */
+const GEMINI_FLASH_IMAGE_COST_USD = 0.039;
+
 async function bufferViaGoogle(
   prompt: string,
   aspectRatio: '16:9' | '4:3' | '1:1' | '3:2',
   key: string,
 ): Promise<HeroImageBuffer> {
-  const model = process.env.GOOGLE_IMAGEN_MODEL ?? 'imagen-4.0-fast-generate-001';
+  const model = process.env.GOOGLE_IMAGEN_MODEL ?? 'gemini-2.5-flash-image';
   const body = {
-    instances: [{ prompt: enrichPrompt(prompt) }],
-    parameters: { sampleCount: 1, aspectRatio, personGeneration: 'allow_adult' },
+    contents: [{ parts: [{ text: enrichPrompt(prompt) }] }],
+    generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio } },
   };
   log.info({ model, aspectRatio, prompt: prompt.slice(0, 80) }, 'requesting hero image (google)');
-  const url = `${GOOGLE_AI_BASE}/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(key)}`;
+  const url = `${GOOGLE_AI_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
   // 60 s hard outer timeout — image gen is slow but lambdas have hard deadlines.
   let res: Response;
   try {
@@ -118,19 +125,20 @@ async function bufferViaGoogle(
     throw new IntegrationError('google-imagen', `Image generation failed: ${res.status}`, res.status, errBody);
   }
   const json = (await res.json()) as {
-    predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }>;
   };
-  const item = json.predictions?.[0];
-  if (!item?.bytesBase64Encoded) {
+  const inlineData = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+  if (!inlineData?.data) {
     throw new IntegrationError('google-imagen', 'Empty image response', undefined, json);
   }
-  const buffer = Buffer.from(item.bytesBase64Encoded, 'base64');
+  const buffer = Buffer.from(inlineData.data, 'base64');
   return {
     buffer,
-    contentType: item.mimeType ?? 'image/jpeg',
+    contentType: inlineData.mimeType ?? 'image/png',
     size: buffer.byteLength,
     model,
     provider: 'google',
+    costUsd: GEMINI_FLASH_IMAGE_COST_USD,
   };
 }
 
