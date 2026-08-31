@@ -82,7 +82,6 @@ const EnvSchema = z.object({
     .pipe(z.number().positive()),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-6'),
   AI_GATEWAY_API_KEY: z.string().optional(),
-  IMAGEN_MODEL: z.string().default('google/imagen-3-fast'),
   /** Central GA4 measurement ID (G-XXXXXXX). Optional in non-production. */
   NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().regex(/^G-/).optional(),
   /**
@@ -182,7 +181,6 @@ export function getEnvLoose() {
     DAILY_LLM_BUDGET_USD: Number.parseFloat(process.env.DAILY_LLM_BUDGET_USD ?? '20'),
     ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
     AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
-    IMAGEN_MODEL: process.env.IMAGEN_MODEL ?? 'google/imagen-3-fast',
     GOOGLE_SERVICE_ACCOUNT_KEY_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_JSON,
     GOOGLE_SERVICE_ACCOUNT_KEY_PATH: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
     GOOGLE_DRY_RUN: process.env.GOOGLE_DRY_RUN === 'true',

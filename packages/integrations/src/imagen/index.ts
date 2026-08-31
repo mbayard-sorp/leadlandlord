@@ -17,7 +17,7 @@ const GOOGLE_AI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  *
  *   2. Vercel AI Gateway  — if AI_GATEWAY_API_KEY is set.
  *      Get a key at https://vercel.com/dashboard/ai-gateway.
- *      Model controlled by IMAGEN_MODEL (default: google/gemini-2.5-flash-image).
+ *      Model controlled by IMAGEN_MODEL (default: bfl/flux-pro-1.1).
  *
  *   3. No-op fallback — neither key set. Returns null and the variant
  *      component renders its placeholder background.
@@ -26,10 +26,20 @@ const GOOGLE_AI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  *
  * The Imagen 4 family (imagen-4.0-*) was retired by Google on 2026-08-17 —
  * do not point either default back at it. gemini-2.5-flash-image ("Nano
- * Banana") is the replacement: it's a generateContent (chat) model, not a
- * predict model, so request/response shapes differ from classic Imagen.
- * Flat-rate $0.039/image at Google list pricing (1290 output tokens @
- * $30/1M). One hero per site.
+ * Banana") is the direct-Google replacement: it's a generateContent (chat)
+ * model, not a predict model, so request/response shapes differ from
+ * classic Imagen. Flat-rate $0.039/image at Google list pricing (1290
+ * output tokens @ $30/1M). One hero per site.
+ *
+ * gemini-2.5-flash-image can NOT be the AI-Gateway default, even though
+ * it's the Google-direct default: on Vercel AI Gateway, multimodal chat
+ * models like gemini-2.5-flash-image only generate images through
+ * /v1/chat/completions with a chat-completions request/response shape.
+ * bufferViaAiGateway below calls the OpenAI-compatible
+ * /v1/images/generations endpoint (model/prompt/n/size/response_format,
+ * data[].b64_json response) — that endpoint only works with image-only
+ * models such as bfl/flux-pro-1.1 or openai/gpt-image-2. Flux Pro 1.1 is
+ * confirmed active with flat $0.04/image pricing.
  */
 
 export interface HeroImageBuffer {
@@ -92,6 +102,9 @@ export async function generateHeroImageBuffer(
 /** Flat per-image list price for gemini-2.5-flash-image (1290 output tokens @ $30/1M). */
 const GEMINI_FLASH_IMAGE_COST_USD = 0.039;
 
+/** Flat per-image list price for bfl/flux-pro-1.1 on Vercel AI Gateway. */
+const FLUX_PRO_COST_USD = 0.04;
+
 async function bufferViaGoogle(
   prompt: string,
   aspectRatio: '16:9' | '4:3' | '1:1' | '3:2',
@@ -148,7 +161,7 @@ async function bufferViaAiGateway(
   key: string,
   negativePrompt?: string,
 ): Promise<HeroImageBuffer> {
-  const model = process.env.IMAGEN_MODEL ?? 'google/imagen-4.0-fast-generate-001';
+  const model = process.env.IMAGEN_MODEL ?? 'bfl/flux-pro-1.1';
   const size = sizeForAspect(aspectRatio);
   const body = {
     model,
@@ -194,7 +207,11 @@ async function bufferViaAiGateway(
     size: buffer.byteLength,
     model,
     provider: 'ai-gateway',
-    costUsd: json.usage?.total_cost,
+    // usage.total_cost is not reliably populated by the images-generation
+    // endpoint response — fall back to the known flat Flux Pro price so
+    // spend still counts toward the run's budget cap (see
+    // packages/agents/src/spec-site-builder/index.ts spentThisRun tracking).
+    costUsd: json.usage?.total_cost ?? FLUX_PRO_COST_USD,
   };
 }
 
