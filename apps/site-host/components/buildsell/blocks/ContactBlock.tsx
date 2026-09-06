@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { BuildSellSection } from '@/lib/sanity';
 import { Icon } from '../Icon';
 import { SendIcon } from '../bs-svg';
+import { buildMapEmbedUrl } from '../contact-map';
 
 interface ContactBlockProps {
   section: BuildSellSection;
@@ -30,6 +31,7 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
   const showDetails = section.showDetails ?? true;
   const showMap = section.showMap ?? false;
   const labels = section.formLabels ?? {};
+  const mapEmbedUrl = showMap ? buildMapEmbedUrl(section) : null;
 
   // Resolve the lead endpoint: a relative path is prefixed with the operator URL.
   const operatorBase = process.env.NEXT_PUBLIC_OPERATOR_URL ?? 'https://leadlandlord-operator.vercel.app';
@@ -113,14 +115,25 @@ export function ContactBlock({ section, buildsellSiteId, phone, layoutVariant }:
           </div>
         )}
 
-        {showMap && (
+        {showMap && (mapEmbedUrl ? (
+          <div className="bs-contact-map bs-contact-map--live">
+            <iframe
+              src={mapEmbedUrl}
+              title={addr?.serviceArea ? `Map of our service area: ${addr.serviceArea}` : 'Map of our service area'}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+        ) : (
+          // No resolvable location yet — keep the styled placeholder rather
+          // than embedding a map of nowhere.
           <div className="bs-contact-map" aria-hidden="true">
             <Icon name="map-pinned" size={26} />
             <span className="bs-contact-map-label">
               {addr?.serviceArea ? `Serving ${addr.serviceArea}` : 'Our service area'}
             </span>
           </div>
-        )}
+        ))}
       </div>
     );
   }

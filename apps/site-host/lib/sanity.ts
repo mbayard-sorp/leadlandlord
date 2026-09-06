@@ -432,6 +432,8 @@ export interface BuildSellSection {
   formEndpoint?: string | null;
   showDetails?: boolean | null;
   showMap?: boolean | null;
+  mapQuery?: string | null;
+  mapZoom?: number | null;
   // bsFaqSection
   /** FAQ items — shared `items` array, each with question + answer (bsFaqItem). */
   /** Which answers start expanded: 'first' (default) | 'all' | 'none'. */
@@ -589,6 +591,12 @@ export function stegaCleanStructural(site: BuildSellSite): BuildSellSite {
       // silently break the === comparison / produce an invalid style value.
       layout: section.layout != null ? stegaClean(section.layout) : section.layout,
       aspect: section.aspect != null ? stegaClean(section.aspect) : section.aspect,
+      // Map query + the service-area string it falls back to are interpolated
+      // into an iframe src — a stega watermark corrupts the URL. `serviceArea`
+      // is also displayed, so it loses its click-to-edit overlay; the field is
+      // still editable from the Contact form in the Studio.
+      mapQuery: section.mapQuery != null ? stegaClean(section.mapQuery) : section.mapQuery,
+      address: section.address ? stegaCleanAddress(section.address) : section.address,
       // icon fields in badges, steps, services
       badges: section.badges?.map((b) => ({
         ...b,
@@ -650,6 +658,23 @@ export function stegaCleanStructural(site: BuildSellSite): BuildSellSite {
         href: l.href != null ? stegaClean(l.href) : l.href,
       })),
     })),
+  };
+}
+
+/**
+ * Clean every address string that can reach the contact map's iframe src.
+ * `hours` is display-only and keeps its stega watermark (and its click-to-edit
+ * overlay); the rest lose theirs, but stay editable from the Contact form.
+ */
+function stegaCleanAddress(address: NonNullable<BuildSellSection['address']>): NonNullable<BuildSellSection['address']> {
+  const clean = (v: string | null | undefined) => (v != null ? stegaClean(v) : v);
+  return {
+    ...address,
+    street: clean(address.street),
+    city: clean(address.city),
+    state: clean(address.state),
+    zip: clean(address.zip),
+    serviceArea: clean(address.serviceArea),
   };
 }
 
