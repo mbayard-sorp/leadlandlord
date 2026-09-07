@@ -2483,6 +2483,21 @@ a.bs-ugc-card:hover {
   border: 1px dashed color-mix(in srgb, var(--bs-primary) 30%, transparent);
 }
 .bs-contact-map-label { font-weight: 600; font-size: 0.9rem; color: var(--bs-text); }
+/* Live embed: the iframe supplies its own surface, so drop the hatch + dashes. */
+.bs-contact-map--live {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bs-primary) 6%, var(--bs-surface));
+  border: 1px solid color-mix(in srgb, var(--bs-primary) 25%, transparent);
+}
+.bs-contact-map--live iframe {
+  display: block;
+  width: 100%;
+  height: 240px;
+  border: 0;
+}
 /* Dark info panel (trust): re-tint the tiles + labels for contrast */
 .bs-contact-info--dark { background-color: color-mix(in srgb, var(--bs-primary-dark) 80%, #000); border-color: transparent; }
 .bs-contact-info--dark .bs-section-title,

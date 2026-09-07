@@ -82,6 +82,11 @@ const SEED: SeedRow[] = [
   // niche-keyword-refresher: quarterly cluster-cache warm, 05:00 UTC on the
   // 1st of Jan/Apr/Jul/Oct (cron.ts expands */3 to months 1,4,7,10).
   { schedulerName: 'niche-keyword-refresher', targetAgent: 'niche-keyword-refresher', cadenceKind: 'cron', cronExpr: '0 5 1 */3 *' },
+  // buildsell-review-refresh (Build & Sell): monthly Places aggregate-rating
+  // refresh for non-draft sites, 08:00 UTC on the 1st. Verbatim from
+  // apps/operator/vercel.json — was missing here, so the DB-driven tick had no
+  // row to fall back on once the vercel.json per-agent cron lines are trimmed.
+  { schedulerName: 'buildsell-review-refresh', targetAgent: 'buildsell-review-refresh', cadenceKind: 'cron', cronExpr: '0 8 1 * *' },
 
   // Registered scheduler with no current timer — event/manual today. Parity.
   { schedulerName: 'wave-progression', targetAgent: 'wave-launcher', cadenceKind: 'manual' },

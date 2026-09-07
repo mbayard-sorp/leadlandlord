@@ -1345,7 +1345,7 @@ function aggregateByQueryPage(rows: GscRow[]): AggByQueryPage[] {
     { query: string; page: string; clicks: number; impressions: number; weightedPos: number }
   >();
   for (const r of rows) {
-    const key = `${r.query} ${r.page}`;
+    const key = `${r.query}::${r.page}`;
     const cur = acc.get(key) ?? {
       query: r.query,
       page: r.page,
