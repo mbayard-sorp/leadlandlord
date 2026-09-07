@@ -5,6 +5,7 @@ One table, newest items appended at the bottom. Columns:
 `ID | Item | Source | Severity | Tier | Status | Updated | Evidence / notes`
 
 - **ID**: `BL-###`, monotonically increasing, never reused.
+  - Before assigning a new ID, check for IDs already claimed by in-flight work: run `git log main..HEAD -- docs/improvement-backlog.md` on any local branches, and check open GitHub PRs/branches (list open PRs, check whether their diffs touch `docs/improvement-backlog.md` and what IDs they claim). Assign the next ID after the highest one found across all of those sources, not just the highest on `main`.
 - **Source**: `triage <date>`, `cycle <date>`, `seed audit`, `Mike`, etc.
 - **Severity**: P1 (fleet broken / money burning), P2 (degraded / drifting), P3 (polish / debt).
 - **Tier**: T0-T3 autonomy tier of the likely fix (see docs/agent-improvement-loop.md).
