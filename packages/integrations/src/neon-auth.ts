@@ -26,6 +26,7 @@ import { bsCustomerSiteAccess } from '@leadlandlord/db';
 import { sql } from 'drizzle-orm';
 import { log } from '@leadlandlord/shared/log';
 import { sendEmail } from './resend/index';
+import { renderCustomerWelcomeEmail } from './emails/customer-welcome';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -79,6 +80,12 @@ export interface ProvisionCustomerAccessArgs {
   businessName: string;
   siteId: string;
   grantedBy: 'operator' | 'auto-markpaid';
+  /**
+   * The customer's live site host (e.g. `karkens.com`), so the welcome email
+   * can name the site they recognise rather than a generic "your website".
+   * Optional: when omitted the copy falls back cleanly.
+   */
+  siteDomain?: string | null;
 }
 
 /**
@@ -92,6 +99,7 @@ export async function provisionCustomerAccess({
   businessName,
   siteId,
   grantedBy,
+  siteDomain,
 }: ProvisionCustomerAccessArgs): Promise<string> {
   const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL;
   if (!neonAuthBaseUrl) {
@@ -197,19 +205,21 @@ export async function provisionCustomerAccess({
   try {
     const fromAddress = process.env.RESEND_FROM_ADDRESS;
     if (fromAddress) {
+      const { subject, html, text } = renderCustomerWelcomeEmail({
+        businessName,
+        portalUrl: customerPortalUrl(),
+        siteDomain,
+        ownerEmail,
+      });
       await sendEmail({
         to: ownerEmail,
         from: fromAddress,
-        subject: 'Your website editor is ready',
-        text: [
-          `Hi ${businessName},`,
-          '',
-          `Your website editor is ready at ${customerPortalUrl()}`,
-          '',
-          'Sign in with this email address and use "Forgot Password" to set your password.',
-          '',
-          'Questions? Just reply to this email.',
-        ].join('\n'),
+        subject,
+        html,
+        text,
+        // The body invites a reply. RESEND_FROM_ADDRESS is often a send-only
+        // sender, so point replies at the operator inbox when we have one.
+        replyTo: process.env.OPERATOR_EMAIL?.trim() || undefined,
       });
       log.info({ ownerEmail }, 'provisionCustomerAccess: welcome email sent');
     } else {

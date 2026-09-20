@@ -63,7 +63,10 @@ export async function grantAccess(formData: FormData): Promise<AccessActionResul
 
   const db = getDb();
   const [site] = await db
-    .select({ businessName: buildsellSites.businessName })
+    .select({
+      businessName: buildsellSites.businessName,
+      customDomain: buildsellSites.customDomain,
+    })
     .from(buildsellSites)
     .where(eq(buildsellSites.id, siteId))
     .limit(1);
@@ -77,6 +80,7 @@ export async function grantAccess(formData: FormData): Promise<AccessActionResul
       businessName: site.businessName,
       siteId,
       grantedBy: 'operator',
+      siteDomain: site.customDomain,
     });
     log.info({ siteId, email, authUserId }, 'grantAccess: access provisioned');
     revalidatePath(`/operator/buildsell/${siteId}`);
