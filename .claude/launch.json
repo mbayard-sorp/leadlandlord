@@ -4,26 +4,42 @@
     {
       "name": "operator",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/operator", "start"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/operator",
+        "start"
+      ],
       "port": 3000
     },
     {
       "name": "operator-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/operator", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/operator",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
     },
     {
       "name": "site-host",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/site-host", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/site-host",
+        "dev"
+      ],
       "port": 3001
     },
     {
       "name": "site-host-dev-dataset",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/site-host", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/site-host",
+        "dev"
+      ],
       "port": 3001,
       "env": {
         "SANITY_DATASET": "development",
@@ -33,7 +49,13 @@
     {
       "name": "site-host-dev-autoport",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/site-host", "exec", "next", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/site-host",
+        "exec",
+        "next",
+        "dev"
+      ],
       "port": 3002,
       "autoPort": true,
       "env": {
@@ -44,14 +66,33 @@
     {
       "name": "studio",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/studio", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/studio",
+        "dev"
+      ],
       "port": 3333
     },
     {
       "name": "db-studio",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@leadlandlord/db", "studio"],
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/db",
+        "studio"
+      ],
       "port": 4983
+    },
+    {
+      "name": "customer-portal",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/customer-portal",
+        "dev"
+      ],
+      "port": 3002,
+      "autoPort": true
     }
   ]
 }
