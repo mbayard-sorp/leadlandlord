@@ -49,12 +49,19 @@ export default async function PreviewPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ t?: string; layout?: string; preset?: string; fh?: string; fb?: string }>;
+  searchParams: Promise<{
+    t?: string;
+    layout?: string;
+    preset?: string;
+    fh?: string;
+    fb?: string;
+    chrome?: string;
+  }>;
 }) {
   // `id` is the path segment — either a Postgres UUID (legacy links) or the
   // human-readable slug. fetchBuildSellSitePreview resolves either form.
   const { id } = await params;
-  const { t: saveToken, layout, preset, fh, fb } = await searchParams;
+  const { t: saveToken, layout, preset, fh, fb, chrome } = await searchParams;
 
   // Defense layer 2: inline meta tag rendered in JSX as a third barrier
   // against indexing, applied regardless of whether the doc is found.
@@ -106,11 +113,31 @@ export default async function PreviewPage({
 
   const fontVars = ALL_BS_FONTS.map((f) => f.variable).join(' ');
 
+  // Sale chrome = DraftShield ("available for purchase" banner + watermark) and
+  // the Customize Theme bar. Both address a PROSPECTIVE BUYER, so neither
+  // belongs in front of the owner of a site that has already been sold.
+  //
+  // This used to be hard-coded `draft={true}`, which meant any preview link for
+  // a sold site advertised it for sale, and the customer portal's editor embed
+  // showed the owner a theme picker for a theme they cannot change.
+  //
+  // Two independent suppressors:
+  //   1. `draftMode === false` — set by publishSite() on every publish, and
+  //      documented on the schema as the flag that drives the DraftShield. A
+  //      published site is by definition no longer an unsold draft.
+  //   2. `?chrome=owner` — explicit opt-out used by the customer portal embed,
+  //      so the editor never depends on document state.
+  //
+  // Not a security boundary: anyone can append the param. It gates a sales
+  // affordance, not access. Indexing is unaffected — generateMetadata above
+  // returns noindex unconditionally, plus the inline meta below.
+  const showSaleChrome = chrome !== 'owner' && site.draftMode !== false;
+
   return (
     <div className={fontVars}>
       {/* Defense layer 2: explicit meta in rendered JSX output */}
       {noindexMeta}
-      <BuildSellHome site={effectiveSite} draft={true} saveToken={saveToken} />
+      <BuildSellHome site={effectiveSite} draft={showSaleChrome} saveToken={saveToken} />
     </div>
   );
 }

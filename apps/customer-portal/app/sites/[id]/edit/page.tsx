@@ -91,7 +91,12 @@ export default async function EditPage({ params }: Props) {
   const previewOrigin =
     process.env.SITE_HOST_ORIGIN ??
     (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001');
-  const previewUrl = `${previewOrigin}/preview/${id}`;
+  // `chrome=owner` suppresses the pre-sale chrome on the site-host preview (the
+  // "available for purchase" banner and the Customize Theme bar). Those address
+  // a prospective buyer; this embed is the owner editing a site they already
+  // bought. site-host also suppresses them for any published site, so this is
+  // the explicit belt to that braces.
+  const previewUrl = `${previewOrigin}/preview/${id}?chrome=owner`;
 
   // AI image-generation quota (read from the published doc).
   const generationsUsed = await getAiImageGenerationCount(id);
