@@ -34,7 +34,7 @@ import { sendEmail } from './resend/index';
 /**
  * Public origin of the customer portal, used in the welcome email.
  *
- * The default is a subdomain of `leadslandlord.com` — note the `s`. The
+ * The default is a subdomain of `leadslandlord.com` (note the `s`). The
  * earlier hard-coded `edit.leadlandlord.com` is a domain we do not own, so
  * every welcome email sent before this fix pointed customers at a third
  * party's parked domain.
@@ -113,12 +113,43 @@ export async function provisionCustomerAccess({
 
   // Attempt to create the user via signUp.email. A random password is used;
   // the customer will use "Forgot password" to set their own credentials.
+  //
+  // A server-to-server fetch sends no Origin header, and Better Auth rejects
+  // that with "Origin header is required when callbackURL is not an absolute
+  // URL", which is why every provisioning call failed and live sites ended up
+  // with an owner_email and no portal account. We therefore send the portal
+  // origin explicitly.
+  //
+  // NOTE: the origin must be registered as a trusted origin in the Neon Auth
+  // project settings, or the service answers 403 "Invalid origin"
+  // (code: feature_not_supported) and no user can be created. Granting access
+  // to an ALREADY-EXISTING user still works in that state, via the SQL
+  // fallback below.
   const randomPassword = crypto.randomUUID();
-  const signUpResult = await authClient.signUp.email({
-    email: ownerEmail,
-    password: randomPassword,
-    name: businessName,
-  });
+
+  // signUp can either RETURN `{ error }` or THROW, depending on the failure.
+  // Both mean the same thing here: fall through to the SQL lookup, because
+  // the most common cause is that the user already exists. Letting a throw
+  // escape skipped the fallback entirely.
+  let signUpResult: {
+    data?: { user?: { id?: string } } | null;
+    error?: { message?: string } | null;
+  } = {};
+  let signUpThrew: unknown = null;
+  try {
+    signUpResult = await authClient.signUp.email({
+      email: ownerEmail,
+      password: randomPassword,
+      name: businessName,
+      fetchOptions: { headers: { origin: customerPortalUrl() } },
+    });
+  } catch (err) {
+    signUpThrew = err;
+    log.warn(
+      { ownerEmail, err },
+      'provisionCustomerAccess: signUp.email threw, falling back to SQL lookup',
+    );
+  }
 
   if (signUpResult.data?.user?.id) {
     authUserId = signUpResult.data.user.id;
@@ -127,7 +158,10 @@ export async function provisionCustomerAccess({
     // User likely already exists. Fall back to SQL lookup against the
     // neon_auth.user table (Better Auth's actual table name in the managed
     // Neon Auth service; the schema is neon_auth).
-    const errorMsg = signUpResult.error?.message ?? String(signUpResult.error);
+    const errorMsg =
+      signUpResult.error?.message ??
+      (signUpThrew instanceof Error ? signUpThrew.message : null) ??
+      String(signUpResult.error ?? signUpThrew);
     log.info(
       { ownerEmail, error: errorMsg },
       'provisionCustomerAccess: signUp failed, attempting SQL lookup (user may already exist)',
