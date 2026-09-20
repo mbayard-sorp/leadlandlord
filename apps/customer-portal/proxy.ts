@@ -27,6 +27,9 @@ export function proxy(req: NextRequest) {
   // Public paths — allow unconditionally.
   if (
     pathname.startsWith('/login') ||
+    // Password reset completion. Signed-out by definition: gating this would
+    // bounce every customer setting their first password back to /login.
+    pathname.startsWith('/reset-password') ||
     pathname.startsWith('/api/auth/') ||
     // Preview iframe rewrites — must pass through, site-host owns auth there.
     pathname.startsWith('/preview/') ||
