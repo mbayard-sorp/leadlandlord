@@ -22,7 +22,7 @@
  */
 
 import { createAuthClient } from '@neondatabase/auth/next';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 
 const authClient = createAuthClient();
@@ -31,7 +31,6 @@ const authClient = createAuthClient();
 const MIN_PASSWORD_LENGTH = 8;
 
 function ResetPasswordForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const linkError = searchParams.get('error');
@@ -69,14 +68,39 @@ function ResetPasswordForm() {
         setError(authError.message ?? 'Could not reset your password. Request a new link.');
       } else {
         setDone(true);
-        // Brief pause so the confirmation is readable before we move on.
-        setTimeout(() => router.replace('/login'), 1500);
+        // Full page load rather than router.replace(). The password has just
+        // changed, so the session state the app booted with is stale, and a
+        // client-side navigation here was observed to silently not navigate,
+        // stranding the customer on a page saying they were being moved.
+        // The success screen below also offers a manual link, so a failure
+        // here is visible and recoverable instead of a dead end.
+        setTimeout(() => window.location.assign('/login'), 1200);
       }
     } catch {
       setError('An unexpected error occurred. Please request a new reset link.');
     } finally {
       setPending(false);
     }
+  }
+
+  // Success. The redirect below is a convenience, not the only way out: the
+  // link is always here, so a failed auto-redirect cannot strand anyone.
+  if (done) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-sm text-center">
+          <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-fg)' }}>
+            Password set
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--color-muted)' }}>
+            You can now sign in with your email and this password.
+          </p>
+          <a href="/login" className="btn-primary w-full mt-6 inline-block">
+            Go to sign in
+          </a>
+        </div>
+      </div>
+    );
   }
 
   // A link that arrived without a usable token: send them back to request one
@@ -92,13 +116,9 @@ function ResetPasswordForm() {
             Password reset links can only be used once, and they expire. Request a
             new one and it will arrive in a moment.
           </p>
-          <button
-            type="button"
-            onClick={() => router.replace('/login')}
-            className="btn-primary w-full mt-6"
-          >
+          <a href="/login" className="btn-primary w-full mt-6 inline-block">
             Back to sign in
-          </button>
+          </a>
         </div>
       </div>
     );
@@ -163,13 +183,8 @@ function ResetPasswordForm() {
               {error}
             </p>
           )}
-          {done && (
-            <p className="text-sm" style={{ color: 'var(--color-success)' }}>
-              Password set. Taking you to sign in...
-            </p>
-          )}
 
-          <button type="submit" disabled={pending || done} className="btn-primary w-full">
+          <button type="submit" disabled={pending} className="btn-primary w-full">
             {pending ? 'Please wait...' : 'Set password'}
           </button>
         </form>
