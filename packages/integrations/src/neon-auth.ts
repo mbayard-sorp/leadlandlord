@@ -197,10 +197,18 @@ export async function provisionCustomerAccess({
   try {
     const fromAddress = process.env.RESEND_FROM_ADDRESS;
     if (fromAddress) {
+      // Business name in the subject so the customer recognises it at a glance
+      // and the sent copy is identifiable when several go out. Kept as a
+      // trailing parenthetical rather than a prefix so the useful part of the
+      // line survives truncation in narrow inboxes, and guarded so an empty
+      // name can't produce a dangling "ready ()".
+      const subjectName = businessName?.trim();
       await sendEmail({
         to: ownerEmail,
         from: fromAddress,
-        subject: 'Your website editor is ready',
+        subject: subjectName
+          ? `Your website editor is ready (${subjectName})`
+          : 'Your website editor is ready',
         text: [
           `Hi ${businessName},`,
           '',
