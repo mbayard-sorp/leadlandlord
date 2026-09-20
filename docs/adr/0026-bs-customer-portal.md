@@ -114,3 +114,70 @@ portal must read the draft before patching them; the publish safety lock is mand
 gets re-noindexed; the `ugc` section is conditionally absent; the `/preview/<id>` route is
 public-by-unguessable-UUID (acceptable v1, hardening logged); a third Vercel project + DNS for
 `edit.leadlandlord.com` is required before end-to-end verification.
+
+## Amendment 1 — pre-handoff fixes (2026-09-20)
+
+Found while assessing the portal before handing a login to the first real
+customer (karkens.com, `bs-site-1f233990-…`). Four changes; none alter the
+auth, authz, or publish-safety decisions above.
+
+### A1. Welcome-email URL was a domain we don't own
+
+`provisionCustomerAccess` hard-coded `https://edit.leadlandlord.com`. The
+domain we own is `leadslandlord.com` — with the `s`; `leadlandlord.com` is
+registered to a third party. Every welcome email sent before this fix pointed
+the customer at a parked domain. The URL now comes from `CUSTOMER_PORTAL_URL`,
+defaulting to `https://edit.leadslandlord.com`. **The Decision section's
+`edit.leadlandlord.com` is superseded by `edit.leadslandlord.com`.**
+
+`.env.example` now documents `CUSTOMER_PORTAL_URL`, `NEON_AUTH_BASE_URL`,
+`NEON_AUTH_COOKIE_SECRET` and `SITE_HOST_ORIGIN`, none of which were listed.
+
+### A2. Publish discarded unsaved edits
+
+`handlePublish` called `publishAction` directly while the structural ops went
+through the D4 flush-then-act sequence. A customer who typed into the form and
+clicked the primary Publish button without first clicking "Save draft"
+published the *previous* draft and silently lost their typing. Publish now
+awaits the same `flushSave()` and aborts with an inline message if the save
+fails. Rule: **every action that promotes or restructures the draft flushes
+pending text edits first.**
+
+### A3. Image patch paths hard-coded `_key=="hero"` / `_key=="about"`
+
+The builder writes those literal keys, but About is addable/removable/
+duplicable, and added or duplicated instances get generated keys
+(`abt_k7z3m1`). Uploading an About image on such a site patched a section that
+did not exist and silently no-opped. `resolveImageFieldPath(doc, fieldKey)`
+now resolves section-scoped image fields by `_type`, selecting the first
+instance in document order, and `uploadAndSetImage` resolves the path *before*
+uploading the asset so a missing section fails loudly instead of orphaning an
+upload. The edit page derives its thumbnails through the same helper, and
+`ALLOWED_IMAGE_FIELD_KEYS` is now derived from `IMAGE_FIELD_KEYS` rather than
+duplicated.
+
+Known limitation: the Photos panel still offers one slot per field, so on a
+site with several About sections only the first one's image is editable.
+
+### A4. Editable scope now covers Pricing and Before/After
+
+`sectionTemplates` had no entry for `bsPricingSection` or
+`bsBeforeAfterSection`, and `buildSectionList` skips unknown types *silently* —
+so a site using either section simply could not edit it. karkens.com uses both
+(a "Specials" block with percentage discounts, and a Before & After gallery).
+
+Added to the **Editable field scope**:
+
+- `bsPricingSection` — `eyebrow`, `heading`, `subhead`, `footnote`; per tier:
+  `name`, `price`, `unit`, `description`, `badge`, `cta.label`, `cta.href`.
+- `bsBeforeAfterSection` — `eyebrow`, `heading`, `subhead`, `beforeLabel`,
+  `afterLabel`, `cta.label/href/style`; per pair: `title`, `caption`,
+  `beforeAlt`, `afterAlt`.
+
+New sub-item key prefixes: `tier.<itemKey>.…` → `tiers[]`, and
+`pair.<itemKey>.…` → `pairs[]`. Still blocked: `layout`, `aspect`,
+`tier.featured`, and the `before`/`after` image refs on a pair.
+
+Neither type was added to `BS_SECTION_RULES`, so customers can edit these
+sections and drag them around but cannot add, remove or duplicate them — that
+would need seed shapes and is a separate decision.

@@ -32,6 +32,25 @@ import { sendEmail } from './resend/index';
 // ---------------------------------------------------------------------------
 
 /**
+ * Public origin of the customer portal, used in the welcome email.
+ *
+ * The default is a subdomain of `leadslandlord.com` — note the `s`. The
+ * earlier hard-coded `edit.leadlandlord.com` is a domain we do not own, so
+ * every welcome email sent before this fix pointed customers at a third
+ * party's parked domain.
+ *
+ * Read at call time (not module scope) so a deployment can set it without
+ * depending on import order.
+ */
+function customerPortalUrl(): string {
+  const configured = process.env.CUSTOMER_PORTAL_URL?.trim();
+  const base = configured && configured.length > 0
+    ? configured
+    : 'https://edit.leadslandlord.com';
+  return base.replace(/\/+$/, '');
+}
+
+/**
  * Looks up a Neon Auth user id by email using a parameterised query.
  *
  * Neon Auth (managed Better Auth) stores users in `neon_auth.user` (singular) —
@@ -151,7 +170,7 @@ export async function provisionCustomerAccess({
         text: [
           `Hi ${businessName},`,
           '',
-          'Your website editor is ready at https://edit.leadlandlord.com',
+          `Your website editor is ready at ${customerPortalUrl()}`,
           '',
           'Sign in with this email address and use "Forgot Password" to set your password.',
           '',
