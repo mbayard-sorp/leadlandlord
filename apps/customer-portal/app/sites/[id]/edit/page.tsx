@@ -24,6 +24,7 @@ import {
   buildsellSiteDocId,
   getAiImageGenerationCount,
   AI_IMAGE_GENERATION_LIMIT,
+  findImageSection,
 } from '@/lib/sanity-write';
 import {
   businessFields,
@@ -129,8 +130,11 @@ export default async function EditPage({ params }: Props) {
     return obj?.asset?._ref as string | undefined;
   }
 
-  const heroSection = docAny?.sections?.find((s: { _key?: string }) => s._key === 'hero');
-  const aboutSection = docAny?.sections?.find((s: { _key?: string }) => s._key === 'about');
+  // Resolve the section instances by _type via the same helper the write path
+  // uses, so the thumbnail shown is always the image an upload would replace
+  // (literal `_key` lookups broke on duplicated/re-added sections).
+  const heroSection = findImageSection(docAny, 'hero.image');
+  const aboutSection = findImageSection(docAny, 'about.image');
 
   const initialThumbnails: Record<string, string | undefined> = {
     'logo':        assetRefToUrl(imageRef(docAny?.logo)),

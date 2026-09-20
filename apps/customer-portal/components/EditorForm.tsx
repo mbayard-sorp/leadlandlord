@@ -708,35 +708,53 @@ const EditorForm = forwardRef<EditorFormHandle, EditorFormProps>(function Editor
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // D4 imperative handle: flushSave.
-  useImperativeHandle(
-    ref,
-    () => ({
-      flushSave: (): Promise<void> => {
-        if (!dirtyRef.current) return Promise.resolve();
-        return new Promise<void>((resolve, reject) => {
-          flushResolveRef.current = resolve;
-          flushRejectRef.current = reject;
-          // Programmatically submit the form.
-          formRef.current?.requestSubmit();
-        });
-      },
-    }),
-    [],
-  );
+  /**
+   * D4 flush: submit any pending text edits and resolve once the save
+   * round-trip succeeds. No-op when the form is clean; rejects when the save
+   * fails so callers can abort instead of acting on a stale draft.
+   */
+  const flushSave = useCallback((): Promise<void> => {
+    if (!dirtyRef.current) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      flushResolveRef.current = resolve;
+      flushRejectRef.current = reject;
+      // Programmatically submit the form.
+      formRef.current?.requestSubmit();
+    });
+  }, []);
+
+  // D4 imperative handle: exposes the same flush to EditorShell.
+  useImperativeHandle(ref, () => ({ flushSave }), [flushSave]);
 
   const errors: Record<string, string> = saveState.errors ?? {};
   const hasErrors = Object.keys(errors).length > 0;
   const anyPending = isSaving || publishPending || discardPending || structuralPending;
 
-  const handlePublish = useCallback(() => {
+  const handlePublish = useCallback(async () => {
     setPublishResult(null);
+
+    // Publish must never ship a stale draft. Without this flush, a customer
+    // who types into the form and then clicks the primary Publish button —
+    // without first clicking "Save draft" — publishes the PREVIOUS draft and
+    // silently loses everything they just typed. Same flush-then-act sequence
+    // the structural ops use (EditorShell.runStructural).
+    try {
+      await flushSave();
+    } catch {
+      setPublishResult({
+        ok: false,
+        message:
+          'Your changes could not be saved, so nothing was published. Fix the highlighted fields above and try again.',
+      });
+      return;
+    }
+
     startPublish(async () => {
       const result = await publishAction(siteId);
       setPublishResult(result);
       if (result.ok) router.refresh();
     });
-  }, [publishAction, siteId, router]);
+  }, [flushSave, publishAction, siteId, router]);
 
   const handleDiscardConfirm = useCallback(() => {
     setShowDiscardModal(false);
