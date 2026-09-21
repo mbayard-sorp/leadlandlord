@@ -51,7 +51,6 @@ const SEED: SeedRow[] = [
   // so freshly-scaffolded seeds are auditable the next day.
   { schedulerName: 'data-inputs-scaffolder', targetAgent: 'data-inputs-scaffolder', cadenceKind: 'cron', cronExpr: '30 8 * * 2' },
   { schedulerName: 'tenant-prospector', targetAgent: 'tenant-prospector', cadenceKind: 'cron', cronExpr: '0 14 * * 1' },
-  { schedulerName: 'molly-digest', targetAgent: 'molly-digest', cadenceKind: 'cron', cronExpr: '0 14 * * *' },
   { schedulerName: 'outreach-agent', targetAgent: 'outreach-agent', cadenceKind: 'cron', cronExpr: '0 15 * * *' },
   { schedulerName: 'trial-manager', targetAgent: 'trial-manager', cadenceKind: 'cron', cronExpr: '0 16 * * *' },
   { schedulerName: 'billing-dunning', targetAgent: 'billing-dunning', cadenceKind: 'cron', cronExpr: '0 17 * * *' },
