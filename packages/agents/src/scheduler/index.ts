@@ -13,7 +13,6 @@ import { schedulePortfolioAnalyst } from './portfolio-analyst';
 import { scheduleNicheCalibrator } from './niche-calibrator';
 import { scheduleNichePriorSuggester } from './niche-prior-suggester';
 import { scheduleOperator } from './operator';
-import { scheduleMollyDigest } from './molly-digest';
 import { scheduleMollyInbox } from './molly-inbox';
 import { scheduleMollyNudge } from './molly-nudge';
 import { scheduleNetworkLinker } from './network-linker';
@@ -51,7 +50,6 @@ export const schedulers: Record<string, Scheduler> = {
   'niche-calibrator': scheduleNicheCalibrator,
   'niche-prior-suggester': scheduleNichePriorSuggester,
   operator: scheduleOperator,
-  'molly-digest': scheduleMollyDigest,
   'molly-inbox': scheduleMollyInbox,
   'molly-nudge': scheduleMollyNudge,
   'network-linker': scheduleNetworkLinker,
