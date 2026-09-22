@@ -31,8 +31,11 @@ export function SiteHeader({ site }: Props) {
             </span>
           ) : (
             <>
-              <span className="cs-brand-name">Michael J. Bayard</span>
-              <span className="cs-brand-sub">Construction ADR</span>
+              {/* Text lockup when no logo has been uploaded. Driven by the
+                  site's own document — a hardcoded name here put site #1's
+                  brand on every other client's header. */}
+              <span className="cs-brand-name">{site.name}</span>
+              {site.tagline ? <span className="cs-brand-sub">{site.tagline}</span> : null}
             </>
           )}
         </a>
