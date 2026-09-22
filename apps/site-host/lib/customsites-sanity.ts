@@ -601,6 +601,39 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     heading, lastUpdated,
     content${CS_BODY_PROJECTION},
     note
+  },
+  _type == "csAppHeroBlock" => {
+    eyebrow, heading, subheading, deviceCaption,
+    "deviceUrl": device.asset->url,
+    "deviceAlt": device.alt,
+    foldPreview{
+      recordLabel, timecode, pastLine, currentLine, lensNote,
+      innerEyebrow, innerHeading, checklist, primaryLabel, secondaryLabel
+    },
+    storeState, storeLabel, storeHref, qualifier, secondaryLabel, secondaryHref
+  },
+  _type == "csDeviceShowcaseBlock" => {
+    eyebrow, heading, body, side, band, caption, ctaLabel, ctaHref,
+    "screenUrl": screen.asset->url,
+    "screenAlt": screen.alt
+  },
+  _type == "csPrompterBandBlock" => {
+    eyebrow, pastLine, currentLine, nextLine, notes
+  },
+  _type == "csPlansBlock" => {
+    eyebrow, heading, intro, footnote,
+    plans[]{ _key, name, price, period, recommended, features, ctaLabel, ctaHref, note }
+  },
+  _type == "csRequirementsBlock" => {
+    heading,
+    items[]{ _key, label, value }
+  },
+  _type == "csAppCtaBlock" => {
+    heading, body, showMark, storeState, storeLabel, storeHref, qualifier, band
+  },
+  _type == "csContrastBlock" => {
+    eyebrow, heading, leftLabel, rightLabel, footnote,
+    rows[]{ _key, left, right }
   }
 }`;
 
@@ -630,7 +663,17 @@ export interface CsFaqBlock { _type: 'csFaqBlock'; _key: string; heading?: strin
 export interface CsStatRailItem { _key: string; value: string; label: string; footnote?: string | null }
 export interface CsStatRailBlock { _type: 'csStatRailBlock'; _key: string; eyebrow?: string | null; inverse?: boolean | null; items?: CsStatRailItem[] | null }
 
-export type CsValuePropIcon = 'team' | 'practice' | 'roadmap' | 'shield' | 'chart' | 'clock';
+export type CsValuePropIcon =
+  | 'team'
+  | 'practice'
+  | 'roadmap'
+  | 'shield'
+  | 'chart'
+  | 'clock'
+  | 'cueduo/fold'
+  | 'cueduo/eyeline'
+  | 'cueduo/cut'
+  | 'cueduo/pace';
 export interface CsValuePropItem { _key: string; icon?: CsValuePropIcon | null; heading: string; body: string }
 export interface CsValuePropsBlock { _type: 'csValuePropsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsValuePropItem[] | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null }
 
@@ -661,6 +704,40 @@ export interface CsAssessmentBlock { _type: 'csAssessmentBlock'; _key: string; i
 
 export interface CsDisclosureBlock { _type: 'csDisclosureBlock'; _key: string; heading?: string | null; lastUpdated?: string | null; content?: CsPortableTextBlock[] | null; note?: string | null }
 
+/* --- the CueDuo set (site #3) ------------------------------------------- */
+
+/** Strings for the built-in two-pane device illustration. Only used when
+ *  csAppHeroBlock has no uploaded device render. */
+export interface CsFoldPreview {
+  recordLabel?: string | null;
+  timecode?: string | null;
+  pastLine?: string | null;
+  currentLine?: string | null;
+  lensNote?: string | null;
+  innerEyebrow?: string | null;
+  innerHeading?: string | null;
+  checklist?: string[] | null;
+  primaryLabel?: string | null;
+  secondaryLabel?: string | null;
+}
+export type CsStoreState = 'soon' | 'live';
+export interface CsAppHeroBlock { _type: 'csAppHeroBlock'; _key: string; eyebrow?: string | null; heading: string; subheading?: string | null; deviceUrl?: string | null; deviceAlt?: string | null; deviceCaption?: string | null; foldPreview?: CsFoldPreview | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; secondaryLabel?: string | null; secondaryHref?: string | null }
+
+export interface CsDeviceShowcaseBlock { _type: 'csDeviceShowcaseBlock'; _key: string; eyebrow?: string | null; heading: string; body?: string | null; screenUrl?: string | null; screenAlt?: string | null; side?: 'left' | 'right' | null; band?: 'porcelain' | 'graphite' | null; caption?: string | null; ctaLabel?: string | null; ctaHref?: string | null }
+
+export interface CsPrompterBandBlock { _type: 'csPrompterBandBlock'; _key: string; eyebrow?: string | null; pastLine?: string | null; currentLine: string; nextLine?: string | null; notes?: string[] | null }
+
+export interface CsPlan { _key: string; name: string; price: string; period?: string | null; recommended?: boolean | null; features?: string[] | null; ctaLabel?: string | null; ctaHref?: string | null; note?: string | null }
+export interface CsPlansBlock { _type: 'csPlansBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; plans?: CsPlan[] | null; footnote?: string | null }
+
+export interface CsRequirementItem { _key: string; label: string; value: string }
+export interface CsRequirementsBlock { _type: 'csRequirementsBlock'; _key: string; heading?: string | null; items?: CsRequirementItem[] | null }
+
+export interface CsAppCtaBlock { _type: 'csAppCtaBlock'; _key: string; heading: string; body?: string | null; showMark?: boolean | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; band?: 'graphite' | 'porcelain' | null }
+
+export interface CsContrastRow { _key: string; left: string; right: string }
+export interface CsContrastBlock { _type: 'csContrastBlock'; _key: string; eyebrow?: string | null; heading: string; leftLabel: string; rightLabel: string; rows?: CsContrastRow[] | null; footnote?: string | null }
+
 export type CsPageBuilderBlock =
   | CsHeroBlock
   | CsIntroBlock
@@ -686,7 +763,14 @@ export type CsPageBuilderBlock =
   | CsTabbedInsightsBlock
   | CsEpisodeListBlock
   | CsAssessmentBlock
-  | CsDisclosureBlock;
+  | CsDisclosureBlock
+  | CsAppHeroBlock
+  | CsDeviceShowcaseBlock
+  | CsPrompterBandBlock
+  | CsPlansBlock
+  | CsRequirementsBlock
+  | CsAppCtaBlock
+  | CsContrastBlock;
 
 export interface CustomSitePageFull {
   _id: string;

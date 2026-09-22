@@ -24,6 +24,13 @@ import { TabbedInsightsBlock } from './blocks/TabbedInsightsBlock';
 import { EpisodeListBlock } from './blocks/EpisodeListBlock';
 import { AssessmentBlock } from './blocks/AssessmentBlock';
 import { DisclosureBlock } from './blocks/DisclosureBlock';
+import { AppHeroBlock } from './blocks/AppHeroBlock';
+import { DeviceShowcaseBlock } from './blocks/DeviceShowcaseBlock';
+import { PrompterBandBlock } from './blocks/PrompterBandBlock';
+import { PlansBlock } from './blocks/PlansBlock';
+import { RequirementsBlock } from './blocks/RequirementsBlock';
+import { AppCtaBlock } from './blocks/AppCtaBlock';
+import { ContrastBlock } from './blocks/ContrastBlock';
 
 interface Props {
   blocks: CsPageBuilderBlock[] | null | undefined;
@@ -34,11 +41,13 @@ interface Props {
   /** Public path of the page rendering these blocks (e.g. "/insights") —
    * lets csTabbedInsightsBlock mark the active tab server-side. */
   currentPath?: string;
+  /** csSite.logo — csAppCtaBlock sets the mark above its heading. */
+  logoUrl?: string | null;
 }
 
 /** Switches over csPage.pageBuilder[]._type — the Custom Sites blocks,
  * rendered in Sanity array order. Mirrors BuildSellHome's section switch. */
-export function PageBuilder({ blocks, siteKey, phone, siteName, currentPath }: Props) {
+export function PageBuilder({ blocks, siteKey, phone, siteName, currentPath, logoUrl }: Props) {
   if (!blocks || blocks.length === 0) return null;
 
   return (
@@ -50,7 +59,7 @@ export function PageBuilder({ blocks, siteKey, phone, siteName, currentPath }: P
           case 'csValuePropsBlock':
             return <ValuePropsBlock key={block._key} block={block} />;
           case 'csJourneyBlock':
-            return <JourneyBlock key={block._key} block={block} />;
+            return <JourneyBlock key={block._key} block={block} siteKey={siteKey} />;
           case 'csCompareBlock':
             return <CompareBlock key={block._key} block={block} siteName={siteName} />;
           case 'csTeamGridBlock':
@@ -95,6 +104,20 @@ export function PageBuilder({ blocks, siteKey, phone, siteName, currentPath }: P
             return <CtaBannerBlock key={block._key} block={block} phone={phone} />;
           case 'csFaqBlock':
             return <FaqBlock key={block._key} block={block} phone={phone} />;
+          case 'csAppHeroBlock':
+            return <AppHeroBlock key={block._key} block={block} />;
+          case 'csDeviceShowcaseBlock':
+            return <DeviceShowcaseBlock key={block._key} block={block} />;
+          case 'csPrompterBandBlock':
+            return <PrompterBandBlock key={block._key} block={block} />;
+          case 'csPlansBlock':
+            return <PlansBlock key={block._key} block={block} />;
+          case 'csRequirementsBlock':
+            return <RequirementsBlock key={block._key} block={block} />;
+          case 'csAppCtaBlock':
+            return <AppCtaBlock key={block._key} block={block} logoUrl={logoUrl} siteName={siteName} />;
+          case 'csContrastBlock':
+            return <ContrastBlock key={block._key} block={block} />;
           default:
             return null;
         }
