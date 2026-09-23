@@ -10,6 +10,10 @@ interface Props {
    * per-site copy from the calling route for any other site. */
   ctaEyebrow?: string;
   ctaBody?: string;
+  /** Label + destination of the rail's text link. Defaults are site #1's. A
+   * site with no /contact route must pass its own, or the rail 404s. */
+  ctaLinkLabel?: string;
+  ctaHref?: string;
   /**
    * "aside" renders the navy rail used alongside practice-area copy and keeps
    * the current page in the list (marked current). "section" is the standalone
@@ -26,6 +30,8 @@ export async function RelatedServices({
   variant = 'section',
   ctaEyebrow = 'Free Case Review',
   ctaBody = 'Have a construction dispute? Talk to our team before you decide your next step.',
+  ctaLinkLabel = 'Request a Consultation',
+  ctaHref = '/contact',
 }: Props) {
   // React.cache-deduped — the page this rail lives on has already resolved
   // the site once, so this is a free lookup, not a second Sanity round trip.
@@ -67,8 +73,8 @@ export async function RelatedServices({
               Call {site.phone}
             </a>
           ) : null}
-          <a href="/contact" className="cs-link">
-            Request a Consultation
+          <a href={ctaHref} className="cs-link">
+            {ctaLinkLabel}
             <span className="cs-link-arrow" aria-hidden="true">
               →
             </span>
