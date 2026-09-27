@@ -124,6 +124,7 @@ export const agentMetadata: Record<string, AgentMeta> = {
   },
   'fleet-digest': {
     description: "Daily email digest of the fleet's health, spend vs caps, and what needs Mike (pending niches, go-lives, blocked agents).",
+    trigger: 'Daily 13:00 UTC (DB-driven; not in vercel.json)',
   },
   'molly-scorer': {
     description: 'Scores the top backlink-prospect domains for a site (Haiku).',
