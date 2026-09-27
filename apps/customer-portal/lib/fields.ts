@@ -28,6 +28,9 @@
  *               'sec.<sectionKey>.col.<colKey>.heading'
  *               'sec.<sectionKey>.col.<colKey>.link.<linkKey>.label'
  *               'sec.<sectionKey>.item.<itemKey>.question'  (FAQ)
+ *               'sec.<sectionKey>.tier.<itemKey>.price'     (Pricing)
+ *               'sec.<sectionKey>.tier.<itemKey>.cta.label' (Pricing)
+ *               'sec.<sectionKey>.pair.<itemKey>.title'     (Before/After)
  */
 
 import { z } from 'zod';
@@ -334,6 +337,30 @@ const sectionTemplates: Record<string, SectionTemplate> = {
       // Per-item fields are generated dynamically in buildSectionList().
     ],
   },
+  bsPricingSection: {
+    label: 'Pricing & Specials',
+    fields: [
+      { relKey: 'eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above your pricing title.' },
+      { relKey: 'heading', label: 'Pricing section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Specials', description: 'The title above your prices or current offers.' },
+      { relKey: 'subhead', label: 'Intro sentence', control: 'textarea', schema: mediumTextOpt, max: 200, placeholder: 'Quotes are always free — limited time offer!', description: 'Optional sentence introducing your pricing.' },
+      { relKey: 'footnote', label: 'Fine print', control: 'textarea', schema: mediumTextOpt, max: 300, placeholder: 'Final price confirmed on site.', description: 'Small print shown under the prices. Use this for any conditions on an offer.' },
+      // Per-tier fields are generated dynamically in buildSectionList().
+    ],
+  },
+  bsBeforeAfterSection: {
+    label: 'Before & After',
+    fields: [
+      { relKey: 'eyebrow', label: 'Small line above the title', control: 'input', schema: shortTextOpt, max: 60, description: 'Optional short phrase above the section title.' },
+      { relKey: 'heading', label: 'Section title', control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Before & After', description: 'The title above your before-and-after photos.' },
+      { relKey: 'subhead', label: 'Intro sentence', control: 'textarea', schema: mediumTextOpt, max: 200, description: 'Optional sentence introducing your recent work.' },
+      { relKey: 'beforeLabel', label: '"Before" label', control: 'input', schema: shortTextOpt, max: 30, placeholder: 'Before', description: 'The wording on the chip over the first photo of every pair.' },
+      { relKey: 'afterLabel', label: '"After" label', control: 'input', schema: shortTextOpt, max: 30, placeholder: 'After', description: 'The wording on the chip over the second photo of every pair.' },
+      { relKey: 'cta.label', label: 'Button text', control: 'input', schema: shortTextOpt, max: 30, description: 'Optional button under the gallery.' },
+      { relKey: 'cta.href', label: 'Button link', control: 'input', schema: ctaHref, placeholder: '#contact', description: 'Where the button goes.' },
+      { relKey: 'cta.style', label: 'Button style', control: 'select', schema: ctaStyle, options: CTA_STYLE_OPTIONS, description: 'Solid stands out most; outline is subtler.' },
+      // Per-project fields are generated dynamically in buildSectionList().
+    ],
+  },
   bsFooterSection: {
     label: 'Footer',
     fields: [
@@ -445,6 +472,35 @@ export function buildSectionList(doc: AnyDoc): SectionDef[] {
         dynamicFields.push(
           { key: `sec.${sectionKey}.item.${k}.question`, label: `Question ${i + 1}`, control: 'input', schema: mediumTextOpt, max: 200, placeholder: 'How long does a typical job take?' },
           { key: `sec.${sectionKey}.item.${k}.answer`, label: `Answer ${i + 1}`, control: 'textarea', schema: longTextOpt, max: 600 },
+        );
+      });
+    }
+
+    if (sectionType === 'bsPricingSection' && Array.isArray(section.tiers)) {
+      section.tiers.forEach((tier: AnyDoc, i: number) => {
+        if (!tier._key) return;
+        const k: string = tier._key;
+        dynamicFields.push(
+          { key: `sec.${sectionKey}.tier.${k}.name`, label: `Item ${i + 1} name`, control: 'input', schema: shortTextOpt, max: 40, placeholder: 'Exterior Painting' },
+          { key: `sec.${sectionKey}.tier.${k}.price`, label: `Item ${i + 1} price`, control: 'input', schema: shortTextOpt, max: 40, placeholder: 'e.g. 30% Off, $250, From $99', description: 'Shown big. Free text — a discount, a dollar amount, or "Call for quote".' },
+          { key: `sec.${sectionKey}.tier.${k}.unit`, label: `Item ${i + 1} price qualifier`, control: 'input', schema: shortTextOpt, max: 40, placeholder: 'your project' },
+          { key: `sec.${sectionKey}.tier.${k}.description`, label: `Item ${i + 1} description`, control: 'textarea', schema: mediumTextOpt, max: 200 },
+          { key: `sec.${sectionKey}.tier.${k}.badge`, label: `Item ${i + 1} ribbon`, control: 'input', schema: shortTextOpt, max: 40, placeholder: 'Best Value' },
+          { key: `sec.${sectionKey}.tier.${k}.cta.label`, label: `Item ${i + 1} button text`, control: 'input', schema: shortTextOpt, max: 30, placeholder: 'Request your quote' },
+          { key: `sec.${sectionKey}.tier.${k}.cta.href`, label: `Item ${i + 1} button link`, control: 'input', schema: ctaHref, placeholder: '#contact' },
+        );
+      });
+    }
+
+    if (sectionType === 'bsBeforeAfterSection' && Array.isArray(section.pairs)) {
+      section.pairs.forEach((pair: AnyDoc, i: number) => {
+        if (!pair._key) return;
+        const k: string = pair._key;
+        dynamicFields.push(
+          { key: `sec.${sectionKey}.pair.${k}.title`, label: `Project ${i + 1} title`, control: 'input', schema: shortTextOpt, max: 120, placeholder: 'Laundry room floor & paint' },
+          { key: `sec.${sectionKey}.pair.${k}.caption`, label: `Project ${i + 1} caption`, control: 'textarea', schema: mediumTextOpt, max: 200 },
+          { key: `sec.${sectionKey}.pair.${k}.beforeAlt`, label: `Project ${i + 1} "before" photo description`, control: 'input', schema: shortTextOpt, max: 120, description: 'Describe the before photo in a few words. Helps Google Images and screen readers.' },
+          { key: `sec.${sectionKey}.pair.${k}.afterAlt`, label: `Project ${i + 1} "after" photo description`, control: 'input', schema: shortTextOpt, max: 120, description: 'Describe the after photo in a few words.' },
         );
       });
     }
@@ -621,6 +677,47 @@ export function extractFormValues(doc: AnyDoc): Record<string, string> {
         }
         break;
 
+      case 'bsPricingSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.heading`, section.heading);
+        set(`sec.${sk}.subhead`, section.subhead);
+        set(`sec.${sk}.footnote`, section.footnote);
+        if (Array.isArray(section.tiers)) {
+          for (const tier of section.tiers as Array<AnyDoc>) {
+            if (!tier._key) continue;
+            const k: string = tier._key;
+            set(`sec.${sk}.tier.${k}.name`, tier.name);
+            set(`sec.${sk}.tier.${k}.price`, tier.price);
+            set(`sec.${sk}.tier.${k}.unit`, tier.unit);
+            set(`sec.${sk}.tier.${k}.description`, tier.description);
+            set(`sec.${sk}.tier.${k}.badge`, tier.badge);
+            set(`sec.${sk}.tier.${k}.cta.label`, tier.cta?.label);
+            set(`sec.${sk}.tier.${k}.cta.href`, tier.cta?.href);
+          }
+        }
+        break;
+
+      case 'bsBeforeAfterSection':
+        set(`sec.${sk}.eyebrow`, section.eyebrow);
+        set(`sec.${sk}.heading`, section.heading);
+        set(`sec.${sk}.subhead`, section.subhead);
+        set(`sec.${sk}.beforeLabel`, section.beforeLabel);
+        set(`sec.${sk}.afterLabel`, section.afterLabel);
+        set(`sec.${sk}.cta.label`, section.cta?.label);
+        set(`sec.${sk}.cta.href`, section.cta?.href);
+        set(`sec.${sk}.cta.style`, section.cta?.style);
+        if (Array.isArray(section.pairs)) {
+          for (const pair of section.pairs as Array<AnyDoc>) {
+            if (!pair._key) continue;
+            const k: string = pair._key;
+            set(`sec.${sk}.pair.${k}.title`, pair.title);
+            set(`sec.${sk}.pair.${k}.caption`, pair.caption);
+            set(`sec.${sk}.pair.${k}.beforeAlt`, pair.beforeAlt);
+            set(`sec.${sk}.pair.${k}.afterAlt`, pair.afterAlt);
+          }
+        }
+        break;
+
       case 'bsFooterSection':
         set(`sec.${sk}.tagline`, section.tagline);
         set(`sec.${sk}.legal`, section.legal);
@@ -666,7 +763,26 @@ const dynamicFieldSchemas: Record<string, z.ZodTypeAny> = {
   'col.*.heading': shortTextOpt,
   'col.*.link.*.label': shortTextOpt,
   'col.*.link.*.href': ctaHref,
+  'tier.*.name': shortTextOpt,
+  'tier.*.price': shortTextOpt,
+  'tier.*.unit': shortTextOpt,
+  'tier.*.description': mediumTextOpt,
+  'tier.*.badge': shortTextOpt,
+  'tier.*.cta.label': shortTextOpt,
+  'tier.*.cta.href': ctaHref,
+  'pair.*.title': shortTextOpt,
+  'pair.*.caption': mediumTextOpt,
+  'pair.*.beforeAlt': shortTextOpt,
+  'pair.*.afterAlt': shortTextOpt,
 };
+
+/**
+ * Sub-item field-name allowlists, used by buildPatchSet to confirm the trailing
+ * path segment is a real field before it is interpolated into a Sanity path.
+ */
+const TIER_FIELDS = new Set(['name', 'price', 'unit', 'description', 'badge']);
+const TIER_CTA_FIELDS = new Set(['label', 'href']);
+const PAIR_FIELDS = new Set(['title', 'caption', 'beforeAlt', 'afterAlt']);
 
 /**
  * Returns the zod schema for a form field key.
@@ -738,6 +854,21 @@ export function schemaForKey(key: string, keyTypeMap?: Record<string, string>): 
   // col.*.link.*.label / col.*.link.*.href
   if (parts[0] === 'col' && parts[2] === 'link' && parts.length === 5) {
     const pattern = `col.*.link.*.${parts[4]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+  // tier.*.<field> (pricing tiers)
+  if (parts[0] === 'tier' && parts.length === 3) {
+    const pattern = `tier.*.${parts[2]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+  // tier.*.cta.label / tier.*.cta.href
+  if (parts[0] === 'tier' && parts.length === 4 && parts[2] === 'cta') {
+    const pattern = `tier.*.cta.${parts[3]}`;
+    if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
+  }
+  // pair.*.<field> (before/after projects)
+  if (parts[0] === 'pair' && parts.length === 3) {
+    const pattern = `pair.*.${parts[2]}`;
     if (dynamicFieldSchemas[pattern]) return dynamicFieldSchemas[pattern]!;
   }
 
@@ -853,6 +984,33 @@ export function buildPatchSet(
       if (!isSafeKey(colKey)) continue;
       emit(
         `sections[_key=="${sectionKey}"].columns[_key=="${colKey}"].heading`,
+        value,
+      );
+    } else if (parts[0] === 'tier' && parts.length === 3) {
+      // sec.<sk>.tier.<itemKey>.<field>  (pricing tiers)
+      const itemKey = parts[1] as string;
+      const fieldName = parts[2] as string;
+      if (!isSafeKey(itemKey) || !TIER_FIELDS.has(fieldName)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].tiers[_key=="${itemKey}"].${fieldName}`,
+        value,
+      );
+    } else if (parts[0] === 'tier' && parts.length === 4 && parts[2] === 'cta') {
+      // sec.<sk>.tier.<itemKey>.cta.<field>
+      const itemKey = parts[1] as string;
+      const fieldName = parts[3] as string;
+      if (!isSafeKey(itemKey) || !TIER_CTA_FIELDS.has(fieldName)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].tiers[_key=="${itemKey}"].cta.${fieldName}`,
+        value,
+      );
+    } else if (parts[0] === 'pair' && parts.length === 3) {
+      // sec.<sk>.pair.<itemKey>.<field>  (before/after projects)
+      const itemKey = parts[1] as string;
+      const fieldName = parts[2] as string;
+      if (!isSafeKey(itemKey) || !PAIR_FIELDS.has(fieldName)) continue;
+      emit(
+        `sections[_key=="${sectionKey}"].pairs[_key=="${itemKey}"].${fieldName}`,
         value,
       );
     } else if (parts[0] === 'col' && parts[2] === 'link' && parts.length === 5) {

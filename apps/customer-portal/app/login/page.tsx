@@ -13,7 +13,7 @@
 
 import { createAuthClient } from '@neondatabase/auth/next';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 
 const authClient = createAuthClient();
 
@@ -21,6 +21,16 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get('next') ?? '/dashboard';
+
+  // Reset links issued before /reset-password existed point here with the
+  // token attached. Forward them instead of silently showing a sign-in form
+  // the customer has no password for yet.
+  const strandedResetToken = searchParams.get('token');
+  useEffect(() => {
+    if (strandedResetToken) {
+      router.replace(`/reset-password?token=${encodeURIComponent(strandedResetToken)}`);
+    }
+  }, [strandedResetToken, router]);
 
   const [mode, setMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -56,9 +66,12 @@ function LoginForm() {
     setInfo(null);
     setPending(true);
     try {
+      // Neon Auth validates the token, then redirects here with `?token=`.
+      // This must point at the page that hosts the new-password form, not at
+      // /login, which has nothing to do with the token.
       const { error: authError } = await authClient.requestPasswordReset({
         email,
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       if (authError) {
         setError(authError.message ?? 'Could not send reset email. Please try again.');

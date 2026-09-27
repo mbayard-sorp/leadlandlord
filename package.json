@@ -26,6 +26,7 @@
     "customsites-geo-audit": "tsx scripts/customsites-geo-audit.ts",
     "customsites-indexnow": "tsx scripts/customsites-indexnow.ts",
     "seed-aligned-advisors": "tsx scripts/seed-aligned-advisors.ts",
+    "seed-cueduo": "tsx scripts/seed-cueduo.ts",
     "customsites-audit": "tsx scripts/customsites-audit.ts"
   },
   "devDependencies": {

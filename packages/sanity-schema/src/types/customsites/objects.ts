@@ -223,6 +223,42 @@ export const csBarAdmission = defineType({
   },
 });
 
+/**
+ * The two-pane device illustration used by csAppHeroBlock when no real device
+ * render has been uploaded yet. Every string describes the actual app: the
+ * outer pane is the prompter during a take, the inner pane is preflight.
+ * It is a stylised illustration, not a screenshot, and it is replaced the
+ * moment a photographed or 3D render exists.
+ */
+export const csFoldPreview = defineType({
+  name: 'csFoldPreview',
+  title: 'Fold Preview',
+  type: 'object',
+  fields: [
+    defineField({ name: 'recordLabel', title: 'Record Label', type: 'string', initialValue: 'REC' }),
+    defineField({ name: 'timecode', title: 'Timecode', type: 'string', initialValue: '00:42', description: 'Set in tabular numerals.' }),
+    defineField({ name: 'pastLine', title: 'Outer: Past Line', type: 'text', rows: 2, description: 'Dimmed to 30% on the outer screen.' }),
+    defineField({ name: 'currentLine', title: 'Outer: Current Line', type: 'text', rows: 2, description: 'The line being read, at full strength.' }),
+    defineField({ name: 'lensNote', title: 'Outer: Lens Note', type: 'string', initialValue: '48MP · look here' }),
+    defineField({ name: 'innerEyebrow', title: 'Inner: Eyebrow', type: 'string', initialValue: 'Preflight' }),
+    defineField({ name: 'innerHeading', title: 'Inner: Heading', type: 'string' }),
+    defineField({
+      name: 'checklist',
+      title: 'Inner: Checklist',
+      type: 'array',
+      of: [{ type: 'string' }],
+      validation: (r) => r.max(3),
+      description: 'Up to three preflight lines.',
+    }),
+    defineField({ name: 'primaryLabel', title: 'Inner: Primary Button', type: 'string' }),
+    defineField({ name: 'secondaryLabel', title: 'Inner: Secondary Button', type: 'string' }),
+  ],
+  preview: {
+    select: { title: 'innerHeading', subtitle: 'currentLine' },
+    prepare: ({ title, subtitle }) => ({ title: title ?? 'Fold preview', subtitle }),
+  },
+});
+
 export const customSitesObjectTypes = [
   csSeo,
   csNavChildLink,
@@ -233,4 +269,5 @@ export const customSitesObjectTypes = [
   csRedirect,
   csCredential,
   csBarAdmission,
+  csFoldPreview,
 ];

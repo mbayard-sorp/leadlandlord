@@ -395,7 +395,7 @@ export const csStatRailBlock = defineType({
 
 export const csValuePropsBlock = defineType({
   name: 'csValuePropsBlock',
-  title: 'Value Props (3-up)',
+  title: 'Value Props (3 or 4 up)',
   type: 'object',
   fields: [
     defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
@@ -415,7 +415,18 @@ export const csValuePropsBlock = defineType({
               title: 'Icon',
               type: 'string',
               options: {
-                list: ['team', 'practice', 'roadmap', 'shield', 'chart', 'clock'],
+                list: [
+                  'team',
+                  'practice',
+                  'roadmap',
+                  'shield',
+                  'chart',
+                  'clock',
+                  'cueduo/fold',
+                  'cueduo/eyeline',
+                  'cueduo/cut',
+                  'cueduo/pace',
+                ],
               },
               description: 'Chooses one of the site’s built-in inline SVG icons. Not an upload — icons ship with the code so they inherit color and stay crisp.',
             }),
@@ -425,7 +436,9 @@ export const csValuePropsBlock = defineType({
           preview: { select: { title: 'heading', subtitle: 'icon' } },
         },
       ],
-      validation: (r) => r.min(2).max(3),
+      // Relaxed from 3 to 4 for site #3, which has four brand features. The
+      // grid is auto-fit, so three-item sites are unaffected.
+      validation: (r) => r.min(2).max(4),
     }),
     defineField({
       name: 'backgroundImage',
@@ -928,6 +941,385 @@ export const csDisclosureBlock = defineType({
   },
 });
 
+
+/* ---------------------------------------------------------------------------
+ * The CueDuo set (site #3). Line-generic like every other block: these exist
+ * because an app marketing site needs a device, a store badge, a price and a
+ * script surface, and none of the professional-services blocks carry those.
+ * Any custom site may use them.
+ * ------------------------------------------------------------------------- */
+
+export const csAppHeroBlock = defineType({
+  name: 'csAppHeroBlock',
+  title: 'App Hero',
+  type: 'object',
+  fields: [
+    defineField({
+      name: 'eyebrow',
+      title: 'Eyebrow',
+      type: 'string',
+      description: 'Small line above the headline. Two or three words, e.g. "Teleprompter and recorder".',
+    }),
+    defineField({
+      name: 'heading',
+      title: 'Heading',
+      type: 'text',
+      rows: 2,
+      description:
+        'The promise. Sentence case, no exclamation marks. A line break here is kept on the page, so "Look up." and "Say it once." can sit on their own lines.',
+      validation: (r) => r.required().max(60),
+    }),
+    defineField({
+      name: 'subheading',
+      title: 'Subheading',
+      type: 'text',
+      rows: 3,
+      description: 'One paragraph. Keep lines to 45-70 characters.',
+    }),
+    defineField({
+      name: 'device',
+      title: 'Device Render',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description:
+        'A photographed or 3D render of the device, both screens legible, on a transparent background. When set it replaces the built-in fold preview below.',
+    }),
+    defineField({
+      name: 'deviceCaption',
+      title: 'Device Caption',
+      type: 'string',
+      description: 'Optional. Names the screen shown.',
+    }),
+    defineField({
+      name: 'foldPreview',
+      title: 'Fold Preview',
+      type: 'csFoldPreview',
+      description:
+        'The built-in two-pane device illustration, drawn from these strings. Used only when no Device Render is uploaded. Copy must describe the real app.',
+    }),
+    defineField({
+      name: 'storeState',
+      title: 'Store State',
+      type: 'string',
+      options: { list: [{ title: 'Coming soon', value: 'soon' }, { title: 'Live', value: 'live' }] },
+      initialValue: 'soon',
+      description: '"Coming soon" shows an ink pill. "Live" shows the App Store badge and needs a Store Href.',
+    }),
+    defineField({
+      name: 'storeLabel',
+      title: 'Store Label',
+      type: 'string',
+      initialValue: 'Coming to the App Store',
+      description: 'The pill text while the Store State is "Coming soon".',
+    }),
+    defineField({
+      name: 'storeHref',
+      title: 'Store Href',
+      type: 'url',
+      description: 'App Store URL. Required once Store State is "Live".',
+      validation: (r) =>
+        r.custom((value, context) => {
+          const state = (context.parent as { storeState?: unknown } | undefined)?.storeState;
+          if (state === 'live' && !value) return 'A live store state needs an App Store URL.';
+          return true;
+        }),
+    }),
+    defineField({
+      name: 'qualifier',
+      title: 'Qualifier',
+      type: 'string',
+      description: 'The small print under the buttons. Device and system requirements, kept factual.',
+    }),
+    defineField({ name: 'secondaryLabel', title: 'Secondary Link Label', type: 'string' }),
+    defineField({ name: 'secondaryHref', title: 'Secondary Link Href', type: 'string' }),
+  ],
+  preview: {
+    select: { title: 'heading', subtitle: 'eyebrow', media: 'device' },
+    prepare: ({ title, subtitle, media }) => ({ title: `App Hero — ${title ?? ''}`, subtitle, media }),
+  },
+});
+
+export const csDeviceShowcaseBlock = defineType({
+  name: 'csDeviceShowcaseBlock',
+  title: 'Device Showcase',
+  type: 'object',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'body', title: 'Body', type: 'text', rows: 4 }),
+    defineField({
+      name: 'screen',
+      title: 'Screen',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description:
+        'A real frame exported from the app, at 1:1 pixels with no shadow or device frame baked in — the frame is drawn in CSS.',
+    }),
+    defineField({
+      name: 'side',
+      title: 'Screen Side',
+      type: 'string',
+      options: { list: [{ title: 'Right', value: 'right' }, { title: 'Left', value: 'left' }] },
+      initialValue: 'right',
+      description: 'Which side the device sits on at desktop width. Alternate it down a page.',
+    }),
+    defineField({
+      name: 'band',
+      title: 'Band',
+      type: 'string',
+      options: { list: [{ title: 'Porcelain (light)', value: 'porcelain' }, { title: 'Graphite (dark)', value: 'graphite' }] },
+      initialValue: 'porcelain',
+    }),
+    defineField({ name: 'caption', title: 'Caption', type: 'string' }),
+    defineField({ name: 'ctaLabel', title: 'Link Label', type: 'string' }),
+    defineField({ name: 'ctaHref', title: 'Link Href', type: 'string' }),
+  ],
+  preview: {
+    select: { title: 'heading', subtitle: 'eyebrow', media: 'screen' },
+    prepare: ({ title, subtitle, media }) => ({ title: `Showcase — ${title ?? ''}`, subtitle, media }),
+  },
+});
+
+export const csPrompterBandBlock = defineType({
+  name: 'csPrompterBandBlock',
+  title: 'Prompter Band',
+  type: 'object',
+  description: 'The near-black script surface. Static by design: no animation, no JavaScript.',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', initialValue: 'This is what you read from' }),
+    defineField({
+      name: 'pastLine',
+      title: 'Past Line',
+      type: 'text',
+      rows: 2,
+      description: 'The line already spoken. Renders dimmed to 35%.',
+    }),
+    defineField({
+      name: 'currentLine',
+      title: 'Current Line',
+      type: 'text',
+      rows: 3,
+      description: 'The line being read. Full white. Keep it to one sentence.',
+      validation: (r) => r.required(),
+    }),
+    defineField({
+      name: 'nextLine',
+      title: 'Next Line',
+      type: 'text',
+      rows: 2,
+      description: 'The line coming up. Renders dimmed to 35%.',
+    }),
+    defineField({
+      name: 'notes',
+      title: 'Notes',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Up to three short explanations under the script.',
+      validation: (r) => r.max(3),
+    }),
+  ],
+  preview: {
+    select: { title: 'currentLine' },
+    prepare: ({ title }) => ({ title: 'Prompter Band', subtitle: title }),
+  },
+});
+
+export const csPlansBlock = defineType({
+  name: 'csPlansBlock',
+  title: 'Plans',
+  type: 'object',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'intro', title: 'Intro', type: 'text', rows: 3 }),
+    defineField({
+      name: 'plans',
+      title: 'Plans',
+      type: 'array',
+      of: [
+        {
+          type: 'object',
+          name: 'csPlan',
+          title: 'Plan',
+          fields: [
+            defineField({ name: 'name', title: 'Name', type: 'string', validation: (r) => r.required() }),
+            defineField({
+              name: 'price',
+              title: 'Price',
+              type: 'string',
+              description: 'Exactly as the App Store shows it, e.g. "$59". A string, not a number, so currency and formatting stay correct.',
+              validation: (r) => r.required(),
+            }),
+            defineField({ name: 'period', title: 'Period', type: 'string', description: 'e.g. "per year". Leave empty for a one-off or free plan.' }),
+            defineField({
+              name: 'recommended',
+              title: 'Recommended',
+              type: 'boolean',
+              initialValue: false,
+              description: 'At most one plan. Adds the flag and lifts the card.',
+            }),
+            defineField({ name: 'features', title: 'Features', type: 'array', of: [{ type: 'string' }] }),
+            defineField({ name: 'ctaLabel', title: 'CTA Label', type: 'string' }),
+            defineField({ name: 'ctaHref', title: 'CTA Href', type: 'string' }),
+            defineField({ name: 'note', title: 'Note', type: 'text', rows: 2, description: 'Replaces the CTA when a plan has nothing to buy.' }),
+          ],
+          preview: { select: { title: 'name', subtitle: 'price' } },
+        },
+      ],
+      validation: (r) =>
+        r.max(4).custom((plans) => {
+          if (!Array.isArray(plans)) return true;
+          const flagged = plans.filter((p) => (p as { recommended?: boolean }).recommended).length;
+          return flagged > 1 ? 'Only one plan can be recommended.' : true;
+        }),
+    }),
+    defineField({
+      name: 'footnote',
+      title: 'Footnote',
+      type: 'text',
+      rows: 2,
+      description: 'Billing, trial length, restore purchase, and any pricing caveat.',
+    }),
+  ],
+  preview: {
+    select: { title: 'heading', plans: 'plans' },
+    prepare: ({ title, plans }) => ({
+      title: title ?? 'Plans',
+      subtitle: `${Array.isArray(plans) ? plans.length : 0} plans`,
+    }),
+  },
+});
+
+export const csRequirementsBlock = defineType({
+  name: 'csRequirementsBlock',
+  title: 'Requirements',
+  type: 'object',
+  fields: [
+    defineField({ name: 'heading', title: 'Heading', type: 'string', description: 'Optional. Without it the rail sits directly under its hairline rule.' }),
+    defineField({
+      name: 'items',
+      title: 'Items',
+      type: 'array',
+      of: [
+        {
+          type: 'object',
+          name: 'csRequirement',
+          title: 'Requirement',
+          fields: [
+            defineField({ name: 'label', title: 'Label', type: 'string', description: 'Device, System, Storage, Languages.', validation: (r) => r.required() }),
+            defineField({ name: 'value', title: 'Value', type: 'string', description: 'Short and factual. "TBC" is an acceptable value.', validation: (r) => r.required() }),
+          ],
+          preview: { select: { title: 'label', subtitle: 'value' } },
+        },
+      ],
+      validation: (r) => r.min(2),
+    }),
+  ],
+  preview: {
+    select: { title: 'heading', items: 'items' },
+    prepare: ({ title, items }) => ({
+      title: title ?? 'Requirements',
+      subtitle: `${Array.isArray(items) ? items.length : 0} facts`,
+    }),
+  },
+});
+
+export const csAppCtaBlock = defineType({
+  name: 'csAppCtaBlock',
+  title: 'App CTA Band',
+  type: 'object',
+  fields: [
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'body', title: 'Body', type: 'text', rows: 2 }),
+    defineField({
+      name: 'showMark',
+      title: 'Show Mark',
+      type: 'boolean',
+      initialValue: true,
+      description: 'Sets the site logo above the heading.',
+    }),
+    defineField({
+      name: 'storeState',
+      title: 'Store State',
+      type: 'string',
+      options: { list: [{ title: 'Coming soon', value: 'soon' }, { title: 'Live', value: 'live' }] },
+      initialValue: 'soon',
+    }),
+    defineField({ name: 'storeLabel', title: 'Store Label', type: 'string', initialValue: 'Coming to the App Store' }),
+    defineField({
+      name: 'storeHref',
+      title: 'Store Href',
+      type: 'url',
+      validation: (r) =>
+        r.custom((value, context) => {
+          const state = (context.parent as { storeState?: unknown } | undefined)?.storeState;
+          if (state === 'live' && !value) return 'A live store state needs an App Store URL.';
+          return true;
+        }),
+    }),
+    defineField({ name: 'qualifier', title: 'Qualifier', type: 'string' }),
+    defineField({
+      name: 'band',
+      title: 'Band',
+      type: 'string',
+      options: { list: [{ title: 'Graphite (dark)', value: 'graphite' }, { title: 'Porcelain (light)', value: 'porcelain' }] },
+      initialValue: 'graphite',
+    }),
+  ],
+  preview: {
+    select: { title: 'heading', subtitle: 'storeState' },
+    prepare: ({ title, subtitle }) => ({ title: `App CTA — ${title ?? ''}`, subtitle }),
+  },
+});
+
+export const csContrastBlock = defineType({
+  name: 'csContrastBlock',
+  title: 'Before / After Contrast',
+  type: 'object',
+  description:
+    'Two labelled columns of paired lines. Unlike csCompareBlock this carries no attributed quotes, so it never implies a person said anything.',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string' }),
+    defineField({ name: 'heading', title: 'Heading', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'leftLabel', title: 'Left Label', type: 'string', validation: (r) => r.required() }),
+    defineField({ name: 'rightLabel', title: 'Right Label', type: 'string', validation: (r) => r.required() }),
+    defineField({
+      name: 'rows',
+      title: 'Rows',
+      type: 'array',
+      of: [
+        {
+          type: 'object',
+          name: 'csContrastRow',
+          title: 'Row',
+          fields: [
+            defineField({ name: 'left', title: 'Left', type: 'string', validation: (r) => r.required() }),
+            defineField({ name: 'right', title: 'Right', type: 'string', validation: (r) => r.required() }),
+          ],
+          preview: { select: { title: 'right', subtitle: 'left' } },
+        },
+      ],
+      validation: (r) => r.min(2),
+    }),
+    defineField({
+      name: 'footnote',
+      title: 'Footnote',
+      type: 'text',
+      rows: 2,
+      description: 'Use this to say what the comparison does not claim. Any measurable claim needs a source.',
+    }),
+  ],
+  preview: {
+    select: { title: 'heading', rows: 'rows' },
+    prepare: ({ title, rows }) => ({
+      title: title ?? 'Contrast',
+      subtitle: `${Array.isArray(rows) ? rows.length : 0} rows`,
+    }),
+  },
+});
+
 export const customSitesSectionTypes = [
   csHeroBlock,
   csIntroBlock,
@@ -954,4 +1346,11 @@ export const customSitesSectionTypes = [
   csEpisodeListBlock,
   csAssessmentBlock,
   csDisclosureBlock,
+  csAppHeroBlock,
+  csDeviceShowcaseBlock,
+  csPrompterBandBlock,
+  csPlansBlock,
+  csRequirementsBlock,
+  csAppCtaBlock,
+  csContrastBlock,
 ];

@@ -1,7 +1,11 @@
 import type { CsJourneyBlock } from '@/lib/customsites-sanity';
+import { csSiteFeatures } from '@/lib/customsites-registry';
 
 interface Props {
   block: CsJourneyBlock;
+  /** Decides whether stages link out: only sites registered with
+   * `journeyPages: true` serve /journey/<slug>. */
+  siteKey: string;
 }
 
 /**
@@ -10,12 +14,16 @@ interface Props {
  * :focus-within raises the brass top rule; no JS, and the no-JS experience
  * is the same markup simply scrolling.
  */
-export function JourneyBlock({ block }: Props) {
+export function JourneyBlock({ block, siteKey }: Props) {
   const stages = block.stages ?? [];
   if (stages.length === 0) return null;
 
+  // Sites without /journey/<slug> routes render the same cards as plain
+  // items. Linking them anyway would be six 404s on the busiest section.
+  const linked = csSiteFeatures(siteKey).journeyPages;
+
   return (
-    <section className="cs-section cs-section--muted cs-journey">
+    <section className="cs-section cs-section--muted cs-journey" id="how-it-works">
       <div className="cs-container">
         {block.eyebrow ? <span className="cs-eyebrow">{block.eyebrow}</span> : null}
         {block.heading ? <h2>{block.heading}</h2> : null}
@@ -24,13 +32,24 @@ export function JourneyBlock({ block }: Props) {
           <span style={{ width: '100%' }} />
         </div>
         <div className="cs-journey-track">
-          {stages.map((stage) => (
-            <a key={stage._id} href={`/journey/${stage.slug}`} className="cs-journey-stage">
-              <span className="cs-journey-num">{String(stage.order).padStart(2, '0')}</span>
-              <h3>{stage.title}</h3>
-              <p>{stage.summary}</p>
-            </a>
-          ))}
+          {stages.map((stage) => {
+            const inner = (
+              <>
+                <span className="cs-journey-num">{String(stage.order).padStart(2, '0')}</span>
+                <h3>{stage.title}</h3>
+                <p>{stage.summary}</p>
+              </>
+            );
+            return linked ? (
+              <a key={stage._id} href={`/journey/${stage.slug}`} className="cs-journey-stage">
+                {inner}
+              </a>
+            ) : (
+              <div key={stage._id} className="cs-journey-stage cs-journey-stage--static">
+                {inner}
+              </div>
+            );
+          })}
         </div>
         {block.ctaLabel && block.ctaHref ? (
           <p style={{ marginTop: 'var(--cs-space-5)' }}>

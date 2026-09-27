@@ -1,0 +1,522 @@
+/* =============================================================
+   CueDuo — Custom Sites line, site #3
+   Scoped stylesheet. Root class: .cs-cueduo
+   Imported by apps/site-host/app/cd/layout.tsx only.
+   No :root, no element selectors outside the root class, no !important.
+
+   CONTRAST AUDIT (WCAG 2.1 AA — 4.5:1 body, 3:1 large text + UI)
+   ------------------------------------------------------------------
+   Ink #14171C        on Porcelain #EEF0F3   15.73  PASS
+   Ink 2 #5B626E      on Porcelain #EEF0F3    5.38  PASS
+   Ink 2 #5B626E      on White #FFFFFF        6.06  PASS
+   Ink 2 #5B626E      on Fog #E2E5EA          4.87  PASS
+   Ink 3 #98A0AC      on Porcelain            2.31  FAIL — decorative rules + disabled only
+   Cobalt #2E5BFF     on Porcelain            4.53  RESTRICTED — fills only, never text
+   Accent Text #1F45D6 on Porcelain           6.39  PASS — links, eyebrows, accent labels
+   Accent Text #1F45D6 on White               7.19  PASS
+   White #FFFFFF      on Cobalt #2E5BFF       5.18  PASS — primary button on light
+   Record lt #D93A3A  on Porcelain            3.98  LARGE TEXT / UI ONLY (rec dot + timer)
+   Record #FF5257     on Porcelain            2.79  FAIL — never used on light
+   Record #FF5257     on Prompter #050505     4.62  PASS (dot is UI, label is 13px semibold)
+   Paper #EEF1F5      on Graphite #0E1114     16.71 PASS
+   Paper #EEF1F5      on Graphite 2 #161A1F   15.02 PASS
+   Inverse muted #98A0AC on Graphite           7.23 PASS
+   Cobalt Bright #5B82FF on Graphite           5.48 PASS — links on graphite
+   White #FFFFFF      on Cobalt Bright         3.45 FAIL for body size
+   Graphite #0E1114   on Cobalt Bright         5.48 PASS  <-- DECISION
+   #8FA8FF            on Prompter #050505      6.93 PASS — the band eyebrow
+   White              on Prompter #050505     20.4  PASS
+   White @35%         on Prompter                   decorative (past/upcoming lines)
+   Ink #14171C        on glass tint (#FFF 58% over porcelain, worst case #F4F5F7)
+                                              15.9  PASS
+   ------------------------------------------------------------------
+   DECISION on the dark-accent ink (brand guide amendment):
+   --cs-on-accent-inverse = Graphite #0E1114, NOT white. The guide sets Accent
+   Ink to #FFFFFF in both modes; on Cobalt Bright that is 3.45:1 and fails AA at
+   button-label size. Graphite on Cobalt Bright gives 5.48:1 and still reads as a
+   lit control. Flagged back to the brand guide as a correction, not a divergence.
+   ============================================================= */
+
+.cs-cueduo {
+  /* --- color: light (shipping) ------------------------------- */
+  --cs-paper: #EEF0F3;              /* brand: Porcelain  --lt-bg */
+  --cs-white: #FFFFFF;              /* brand: --lt-surface */
+  --cs-surface: #E2E5EA;            /* brand: Fog --lt-surface2 */
+  --cs-ink: #14171C;                /* brand: Ink */
+  --cs-muted: #5B626E;              /* brand: Ink 2 */
+  --cs-hairline-text: #98A0AC;      /* brand: Ink 3 — decorative ONLY */
+  --cs-hairline: rgba(20, 23, 28, .10);
+  --cs-hairline-soft: rgba(20, 23, 28, .07);
+  --cs-accent: #2E5BFF;             /* fills only */
+  --cs-accent-ink: #1F45D6;         /* accent as text on light */
+  --cs-accent-soft: rgba(46, 91, 255, .14);
+  --cs-on-accent: #FFFFFF;
+  --cs-graphite: #0E1114;           /* .cs-section--navy means Graphite here */
+  --cs-graphite-surface: #161A1F;
+  --cs-inverse-text: #EEF1F5;
+  --cs-inverse-muted: #98A0AC;
+  --cs-inverse-quiet: #5E6672;
+  --cs-accent-inverse: #5B82FF;
+  --cs-on-accent-inverse: #0E1114;  /* see DECISION above */
+  --cs-prompter: #050505;
+  --cs-prompter-dim: rgba(255, 255, 255, .35);
+  --cs-record: #FF5257;             /* on prompter / graphite only */
+  --cs-record-light: #D93A3A;       /* on porcelain, large text + UI only */
+  --cs-chassis: linear-gradient(150deg, #2A3037, #0A0C0F 44%, #14181D);
+
+  /* --- shape -------------------------------------------------- */
+  --cs-radius-control: 999px;
+  --cs-radius-card: 28px;
+  --cs-radius-card-lg: 32px;
+  --cs-radius-inner: 20px;
+
+  /* --- space -------------------------------------------------- */
+  --cs-space-1: 6px;
+  --cs-space-2: 12px;
+  --cs-space-3: 20px;
+  --cs-space-4: 32px;
+  --cs-space-5: 48px;
+  --cs-space-6: 72px;
+
+  /* --- layout ------------------------------------------------- */
+  --cs-container-max: 1200px;
+  --cs-container-pad: 24px;
+  --cs-section-pad: clamp(56px, 7vw, 88px);
+  --cs-measure: 68ch;
+
+  /* --- type --------------------------------------------------- */
+  --cs-font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', var(--font-inter), system-ui, sans-serif;
+  --cs-font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', var(--font-inter), system-ui, sans-serif;
+  --cs-fs-display: clamp(40px, 6vw, 60px);   /* guide 60 / -3%   */
+  --cs-fs-title: clamp(28px, 3.4vw, 40px);   /* guide 40 / -2.5% */
+  --cs-fs-heading: clamp(22px, 2.4vw, 24px); /* guide 24 / -2%   */
+  --cs-fs-lead: clamp(18px, 2vw, 20px);
+  --cs-fs-body: 17px;                        /* guide 17 / 0     */
+  --cs-fs-small: 15px;
+  --cs-fs-eyebrow: 13px;                     /* guide 13 / +6%   */
+  --cs-lh-tight: 1.02;
+  --cs-lh-title: 1.1;
+  --cs-lh-body: 1.5;
+  --cs-lh-prompter: 1.3;
+  --cs-track-display: -.03em;
+  --cs-track-title: -.025em;
+  --cs-track-heading: -.02em;
+  --cs-track-eyebrow: .06em;
+
+  /* --- elevation + materials ---------------------------------- */
+  --cs-shadow-card: 0 10px 30px rgba(20, 23, 28, .10);
+  --cs-shadow-glass: 0 18px 50px rgba(20, 23, 28, .14), 0 2px 6px rgba(20, 23, 28, .06);
+  --cs-shadow-device: 0 44px 90px -36px rgba(20, 23, 28, .42);
+  --cs-glass: rgba(255, 255, 255, .58);
+  --cs-glass-border: rgba(255, 255, 255, .8);
+  --cs-glass-hi: rgba(255, 255, 255, .95);
+  --cs-glass-lo: rgba(20, 23, 28, .06);
+  --cs-amb-1: rgba(46, 91, 255, .14);
+  --cs-amb-2: rgba(120, 150, 190, .14);
+
+  background: var(--cs-paper);
+  color: var(--cs-ink);
+  font-family: var(--cs-font-body);
+  font-size: var(--cs-fs-body);
+  line-height: var(--cs-lh-body);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  isolation: isolate;
+}
+
+/* ambient lights: one fixed pair behind everything, never per-section */
+.cs-cueduo::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48% 28% at 6% 2%, var(--cs-amb-1), transparent 70%),
+    radial-gradient(42% 26% at 98% 64%, var(--cs-amb-2), transparent 70%);
+}
+
+/* ---------- primitives ---------------------------------------- */
+.cs-cueduo .cs-container { max-width: var(--cs-container-max); margin: 0 auto; padding: 0 var(--cs-container-pad); }
+.cs-cueduo .cs-section { padding: var(--cs-section-pad) 0; }
+/* The header is sticky, so anchored sections need to clear it. */
+.cs-cueduo [id] { scroll-margin-top: 84px; }
+.cs-cueduo .cs-section--tight { padding: 0 0 var(--cs-section-pad); }
+.cs-cueduo .cs-section--muted { background: var(--cs-surface); }
+.cs-cueduo .cs-section--navy { background: var(--cs-graphite); color: var(--cs-inverse-text); }
+.cs-cueduo .cs-section--navy p { color: var(--cs-inverse-muted); }
+.cs-cueduo .cs-section--navy a { color: var(--cs-accent-inverse); }
+
+.cs-cueduo h1, .cs-cueduo h2, .cs-cueduo h3, .cs-cueduo h4 { font-family: var(--cs-font-display); font-weight: 600; margin: 0; text-wrap: pretty; }
+.cs-cueduo h1 { font-size: var(--cs-fs-display); line-height: var(--cs-lh-tight); letter-spacing: var(--cs-track-display); }
+.cs-cueduo h2 { font-size: var(--cs-fs-title); line-height: var(--cs-lh-title); letter-spacing: var(--cs-track-title); }
+.cs-cueduo h3 { font-size: var(--cs-fs-heading); line-height: 1.2; letter-spacing: var(--cs-track-heading); }
+.cs-cueduo p { margin: 0 0 var(--cs-space-3); max-width: var(--cs-measure); }
+.cs-cueduo .cs-lead { font-size: var(--cs-fs-lead); line-height: 1.45; color: var(--cs-muted); }
+
+.cs-cueduo .cs-eyebrow { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-accent-ink); }
+.cs-cueduo .cs-eyebrow--inverse { color: var(--cs-inverse-quiet); }
+/* Section-level eyebrows that name a screen rather than carrying the accent.
+   The accent budget is one element per section (brand guide: 80/15/5). */
+.cs-cueduo .cs-eyebrow--quiet { color: var(--cs-hairline-text); }
+.cs-cueduo .cs-eyebrow--ruled { display: flex; align-items: center; gap: 14px; margin: 0 0 var(--cs-space-4); }
+.cs-cueduo .cs-rule { width: 28px; height: 1px; background: currentColor; flex: none; }
+
+.cs-cueduo .cs-card { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: 26px; box-shadow: var(--cs-shadow-card); }
+.cs-cueduo .cs-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+
+.cs-cueduo .cs-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font: 600 16px/1 var(--cs-font-body); padding: 15px 22px; border-radius: var(--cs-radius-control); text-decoration: none; letter-spacing: -.01em; }
+.cs-cueduo .cs-btn-primary { background: var(--cs-accent); color: var(--cs-on-accent); }
+.cs-cueduo .cs-btn-primary:hover { background: #2751E3; }
+.cs-cueduo .cs-btn-primary:active { background: #2246C6; }
+.cs-cueduo .cs-btn-secondary { background: transparent; color: var(--cs-ink); box-shadow: inset 0 0 0 1px rgba(20, 23, 28, .18); }
+.cs-cueduo .cs-btn-secondary:hover { background: var(--cs-surface); }
+.cs-cueduo .cs-btn[aria-disabled="true"] { background: var(--cs-surface); color: var(--cs-hairline-text); cursor: default; }
+.cs-cueduo .cs-section--navy .cs-btn-primary { background: var(--cs-accent-inverse); color: var(--cs-on-accent-inverse); }
+
+.cs-cueduo .cs-link { color: var(--cs-accent-ink); font-weight: 600; }
+.cs-cueduo .cs-link:hover { color: var(--cs-ink); }
+.cs-cueduo .cs-link-arrow::after { content: " \2192"; }
+/* The design's text links are a rule under the label, not an underline —
+   thinner, and it survives descenders. */
+.cs-cueduo .cs-underline-link { display: inline-flex; align-items: center; font-weight: 600; font-size: 16px; letter-spacing: -.01em; color: var(--cs-ink); padding-bottom: 3px; border-bottom: 1px solid rgba(20, 23, 28, .18); }
+.cs-cueduo .cs-underline-link:hover { border-bottom-color: var(--cs-accent-ink); color: var(--cs-accent-ink); }
+.cs-cueduo .cs-underline-link--accent { color: var(--cs-accent-ink); border-bottom-color: rgba(31, 69, 214, .3); font-size: var(--cs-fs-small); }
+.cs-cueduo .cs-section--navy .cs-underline-link { color: var(--cs-inverse-text); border-bottom-color: rgba(255, 255, 255, .22); }
+.cs-cueduo .cs-section--navy .cs-underline-link--accent { color: var(--cs-accent-inverse); border-bottom-color: rgba(91, 130, 255, .3); }
+
+.cs-cueduo .cs-footnote { font-size: 13px; color: var(--cs-hairline-text); margin: var(--cs-space-3) 0 0; max-width: var(--cs-measure); }
+
+/* A heading on the left, a supporting paragraph aligned to its baseline on
+   the right. Used by plans, the journey and the contrast block. */
+.cs-cueduo .cs-section-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: clamp(24px, 5vw, 64px); align-items: end; margin-bottom: var(--cs-space-5); }
+.cs-cueduo .cs-section-head-aside { color: var(--cs-muted); max-width: 42ch; margin: 0; }
+
+.cs-cueduo :focus-visible { outline: 2px solid var(--cs-accent-ink); outline-offset: 3px; border-radius: 6px; }
+.cs-cueduo .cs-section--navy :focus-visible, .cs-cueduo .cs-prompter-band :focus-visible { outline-color: var(--cs-accent-inverse); }
+.cs-cueduo .cs-skip-link { position: absolute; left: 16px; top: -64px; z-index: 90; padding: 12px 18px; border-radius: var(--cs-radius-control); background: var(--cs-ink); color: var(--cs-white); font-weight: 600; }
+.cs-cueduo .cs-skip-link:focus { top: 12px; }
+
+/* ---------- shared chrome ------------------------------------- */
+.cs-cueduo .cs-topbar { background: var(--cs-ink); color: var(--cs-inverse-text); font-size: 13px; }
+.cs-cueduo .cs-topbar-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: 9px var(--cs-container-pad); display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+.cs-cueduo .cs-topbar-tagline { color: var(--cs-inverse-text); }
+.cs-cueduo .cs-topbar-contact { display: flex; gap: 16px; }
+.cs-cueduo .cs-topbar-email { color: var(--cs-inverse-text); font-weight: 600; }
+
+.cs-cueduo .cs-header { position: sticky; top: 0; z-index: 40; background: linear-gradient(180deg, rgba(255,255,255,.55), transparent 38%), var(--cs-glass); border-bottom: 1px solid var(--cs-hairline-soft); }
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .cs-cueduo .cs-header { backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .cs-cueduo .cs-header { background: #F5F6F8; }   /* opaque fallback */
+}
+.cs-cueduo .cs-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: 14px var(--cs-container-pad); display: flex; align-items: center; gap: var(--cs-space-4); }
+.cs-cueduo .cs-header-logo { display: flex; align-items: center; gap: 10px; color: var(--cs-ink); }
+.cs-cueduo .cs-brand-name { font-family: var(--cs-font-display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
+.cs-cueduo .cs-brand-sub { display: none; }              /* no strapline in the header lockup */
+/* The header phone slot is SUPPRESSED for CueDuo (no phone number exists).
+   SiteHeader renders it only when csSite.phone is set; leave phone empty in
+   Studio and the node never mounts. These rules cover the case where a future
+   author fills the field: it renders as a plain accent label, not a tel pill. */
+.cs-cueduo .cs-header-phone { margin-left: 0; }
+.cs-cueduo .cs-header-phone-icon { display: none; }
+.cs-cueduo .cs-header-phone-text { font-weight: 600; font-size: 14px; color: var(--cs-accent-ink); }
+
+.cs-cueduo .cs-nav { margin-left: auto; }
+.cs-cueduo .cs-nav-links { display: flex; align-items: center; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.cs-cueduo .cs-nav-link { padding: 8px 12px; border-radius: var(--cs-radius-control); font-size: 14px; font-weight: 500; color: var(--cs-muted); letter-spacing: -.005em; }
+.cs-cueduo .cs-nav-link:hover, .cs-cueduo .cs-nav-link[aria-current="page"] { color: var(--cs-ink); background: var(--cs-glass-hi); }
+.cs-cueduo .cs-nav-caret { width: 10px; height: 10px; opacity: .6; }
+.cs-cueduo .cs-nav-dropdown { background: var(--cs-white); border-radius: var(--cs-radius-inner); box-shadow: var(--cs-shadow-card); padding: 8px; }
+.cs-cueduo .cs-nav-toggle { display: none; width: 44px; height: 44px; border: 0; background: transparent; }
+.cs-cueduo .cs-nav-toggle-bar { display: block; width: 20px; height: 1.75px; border-radius: 2px; background: var(--cs-ink); margin: 4px auto; }
+.cs-cueduo .cs-drawer { position: fixed; inset: 0 0 0 auto; width: min(88vw, 360px); background: var(--cs-white); padding: 24px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+.cs-cueduo .cs-drawer-overlay { position: fixed; inset: 0; background: rgba(20,23,28,.4); z-index: 55; }
+.cs-cueduo .cs-drawer-close { align-self: flex-end; width: 44px; height: 44px; border: 0; background: var(--cs-surface); border-radius: var(--cs-radius-control); }
+.cs-cueduo .cs-drawer-links { display: flex; flex-direction: column; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.cs-cueduo .cs-drawer-links a { padding: 14px 8px; font-size: 19px; font-weight: 600; color: var(--cs-ink); }
+.cs-cueduo .cs-drawer-sublinks a { padding: 10px 8px 10px 20px; font-size: 16px; font-weight: 400; color: var(--cs-muted); }
+
+.cs-cueduo .cs-sticky-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 12px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; background: var(--cs-glass); border-top: 1px solid var(--cs-hairline-soft); }
+@supports (backdrop-filter: blur(1px)) { .cs-cueduo .cs-sticky-bar { backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); } }
+@supports not (backdrop-filter: blur(1px)) { .cs-cueduo .cs-sticky-bar { background: #F5F6F8; } }
+.cs-cueduo .cs-sticky-spacer { height: 72px; }
+
+.cs-cueduo .cs-footer { background: var(--cs-paper); border-top: 1px solid var(--cs-hairline); }
+.cs-cueduo .cs-footer-grid { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-5) var(--cs-container-pad) var(--cs-space-4); display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--cs-space-4); }
+.cs-cueduo .cs-footer-tagline { color: var(--cs-hairline-text); font-size: 14px; max-width: 26ch; line-height: 1.55; }
+.cs-cueduo .cs-footer-legal { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-3) var(--cs-container-pad) var(--cs-space-5); display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--cs-hairline-text); border-top: 1px solid var(--cs-hairline); }
+.cs-cueduo .cs-footer-legal-links { display: flex; gap: 16px; margin-left: auto; }
+
+.cs-cueduo .cs-page-header { background: var(--cs-surface); }
+.cs-cueduo .cs-page-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-5) var(--cs-container-pad); }
+.cs-cueduo .cs-page-header-bg { display: none; }      /* no photographic banner on interior pages */
+.cs-cueduo .cs-page-header-skyline { display: none; } /* site #1/#2 city silhouette: suppressed */
+.cs-cueduo .cs-breadcrumb-bar { font-size: 13px; color: var(--cs-muted); }
+
+.cs-cueduo .cs-prose { max-width: var(--cs-measure); }
+.cs-cueduo .cs-prose h2 { margin: var(--cs-space-5) 0 var(--cs-space-2); }
+.cs-cueduo .cs-prose h3 { margin: var(--cs-space-4) 0 10px; }
+.cs-cueduo .cs-prose p, .cs-cueduo .cs-prose li { color: var(--cs-muted); }
+.cs-cueduo .cs-prose blockquote { margin: var(--cs-space-4) 0; padding: 20px 24px; border-radius: 22px; background: var(--cs-white); box-shadow: var(--cs-shadow-card); font-size: 19px; font-weight: 600; letter-spacing: -.01em; color: var(--cs-ink); }
+.cs-cueduo .cs-prose figcaption { font-size: 13px; color: var(--cs-muted); }
+.cs-cueduo .cs-prose--dividers > * + * { border-top: 1px solid var(--cs-hairline); padding-top: var(--cs-space-3); }
+
+/* csIntroBlock, split layout: statement left, two paragraphs right, under a
+   hairline that separates it from the hero. */
+.cs-cueduo .cs-intro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(32px, 6vw, 80px); border-top: 1px solid var(--cs-hairline); padding-top: clamp(32px, 4vw, 56px); }
+.cs-cueduo .cs-intro-aside h2 { max-width: 16ch; text-wrap: balance; }
+.cs-cueduo .cs-intro-stacked--rule { border-top: 1px solid var(--cs-hairline); padding-top: clamp(32px, 4vw, 56px); }
+
+/* ---------- form ---------------------------------------------- */
+.cs-cueduo .cs-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.cs-cueduo .cs-form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.cs-cueduo .cs-form-label { font-size: 14px; font-weight: 600; }
+.cs-cueduo .cs-form-required { color: var(--cs-muted); font-weight: 400; }
+.cs-cueduo .cs-form-input, .cs-cueduo .cs-form-textarea { border: 1px solid var(--cs-hairline); background: var(--cs-paper); border-radius: 14px; padding: 13px 14px; font: 400 16px/1.4 var(--cs-font-body); color: var(--cs-ink); }
+.cs-cueduo .cs-form-input:focus-visible, .cs-cueduo .cs-form-textarea:focus-visible { border-color: var(--cs-accent); }
+.cs-cueduo .cs-form-textarea { resize: vertical; min-height: 120px; }
+.cs-cueduo .cs-form-field-error { font-size: 14px; font-weight: 600; color: var(--cs-record-light); }
+.cs-cueduo .cs-form-message { border-radius: var(--cs-radius-inner); padding: 14px 16px; font-size: var(--cs-fs-small); }
+.cs-cueduo .cs-form-message--success { background: var(--cs-accent-soft); color: var(--cs-accent-ink); }
+.cs-cueduo .cs-form-message--error { background: var(--cs-surface); color: var(--cs-ink); }
+.cs-cueduo .cs-form-honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* ---------- cards / articles ---------------------------------- */
+.cs-cueduo .cs-card-media { border-radius: var(--cs-radius-inner); overflow: hidden; aspect-ratio: 4 / 3; background: var(--cs-surface); }
+.cs-cueduo .cs-card-excerpt { color: var(--cs-muted); font-size: var(--cs-fs-small); }
+.cs-cueduo .cs-article-meta { font-size: 13px; color: var(--cs-muted); font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-article-related, .cs-cueduo .cs-services-rail { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: 20px; box-shadow: var(--cs-shadow-card); }
+.cs-cueduo .cs-related-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cs-cueduo .cs-services-rail-cta { font-weight: 600; color: var(--cs-accent-ink); }
+
+/* ---------- csAppHeroBlock ------------------------------------ */
+.cs-cueduo .cs-apphero { padding: clamp(56px, 9vw, 120px) 0 clamp(40px, 6vw, 72px); }
+.cs-cueduo .cs-apphero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: clamp(40px, 7vw, 88px); align-items: center; }
+.cs-cueduo .cs-apphero-grid--solo { grid-template-columns: minmax(0, 1fr); }
+.cs-cueduo .cs-apphero-copy .cs-eyebrow--ruled { color: var(--cs-accent-ink); }
+/* A line break typed in Studio is kept — "Look up." and "Say it once." each
+   get their own line without the author needing markup. */
+.cs-cueduo .cs-apphero-heading { white-space: pre-line; font-size: clamp(44px, 7vw, 86px); line-height: .96; letter-spacing: -.04em; text-wrap: balance; margin: 0 0 clamp(20px, 3vw, 30px); }
+.cs-cueduo .cs-apphero-sub { max-width: 33em; margin: 0 0 clamp(28px, 4vw, 40px); }
+.cs-cueduo .cs-apphero-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.cs-cueduo .cs-apphero-note { font-size: 13px; color: var(--cs-hairline-text); margin: clamp(24px, 4vw, 36px) 0 0; }
+.cs-cueduo .cs-apphero-media { display: flex; justify-content: center; }
+.cs-cueduo .cs-apphero-device { margin: 0; }
+.cs-cueduo .cs-apphero-device img { width: 100%; height: auto; }
+
+.cs-cueduo .cs-storebadge { display: inline-block; line-height: 0; }
+.cs-cueduo .cs-storebadge img { width: 180px; height: 60px; }        /* Apple minimum respected */
+.cs-cueduo .cs-storebadge--soon { display: inline-flex; align-items: center; padding: 17px 28px; border-radius: var(--cs-radius-control); background: var(--cs-ink); color: var(--cs-inverse-text); font-weight: 600; font-size: 16px; letter-spacing: -.01em; box-shadow: 0 14px 40px rgba(20, 23, 28, .18); }
+.cs-cueduo .cs-section--navy .cs-storebadge--soon { background: var(--cs-accent-inverse); color: var(--cs-on-accent-inverse); box-shadow: none; }
+
+/* The fold preview: a graphite chassis holding a prompter-black outer pane
+   and a porcelain inner pane. Illustration, not a screenshot. */
+.cs-cueduo .cs-fold { margin: 0; position: relative; }
+.cs-cueduo .cs-fold-body { display: flex; align-items: stretch; gap: 3px; padding: 9px; border-radius: 38px; background: var(--cs-chassis); box-shadow: 0 60px 120px -40px rgba(20, 23, 28, .5), inset 0 2px 0 rgba(255, 255, 255, .14); }
+.cs-cueduo .cs-fold-pane { border-radius: 29px; padding: 20px 16px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+.cs-cueduo .cs-fold-pane--outer { width: clamp(132px, 17vw, 172px); background: var(--cs-prompter); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07); }
+.cs-cueduo .cs-fold-pane--inner { width: clamp(152px, 20vw, 204px); background: var(--cs-paper); color: var(--cs-ink); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
+.cs-cueduo .cs-fold-rec { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 600; letter-spacing: .12em; }
+.cs-cueduo .cs-fold-time { margin-left: auto; font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, .55); font-weight: 500; letter-spacing: .04em; }
+.cs-cueduo .cs-fold-script { font-size: clamp(13px, 1.4vw, 15px); font-weight: 600; line-height: 1.32; letter-spacing: -.012em; margin: 0; max-width: none; }
+.cs-cueduo .cs-fold-lens { margin: auto 0 0; display: flex; align-items: center; gap: 7px; font-size: 9px; color: rgba(255, 255, 255, .3); letter-spacing: .14em; text-transform: uppercase; }
+.cs-cueduo .cs-fold-lens-ring { width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .4); flex: none; }
+.cs-cueduo .cs-fold-eyebrow { margin: 0; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); }
+.cs-cueduo .cs-fold-heading { margin: 0; font-family: var(--cs-font-display); font-size: clamp(15px, 1.7vw, 18px); font-weight: 600; letter-spacing: -.025em; line-height: 1.12; }
+.cs-cueduo .cs-fold-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; font-size: 11px; color: var(--cs-muted); background: var(--cs-white); border-radius: 16px; overflow: hidden; }
+.cs-cueduo .cs-fold-list li { padding: 11px 13px; }
+.cs-cueduo .cs-fold-list li + li { border-top: 1px solid var(--cs-hairline-soft); }
+.cs-cueduo .cs-fold-actions { margin: auto 0 0; display: flex; gap: 6px; max-width: none; }
+.cs-cueduo .cs-fold-primary { flex: 1; text-align: center; padding: 11px; border-radius: var(--cs-radius-control); background: var(--cs-accent); color: var(--cs-on-accent); font-size: 12px; font-weight: 600; }
+.cs-cueduo .cs-fold-secondary { padding: 11px 13px; border-radius: var(--cs-radius-control); background: var(--cs-surface); color: var(--cs-ink); font-size: 12px; font-weight: 600; }
+.cs-cueduo .cs-device-caption { font-size: 12px; color: var(--cs-hairline-text); margin-top: 12px; text-align: center; }
+
+/* ---------- csPrompterBandBlock ------------------------------- */
+.cs-cueduo .cs-prompter-band { background: var(--cs-prompter); color: #fff; padding: clamp(64px, 10vw, 140px) 0; }
+.cs-cueduo .cs-prompter-band .cs-container { max-width: 1000px; }
+.cs-cueduo .cs-prompter-band .cs-eyebrow { color: #8FA8FF; }   /* 6.93:1 on #050505 */
+.cs-cueduo .cs-prompter-line { font-family: var(--cs-font-display); font-size: clamp(24px, 4.2vw, 52px); font-weight: 600; line-height: var(--cs-lh-prompter); letter-spacing: -.028em; margin: 0; max-width: none; text-wrap: pretty; }
+.cs-cueduo .cs-prompter-past, .cs-cueduo .cs-prompter-next { color: var(--cs-prompter-dim); }
+.cs-cueduo .cs-prompter-notes { margin-top: clamp(36px, 6vw, 64px); padding-top: 28px; border-top: 1px solid rgba(255, 255, 255, .1); display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 28px; }
+.cs-cueduo .cs-prompter-notes p { margin: 0; font-size: 14px; color: rgba(255, 255, 255, .5); line-height: 1.6; max-width: none; }
+.cs-cueduo .cs-rec-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-record); display: inline-block; flex: none; box-shadow: 0 0 10px rgba(255, 82, 87, .8); }
+
+/* ---------- csValuePropsBlock, the four brand features -------- */
+/* Hairline columns with a counter in the bottom corner, per the comp. The
+   counter is CSS so the block stays shared with sites #1 and #2, where it is
+   simply never styled in. */
+.cs-cueduo .cs-valueprops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); counter-reset: cs-vp; border-top: 1px solid var(--cs-hairline); border-bottom: 1px solid var(--cs-hairline); }
+.cs-cueduo .cs-valueprop { counter-increment: cs-vp; display: flex; flex-direction: column; gap: clamp(20px, 3vw, 36px); padding: clamp(24px, 3vw, 40px) clamp(20px, 2.4vw, 30px); border-left: 1px solid var(--cs-hairline); margin-left: -1px; }
+.cs-cueduo .cs-valueprop::after { content: "0" counter(cs-vp); margin-top: auto; font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-valueprop-icon { width: 30px; height: 30px; color: var(--cs-ink); stroke-width: 1.4; }
+.cs-cueduo .cs-valueprop h3 { font-size: 19px; letter-spacing: -.022em; margin-bottom: 10px; }
+.cs-cueduo .cs-valueprop p { font-size: var(--cs-fs-small); color: var(--cs-muted); line-height: 1.6; margin: 0; }
+
+/* ---------- csDeviceShowcaseBlock ----------------------------- */
+.cs-cueduo .cs-showcase-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(32px, 6vw, 88px); align-items: center; }
+.cs-cueduo .cs-showcase-grid--solo { grid-template-columns: minmax(0, 1fr); }
+.cs-cueduo .cs-showcase-copy { max-width: 44ch; }
+.cs-cueduo .cs-showcase-copy h2 { font-size: clamp(26px, 2.9vw, 38px); letter-spacing: -.03em; margin: var(--cs-space-3) 0 var(--cs-space-3); text-wrap: balance; }
+.cs-cueduo .cs-showcase-copy p { color: var(--cs-muted); line-height: 1.65; margin-bottom: var(--cs-space-4); }
+.cs-cueduo .cs-section--navy .cs-showcase-copy p { color: var(--cs-inverse-muted); }
+.cs-cueduo .cs-showcase-media { margin: 0; justify-self: center; width: min(100%, 440px); }
+.cs-cueduo .cs-showcase--left .cs-showcase-media { order: -1; }
+.cs-cueduo .cs-device { border-radius: var(--cs-radius-card-lg); background: var(--cs-chassis); padding: 9px; box-shadow: var(--cs-shadow-device); }
+.cs-cueduo .cs-section--navy .cs-device { box-shadow: 0 44px 100px -40px rgba(0, 0, 0, .9); }
+.cs-cueduo .cs-device-screen { border-radius: 24px; overflow: hidden; display: block; width: 100%; height: auto; }
+
+/* ---------- csJourneyBlock ------------------------------------ */
+/* CueDuo's stages do not have detail pages, so the rail is a row of bordered
+   columns rather than the scroll-snap card track sites #1/#2 use. */
+.cs-cueduo .cs-journey { background: transparent; }
+.cs-cueduo .cs-journey-progress { display: none; }
+.cs-cueduo .cs-journey-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); border-top: 1px solid var(--cs-hairline); margin-top: var(--cs-space-5); }
+.cs-cueduo .cs-journey-stage { display: block; padding: 26px 22px 30px; border-right: 1px solid var(--cs-hairline); color: inherit; }
+.cs-cueduo .cs-journey-stage:last-child { border-right: 0; }
+.cs-cueduo .cs-journey-num { display: block; font-size: 11px; font-weight: 600; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; letter-spacing: .14em; margin-bottom: 18px; }
+.cs-cueduo .cs-journey-stage h3 { font-size: 17px; letter-spacing: -.02em; }
+.cs-cueduo .cs-journey-stage p { margin: 8px 0 0; font-size: 14px; color: var(--cs-muted); line-height: 1.55; }
+.cs-cueduo .cs-journey-stage--static { cursor: default; }
+.cs-cueduo a.cs-journey-stage:hover h3 { color: var(--cs-accent-ink); }
+
+/* ---------- csContrastBlock ----------------------------------- */
+.cs-cueduo .cs-contrast .cs-container > * { border-color: var(--cs-hairline); }
+.cs-cueduo .cs-contrast-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: clamp(24px, 5vw, 64px); border-top: 1px solid var(--cs-hairline); padding-top: clamp(32px, 4vw, 52px); align-items: end; }
+.cs-cueduo .cs-contrast-head h2 { font-size: clamp(24px, 2.6vw, 32px); max-width: 16ch; margin-top: var(--cs-space-3); text-wrap: balance; }
+.cs-cueduo .cs-contrast-label { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; margin: 0; padding-bottom: 14px; }
+.cs-cueduo .cs-contrast-label--left { color: var(--cs-hairline-text); border-bottom: 1px solid var(--cs-hairline); }
+.cs-cueduo .cs-contrast-label--right { color: var(--cs-ink); border-bottom: 1px solid rgba(20, 23, 28, .18); }
+.cs-cueduo .cs-contrast-rows { list-style: none; margin: 0; padding: 0; }
+.cs-cueduo .cs-contrast-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: clamp(24px, 5vw, 64px); }
+/* The heading column is empty from here down, so the two label columns and the
+   row cells stay aligned: one spacer cell per row at desktop width. */
+.cs-cueduo .cs-contrast-row::before { content: ""; }
+.cs-cueduo .cs-contrast-cell { display: block; padding: 14px 0; border-bottom: 1px solid var(--cs-hairline-soft); font-size: var(--cs-fs-small); line-height: 1.5; }
+.cs-cueduo .cs-contrast-cell--left { color: var(--cs-hairline-text); }
+.cs-cueduo .cs-contrast-cell--right { color: var(--cs-ink); }
+/* Only shown once the columns stack, where a bare line loses its column head. */
+.cs-cueduo .cs-contrast-inline-label { display: none; font-size: 11px; font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-hairline-text); margin-bottom: 4px; }
+
+/* ---------- csPlansBlock -------------------------------------- */
+.cs-cueduo .cs-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--cs-space-3); align-items: stretch; }
+.cs-cueduo .cs-plan { background: var(--cs-white); border-radius: 26px; padding: clamp(24px, 3vw, 34px); border: 1px solid var(--cs-hairline-soft); display: flex; flex-direction: column; gap: var(--cs-space-3); }
+.cs-cueduo .cs-plan--recommended { border-color: var(--cs-accent); box-shadow: 0 24px 60px -32px rgba(20, 23, 28, .3); }
+.cs-cueduo .cs-plan-name { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: -.015em; margin: 0; }
+.cs-cueduo .cs-plan-flag { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 5px 10px; border-radius: var(--cs-radius-control); background: var(--cs-accent-soft); color: var(--cs-accent-ink); }
+.cs-cueduo .cs-plan-price { font-family: var(--cs-font-display); font-size: clamp(34px, 4vw, 46px); font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0; }
+.cs-cueduo .cs-plan-period { font-size: 14px; font-weight: 400; color: var(--cs-hairline-text); letter-spacing: 0; }
+.cs-cueduo .cs-plan-list { list-style: none; margin: 0; padding: 0; color: var(--cs-muted); font-size: 14px; line-height: 1.5; }
+.cs-cueduo .cs-plan-list li { padding: 11px 0; border-top: 1px solid var(--cs-hairline-soft); }
+.cs-cueduo .cs-plan-cta { margin-top: auto; }
+.cs-cueduo .cs-plan-note { margin: auto 0 0; font-size: 13px; color: var(--cs-hairline-text); line-height: 1.5; }
+
+/* ---------- csRequirementsBlock -------------------------------- */
+.cs-cueduo .cs-requirements-heading { font-size: var(--cs-fs-heading); margin-bottom: var(--cs-space-3); }
+.cs-cueduo .cs-requirements { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--cs-space-4); border-top: 1px solid var(--cs-hairline); padding-top: var(--cs-space-4); margin: 0; }
+.cs-cueduo .cs-requirements dt { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); margin-bottom: 10px; }
+.cs-cueduo .cs-requirements dd { margin: 0; font-size: 14px; color: var(--cs-muted); }
+
+/* ---------- csAppCtaBlock ------------------------------------- */
+.cs-cueduo .cs-appcta { text-align: center; padding: clamp(64px, 10vw, 140px) 0; }
+.cs-cueduo .cs-appcta-mark { margin: 0 auto var(--cs-space-4); display: block; }
+.cs-cueduo .cs-appcta-heading { font-size: clamp(30px, 4.4vw, 56px); letter-spacing: -.035em; line-height: 1.04; text-wrap: balance; margin: 0 auto var(--cs-space-3); max-width: 18ch; }
+.cs-cueduo .cs-appcta-body { margin: 0 auto var(--cs-space-5); max-width: 44ch; font-size: var(--cs-fs-lead); line-height: 1.55; }
+.cs-cueduo .cs-appcta-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; }
+.cs-cueduo .cs-appcta-note { margin: var(--cs-space-3) auto 0; font-size: 13px; color: var(--cs-inverse-quiet); }
+.cs-cueduo .cs-appcta:not(.cs-section--navy) .cs-appcta-note { color: var(--cs-hairline-text); }
+
+/* ---------- FAQ (shared PageFaq emits info-page-* classes) ----- */
+/* Heading parked in the left column, the accordion in the right, matching the
+   comp. The shared component emits a flat h2 + details list, so the split is
+   done with an explicit two-column grid rather than by changing its DOM. */
+.cs-cueduo .info-page-faq { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); column-gap: clamp(32px, 5vw, 80px); align-items: start; }
+.cs-cueduo .info-page-faq-heading { grid-column: 1; grid-row: 1 / -1; font-family: var(--cs-font-display); font-size: clamp(26px, 2.9vw, 36px); font-weight: 600; letter-spacing: -.03em; line-height: 1.1; margin: 0; max-width: 14ch; text-wrap: balance; }
+.cs-cueduo .info-page-faq-item { grid-column: 2; }
+.cs-cueduo .info-page-faq-item:first-of-type { border-top: 1px solid var(--cs-hairline); }
+.cs-cueduo .info-page-faq-item { border-bottom: 1px solid var(--cs-hairline); padding: 20px 0; }
+.cs-cueduo .info-page-faq-q { cursor: pointer; font-weight: 600; font-size: 17px; letter-spacing: -.018em; list-style: none; display: flex; align-items: center; gap: 16px; }
+.cs-cueduo .info-page-faq-q::-webkit-details-marker { display: none; }
+.cs-cueduo .info-page-faq-q::after { content: "+"; margin-left: auto; font-weight: 400; color: var(--cs-hairline-text); font-size: 20px; line-height: 1; transition: transform .4s cubic-bezier(.2, .7, .3, 1); }
+.cs-cueduo .info-page-faq-item[open] .info-page-faq-q::after { transform: rotate(45deg); }
+.cs-cueduo .info-page-faq-a { margin: 14px 0 0; color: var(--cs-muted); font-size: var(--cs-fs-small); line-height: 1.6; max-width: 56ch; }
+
+/* ---------- responsive: 639 / 899 only ------------------------ */
+@media (max-width: 899px) {
+  .cs-cueduo { --cs-container-pad: 20px; --cs-section-pad: clamp(40px, 8vw, 64px); }
+  .cs-cueduo .cs-nav-desktop { display: none; }
+  .cs-cueduo .cs-nav-toggle { display: block; }
+  .cs-cueduo .cs-valueprop { border-left: 0; margin-left: 0; border-top: 1px solid var(--cs-hairline); }
+  .cs-cueduo .cs-valueprops { border-top: 0; }
+  .cs-cueduo .cs-journey-stage { border-right: 0; border-bottom: 1px solid var(--cs-hairline); }
+  .cs-cueduo .cs-showcase--left .cs-showcase-media { order: 0; }
+  .cs-cueduo .cs-contrast-row::before { display: none; }
+  .cs-cueduo .cs-contrast-label { display: none; }
+  .cs-cueduo .cs-contrast-inline-label { display: block; }
+  .cs-cueduo .cs-contrast-row { gap: 0; padding: 8px 0; border-bottom: 1px solid var(--cs-hairline); }
+  .cs-cueduo .cs-contrast-cell { border-bottom: 0; }
+  .cs-cueduo .info-page-faq { grid-template-columns: minmax(0, 1fr); row-gap: var(--cs-space-3); }
+  .cs-cueduo .info-page-faq-heading { grid-column: 1; grid-row: auto; max-width: 20ch; }
+  .cs-cueduo .info-page-faq-item { grid-column: 1; }
+}
+@media (max-width: 639px) {
+  .cs-cueduo { --cs-container-pad: 16px; }
+  .cs-cueduo .cs-topbar-inner { justify-content: center; }
+  .cs-cueduo .cs-apphero-heading { font-size: clamp(38px, 12vw, 52px); }
+  .cs-cueduo .cs-fold-body { flex-direction: column; }
+  .cs-cueduo .cs-fold-pane--outer, .cs-cueduo .cs-fold-pane--inner { width: 100%; }
+}
+
+/* ---------- motion -------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .cs-cueduo *, .cs-cueduo *::before, .cs-cueduo *::after { animation-duration: .001ms; animation-iteration-count: 1; transition-duration: .001ms; scroll-behavior: auto; }
+  .cs-cueduo video[autoplay] { display: none; }
+  .cs-cueduo .cs-video-poster { display: block; }
+}
+
+/* ---------- print --------------------------------------------- */
+@media print {
+  .cs-cueduo .cs-header, .cs-cueduo .cs-sticky-bar, .cs-cueduo .cs-topbar { display: none; }
+  .cs-cueduo { background: #fff; }
+}
+
+/* =============================================================
+   DEFERRED — DARK MODE OVERRIDE. Not enabled at launch.
+   Ship light only; uncomment when the line adopts dark mode.
+   Known breakages to fix first:
+   · .cs-section--navy lands on a near-identical background — the
+     inverse band loses its job. Swap it to --cs-graphite-surface.
+   · The prompter band stops reading as a distinct material against
+     graphite; give it a 1px --cs-hairline top and bottom.
+   · The glass header over a dark page needs the dark glass recipe,
+     and the Apple badge must switch to its white variant.
+   · Device frames (--cs-chassis) disappear against the page.
+   =============================================================
+
+@media (prefers-color-scheme: dark) {
+  .cs-cueduo {
+    --cs-paper: #0E1114;
+    --cs-white: #161A1F;
+    --cs-surface: #1F242B;
+    --cs-ink: #EEF1F5;
+    --cs-muted: #98A0AC;
+    --cs-hairline-text: #5E6672;
+    --cs-hairline: rgba(255, 255, 255, .08);
+    --cs-accent: #5B82FF;
+    --cs-accent-ink: #8FA8FF;
+    --cs-accent-soft: rgba(91, 130, 255, .16);
+    --cs-on-accent: #0E1114;
+    --cs-graphite: #05070A;
+    --cs-graphite-surface: #0E1114;
+    --cs-shadow-card: 0 10px 30px rgba(0, 0, 0, .45);
+    --cs-shadow-glass: 0 24px 60px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .4);
+    --cs-glass: rgba(40, 44, 50, .5);
+    --cs-glass-border: rgba(255, 255, 255, .12);
+    --cs-glass-hi: rgba(255, 255, 255, .2);
+    --cs-glass-lo: rgba(0, 0, 0, .3);
+    --cs-amb-1: rgba(91, 130, 255, .14);
+    --cs-amb-2: rgba(90, 120, 170, .12);
+  }
+}
+*/

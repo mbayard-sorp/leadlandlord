@@ -26,10 +26,30 @@ import { bsCustomerSiteAccess } from '@leadlandlord/db';
 import { sql } from 'drizzle-orm';
 import { log } from '@leadlandlord/shared/log';
 import { sendEmail } from './resend/index';
+import { renderCustomerWelcomeEmail } from './emails/customer-welcome';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Public origin of the customer portal, used in the welcome email.
+ *
+ * The default is a subdomain of `leadslandlord.com` (note the `s`). The
+ * earlier hard-coded `edit.leadlandlord.com` is a domain we do not own, so
+ * every welcome email sent before this fix pointed customers at a third
+ * party's parked domain.
+ *
+ * Read at call time (not module scope) so a deployment can set it without
+ * depending on import order.
+ */
+function customerPortalUrl(): string {
+  const configured = process.env.CUSTOMER_PORTAL_URL?.trim();
+  const base = configured && configured.length > 0
+    ? configured
+    : 'https://edit.leadslandlord.com';
+  return base.replace(/\/+$/, '');
+}
 
 /**
  * Looks up a Neon Auth user id by email using a parameterised query.
@@ -60,6 +80,12 @@ export interface ProvisionCustomerAccessArgs {
   businessName: string;
   siteId: string;
   grantedBy: 'operator' | 'auto-markpaid';
+  /**
+   * The customer's live site host (e.g. `karkens.com`), so the welcome email
+   * can name the site they recognise rather than a generic "your website".
+   * Optional: when omitted the copy falls back cleanly.
+   */
+  siteDomain?: string | null;
 }
 
 /**
@@ -73,6 +99,7 @@ export async function provisionCustomerAccess({
   businessName,
   siteId,
   grantedBy,
+  siteDomain,
 }: ProvisionCustomerAccessArgs): Promise<string> {
   const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL;
   if (!neonAuthBaseUrl) {
@@ -94,12 +121,43 @@ export async function provisionCustomerAccess({
 
   // Attempt to create the user via signUp.email. A random password is used;
   // the customer will use "Forgot password" to set their own credentials.
+  //
+  // A server-to-server fetch sends no Origin header, and Better Auth rejects
+  // that with "Origin header is required when callbackURL is not an absolute
+  // URL", which is why every provisioning call failed and live sites ended up
+  // with an owner_email and no portal account. We therefore send the portal
+  // origin explicitly.
+  //
+  // NOTE: the origin must be registered as a trusted origin in the Neon Auth
+  // project settings, or the service answers 403 "Invalid origin"
+  // (code: feature_not_supported) and no user can be created. Granting access
+  // to an ALREADY-EXISTING user still works in that state, via the SQL
+  // fallback below.
   const randomPassword = crypto.randomUUID();
-  const signUpResult = await authClient.signUp.email({
-    email: ownerEmail,
-    password: randomPassword,
-    name: businessName,
-  });
+
+  // signUp can either RETURN `{ error }` or THROW, depending on the failure.
+  // Both mean the same thing here: fall through to the SQL lookup, because
+  // the most common cause is that the user already exists. Letting a throw
+  // escape skipped the fallback entirely.
+  let signUpResult: {
+    data?: { user?: { id?: string } } | null;
+    error?: { message?: string } | null;
+  } = {};
+  let signUpThrew: unknown = null;
+  try {
+    signUpResult = await authClient.signUp.email({
+      email: ownerEmail,
+      password: randomPassword,
+      name: businessName,
+      fetchOptions: { headers: { origin: customerPortalUrl() } },
+    });
+  } catch (err) {
+    signUpThrew = err;
+    log.warn(
+      { ownerEmail, err },
+      'provisionCustomerAccess: signUp.email threw, falling back to SQL lookup',
+    );
+  }
 
   if (signUpResult.data?.user?.id) {
     authUserId = signUpResult.data.user.id;
@@ -108,7 +166,10 @@ export async function provisionCustomerAccess({
     // User likely already exists. Fall back to SQL lookup against the
     // neon_auth.user table (Better Auth's actual table name in the managed
     // Neon Auth service; the schema is neon_auth).
-    const errorMsg = signUpResult.error?.message ?? String(signUpResult.error);
+    const errorMsg =
+      signUpResult.error?.message ??
+      (signUpThrew instanceof Error ? signUpThrew.message : null) ??
+      String(signUpResult.error ?? signUpThrew);
     log.info(
       { ownerEmail, error: errorMsg },
       'provisionCustomerAccess: signUp failed, attempting SQL lookup (user may already exist)',
@@ -144,19 +205,21 @@ export async function provisionCustomerAccess({
   try {
     const fromAddress = process.env.RESEND_FROM_ADDRESS;
     if (fromAddress) {
+      const { subject, html, text } = renderCustomerWelcomeEmail({
+        businessName,
+        portalUrl: customerPortalUrl(),
+        siteDomain,
+        ownerEmail,
+      });
       await sendEmail({
         to: ownerEmail,
         from: fromAddress,
-        subject: 'Your website editor is ready',
-        text: [
-          `Hi ${businessName},`,
-          '',
-          'Your website editor is ready at https://edit.leadlandlord.com',
-          '',
-          'Sign in with this email address and use "Forgot Password" to set your password.',
-          '',
-          'Questions? Just reply to this email.',
-        ].join('\n'),
+        subject,
+        html,
+        text,
+        // The body invites a reply. RESEND_FROM_ADDRESS is often a send-only
+        // sender, so point replies at the operator inbox when we have one.
+        replyTo: process.env.OPERATOR_EMAIL?.trim() || undefined,
       });
       log.info({ ownerEmail }, 'provisionCustomerAccess: welcome email sent');
     } else {

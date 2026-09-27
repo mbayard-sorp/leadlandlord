@@ -33,6 +33,7 @@ import {
   writeSections,
   genKey,
   regenerateKeys,
+  IMAGE_FIELD_KEYS,
   type CustomerLayout,
 } from '@/lib/sanity-write';
 import { validateFormValues, buildPatchSet, isSafeKey } from '@/lib/fields';
@@ -203,17 +204,11 @@ export async function discardAction(siteId: string): Promise<DiscardResult> {
 // ---------------------------------------------------------------------------
 
 /**
- * Allowed image field keys. Must stay in sync with IMAGE_FIELD_PATHS in
- * lib/sanity-write.ts. Checked here (server action boundary) before
- * uploadAndSetImage also validates.
+ * Allowed image field keys. Derived from the single allowlist in
+ * lib/sanity-write.ts so the two can't drift. Checked here (server action
+ * boundary) before uploadAndSetImage also validates.
  */
-const ALLOWED_IMAGE_FIELD_KEYS = new Set([
-  'logo',
-  'favicon',
-  'hero.image',
-  'about.image',
-  'seo.ogImage',
-]);
+const ALLOWED_IMAGE_FIELD_KEYS = new Set<string>(IMAGE_FIELD_KEYS);
 
 export interface UploadImageResult {
   ok: boolean;

@@ -186,6 +186,56 @@ export function CheckCircleIcon(props: IconProps) {
   );
 }
 
+/* --- CueDuo feature glyphs (site #3) -------------------------------------
+ * Lifted verbatim from the CueDuo brand guide's icon family: 24x24 grid,
+ * outline, round caps and joins. They keep the shared 1.5 stroke of this set
+ * rather than the guide's 1.75, because here they render at 30px+ where 1.5
+ * matches the guide's own 40px feature weight.
+ * ----------------------------------------------------------------------- */
+
+/** Two panes at a hinge, aperture on the left pane — the product itself. */
+export function FoldIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 6.5l7-1.5v14l-7-1.5zM20 6.5l-7-1.5v14l7-1.5z" />
+      <circle cx="6.8" cy="8.6" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** A lens with the eyeline running through it. */
+export function EyelineIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M12 3.5v2M12 18.5v2" />
+    </svg>
+  );
+}
+
+/** Scissors: trim, title, photo. */
+export function CutIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="7" cy="7" r="2.5" />
+      <circle cx="7" cy="17" r="2.5" />
+      <path d="M9 8.5L19 17M9 15.5L19 7" />
+    </svg>
+  );
+}
+
+/** A speed dial, needle back — your pace, not ours. */
+export function PaceIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4.5 15a8 8 0 1 1 15 0" />
+      <path d="M12 15l3.5-4.5" />
+      <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const VALUE_PROP_ICONS: Record<CsValuePropIcon, (props: IconProps) => React.JSX.Element> = {
   team: TeamIcon,
   practice: PracticeIcon,
@@ -193,6 +243,10 @@ const VALUE_PROP_ICONS: Record<CsValuePropIcon, (props: IconProps) => React.JSX.
   shield: ShieldIcon,
   chart: ChartIcon,
   clock: ClockIcon,
+  'cueduo/fold': FoldIcon,
+  'cueduo/eyeline': EyelineIcon,
+  'cueduo/cut': CutIcon,
+  'cueduo/pace': PaceIcon,
 };
 
 /** Icon component for a csValuePropsBlock icon name, or null for unknown/empty. */

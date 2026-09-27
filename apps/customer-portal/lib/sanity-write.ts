@@ -15,6 +15,11 @@ import 'server-only';
 
 import { createWriteClient } from '@leadlandlord/sanity-schema/client';
 import { buildsellSiteDocId } from '@leadlandlord/sanity-schema/ids';
+import { isSafeKey } from './fields';
+
+/** Loosely-typed Sanity document/section shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyDoc = Record<string, any>;
 
 // ---------------------------------------------------------------------------
 // Key generation helpers
@@ -118,19 +123,79 @@ export { buildsellSiteDocId };
 // ---------------------------------------------------------------------------
 
 /**
- * Maps the customer-facing fieldKey to the granular Sanity draft patch path.
- * ONLY these four targets are permitted. Any other key is rejected at the
- * server action boundary and again here.
+ * Document-root image targets: the patch path is a fixed property path.
  */
-const IMAGE_FIELD_PATHS: Record<string, string> = {
-  'logo':         'logo',
-  'favicon':      'favicon',
-  'hero.image':   'sections[_key=="hero"].image',
-  'about.image':  'sections[_key=="about"].image',
-  'seo.ogImage':  'seo.ogImage',
+const ROOT_IMAGE_FIELD_PATHS: Record<string, string> = {
+  'logo':        'logo',
+  'favicon':     'favicon',
+  'seo.ogImage': 'seo.ogImage',
 } as const;
 
-export type ImageFieldKey = keyof typeof IMAGE_FIELD_PATHS;
+/**
+ * Section-scoped image targets: the patch path depends on which section
+ * instance currently holds the image, so it must be resolved against the live
+ * doc at write time.
+ *
+ * These used to be hard-coded as `sections[_key=="hero"].image` /
+ * `sections[_key=="about"].image`. The builder does write those literal keys,
+ * but About is addable/removable/duplicable (bs-section-rules.ts), and
+ * added or duplicated instances get generated keys like `abt_k7z3m1`. A site
+ * whose About section was duplicated — or removed and re-added — therefore
+ * patched a section that no longer existed and the upload silently no-opped.
+ * Resolving by `_type` fixes that; for a builder-written doc it selects the
+ * same section as before.
+ */
+const SECTION_IMAGE_FIELDS: Record<string, { sectionType: string; prop: string }> = {
+  'hero.image':  { sectionType: 'bsHeroSection',  prop: 'image' },
+  'about.image': { sectionType: 'bsAboutSection', prop: 'image' },
+} as const;
+
+/** Every permitted image field key. */
+export const IMAGE_FIELD_KEYS: readonly string[] = [
+  ...Object.keys(ROOT_IMAGE_FIELD_PATHS),
+  ...Object.keys(SECTION_IMAGE_FIELDS),
+];
+
+export type ImageFieldKey = string;
+
+/**
+ * Returns the section instance that owns a section-scoped image field, or
+ * `undefined` for root fields / when no matching section exists.
+ *
+ * Selection rule: the FIRST section of the matching `_type` in document
+ * order. The Photos panel offers one slot per field, so the first instance is
+ * the deterministic target. Sections with an unsafe `_key` are skipped — the
+ * key is interpolated into a Sanity filter path.
+ */
+export function findImageSection(doc: AnyDoc | null, fieldKey: string): AnyDoc | undefined {
+  const scoped = SECTION_IMAGE_FIELDS[fieldKey];
+  if (!scoped) return undefined;
+  const sections = Array.isArray(doc?.sections) ? (doc.sections as AnyDoc[]) : [];
+  return sections.find(
+    (s) =>
+      s?._type === scoped.sectionType &&
+      typeof s?._key === 'string' &&
+      isSafeKey(s._key),
+  );
+}
+
+/**
+ * Resolves a customer-facing image fieldKey to a granular Sanity patch path
+ * against `doc`. Returns null when the field is not permitted, or when a
+ * section-scoped field has no matching section in the doc.
+ */
+export function resolveImageFieldPath(doc: AnyDoc | null, fieldKey: string): string | null {
+  const rootPath = ROOT_IMAGE_FIELD_PATHS[fieldKey];
+  if (rootPath) return rootPath;
+
+  const scoped = SECTION_IMAGE_FIELDS[fieldKey];
+  if (!scoped) return null;
+
+  const section = findImageSection(doc, fieldKey);
+  if (!section) return null;
+
+  return `sections[_key=="${String(section._key)}"].${scoped.prop}`;
+}
 
 // ---------------------------------------------------------------------------
 // Document read
@@ -275,10 +340,9 @@ export async function uploadAndSetImage(
   },
 ): Promise<UploadImageResult> {
   // 1. Allowlist check.
-  if (!(fieldKey in IMAGE_FIELD_PATHS)) {
+  if (!IMAGE_FIELD_KEYS.includes(fieldKey)) {
     throw new Error(`Image field '${fieldKey}' is not permitted.`);
   }
-  const sanityPath = IMAGE_FIELD_PATHS[fieldKey]!;
 
   // 2. Type validation (server-side, declared contentType).
   if (!ALLOWED_IMAGE_TYPES.has(file.contentType)) {
@@ -325,6 +389,19 @@ export async function uploadAndSetImage(
   // 4. Ensure the draft exists before patching.
   const draftId = await ensureDraft(siteId);
   const client = createWriteClient();
+
+  // 4b. Resolve the patch path against the draft we are about to write, so a
+  //     section-scoped image lands on the section that actually exists. Do
+  //     this BEFORE uploading the asset — a missing section should fail loudly
+  //     rather than orphan an uploaded asset.
+  const draftDoc = (await client.getDocument(draftId)) as AnyDoc | undefined;
+  const sanityPath = resolveImageFieldPath(draftDoc ?? null, fieldKey);
+  if (!sanityPath) {
+    throw new Error(
+      `This site has no section to hold the '${fieldKey}' image. ` +
+        `Add the section back to your page, then upload the image again.`,
+    );
+  }
 
   // 5. Upload asset to Sanity media library.
   //    Use the already-materialised `buf` from the magic-byte check above.

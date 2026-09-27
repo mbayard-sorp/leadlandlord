@@ -551,6 +551,7 @@ async function goLiveSite(
         businessName: existing.businessName,
         siteId: id,
         grantedBy,
+        siteDomain: existing.customDomain,
       });
     }
   } catch (err) {
