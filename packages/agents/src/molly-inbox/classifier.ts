@@ -110,6 +110,10 @@ Classify into ONE of:
 - "escalated": the recipient asks about pricing/fees, wants reciprocal links, mentions sponsor/advertising, or sends a legal/unsubscribe/compliance notice. A human must handle this.
 - "silent": the body is empty, an auto-reply / out-of-office, or completely off-topic.
 
+Examples of hedge/ambiguous phrasing that don't hit the regex fast path:
+- Reply: "Sure, tell me more about the angle you had in mind." → {"label":"accepted","confidence":0.7,"reason":"asking for more info in a positive way, willing to consider the angle"}
+- Reply: "Let me think about it and get back to you." → {"label":"silent","confidence":0.55,"reason":"non-committal, no decision either way yet"}
+
 Return strict JSON with this shape (no markdown fence):
 {"label":"accepted|declined|escalated|silent","confidence":0.0-1.0,"reason":"one short sentence"}`;
 }
@@ -158,11 +162,13 @@ async function classifyWithHaiku(args: ClassifyArgs): Promise<ReplyClassificatio
     const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
     parsed = JSON.parse(cleaned) as HaikuRaw;
   } catch {
+    // Stable `parse_error:` prefix so log/metadata consumers can group by
+    // cause; the raw snippet is trailing detail, not part of the code.
     return {
       label: 'silent',
       confidence: 0,
       source: 'haiku',
-      reason: `haiku:unparseable:${text.slice(0, 80)}`,
+      reason: `parse_error:${text.slice(0, 80)}`,
       costUsd,
     };
   }
