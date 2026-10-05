@@ -185,15 +185,23 @@ export class MollyInbox extends BaseAgent<typeof MollyInboxInput, typeof MollyIn
             originalPitchSubject: row.subjectLine ?? undefined,
           });
         } catch (err) {
+          const errMessage = err instanceof Error ? err.message : String(err);
           ctx.log.warn(
-            { err: err instanceof Error ? err.message : String(err), backlinkId: row.id },
+            { err: errMessage, backlinkId: row.id },
             'molly-inbox: classifier failed, defaulting to manual review',
           );
+          // Stable `classifier_error:` prefix (trailing detail is the raw
+          // error message) so this groups the same way as the classifier's
+          // own `parse_error:` code. There is no reliable signal in this
+          // catch to distinguish a timeout from any other classifier
+          // failure (classifyReply doesn't tag its own errors), so we don't
+          // fork into separate codes here — that would require inventing
+          // detection logic the classifier doesn't provide.
           classification = {
             label: 'escalated',
             confidence: 0,
             source: 'haiku',
-            reason: 'classifier_error',
+            reason: `classifier_error:${errMessage.slice(0, 120)}`,
             costUsd: 0,
           };
         }
