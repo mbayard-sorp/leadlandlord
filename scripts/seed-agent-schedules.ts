@@ -36,7 +36,8 @@ const SEED: SeedRow[] = [
   { schedulerName: 'operator', targetAgent: 'operator', cadenceKind: 'poll', intervalMinutes: POLL_INTERVAL },
   { schedulerName: 'network-linker', targetAgent: 'network-linker', cadenceKind: 'poll', intervalMinutes: POLL_INTERVAL },
   { schedulerName: 'molly-inbox', targetAgent: 'molly-inbox', cadenceKind: 'poll', intervalMinutes: POLL_INTERVAL },
-  // molly-nudge feeds the (unregistered, deferred) 'molly' kind; kept at parity.
+  // molly-nudge feeds the registered, live 'molly' kind (registry.ts, ON(5) —
+  // guest-post outreach, human-gated); kept at parity.
   { schedulerName: 'molly-nudge', targetAgent: 'molly', cadenceKind: 'poll', intervalMinutes: POLL_INTERVAL },
 
   // Daily/weekly crons — verbatim from apps/operator/vercel.json.
@@ -77,7 +78,8 @@ const SEED: SeedRow[] = [
   // fleet-digest (orchestrator Phase 5): 0 13 * * * UTC ~= 6am MST. Avoids the
   // 14:00 molly-digest slot. Not in vercel.json — DB-driven from the start.
   { schedulerName: 'fleet-digest', targetAgent: 'fleet-digest', cadenceKind: 'cron', cronExpr: '0 13 * * *' },
-  // citation-runner (citations v1): weekly Monday 13:00 UTC ~= 6am MST, live sites only.
+  // citation-runner (citations v1): weekly Monday 13:00 UTC ~= 6am MST, live
+  // sites only. Not in vercel.json — DB-driven from the start.
   { schedulerName: 'citation-runner', targetAgent: 'citation-runner', cadenceKind: 'cron', cronExpr: '0 13 * * 1' },
   // niche-keyword-refresher: quarterly cluster-cache warm, 05:00 UTC on the
   // 1st of Jan/Apr/Jul/Oct (cron.ts expands */3 to months 1,4,7,10).

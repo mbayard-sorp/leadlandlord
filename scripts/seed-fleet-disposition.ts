@@ -17,9 +17,14 @@ import {
  * global kill switch (system_state.kill_switch) remains the instant stop.
  */
 
-// Agents in the disposition that are not (yet) in the registry: the two new
-// agents built in later phases + the two deferred stubs.
-const KNOWN_EXTRAS = new Set(['fleet-digest', 'orchestrator', 'backlink-copycat', 'citation-runner']);
+// Agents in the disposition that aren't necessarily registry kinds:
+// orchestrator is intentionally never registered (registry.ts, ADR 0019 —
+// firing it via the cron worker would be a security hole) and
+// backlink-copycat remains the one deferred, not-built stub. (fleet-digest is
+// also listed here for historical parity, though it is now a registered,
+// live agent too — BL-038 removed citation-runner from this Set once it
+// shipped as citations v1 and became registered.)
+const KNOWN_EXTRAS = new Set(['fleet-digest', 'orchestrator', 'backlink-copycat']);
 
 async function main() {
   const registryKeys = Object.keys(agentRegistry);
