@@ -1468,7 +1468,7 @@ function recDedupeKey(type: string, targetPage: string | null, payload: unknown)
     const q = (payload as Record<string, unknown>).query;
     if (typeof q === 'string') queryPart = q;
   }
-  return `${type}${targetPage ?? ''}${queryPart}`;
+  return `${type}::${targetPage ?? ''}::${queryPart}`;
 }
 
 function clampedScore(n: number): string {
