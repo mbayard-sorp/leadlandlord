@@ -98,6 +98,10 @@ const siteRef = { _type: 'reference' as const, _ref: SITE_ID };
 
 const QUALIFIER = 'Requires a folding phone running iOS 18 or later';
 
+/** Shown as "Last updated" on /privacy and /terms. Bump it whenever either
+ *  body changes — compliance reviewers look for this line. */
+const LEGAL_LAST_UPDATED = '2026-09-21T00:00:00Z';
+
 let keyCounter = 0;
 function k(prefix: string): string {
   keyCounter += 1;
@@ -691,6 +695,95 @@ async function main() {
         _type: 'csSeo',
         metaTitle: 'Support',
         metaDescription: 'Help with CueDuo, and a way to reach a person.',
+      },
+      publishedAt: '2026-09-21T00:00:00Z',
+    },
+    {
+      _id: csPageDocId(SITE_KEY, 'privacy'),
+      _type: 'csPage',
+      site: siteRef,
+      title: 'Privacy',
+      slug: { _type: 'slug', current: 'privacy' },
+      pageBuilder: [
+        {
+          _type: 'csDisclosureBlock',
+          _key: k('blk'),
+          // No heading: PageHeader already renders "Privacy" as the page h1, and
+          // repeating it as an h2 directly underneath reads as a mistake.
+          lastUpdated: LEGAL_LAST_UPDATED,
+          content: [
+            ptBlock(
+              'Your scripts and your takes stay on your phone. We don’t have a copy, and there’s no account to make.',
+            ),
+            ptBlock('What the app asks for', 'h3'),
+            ptBlock(
+              'CueDuo asks for the camera and the microphone. The camera records your take. The microphone records your audio and paces the prompter to what you’ve already said. You can refuse either one in Settings, and the parts that need them stop working rather than working differently.',
+            ),
+            ptBlock('What leaves the device', 'h3'),
+            ptBlock(
+              'Only what you choose to share, and only to the place you send it. If you write to us through the support form, we keep that message and your email address until your question is answered.',
+            ),
+            ptBlock('Analytics', 'h3'),
+            ptBlock(
+              'This website counts page views through our tag manager. The app itself reports crashes and nothing else.',
+            ),
+            ptBlock('Payment', 'h3'),
+            ptBlock(
+              'Billing is handled by the App Store. We never see your card, and this site never takes a payment.',
+            ),
+          ],
+          note: 'Placeholder wording, carried over from the approved design. The binding text comes from the client’s counsel and must be in place before submission to App Store Connect. Where the app processes voice pacing, and how long support email is retained, both need confirming before this is final.',
+        },
+      ],
+      seo: {
+        _type: 'csSeo',
+        metaTitle: 'Privacy',
+        metaDescription: 'What CueDuo does and does not do with your scripts, your takes and your data.',
+      },
+      publishedAt: '2026-09-21T00:00:00Z',
+    },
+    {
+      _id: csPageDocId(SITE_KEY, 'terms'),
+      _type: 'csPage',
+      site: siteRef,
+      title: 'Terms',
+      slug: { _type: 'slug', current: 'terms' },
+      pageBuilder: [
+        {
+          _type: 'csDisclosureBlock',
+          _key: k('blk'),
+          // No heading: PageHeader already renders "Terms" as the page h1, and
+          // repeating it as an h2 directly underneath reads as a mistake.
+          lastUpdated: LEGAL_LAST_UPDATED,
+          content: [
+            // Deliberately NOT a terms of service. No licence grant, no
+            // liability limit, no termination or governing-law clause: those
+            // are binding commitments and they are counsel's to write, not
+            // ours to invent. What follows is only the operational detail
+            // already stated on /pricing and in the app.
+            ptBlock(
+              'The full terms of service are being prepared. What follows is a plain summary of how buying and using CueDuo works. It is not the agreement itself.',
+            ),
+            ptBlock('Paying for it', 'h3'),
+            ptBlock(
+              'Billing is handled by the App Store, on the Apple ID signed in on your phone. A plan starts after the free week unless you cancel inside it.',
+            ),
+            ptBlock('Stopping', 'h3'),
+            ptBlock(
+              'Cancel any time in Settings. The plan runs to the end of the period you have already paid for. If you stop paying, your takes stay on your phone — you lose full-quality export, not your work.',
+            ),
+            ptBlock('Moving to a new phone', 'h3'),
+            ptBlock('Open Settings and choose Restore purchase. It checks with the App Store using the Apple ID on the device.'),
+            ptBlock('Your content', 'h3'),
+            ptBlock('Your scripts and your takes are yours. We do not hold a copy of them.'),
+          ],
+          note: 'This page is a summary, not a contract. The binding terms of service are with the client’s counsel and must replace this before launch — nothing here grants a licence, limits liability, or sets a governing law, because none of that is ours to write.',
+        },
+      ],
+      seo: {
+        _type: 'csSeo',
+        metaTitle: 'Terms',
+        metaDescription: 'How paying for CueDuo works, and what happens to your takes if you stop.',
       },
       publishedAt: '2026-09-21T00:00:00Z',
     },
