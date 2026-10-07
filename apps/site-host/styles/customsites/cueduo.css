@@ -212,7 +212,11 @@
   .cs-cueduo .cs-header { background: #F5F6F8; }   /* opaque fallback */
 }
 .cs-cueduo .cs-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: 14px var(--cs-container-pad); display: flex; align-items: center; gap: var(--cs-space-4); }
-.cs-cueduo .cs-header-logo { display: flex; align-items: center; gap: 10px; color: var(--cs-ink); }
+/* SiteHeader renders an uploaded logo with next/image `fill`, which needs a
+   positioned box with real dimensions or it collapses to zero height. Sized
+   for the brand guide's 5:1 lockup, above its 96px minimum width. */
+.cs-cueduo .cs-header-logo { position: relative; display: block; width: 140px; height: 28px; }
+.cs-cueduo .cs-brand { display: flex; align-items: center; gap: 10px; color: var(--cs-ink); }
 .cs-cueduo .cs-brand-name { font-family: var(--cs-font-display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
 .cs-cueduo .cs-brand-sub { display: none; }              /* no strapline in the header lockup */
 /* The header phone slot is SUPPRESSED for CueDuo (no phone number exists).
@@ -426,6 +430,16 @@
 .cs-cueduo .cs-appcta-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; }
 .cs-cueduo .cs-appcta-note { margin: var(--cs-space-3) auto 0; font-size: 13px; color: var(--cs-inverse-quiet); }
 .cs-cueduo .cs-appcta:not(.cs-section--navy) .cs-appcta-note { color: var(--cs-hairline-text); }
+
+/* ---------- csDisclosureBlock (privacy, terms) ----------------- */
+/* The heading is left to PageHeader, so the slab opens on the date. The note
+   is the boxed caveat under the body: on these two pages it carries the
+   "counsel has not signed this off yet" line, so it has to read as separate
+   from the policy rather than as part of it. */
+.cs-cueduo .cs-disclosure { max-width: 76ch; }
+.cs-cueduo .cs-disclosure-updated { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; margin-bottom: var(--cs-space-4); }
+.cs-cueduo .cs-disclosure .cs-prose h3 { margin: var(--cs-space-4) 0 10px; }
+.cs-cueduo .cs-disclosure-note { margin-top: var(--cs-space-5); padding: var(--cs-space-3) var(--cs-space-4); background: var(--cs-surface); border-left: 2px solid var(--cs-accent); border-radius: var(--cs-radius-inner); font-size: var(--cs-fs-small); color: var(--cs-muted); max-width: 76ch; }
 
 /* ---------- FAQ (shared PageFaq emits info-page-* classes) ----- */
 /* Heading parked in the left column, the accordion in the right, matching the
