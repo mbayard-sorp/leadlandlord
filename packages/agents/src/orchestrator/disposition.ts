@@ -34,9 +34,10 @@ const OFF = (note: string): AgentDisposition => ({
 });
 
 /**
- * Keyed by registry kind, plus the two not-yet-built agents (fleet-digest,
- * orchestrator) and the two deferred stubs. The seed enumerates the live
- * registry and the registry wins on any mismatch.
+ * Keyed by registry kind. fleet-digest and orchestrator are live, registered
+ * agents (Phase 5 / Phase 6); the sole remaining not-built stub is
+ * backlink-copycat. The seed enumerates the live registry and the registry
+ * wins on any mismatch.
  */
 export const FLEET_DISPOSITION: Record<string, AgentDisposition> = {
   // ── Owned-asset, ON (no outbound email to third parties) ──

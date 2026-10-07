@@ -18,8 +18,9 @@
  *  - ambiguous text falls through to the Haiku layer; source/costUsd/label
  *    come from the parsed response
  *  - markdown-fenced Haiku JSON is tolerated
- *  - unparseable Haiku text → silent, source haiku, reason carries a
- *    snippet, cost still recorded (money was spent even though parsing failed)
+ *  - unparseable Haiku text → silent, source haiku, reason carries the
+ *    stable `parse_error:` code + a snippet, cost still recorded (money was
+ *    spent even though parsing failed)
  *  - normalizeLabel drift tolerance: synonyms/prefixes map to the right
  *    ReplyLabel, unrecognized values default to silent
  *  - confidence is clamped to [0, 1] and defaults to 0.5 when non-numeric
@@ -174,7 +175,7 @@ describe('classifyReply — Haiku fallback for ambiguous text', () => {
     expect(result.reason).toBe('haiku:polite pass');
   });
 
-  it('unparseable Haiku text → silent, cost still recorded, reason carries a snippet', async () => {
+  it('unparseable Haiku text → silent, cost still recorded, reason carries a stable parse_error code + snippet', async () => {
     mockRawText = 'Sorry, I cannot classify this reply right now.';
 
     const result = await classifyReply({ body: AMBIGUOUS });
@@ -182,7 +183,10 @@ describe('classifyReply — Haiku fallback for ambiguous text', () => {
     expect(result.label).toBe('silent');
     expect(result.confidence).toBe(0);
     expect(result.source).toBe('haiku');
-    expect(result.reason).toMatch(/^haiku:unparseable:/);
+    // Stable `parse_error:` prefix (BL-011) so downstream consumers can
+    // group by cause; the raw snippet is trailing detail.
+    expect(result.reason).toMatch(/^parse_error:/);
+    expect(result.reason).toContain('Sorry, I cannot classify');
     expect(result.costUsd).toBe(0.0011);
   });
 

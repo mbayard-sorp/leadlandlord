@@ -34,8 +34,9 @@
  *    transitions[] entry with the right shape
  *  - toStatus === 'accepted' emits the guest_post.accepted next-step event
  *    with the right payload; any other label does NOT emit
- *  - classifier throwing → defaults to an escalated classification and the
- *    run continues (never propagates the classifier error)
+ *  - classifier throwing → defaults to an escalated classification tagged
+ *    with a stable `classifier_error:` reason code, and the run continues
+ *    (never propagates the classifier error)
  *  - recordUsage is only called when classification.source === 'haiku' AND
  *    costUsd > 0 — not for regex hits, not for the zero-cost classifier-
  *    error fallback
@@ -383,7 +384,10 @@ describe('MollyInbox.execute — happy path transition', () => {
 
     expect(backlinksUpdateCalls[0]!.status).toBe('escalated');
     const transitions = result.transitions as Array<{ classification: { reason: string } }>;
-    expect(transitions[0]!.classification.reason).toBe('classifier_error');
+    // Stable `classifier_error:` prefix (BL-011) so downstream consumers can
+    // group by cause; the raw error message is trailing detail.
+    expect(transitions[0]!.classification.reason).toMatch(/^classifier_error:/);
+    expect(transitions[0]!.classification.reason).toContain('anthropic 529 overloaded');
     expect(NOOP_CTX.emitNextStepEvent).not.toHaveBeenCalled();
     // costUsd=0 on the synthetic error classification → recordUsage never fires.
     expect(NOOP_CTX.recordUsage).not.toHaveBeenCalled();
