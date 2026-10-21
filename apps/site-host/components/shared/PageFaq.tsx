@@ -7,6 +7,8 @@ interface PageFaqProps {
   heading: string;
   /** Tenant tracking number — replaces `{{phone}}` tokens in Q&A text. */
   phone: string;
+  /** Closing content rendered after the last question, inside the section. */
+  outro?: React.ReactNode;
 }
 
 /**
@@ -18,7 +20,7 @@ interface PageFaqProps {
  *
  * Theme-agnostic: styled with the info-page CSS variables, no per-variant code.
  */
-export function PageFaq({ faqs, heading, phone }: PageFaqProps) {
+export function PageFaq({ faqs, heading, phone, outro }: PageFaqProps) {
   if (faqs.length === 0) return null;
   const resolved = faqs.map((f) => ({
     q: substitutePhone(f.q, phone),
@@ -36,6 +38,7 @@ export function PageFaq({ faqs, heading, phone }: PageFaqProps) {
           <p className="info-page-faq-a">{f.a}</p>
         </details>
       ))}
+      {outro}
     </section>
   );
 }

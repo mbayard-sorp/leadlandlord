@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { csImageUrl, type CsAppHeroBlock, type CsFoldPreview } from '@/lib/customsites-sanity';
 import { StoreBadge } from './StoreBadge';
+import { hotspotPosition } from './hotspot';
 
 interface Props {
   block: CsAppHeroBlock;
@@ -10,7 +11,8 @@ interface Props {
 function foldHasContent(preview?: CsFoldPreview | null): boolean {
   if (!preview) return false;
   return Boolean(
-    preview.currentLine ||
+    preview.viewfinderUrl ||
+      preview.currentLine ||
       preview.pastLine ||
       preview.innerHeading ||
       (preview.checklist && preview.checklist.length > 0),
@@ -86,6 +88,7 @@ export function AppHeroBlock({ block }: Props) {
 
 function FoldPreview({ preview, caption }: { preview?: CsFoldPreview | null; caption?: string | null }) {
   if (!foldHasContent(preview) || !preview) return null;
+  if (preview.viewfinderUrl) return <CameraPreview preview={preview} caption={caption} />;
   const checklist = preview.checklist ?? [];
   const hasOuter = Boolean(preview.currentLine || preview.pastLine);
   const hasInner = Boolean(preview.innerHeading || checklist.length > 0);
@@ -137,6 +140,52 @@ function FoldPreview({ preview, caption }: { preview?: CsFoldPreview | null; cap
       <figcaption className="cs-device-caption">
         {caption ?? 'An illustration of the two screens. Not a screenshot.'}
       </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * Camera variant of the fold preview: the viewfinder photo on the left, the
+ * prompter on the right, in one chassis. The photo keeps its alt text, so the
+ * figure still says what it shows; the REC overlay and the prompter lines are
+ * app chrome and the same words appear in the copy column, so they are hidden
+ * from assistive tech. Unlike the preflight variant it has no default caption:
+ * a photograph needs no "not a screenshot" disclaimer.
+ */
+function CameraPreview({ preview, caption }: { preview: CsFoldPreview; caption?: string | null }) {
+  const position = hotspotPosition(preview.viewfinderHotspot);
+  return (
+    <figure className="cs-camera">
+      <div className="cs-camera-stage">
+        <div className="cs-camera-shadow" aria-hidden="true" />
+        <div className="cs-camera-body">
+          <div className="cs-camera-photo">
+            <Image
+              src={csImageUrl(preview.viewfinderUrl, { w: 1000 })!}
+              alt={preview.viewfinderAlt ?? ''}
+              fill
+              priority
+              sizes="(max-width: 899px) 46vw, 275px"
+              style={{ objectFit: 'cover', objectPosition: position }}
+            />
+            {preview.recordLabel || preview.timecode ? (
+              <div className="cs-camera-rec" aria-hidden="true">
+                <span className="cs-rec-dot" />
+                {preview.recordLabel ?? 'REC'}
+                {preview.timecode ? <span className="cs-camera-time">{preview.timecode}</span> : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="cs-camera-prompter" aria-hidden="true">
+            <p className="cs-camera-script">
+              {preview.pastLine ? <span className="cs-prompter-past">{preview.pastLine}</span> : null}
+              {preview.currentLine ? <span>{preview.currentLine}</span> : null}
+              {preview.nextLine ? <span className="cs-prompter-next">{preview.nextLine}</span> : null}
+            </p>
+          </div>
+        </div>
+      </div>
+      {caption ? <figcaption className="cs-device-caption">{caption}</figcaption> : null}
     </figure>
   );
 }

@@ -29,34 +29,41 @@ export function PlansBlock({ block }: Props) {
         </div>
 
         <div className="cs-plan-grid">
-          {plans.map((plan) => (
-            <div key={plan._key} className={`cs-plan${plan.recommended ? ' cs-plan--recommended' : ''}`}>
-              <p className="cs-plan-name">
-                {plan.name}
-                {plan.recommended ? <span className="cs-plan-flag">Recommended</span> : null}
-              </p>
-              <p className="cs-plan-price">
-                {plan.price}
-                {plan.period ? <span className="cs-plan-period"> {plan.period}</span> : null}
-              </p>
-              {plan.features && plan.features.length > 0 ? (
-                <ul className="cs-plan-list">
-                  {plan.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {plan.ctaLabel && plan.ctaHref ? (
-                <a
-                  className={`cs-btn ${plan.recommended ? 'cs-btn-primary' : 'cs-btn-secondary'} cs-plan-cta`}
-                  href={plan.ctaHref}
-                >
-                  {plan.ctaLabel}
-                </a>
-              ) : null}
-              {plan.note ? <p className="cs-plan-note">{plan.note}</p> : null}
-            </div>
-          ))}
+          {plans.map((plan) => {
+            const ctaHref = plan.ctaHref ?? undefined;
+            const hasCta = Boolean(plan.ctaLabel && ctaHref);
+            return (
+              <div
+                key={plan._key}
+                className={`cs-plan${plan.recommended ? ' cs-plan--recommended' : ''}${hasCta ? '' : ' cs-plan--static'}`}
+              >
+                <p className="cs-plan-name">
+                  {plan.name}
+                  {plan.recommended ? <span className="cs-plan-flag">Recommended</span> : null}
+                </p>
+                <p className="cs-plan-price">
+                  {plan.price}
+                  {plan.period ? <span className="cs-plan-period"> {plan.period}</span> : null}
+                </p>
+                {plan.features && plan.features.length > 0 ? (
+                  <ul className="cs-plan-list">
+                    {plan.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {hasCta ? (
+                  <a
+                    className={`cs-btn ${plan.recommended ? 'cs-btn-primary' : 'cs-btn-secondary'} cs-plan-cta`}
+                    href={ctaHref}
+                  >
+                    {plan.ctaLabel}
+                  </a>
+                ) : null}
+                {plan.note ? <p className="cs-plan-note">{plan.note}</p> : null}
+              </div>
+            );
+          })}
         </div>
 
         {block.footnote ? <p className="cs-footnote">{block.footnote}</p> : null}

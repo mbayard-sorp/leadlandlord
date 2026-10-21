@@ -103,6 +103,33 @@ export interface CustomSite {
   indexnowKey?: string | null;
   /** Plain-text compliance line shown above the footer legal row on every page. */
   footerDisclosure?: string | null;
+  /** Optional header button (e.g. "Get CueDuo"), independent of the phone button. */
+  headerCta?: CustomSiteCta | null;
+  /** Titled footer link columns. When non-empty they replace the flat `footerNav` links; the flat list stays the fallback. */
+  footerColumns?: CustomSiteFooterColumn[] | null;
+  /** Heading of the footer app-download column, e.g. "Get the app". */
+  footerAppLabel?: string | null;
+  /** One line in the footer legal row (trademark attributions and the like). */
+  footerLegal?: string | null;
+  /** Sticky mobile bar with a short line and one button; the non-phone sibling of StickyBar. */
+  mobileBar?: CustomSiteMobileBar | null;
+}
+
+export interface CustomSiteCta {
+  label?: string | null;
+  href?: string | null;
+}
+
+export interface CustomSiteFooterColumn {
+  _key: string;
+  title: string;
+  links?: CustomSiteNavLink[] | null;
+}
+
+export interface CustomSiteMobileBar {
+  text?: string | null;
+  ctaLabel?: string | null;
+  ctaHref?: string | null;
 }
 
 const CUSTOM_SITE_PROJECTION = `{
@@ -121,7 +148,11 @@ const CUSTOM_SITE_PROJECTION = `{
   robotsDisallow,
   redirects[]{ from, to },
   seo{ metaTitle, metaDescription, "ogImageUrl": ogImage.asset->url, noindex, canonicalOverride },
-  titleTemplate, areaServed, indexnowKey, footerDisclosure
+  titleTemplate, areaServed, indexnowKey, footerDisclosure,
+  headerCta{ label, href },
+  footerColumns[]{ _key, title, links[]{ label, href, children[]{ label, href } } },
+  footerAppLabel, footerLegal,
+  mobileBar{ text, ctaLabel, ctaHref }
 }`;
 
 const CUSTOM_SITE_BY_KEY_QUERY = `*[_type=="csSite" && siteKey==$siteKey][0]${CUSTOM_SITE_PROJECTION}`;
@@ -499,7 +530,10 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
   _type == "csIntroBlock" => {
     eyebrow, heading,
     body${CS_BODY_PROJECTION},
-    ctaLabel, ctaHref, layout, bodyDividers, topRule
+    ctaLabel, ctaHref, layout, bodyDividers, topRule, mediaBadge,
+    "mediaUrl": media.asset->url,
+    "mediaAlt": media.alt,
+    "mediaHotspot": media.hotspot{ x, y }
   },
   _type == "csPracticeGridBlock" => {
     eyebrow, heading, mode,
@@ -535,7 +569,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     heading, ctaLabel, ctaHref
   },
   _type == "csFaqBlock" => {
-    heading,
+    heading, layout, outroLead, outroLinkLabel, outroLinkHref, outroTail,
     items[]{ question, answer }
   },
   _type == "csStatRailBlock" => {
@@ -608,17 +642,35 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     "deviceAlt": device.alt,
     foldPreview{
       recordLabel, timecode, pastLine, currentLine, lensNote,
-      innerEyebrow, innerHeading, checklist, primaryLabel, secondaryLabel
+      innerEyebrow, innerHeading, checklist, primaryLabel, secondaryLabel, nextLine,
+      "viewfinderUrl": viewfinder.asset->url,
+      "viewfinderAlt": viewfinder.alt,
+      "viewfinderHotspot": viewfinder.hotspot{ x, y }
     },
     storeState, storeLabel, storeHref, qualifier, secondaryLabel, secondaryHref
   },
   _type == "csDeviceShowcaseBlock" => {
-    eyebrow, heading, body, side, band, caption, ctaLabel, ctaHref,
+    eyebrow, heading, body, side, band, caption, ctaLabel, ctaHref, visual,
     "screenUrl": screen.asset->url,
-    "screenAlt": screen.alt
+    "screenAlt": screen.alt,
+    takes[]{
+      _key, label, duration, flag,
+      "imageUrl": image.asset->url,
+      "imageAlt": image.alt,
+      "imageHotspot": image.hotspot{ x, y }
+    },
+    editor{
+      title, timecode, range, clipLabel, tracks, tools, doneLabel,
+      "imageUrl": image.asset->url,
+      "imageAlt": image.alt,
+      "imageHotspot": image.hotspot{ x, y }
+    }
   },
   _type == "csPrompterBandBlock" => {
-    eyebrow, pastLine, currentLine, nextLine, notes
+    eyebrow, pastLine, currentLine, nextLine, notes, imageCaption, lensLabel,
+    "imageUrl": image.asset->url,
+    "imageAlt": image.alt,
+    "imageHotspot": image.hotspot{ x, y }
   },
   _type == "csPlansBlock" => {
     eyebrow, heading, intro, footnote,
@@ -629,7 +681,8 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     items[]{ _key, label, value }
   },
   _type == "csAppCtaBlock" => {
-    heading, body, showMark, storeState, storeLabel, storeHref, qualifier, band
+    heading, body, showMark, storeState, storeLabel, storeHref, qualifier, band,
+    countdown{ eyebrow, digit, recLabel, timecode }
   },
   _type == "csContrastBlock" => {
     eyebrow, heading, leftLabel, rightLabel, footnote,
@@ -638,7 +691,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
 }`;
 
 export interface CsHeroBlock { _type: 'csHeroBlock'; _key: string; eyebrow?: string | null; heading: string; headingEmphasis?: string | null; subheading?: string | null; ctaLabel?: string | null; ctaHref?: string | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null; backgroundVideoUrl?: string | null; backgroundVideoMimeType?: string | null }
-export interface CsIntroBlock { _type: 'csIntroBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: CsPortableTextBlock[] | null; ctaLabel?: string | null; ctaHref?: string | null; layout?: 'split' | 'stacked' | null; bodyDividers?: boolean | null; topRule?: boolean | null }
+export interface CsIntroBlock { _type: 'csIntroBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: CsPortableTextBlock[] | null; ctaLabel?: string | null; ctaHref?: string | null; layout?: 'split' | 'stacked' | 'media' | null; bodyDividers?: boolean | null; topRule?: boolean | null; mediaUrl?: string | null; mediaAlt?: string | null; mediaHotspot?: CsImageHotspot | null; mediaBadge?: string | null }
 export interface CsPracticeGridBlock { _type: 'csPracticeGridBlock'; _key: string; eyebrow?: string | null; heading?: string | null; mode?: 'all' | 'selected' | null; areas?: CustomSitePracticeAreaCard[] | null }
 export interface CsAttorneyBlock { _type: 'csAttorneyBlock'; _key: string; showFullProfile?: boolean | null; attorney?: CustomSiteAttorney | null }
 export interface CsTestimonialItem {
@@ -658,7 +711,7 @@ export interface CsRichTextBlock { _type: 'csRichTextBlock'; _key: string; conte
 export interface CsContactChecklistItem { _key: string; heading: string; body?: string | null }
 export interface CsContactCtaBlock { _type: 'csContactCtaBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: string | null; showForm?: boolean | null; formVariant?: 'standard' | 'consultation' | null; formFootnote?: string | null; checklist?: CsContactChecklistItem[] | null }
 export interface CsCtaBannerBlock { _type: 'csCtaBannerBlock'; _key: string; heading?: string | null; ctaLabel?: string | null; ctaHref?: string | null }
-export interface CsFaqBlock { _type: 'csFaqBlock'; _key: string; heading?: string | null; items?: CsFaqItem[] | null }
+export interface CsFaqBlock { _type: 'csFaqBlock'; _key: string; heading?: string | null; items?: CsFaqItem[] | null; layout?: 'stacked' | 'split' | null; outroLead?: string | null; outroLinkLabel?: string | null; outroLinkHref?: string | null; outroTail?: string | null }
 
 export interface CsStatRailItem { _key: string; value: string; label: string; footnote?: string | null }
 export interface CsStatRailBlock { _type: 'csStatRailBlock'; _key: string; eyebrow?: string | null; inverse?: boolean | null; items?: CsStatRailItem[] | null }
@@ -706,9 +759,18 @@ export interface CsDisclosureBlock { _type: 'csDisclosureBlock'; _key: string; h
 
 /* --- the CueDuo set (site #3) ------------------------------------------- */
 
+/** Sanity image hotspot centre, 0 to 1 from the top-left of the image. Feed it to object-position as `${x*100}% ${y*100}%`. */
+export interface CsImageHotspot { x: number; y: number }
+
 /** Strings for the built-in two-pane device illustration. Only used when
  *  csAppHeroBlock has no uploaded device render. */
 export interface CsFoldPreview {
+  /** Camera variant: when set the preview renders a photo pane + prompter pane and the inner-pane fields are ignored. */
+  viewfinderUrl?: string | null;
+  viewfinderAlt?: string | null;
+  viewfinderHotspot?: CsImageHotspot | null;
+  /** Camera variant only: the line coming up under currentLine. */
+  nextLine?: string | null;
   recordLabel?: string | null;
   timecode?: string | null;
   pastLine?: string | null;
@@ -723,9 +785,12 @@ export interface CsFoldPreview {
 export type CsStoreState = 'soon' | 'live';
 export interface CsAppHeroBlock { _type: 'csAppHeroBlock'; _key: string; eyebrow?: string | null; heading: string; subheading?: string | null; deviceUrl?: string | null; deviceAlt?: string | null; deviceCaption?: string | null; foldPreview?: CsFoldPreview | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; secondaryLabel?: string | null; secondaryHref?: string | null }
 
-export interface CsDeviceShowcaseBlock { _type: 'csDeviceShowcaseBlock'; _key: string; eyebrow?: string | null; heading: string; body?: string | null; screenUrl?: string | null; screenAlt?: string | null; side?: 'left' | 'right' | null; band?: 'porcelain' | 'graphite' | null; caption?: string | null; ctaLabel?: string | null; ctaHref?: string | null }
+export interface CsDeviceShowcaseBlock { _type: 'csDeviceShowcaseBlock'; _key: string; eyebrow?: string | null; heading: string; body?: string | null; screenUrl?: string | null; screenAlt?: string | null; side?: 'left' | 'right' | null; band?: 'porcelain' | 'graphite' | null; caption?: string | null; ctaLabel?: string | null; ctaHref?: string | null; visual?: 'screen' | 'takes' | 'editor' | null; takes?: CsShowcaseTake[] | null; editor?: CsShowcaseEditor | null }
 
-export interface CsPrompterBandBlock { _type: 'csPrompterBandBlock'; _key: string; eyebrow?: string | null; pastLine?: string | null; currentLine: string; nextLine?: string | null; notes?: string[] | null }
+export interface CsShowcaseTake { _key: string; label: string; duration: string; flag?: string | null; imageUrl?: string | null; imageAlt?: string | null; imageHotspot?: CsImageHotspot | null }
+export interface CsShowcaseEditor { title?: string | null; timecode?: string | null; range?: string | null; clipLabel?: string | null; tracks?: string[] | null; tools?: string[] | null; doneLabel?: string | null; imageUrl?: string | null; imageAlt?: string | null; imageHotspot?: CsImageHotspot | null }
+
+export interface CsPrompterBandBlock { _type: 'csPrompterBandBlock'; _key: string; eyebrow?: string | null; pastLine?: string | null; currentLine: string; nextLine?: string | null; notes?: string[] | null; imageUrl?: string | null; imageAlt?: string | null; imageHotspot?: CsImageHotspot | null; imageCaption?: string | null; lensLabel?: string | null }
 
 export interface CsPlan { _key: string; name: string; price: string; period?: string | null; recommended?: boolean | null; features?: string[] | null; ctaLabel?: string | null; ctaHref?: string | null; note?: string | null }
 export interface CsPlansBlock { _type: 'csPlansBlock'; _key: string; eyebrow?: string | null; heading?: string | null; intro?: string | null; plans?: CsPlan[] | null; footnote?: string | null }
@@ -733,7 +798,9 @@ export interface CsPlansBlock { _type: 'csPlansBlock'; _key: string; eyebrow?: s
 export interface CsRequirementItem { _key: string; label: string; value: string }
 export interface CsRequirementsBlock { _type: 'csRequirementsBlock'; _key: string; heading?: string | null; items?: CsRequirementItem[] | null }
 
-export interface CsAppCtaBlock { _type: 'csAppCtaBlock'; _key: string; heading: string; body?: string | null; showMark?: boolean | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; band?: 'graphite' | 'porcelain' | null }
+export interface CsAppCtaBlock { _type: 'csAppCtaBlock'; _key: string; heading: string; body?: string | null; showMark?: boolean | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; band?: 'graphite' | 'porcelain' | 'prompter' | null; countdown?: CsCountdown | null }
+
+export interface CsCountdown { eyebrow?: string | null; digit?: string | null; recLabel?: string | null; timecode?: string | null }
 
 export interface CsContrastRow { _key: string; left: string; right: string }
 export interface CsContrastBlock { _type: 'csContrastBlock'; _key: string; eyebrow?: string | null; heading: string; leftLabel: string; rightLabel: string; rows?: CsContrastRow[] | null; footnote?: string | null }

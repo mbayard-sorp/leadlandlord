@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import type { CustomSite, CustomSiteNavLink } from '@/lib/customsites-sanity';
+import { StoreBadge } from './blocks/StoreBadge';
 
 interface Props {
   site: CustomSite;
@@ -38,7 +39,60 @@ function legalLinksFor(site: CustomSite): CustomSiteNavLink[] {
   );
 }
 
+/**
+ * Product-site footer: brand column, one column per authored `footerColumns`
+ * entry, and an app column. Only used when `footerColumns` is non-empty; the
+ * flat three-column footer below stays the fallback for every other site.
+ */
+function ColumnFooter({ site }: Props) {
+  const columns = site.footerColumns ?? [];
+  const mark = site.footerLogoUrl ?? site.logoUrl;
+  return (
+    <footer className="cs-footer cs-footer--columns">
+      <div className="cs-container cs-footer-cols">
+        <div className="cs-footer-brand">
+          <div className="cs-footer-brand-lockup">
+            {mark ? (
+              <span className="cs-footer-mark">
+                <Image src={mark} alt="" fill sizes="24px" style={{ objectFit: 'contain' }} />
+              </span>
+            ) : null}
+            <span className="cs-footer-brand-name">{site.name}</span>
+          </div>
+          {site.tagline ? <p className="cs-footer-tagline">{site.tagline}</p> : null}
+        </div>
+
+        {columns.map((col) => (
+          <nav key={col._key} className="cs-footer-col" aria-label={col.title}>
+            <span className="cs-footer-col-title">{col.title}</span>
+            {(col.links ?? []).map((link) => (
+              <a key={`${link.label}-${link.href}`} href={link.href ?? '#'}>
+                {link.label}
+              </a>
+            ))}
+          </nav>
+        ))}
+
+        <div className="cs-footer-col cs-footer-app">
+          {site.footerAppLabel ? <span className="cs-footer-col-title">{site.footerAppLabel}</span> : null}
+          {/* No store state lives on the site doc yet, so the footer always
+              shows the "soon" pill; flip it when a site-level state exists. */}
+          <StoreBadge state="soon" label="Coming to the App Store" placement="footer" />
+          {site.email ? <a href={`mailto:${site.email}`}>{site.email}</a> : null}
+        </div>
+      </div>
+
+      <div className="cs-container cs-footer-bar">
+        <span>&copy; {new Date().getFullYear()} {site.name}</span>
+        {site.footerLegal ? <span className="cs-footer-bar-legal">{site.footerLegal}</span> : null}
+      </div>
+    </footer>
+  );
+}
+
 export function SiteFooter({ site }: Props) {
+  if (site.footerColumns && site.footerColumns.length > 0) return <ColumnFooter site={site} />;
+
   // `navigation` is the header's own source and is what's actually correct
   // and current on the live site; `footerNav` is a separate editorial field
   // that can drift from it (stale "About Us" label, missing nav items). Prefer

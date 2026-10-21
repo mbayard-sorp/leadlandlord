@@ -79,7 +79,13 @@ export const csIntroBlock = defineType({
       name: 'layout',
       title: 'Layout',
       type: 'string',
-      options: { list: [{ title: 'Split (heading left, body right)', value: 'split' }, { title: 'Stacked (heading above full-width body)', value: 'stacked' }] },
+      options: {
+        list: [
+          { title: 'Split (heading left, body right)', value: 'split' },
+          { title: 'Stacked (heading above full-width body)', value: 'stacked' },
+          { title: 'Media (copy left, photo right)', value: 'media' },
+        ],
+      },
       initialValue: 'split',
     }),
     defineField({
@@ -93,11 +99,25 @@ export const csIntroBlock = defineType({
       name: 'topRule',
       title: 'Rule line above block',
       type: 'boolean',
-      description: 'Stacked layout only. Draws a hairline rule above the block, e.g. a closing note below a grid.',
+      description: 'Stacked and Media layouts only. Draws a hairline rule above the block, e.g. a closing note below a grid.',
       initialValue: false,
     }),
+    defineField({
+      name: 'media',
+      title: 'Media',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description: 'Media layout only. The photo set beside the copy.',
+    }),
+    defineField({
+      name: 'mediaBadge',
+      title: 'Media Badge',
+      type: 'string',
+      description: 'Media layout only. Short label pinned to the photo, e.g. "Eyes on the lens".',
+    }),
   ],
-  preview: { select: { title: 'heading' }, prepare: ({ title }) => ({ title: title ? `Intro — ${title}` : 'Intro' }) },
+  preview: { select: { title: 'heading', media: 'media' }, prepare: ({ title, media }) => ({ title: title ? `Intro — ${title}` : 'Intro', media }) },
 });
 
 export const csPracticeGridBlock = defineType({
@@ -326,6 +346,23 @@ export const csFaqBlock = defineType({
       description: 'Defaults to "Frequently Asked Questions" at render time when left empty.',
     }),
     defineField({ name: 'items', title: 'Items', type: 'array', of: [{ type: 'csFaqItem' }] }),
+    defineField({
+      name: 'layout',
+      title: 'Layout',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Stacked (heading above the questions)', value: 'stacked' },
+          { title: 'Split (heading left, questions right)', value: 'split' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'stacked',
+    }),
+    defineField({ name: 'outroLead', title: 'Outro: Lead', type: 'string', description: 'Optional closing line under the questions, built from four fields. The opening words, e.g. "Still stuck?"' }),
+    defineField({ name: 'outroLinkLabel', title: 'Outro: Link Label', type: 'string', description: 'The linked middle of the closing line, e.g. "Write to us".' }),
+    defineField({ name: 'outroLinkHref', title: 'Outro: Link Href', type: 'string', description: 'Where the link goes. A path, an anchor or a mailto: address.' }),
+    defineField({ name: 'outroTail', title: 'Outro: Tail', type: 'string', description: 'The text after the link, e.g. "and a person answers."' }),
   ],
   preview: {
     select: { title: 'heading' },
@@ -1075,6 +1112,37 @@ export const csDeviceShowcaseBlock = defineType({
     defineField({ name: 'caption', title: 'Caption', type: 'string' }),
     defineField({ name: 'ctaLabel', title: 'Link Label', type: 'string' }),
     defineField({ name: 'ctaHref', title: 'Link Href', type: 'string' }),
+    defineField({
+      name: 'visual',
+      title: 'Visual',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Screen (uploaded app frame)', value: 'screen' },
+          { title: 'Takes (library grid mock)', value: 'takes' },
+          { title: 'Editor (editor mock)', value: 'editor' },
+        ],
+        layout: 'radio',
+      },
+      initialValue: 'screen',
+      description: 'What sits opposite the copy. "Screen" uses the Screen image above; "Takes" and "Editor" draw a mock of the app from the fields below.',
+    }),
+    defineField({
+      name: 'takes',
+      title: 'Takes',
+      type: 'array',
+      of: [{ type: 'csShowcaseTake' }],
+      hidden: ({ parent }) => (parent as { visual?: string } | undefined)?.visual !== 'takes',
+      description: 'The library grid cards, in order. Up to eight. Used when Visual is "Takes".',
+      validation: (r) => r.max(8),
+    }),
+    defineField({
+      name: 'editor',
+      title: 'Editor',
+      type: 'csShowcaseEditor',
+      hidden: ({ parent }) => (parent as { visual?: string } | undefined)?.visual !== 'editor',
+      description: 'Strings and frame for the editor mock. Used when Visual is "Editor".',
+    }),
   ],
   preview: {
     select: { title: 'heading', subtitle: 'eyebrow', media: 'screen' },
@@ -1119,10 +1187,20 @@ export const csPrompterBandBlock = defineType({
       description: 'Up to three short explanations under the script.',
       validation: (r) => r.max(3),
     }),
+    defineField({
+      name: 'image',
+      title: 'Image',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description: 'Optional photo set beside the script, e.g. someone reading the outer screen. Without it the script spans the band.',
+    }),
+    defineField({ name: 'imageCaption', title: 'Image Caption', type: 'string', description: 'Short line over the foot of the photo.' }),
+    defineField({ name: 'lensLabel', title: 'Lens Label', type: 'string', initialValue: 'Lens', description: 'Label on the lens marker above the script.' }),
   ],
   preview: {
-    select: { title: 'currentLine' },
-    prepare: ({ title }) => ({ title: 'Prompter Band', subtitle: title }),
+    select: { title: 'currentLine', media: 'image' },
+    prepare: ({ title, media }) => ({ title: 'Prompter Band', subtitle: title, media }),
   },
 });
 
@@ -1264,8 +1342,20 @@ export const csAppCtaBlock = defineType({
       name: 'band',
       title: 'Band',
       type: 'string',
-      options: { list: [{ title: 'Graphite (dark)', value: 'graphite' }, { title: 'Porcelain (light)', value: 'porcelain' }] },
+      options: {
+        list: [
+          { title: 'Graphite (dark)', value: 'graphite' },
+          { title: 'Porcelain (light)', value: 'porcelain' },
+          { title: 'Prompter (near-black, #050505)', value: 'prompter' },
+        ],
+      },
       initialValue: 'graphite',
+    }),
+    defineField({
+      name: 'countdown',
+      title: 'Countdown',
+      type: 'csCountdown',
+      description: 'Optional record-countdown mock set above the heading.',
     }),
   ],
   preview: {

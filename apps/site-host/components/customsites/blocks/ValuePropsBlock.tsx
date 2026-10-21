@@ -20,9 +20,15 @@ export function ValuePropsBlock({ block }: Props) {
   if (items.length === 0) return null;
 
   const bg = block.backgroundImageUrl;
+  // The CueDuo nav links to #features. Only a block that uses the CueDuo
+  // glyphs claims the anchor, so sites #1 and #2 keep an id-free section.
+  const anchor = items.some((item) => item.icon?.startsWith('cueduo/')) ? 'features' : undefined;
 
   return (
-    <section className={`cs-section${bg ? ' cs-section--navy cs-valueprops-section--image' : ''}`}>
+    <section
+      className={`cs-section${bg ? ' cs-section--navy cs-valueprops-section--image' : ''}`}
+      id={anchor}
+    >
       {bg ? (
         <div className="cs-valueprops-bg">
           <Image
@@ -36,10 +42,13 @@ export function ValuePropsBlock({ block }: Props) {
       ) : null}
       <div className="cs-container" style={bg ? { position: 'relative', zIndex: 1 } : undefined}>
         {block.eyebrow ? (
-          <span className={`cs-eyebrow${bg ? ' cs-eyebrow--inverse' : ''}`}>{block.eyebrow}</span>
+          <span className={`cs-eyebrow${bg ? ' cs-eyebrow--inverse' : ''}${anchor ? ' cs-eyebrow--ruled' : ''}`}>
+            {anchor ? <span className="cs-rule" aria-hidden="true" /> : null}
+            {block.eyebrow}
+          </span>
         ) : null}
         {block.heading ? <h2>{block.heading}</h2> : null}
-        <div className="cs-valueprops" style={{ marginTop: 'var(--cs-space-5)' }}>
+        <div className="cs-valueprops" style={anchor ? undefined : { marginTop: 'var(--cs-space-5)' }}>
           {items.map((item) => (
             <div key={item._key} className="cs-valueprop">
               <ValuePropIcon name={item.icon} className="cs-valueprop-icon" />
