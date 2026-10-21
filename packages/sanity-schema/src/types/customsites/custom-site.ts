@@ -60,6 +60,63 @@ export const csSite = defineType({
     defineField({ name: 'navigation', title: 'Navigation', type: 'array', of: [{ type: 'csNavLink' }], group: 'content' }),
     defineField({ name: 'footerNav', title: 'Footer Navigation', type: 'array', of: [{ type: 'csNavLink' }], group: 'content' }),
     defineField({
+      name: 'headerCta',
+      title: 'Header CTA',
+      type: 'object',
+      group: 'content',
+      description: 'Optional button at the right of the header, e.g. "Get CueDuo". Independent of the phone button.',
+      fields: [
+        defineField({ name: 'label', title: 'Label', type: 'string' }),
+        defineField({ name: 'href', title: 'Href', type: 'string' }),
+      ],
+    }),
+    defineField({
+      name: 'footerColumns',
+      title: 'Footer Columns',
+      type: 'array',
+      group: 'content',
+      description: 'Optional titled link columns, e.g. "Product" and "Help". When set they replace the flat Footer Navigation links; leave empty to keep the flat list.',
+      of: [
+        {
+          type: 'object',
+          name: 'csFooterColumn',
+          title: 'Footer Column',
+          fields: [
+            defineField({ name: 'title', title: 'Title', type: 'string', validation: (r) => r.required() }),
+            defineField({ name: 'links', title: 'Links', type: 'array', of: [{ type: 'csNavLink' }] }),
+          ],
+          preview: { select: { title: 'title' } },
+        },
+      ],
+      validation: (r) => r.max(4),
+    }),
+    defineField({
+      name: 'footerAppLabel',
+      title: 'Footer App Label',
+      type: 'string',
+      group: 'content',
+      description: 'Heading of the footer app-download column, e.g. "Get the app".',
+    }),
+    defineField({
+      name: 'footerLegal',
+      title: 'Footer Legal Note',
+      type: 'string',
+      group: 'content',
+      description: 'One line in the footer legal row, e.g. trademark attributions. Distinct from Footer Disclosure, which sits above that row.',
+    }),
+    defineField({
+      name: 'mobileBar',
+      title: 'Mobile Bar',
+      type: 'object',
+      group: 'content',
+      description: 'Optional sticky bar at the foot of the screen on mobile: a short line and one button. Used when there is no phone number to put in the call bar.',
+      fields: [
+        defineField({ name: 'text', title: 'Text', type: 'string' }),
+        defineField({ name: 'ctaLabel', title: 'Button Label', type: 'string' }),
+        defineField({ name: 'ctaHref', title: 'Button Href', type: 'string' }),
+      ],
+    }),
+    defineField({
       name: 'leadRecipients',
       title: 'Lead Recipients',
       type: 'array',

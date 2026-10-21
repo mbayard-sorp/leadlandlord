@@ -4,6 +4,10 @@ import { NavLink, MobileDrawer } from './NavClient';
 
 interface Props {
   site: CustomSite;
+  /** Render the site name beside an uploaded logo (a mark rather than a
+   * self-contained lockup). Off by default so sites whose logo already carries
+   * the name render exactly as before. */
+  showWordmark?: boolean;
 }
 
 /** Structural default used only until `csSite.navigation` is authored in
@@ -18,14 +22,21 @@ const DEFAULT_NAV: CustomSiteNavLink[] = [
   { label: 'Contact', href: '/contact' },
 ];
 
-export function SiteHeader({ site }: Props) {
+export function SiteHeader({ site, showWordmark = false }: Props) {
   const links = site.navigation && site.navigation.length > 0 ? site.navigation : DEFAULT_NAV;
 
   return (
     <header className="cs-header">
       <div className="cs-container cs-header-inner">
         <a href="/" className="cs-brand">
-          {site.logoUrl ? (
+          {site.logoUrl && showWordmark ? (
+            <>
+              <span className="cs-header-mark">
+                <Image src={site.logoUrl} alt="" fill sizes="26px" priority style={{ objectFit: 'contain' }} />
+              </span>
+              <span className="cs-brand-name">{site.name}</span>
+            </>
+          ) : site.logoUrl ? (
             <span className="cs-header-logo">
               <Image src={site.logoUrl} alt={site.name} fill sizes="200px" priority style={{ objectFit: 'contain', objectPosition: 'left center' }} />
             </span>
@@ -64,6 +75,12 @@ export function SiteHeader({ site }: Props) {
             })}
           </ul>
         </nav>
+
+        {site.headerCta?.label && site.headerCta.href ? (
+          <a href={site.headerCta.href} className="cs-header-cta">
+            {site.headerCta.label}
+          </a>
+        ) : null}
 
         {site.phone ? (
           <a href={`tel:${site.phone}`} className="cs-btn cs-btn-primary cs-header-phone" aria-label={`Call ${site.phone}`}>

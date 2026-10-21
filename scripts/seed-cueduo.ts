@@ -3,7 +3,7 @@
  * Seed CueDuo (Custom Sites site #3, siteKey `cueduo`) into Sanity.
  *
  * Every string here comes from the approved design in Claude Design
- * (`CueDuo Web - Home v2.dc.html`) and the CueDuo brand guide v1.1. Nothing is
+ * (`CueDuo Web - Home v3.dc.html`) and the CueDuo brand guide v1.1. Nothing is
  * paraphrased and nothing is invented: the brand's register has no hype
  * setting, and the guide already supplies the positioning paragraph, the four
  * feature titles and bodies, and the App Store headlines.
@@ -15,11 +15,12 @@
  * createOrReplace transaction chunks (idempotent re-runs).
  *
  * Content decisions:
- *  - No images are seeded. The half-open device render does not exist yet and
- *    the app screens have to be exported from the prototype at 2x; until then
- *    csAppHeroBlock falls back to its built-in fold preview and the two
- *    showcases render copy at full width. A placeholder tile would imply a
- *    screenshot exists.
+ *  - Images come from scripts/assets/cueduo/ and are uploaded through the
+ *    Sanity assets API (content-hash deduped, so re-runs reuse the same asset).
+ *    --dry-run skips the upload and writes placeholder asset refs so the JSON
+ *    shows the field shapes. The real half-open device render and the app
+ *    screens do not exist yet; the viewfinder photo stands in for the Take 3
+ *    thumbnail and the editor frame.
  *  - Prices are the design's placeholders and are marked as such in the
  *    block's own footnote, on the page, where a reader sees it.
  *  - No testimonials, badges, stat rail or publications: there are no real
@@ -37,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { createReadStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -127,6 +129,52 @@ function ptBlock(text: string, style = 'normal'): PTBlock {
 }
 
 // ---------------------------------------------------------------------------
+// Images. Uploaded once per run (Sanity dedupes by content hash); dry runs
+// skip the network and use placeholder refs so the output shows the shape.
+// ---------------------------------------------------------------------------
+
+const ASSET_DIR = resolve(__dirname, 'assets', 'cueduo');
+
+const IMAGE_FILES = {
+  viewfinder: 'presenter-viewfinder.jpg',
+  tripod: 'presenter-tripod.jpg',
+  duo: 'presenter-duo-halfopen.jpg',
+  mark: 'cueduo-mark.svg',
+} as const;
+type ImageKey = keyof typeof IMAGE_FILES;
+type AssetIds = Record<ImageKey, string>;
+
+type WriteClient = ReturnType<typeof createWriteClient>;
+
+async function uploadImages(client: WriteClient | null): Promise<AssetIds> {
+  const ids = {} as AssetIds;
+  for (const key of Object.keys(IMAGE_FILES) as ImageKey[]) {
+    const filename = IMAGE_FILES[key];
+    const path = join(ASSET_DIR, filename);
+    if (!existsSync(path)) throw new Error(`Missing asset ${path}`);
+    if (!client) {
+      ids[key] = `image-dry-run-${key}`;
+      continue;
+    }
+    const asset = await client.assets.upload('image', createReadStream(path), { filename });
+    ids[key] = asset._id;
+  }
+  return ids;
+}
+
+/** Hotspot centred on the upper third, where the presenter's face sits. */
+const FACE_HOTSPOT = { _type: 'sanity.imageHotspot', x: 0.5, y: 0.3, width: 0.8, height: 0.5 };
+
+function imageValue(assetId: string, alt?: string, hotspot?: typeof FACE_HOTSPOT) {
+  return {
+    _type: 'image' as const,
+    asset: { _type: 'reference' as const, _ref: assetId },
+    ...(alt ? { alt } : {}),
+    ...(hotspot ? { hotspot } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Journey stages — "How a take happens". Section-only: the registry has
 // journeyPages: false for this site, so JourneyBlock renders them unlinked.
 // ---------------------------------------------------------------------------
@@ -199,7 +247,20 @@ const FEATURES = [
 // the page reorders: nothing here depends on its neighbours.
 // ---------------------------------------------------------------------------
 
-function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _key: string }>) {
+/** The library mock. The design's photo card shows only its flag and duration;
+ *  Studio requires a label, so it is "Take 3" to match the thumbnail alt. */
+const LIBRARY_TAKES = [
+  { label: 'Take 01', duration: '01:14' },
+  { label: 'Take 02', duration: '00:58' },
+  { label: 'Take 3', duration: '01:08', flag: 'Latest', photo: true },
+  { label: 'Intro', duration: '00:21' },
+  { label: 'Pitch', duration: '02:40' },
+  { label: 'Thanks', duration: '00:36' },
+  { label: 'Q&A', duration: '04:12' },
+  { label: 'Welcome', duration: '00:48' },
+] as const;
+
+function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _key: string }>, assets: AssetIds) {
   return [
     {
       _type: 'csAppHeroBlock',
@@ -211,15 +272,17 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       foldPreview: {
         _type: 'csFoldPreview',
         recordLabel: 'REC',
-        timecode: '00:42',
-        pastLine: 'Three bedrooms, two baths, and the light you only get on this side of the harbor.',
-        currentLine: 'Come in through the side door with me.',
-        lensNote: '48MP · look here',
-        innerEyebrow: 'Preflight',
-        innerHeading: 'Turn the phone around',
-        checklist: ['Framing looks good', 'Mic is picking you up', 'Script ready · 240 words'],
-        primaryLabel: 'I’m ready',
-        secondaryLabel: 'Not yet',
+        timecode: '00:12',
+        // Camera variant: the viewfinder photo makes the preview ignore the
+        // inner-pane (preflight) fields, so none are seeded.
+        viewfinder: imageValue(
+          assets.viewfinder,
+          'Presenter in the viewfinder, looking into the lens',
+          FACE_HOTSPOT,
+        ),
+        pastLine: 'Thanks for joining.',
+        currentLine: 'Today I want to show you something we’ve been quietly building for a year.',
+        nextLine: 'It starts with a question. Why do we all hate talking to a camera?',
       },
       storeState: 'soon',
       storeLabel: 'Coming to the App Store',
@@ -230,8 +293,13 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
     {
       _type: 'csIntroBlock',
       _key: k('blk'),
-      layout: 'split',
+      layout: 'media',
       topRule: true,
+      media: imageValue(
+        assets.tripod,
+        'Presenter talking to a phone on a tripod with a ring light, eyes on the lens',
+      ),
+      mediaBadge: 'Eyes on the lens',
       heading: 'The words go beside the lens, not under it.',
       body: [
         ptBlock(
@@ -246,9 +314,15 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       _type: 'csPrompterBandBlock',
       _key: k('blk'),
       eyebrow: 'This is what you read from',
-      pastLine: 'Hi, I’m Dana with Harbor Realty, and this is 14 Harbor Point.',
-      currentLine: 'Three bedrooms, two baths, and the light you only get on this side of the harbor.',
-      nextLine: 'Come in through the side door with me.',
+      pastLine: 'Hi, I’m Maya. For the last year I’ve been building something for people who hate talking to camera.',
+      currentLine: 'It lets you read your script while looking straight at the person watching.',
+      nextLine: 'No glance down.',
+      image: imageValue(
+        assets.duo,
+        'Presenter holding a half-open folding phone, reading the outer screen beside the lens',
+      ),
+      imageCaption: 'Half-open, outer screen toward you. The camera sits right beside the words.',
+      lensLabel: 'Lens',
       notes: [
         'White Semibold on near-black. The line you’re on at full strength, the ones around it at 35 per cent.',
         'Scrolling follows your voice, so a pause is just a pause.',
@@ -294,10 +368,19 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       _type: 'csDeviceShowcaseBlock',
       _key: k('blk'),
       eyebrow: 'Library',
-      heading: 'Every take you’ve ever made is still here',
+      heading: 'Every take, kept.',
       body: 'Scripts keep their takes. Come back a week later, read the same lines again, and compare the two side by side before you send one.',
       side: 'right',
       band: 'porcelain',
+      visual: 'takes',
+      takes: LIBRARY_TAKES.map((take, i) => ({
+        _type: 'csShowcaseTake',
+        _key: `take-${i + 1}`,
+        label: take.label,
+        duration: take.duration,
+        ...('flag' in take ? { flag: take.flag } : {}),
+        ...('photo' in take ? { image: imageValue(assets.viewfinder, 'Take 3 thumbnail', FACE_HOTSPOT) } : {}),
+      })),
       ctaLabel: 'Look inside the library',
       ctaHref: '/features/library',
     },
@@ -307,8 +390,20 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       eyebrow: 'Editing',
       heading: 'Cut it before you put the phone down',
       body: 'Trim the top and tail, drop a title card in front, add a photo of the thing you’re talking about. Transitions belong to the clip they lead out of, so reordering never breaks them.',
-      side: 'left',
+      side: 'right',
       band: 'graphite',
+      visual: 'editor',
+      editor: {
+        _type: 'csShowcaseEditor',
+        title: 'Edit take',
+        timecode: '00:42',
+        image: imageValue(assets.viewfinder, 'Take 3 preview', FACE_HOTSPOT),
+        range: '00:14 → 00:52',
+        clipLabel: 'Take 3',
+        tracks: ['Title', 'Photo'],
+        tools: ['Trim', 'Title', 'Photo', 'Transition'],
+        doneLabel: 'Done',
+      },
       ctaLabel: 'See what the editor can do',
       ctaHref: '/features/editing',
     },
@@ -392,6 +487,11 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       _type: 'csFaqBlock',
       _key: k('blk'),
       heading: 'Questions people ask first',
+      layout: 'split',
+      outroLead: 'Still stuck?',
+      outroLinkLabel: 'Write to us',
+      outroLinkHref: 'mailto:hello@cueduo.com',
+      outroTail: 'and a person answers.',
       items: [
         {
           _type: 'csFaqItem',
@@ -428,10 +528,11 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       heading: 'Say it once, and get on with your day.',
       body: 'Unfold the phone, read at the lens, trim it, send it.',
       showMark: true,
+      countdown: { _type: 'csCountdown', eyebrow: 'Take 03', digit: '1', recLabel: 'REC', timecode: '00:00' },
       storeState: 'soon',
       storeLabel: 'Coming to the App Store',
       qualifier: QUALIFIER,
-      band: 'graphite',
+      band: 'prompter',
     },
   ];
 }
@@ -469,6 +570,8 @@ async function main() {
     body: feature.body.map((p) => ptBlock(p)),
   }));
 
+  const assets = await uploadImages(client);
+
   const site = {
     _id: SITE_ID,
     _type: 'csSite',
@@ -479,6 +582,8 @@ async function main() {
     // No phone: this is a product, not a phone-first service business. The
     // header phone slot and the sticky call bar stay unmounted.
     email: 'hello@cueduo.com',
+    logo: imageValue(assets.mark),
+    favicon: imageValue(assets.mark),
     navigation: [
       { _type: 'csNavLink', _key: k('nav'), label: 'Features', href: '/features' },
       { _type: 'csNavLink', _key: k('nav'), label: 'How it works', href: '/#how-it-works' },
@@ -493,6 +598,34 @@ async function main() {
       { _type: 'csNavLink', _key: k('nav'), label: 'Privacy', href: '/privacy' },
       { _type: 'csNavLink', _key: k('nav'), label: 'Terms', href: '/terms' },
     ],
+    // Chrome for the v3 design. footerColumns supersede the flat footerNav
+    // above, which stays seeded as the fallback.
+    headerCta: { _type: 'headerCta', label: 'Get CueDuo', href: '/#get' },
+    footerColumns: [
+      {
+        _type: 'csFooterColumn',
+        _key: 'footer-product',
+        title: 'Product',
+        links: [
+          { _type: 'csNavLink', _key: 'fp-features', label: 'Features', href: '/features' },
+          { _type: 'csNavLink', _key: 'fp-pricing', label: 'Pricing', href: '/pricing' },
+          { _type: 'csNavLink', _key: 'fp-updates', label: 'Updates', href: '/updates' },
+        ],
+      },
+      {
+        _type: 'csFooterColumn',
+        _key: 'footer-help',
+        title: 'Help',
+        links: [
+          { _type: 'csNavLink', _key: 'fh-support', label: 'Support', href: '/support' },
+          { _type: 'csNavLink', _key: 'fh-privacy', label: 'Privacy', href: '/privacy' },
+          { _type: 'csNavLink', _key: 'fh-terms', label: 'Terms', href: '/terms' },
+        ],
+      },
+    ],
+    footerAppLabel: 'Get the app',
+    footerLegal: 'Apple and the App Store are trademarks of Apple Inc. Device renders are illustrative.',
+    mobileBar: { _type: 'mobileBar', text: 'Look up. Say it once.', ctaLabel: 'Get CueDuo', ctaHref: '/#get' },
     // ⚠ Confirm with the client before go-live.
     leadRecipients: ['hello@cueduo.com'],
     // Not LegalService/FinancialService: this site describes an app. The
@@ -515,7 +648,7 @@ async function main() {
       site: siteRef,
       title: 'Home',
       slug: { _type: 'slug', current: 'home' },
-      pageBuilder: homePageBuilder(stageRefs),
+      pageBuilder: homePageBuilder(stageRefs, assets),
       seo: {
         _type: 'csSeo',
         metaTitle: 'CueDuo | Look up. Say it once.',
@@ -811,7 +944,8 @@ async function main() {
 
   console.log(`\nDone. ${chunks.flat().length} documents seeded to "${dataset}".`);
   console.log('Reminders:');
-  console.log('  - No images seeded: the half-open device render and the app screens do not exist yet.');
+  console.log('  - Presenter photos and the logo mark were uploaded from scripts/assets/cueduo/. The Take 3 thumbnail and');
+  console.log('    editor frame reuse the viewfinder photo until real app frames are exported.');
   console.log('  - Prices are the design placeholders; the block footnote says so on the page.');
   console.log('  - storeState is "soon" everywhere. Flip to "live" once the App Store URL exists,');
   console.log('    and drop Apple’s badge at apps/site-host/public/cueduo/app-store-badge.svg first.');

@@ -79,8 +79,8 @@
   --cs-space-6: 72px;
 
   /* --- layout ------------------------------------------------- */
-  --cs-container-max: 1200px;
-  --cs-container-pad: 24px;
+  --cs-container-max: 1320px;      /* Home v3 design: 1320 wide, 40 gutters */
+  --cs-container-pad: 40px;
   --cs-section-pad: clamp(56px, 7vw, 88px);
   --cs-measure: 68ch;
 
@@ -88,31 +88,35 @@
   --cs-font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', var(--font-inter), system-ui, sans-serif;
   --cs-font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', var(--font-inter), system-ui, sans-serif;
   --cs-fs-display: clamp(40px, 6vw, 60px);   /* guide 60 / -3%   */
-  --cs-fs-title: clamp(28px, 3.4vw, 40px);   /* guide 40 / -2.5% */
+  --cs-fs-title: clamp(28px, 3.2vw, 42px);   /* Home v3 section title */
   --cs-fs-heading: clamp(22px, 2.4vw, 24px); /* guide 24 / -2%   */
   --cs-fs-lead: clamp(18px, 2vw, 20px);
   --cs-fs-body: 17px;                        /* guide 17 / 0     */
   --cs-fs-small: 15px;
-  --cs-fs-eyebrow: 13px;                     /* guide 13 / +6%   */
+  --cs-fs-eyebrow: 11px;                     /* Home v3: 11 / +14% */
   --cs-lh-tight: 1.02;
-  --cs-lh-title: 1.1;
+  --cs-lh-title: 1.08;
   --cs-lh-body: 1.5;
   --cs-lh-prompter: 1.3;
   --cs-track-display: -.03em;
-  --cs-track-title: -.025em;
+  --cs-track-title: -.032em;
   --cs-track-heading: -.02em;
-  --cs-track-eyebrow: .06em;
+  --cs-track-eyebrow: .14em;
 
   /* --- elevation + materials ---------------------------------- */
   --cs-shadow-card: 0 10px 30px rgba(20, 23, 28, .10);
   --cs-shadow-glass: 0 18px 50px rgba(20, 23, 28, .14), 0 2px 6px rgba(20, 23, 28, .06);
   --cs-shadow-device: 0 44px 90px -36px rgba(20, 23, 28, .42);
+  --cs-shadow-device-dark: 0 44px 100px -40px rgba(0, 0, 0, .9);
+  --cs-shadow-chassis: 0 60px 120px -40px rgba(20, 23, 28, .5), inset 0 2px 0 rgba(255, 255, 255, .14);
+  --cs-shadow-plan: 0 24px 60px -32px rgba(20, 23, 28, .3);
+  --cs-ease-out: cubic-bezier(.2, .7, .3, 1);
   --cs-glass: rgba(255, 255, 255, .58);
   --cs-glass-border: rgba(255, 255, 255, .8);
   --cs-glass-hi: rgba(255, 255, 255, .95);
   --cs-glass-lo: rgba(20, 23, 28, .06);
-  --cs-amb-1: rgba(46, 91, 255, .14);
-  --cs-amb-2: rgba(120, 150, 190, .14);
+  --cs-amb-1: rgba(46, 91, 255, .10);
+  --cs-amb-2: rgba(120, 150, 190, .11);
 
   background: var(--cs-paper);
   color: var(--cs-ink);
@@ -132,9 +136,15 @@
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(48% 28% at 6% 2%, var(--cs-amb-1), transparent 70%),
-    radial-gradient(42% 26% at 98% 64%, var(--cs-amb-2), transparent 70%);
+    radial-gradient(44% 26% at 4% -2%, var(--cs-amb-1), transparent 72%),
+    radial-gradient(38% 24% at 100% 58%, var(--cs-amb-2), transparent 72%);
 }
+
+/* Plain links ease to the accent text colour. :where() keeps this at
+   (0,2,0) so any component rule that sets its own colour, later in the file
+   or more specific (buttons, inverse bands), still wins on hover. */
+.cs-cueduo a { transition: color .35s ease, opacity .35s ease; }
+.cs-cueduo :where(a):hover { color: var(--cs-accent-ink); }
 
 /* ---------- primitives ---------------------------------------- */
 .cs-cueduo .cs-container { max-width: var(--cs-container-max); margin: 0 auto; padding: 0 var(--cs-container-pad); }
@@ -161,6 +171,7 @@
 .cs-cueduo .cs-eyebrow--quiet { color: var(--cs-hairline-text); }
 .cs-cueduo .cs-eyebrow--ruled { display: flex; align-items: center; gap: 14px; margin: 0 0 var(--cs-space-4); }
 .cs-cueduo .cs-rule { width: 28px; height: 1px; background: currentColor; flex: none; }
+.cs-cueduo .cs-prompter-band .cs-rule { background: var(--cs-accent-inverse); }
 
 .cs-cueduo .cs-card { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: 26px; box-shadow: var(--cs-shadow-card); }
 .cs-cueduo .cs-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
@@ -185,16 +196,19 @@
 .cs-cueduo .cs-section--navy .cs-underline-link { color: var(--cs-inverse-text); border-bottom-color: rgba(255, 255, 255, .22); }
 .cs-cueduo .cs-section--navy .cs-underline-link--accent { color: var(--cs-accent-inverse); border-bottom-color: rgba(91, 130, 255, .3); }
 
-.cs-cueduo .cs-footnote { font-size: 13px; color: var(--cs-hairline-text); margin: var(--cs-space-3) 0 0; max-width: var(--cs-measure); }
+.cs-cueduo .cs-footnote { font-size: 12px; color: var(--cs-hairline-text); margin: 24px 0 0; max-width: var(--cs-measure); }
 
 /* A heading on the left, a supporting paragraph aligned to its baseline on
    the right. Used by plans, the journey and the contrast block. */
-.cs-cueduo .cs-section-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: clamp(24px, 5vw, 64px); align-items: end; margin-bottom: var(--cs-space-5); }
-.cs-cueduo .cs-section-head-aside { color: var(--cs-muted); max-width: 42ch; margin: 0; }
+.cs-cueduo .cs-section-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(32px, 5vw, 80px); align-items: end; margin-bottom: clamp(36px, 5vw, 56px); }
+.cs-cueduo .cs-section-head .cs-eyebrow { display: block; margin: 0 0 20px; }
+.cs-cueduo .cs-section-head h2 { max-width: 14ch; text-wrap: balance; }
+.cs-cueduo .cs-section-head-aside { color: var(--cs-muted); line-height: 1.65; max-width: 42ch; margin: 0; }
 
 .cs-cueduo :focus-visible { outline: 2px solid var(--cs-accent-ink); outline-offset: 3px; border-radius: 6px; }
 .cs-cueduo .cs-section--navy :focus-visible, .cs-cueduo .cs-prompter-band :focus-visible { outline-color: var(--cs-accent-inverse); }
-.cs-cueduo .cs-skip-link { position: absolute; left: 16px; top: -64px; z-index: 90; padding: 12px 18px; border-radius: var(--cs-radius-control); background: var(--cs-ink); color: var(--cs-white); font-weight: 600; }
+.cs-cueduo .cs-skip-link { position: absolute; left: 24px; top: -72px; z-index: 90; padding: 12px 18px; border-radius: var(--cs-radius-control); background: var(--cs-ink); color: var(--cs-white); font-weight: 600; font-size: 15px; }
+.cs-cueduo .cs-skip-link:hover { color: var(--cs-white); }
 .cs-cueduo .cs-skip-link:focus { top: 12px; }
 
 /* ---------- shared chrome ------------------------------------- */
@@ -211,12 +225,14 @@
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .cs-cueduo .cs-header { background: #F5F6F8; }   /* opaque fallback */
 }
-.cs-cueduo .cs-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: 14px var(--cs-container-pad); display: flex; align-items: center; gap: var(--cs-space-4); }
+.cs-cueduo .cs-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: 18px var(--cs-container-pad); display: flex; align-items: center; gap: 40px; }
 /* SiteHeader renders an uploaded logo with next/image `fill`, which needs a
    positioned box with real dimensions or it collapses to zero height. Sized
    for the brand guide's 5:1 lockup, above its 96px minimum width. */
 .cs-cueduo .cs-header-logo { position: relative; display: block; width: 140px; height: 28px; }
-.cs-cueduo .cs-brand { display: flex; align-items: center; gap: 10px; color: var(--cs-ink); }
+.cs-cueduo .cs-brand { display: flex; align-items: center; gap: 11px; color: var(--cs-ink); }
+/* Two-pane mark beside the wordmark (SiteHeader showWordmark). */
+.cs-cueduo .cs-header-mark { position: relative; display: block; flex: none; width: 26px; height: 26px; }
 .cs-cueduo .cs-brand-name { font-family: var(--cs-font-display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
 .cs-cueduo .cs-brand-sub { display: none; }              /* no strapline in the header lockup */
 /* The header phone slot is SUPPRESSED for CueDuo (no phone number exists).
@@ -228,9 +244,13 @@
 .cs-cueduo .cs-header-phone-text { font-weight: 600; font-size: 14px; color: var(--cs-accent-ink); }
 
 .cs-cueduo .cs-nav { margin-left: auto; }
-.cs-cueduo .cs-nav-links { display: flex; align-items: center; gap: 4px; list-style: none; margin: 0; padding: 0; }
-.cs-cueduo .cs-nav-link { padding: 8px 12px; border-radius: var(--cs-radius-control); font-size: 14px; font-weight: 500; color: var(--cs-muted); letter-spacing: -.005em; }
-.cs-cueduo .cs-nav-link:hover, .cs-cueduo .cs-nav-link[aria-current="page"] { color: var(--cs-ink); background: var(--cs-glass-hi); }
+.cs-cueduo .cs-nav-links { display: flex; align-items: center; gap: 32px; list-style: none; margin: 0; padding: 0; }
+.cs-cueduo .cs-nav-link { font-size: 14px; font-weight: 500; color: var(--cs-muted); letter-spacing: -.005em; }
+.cs-cueduo .cs-nav-link:hover { color: var(--cs-accent-ink); }
+.cs-cueduo .cs-nav-link[aria-current="page"] { color: var(--cs-ink); }
+/* Header button (csSite.headerCta): outline pill after the nav. */
+.cs-cueduo .cs-header-cta { flex: none; padding: 10px 20px; border-radius: var(--cs-radius-control); border: 1px solid rgba(20, 23, 28, .14); font-size: 14px; font-weight: 600; letter-spacing: -.005em; color: var(--cs-ink); }
+.cs-cueduo .cs-header-cta:hover { color: var(--cs-accent-ink); }
 .cs-cueduo .cs-nav-caret { width: 10px; height: 10px; opacity: .6; }
 .cs-cueduo .cs-nav-dropdown { background: var(--cs-white); border-radius: var(--cs-radius-inner); box-shadow: var(--cs-shadow-card); padding: 8px; }
 .cs-cueduo .cs-nav-toggle { display: none; width: 44px; height: 44px; border: 0; background: transparent; }
@@ -253,6 +273,32 @@
 .cs-cueduo .cs-footer-legal { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-3) var(--cs-container-pad) var(--cs-space-5); display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--cs-hairline-text); border-top: 1px solid var(--cs-hairline); }
 .cs-cueduo .cs-footer-legal-links { display: flex; gap: 16px; margin-left: auto; }
 
+/* Product footer (SiteFooter ColumnFooter, used when csSite.footerColumns is
+   set): brand, authored link columns, app column, then a hairline bar. */
+.cs-cueduo .cs-footer--columns { border-top: 0; }
+.cs-cueduo .cs-footer-cols { padding: clamp(48px, 6vw, 80px) var(--cs-container-pad) 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 40px; }
+.cs-cueduo .cs-footer-brand-lockup { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.cs-cueduo .cs-footer-mark { position: relative; display: block; flex: none; width: 24px; height: 24px; }
+.cs-cueduo .cs-footer-brand-name { font-family: var(--cs-font-display); font-weight: 600; font-size: 16px; letter-spacing: -.02em; }
+.cs-cueduo .cs-footer--columns .cs-footer-tagline { margin: 0; }
+.cs-cueduo .cs-footer-col { display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.cs-cueduo .cs-footer-col a { color: var(--cs-muted); }
+.cs-cueduo .cs-footer-col a:hover { color: var(--cs-accent-ink); }
+.cs-cueduo .cs-footer-col-title { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); }
+.cs-cueduo .cs-footer-app { gap: 14px; align-items: flex-start; }
+/* The "soon" pill at the design's 160x54 badge footprint, so the live Apple
+   badge swaps in without moving the column. */
+.cs-cueduo .cs-footer-app .cs-storebadge--soon { box-sizing: border-box; justify-content: center; min-width: 160px; height: 54px; padding: 0 20px; white-space: nowrap; border-radius: 12px; box-shadow: none; font-size: 13px; line-height: 1.3; text-align: center; }
+.cs-cueduo .cs-footer-bar { padding: 20px var(--cs-container-pad) 40px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--cs-hairline-text); border-top: 1px solid rgba(20, 23, 28, .09); }
+.cs-cueduo .cs-footer-bar-legal { margin-left: auto; }
+
+/* Sticky mobile bar (MobileBar, csSite.mobileBar). Below 899px only; sticky
+   and last in the page, so it needs no spacer. */
+.cs-cueduo .cs-mobilebar { display: none; }
+.cs-cueduo .cs-mobilebar-text { font-size: 13px; color: var(--cs-muted); letter-spacing: -.005em; }
+.cs-cueduo .cs-mobilebar-cta { margin-left: auto; flex: none; padding: 11px 20px; border-radius: var(--cs-radius-control); background: var(--cs-ink); color: var(--cs-white); font-weight: 600; font-size: 14px; letter-spacing: -.01em; }
+.cs-cueduo .cs-mobilebar-cta:hover { color: var(--cs-white); }
+
 .cs-cueduo .cs-page-header { background: var(--cs-surface); }
 .cs-cueduo .cs-page-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-5) var(--cs-container-pad); }
 .cs-cueduo .cs-page-header-bg { display: none; }      /* no photographic banner on interior pages */
@@ -272,6 +318,23 @@
 .cs-cueduo .cs-intro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(32px, 6vw, 80px); border-top: 1px solid var(--cs-hairline); padding-top: clamp(32px, 4vw, 56px); }
 .cs-cueduo .cs-intro-aside h2 { max-width: 16ch; text-wrap: balance; }
 .cs-cueduo .cs-intro-stacked--rule { border-top: 1px solid var(--cs-hairline); padding-top: clamp(32px, 4vw, 56px); }
+
+/* csIntroBlock, media layout: statement and body left, photo right with a
+   glass badge over its corner. Stacks, copy first, below 899px. */
+.cs-cueduo .cs-intro-media-section { padding: clamp(48px, 6vw, 88px) 0; }
+.cs-cueduo .cs-intro-media { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(40px, 6vw, 96px); align-items: center; border-top: 1px solid var(--cs-hairline); padding-top: clamp(36px, 4vw, 56px); }
+.cs-cueduo .cs-intro-media--solo { grid-template-columns: minmax(0, 1fr); }
+.cs-cueduo .cs-intro-media-copy { display: flex; flex-direction: column; align-items: flex-start; gap: clamp(24px, 3vw, 36px); }
+.cs-cueduo .cs-intro-media-copy .cs-eyebrow { display: block; margin: 0 0 -12px; }
+.cs-cueduo .cs-intro-media-copy h2 { max-width: 16ch; text-wrap: balance; }
+.cs-cueduo .cs-intro-media-copy .cs-prose { max-width: 52ch; display: flex; flex-direction: column; gap: 18px; }
+.cs-cueduo .cs-intro-media-copy .cs-prose p { margin: 0; max-width: none; color: var(--cs-muted); line-height: 1.65; text-wrap: pretty; }
+.cs-cueduo .cs-intro-media-frame { justify-self: center; position: relative; width: min(100%, 520px); aspect-ratio: 4 / 4.6; border-radius: var(--cs-radius-card-lg); overflow: hidden; background: var(--cs-graphite-surface); box-shadow: var(--cs-shadow-device); }
+.cs-cueduo .cs-glass-badge { position: absolute; left: 20px; top: 20px; display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: var(--cs-radius-control); background: rgba(40, 44, 50, .82); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: -.005em; }
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .cs-cueduo .cs-glass-badge { background: rgba(40, 44, 50, .5); backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); }
+}
+.cs-cueduo .cs-glass-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-accent-inverse); box-shadow: 0 0 10px rgba(91, 130, 255, .9); flex: none; }
 
 /* ---------- form ---------------------------------------------- */
 .cs-cueduo .cs-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
@@ -296,16 +359,17 @@
 .cs-cueduo .cs-services-rail-cta { font-weight: 600; color: var(--cs-accent-ink); }
 
 /* ---------- csAppHeroBlock ------------------------------------ */
-.cs-cueduo .cs-apphero { padding: clamp(56px, 9vw, 120px) 0 clamp(40px, 6vw, 72px); }
-.cs-cueduo .cs-apphero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: clamp(40px, 7vw, 88px); align-items: center; }
+.cs-cueduo .cs-apphero { padding: clamp(72px, 10vw, 140px) 0 clamp(56px, 7vw, 96px); }
+.cs-cueduo .cs-apphero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: clamp(48px, 7vw, 96px); align-items: center; }
 .cs-cueduo .cs-apphero-grid--solo { grid-template-columns: minmax(0, 1fr); }
-.cs-cueduo .cs-apphero-copy .cs-eyebrow--ruled { color: var(--cs-accent-ink); }
+.cs-cueduo .cs-apphero-copy .cs-eyebrow--ruled { color: var(--cs-accent-ink); margin-bottom: clamp(28px, 4vw, 44px); }
 /* A line break typed in Studio is kept — "Look up." and "Say it once." each
    get their own line without the author needing markup. */
-.cs-cueduo .cs-apphero-heading { white-space: pre-line; font-size: clamp(44px, 7vw, 86px); line-height: .96; letter-spacing: -.04em; text-wrap: balance; margin: 0 0 clamp(20px, 3vw, 30px); }
-.cs-cueduo .cs-apphero-sub { max-width: 33em; margin: 0 0 clamp(28px, 4vw, 40px); }
+.cs-cueduo .cs-apphero-heading { white-space: pre-line; font-size: clamp(46px, 7.4vw, 92px); line-height: .96; letter-spacing: -.04em; text-wrap: balance; margin: 0 0 clamp(24px, 3vw, 32px); }
+.cs-cueduo .cs-apphero-sub { font-size: clamp(18px, 1.55vw, 21px); line-height: 1.55; max-width: 33em; margin: 0 0 clamp(32px, 4vw, 44px); text-wrap: pretty; }
 .cs-cueduo .cs-apphero-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
-.cs-cueduo .cs-apphero-note { font-size: 13px; color: var(--cs-hairline-text); margin: clamp(24px, 4vw, 36px) 0 0; }
+.cs-cueduo .cs-apphero-actions .cs-underline-link { padding: 17px 4px; }
+.cs-cueduo .cs-apphero-note { font-size: 13px; letter-spacing: .01em; color: var(--cs-hairline-text); margin: clamp(28px, 4vw, 40px) 0 0; }
 .cs-cueduo .cs-apphero-media { display: flex; justify-content: center; }
 .cs-cueduo .cs-apphero-device { margin: 0; }
 .cs-cueduo .cs-apphero-device img { width: 100%; height: auto; }
@@ -337,6 +401,19 @@
 .cs-cueduo .cs-fold-secondary { padding: 11px 13px; border-radius: var(--cs-radius-control); background: var(--cs-surface); color: var(--cs-ink); font-size: 12px; font-weight: 600; }
 .cs-cueduo .cs-device-caption { font-size: 12px; color: var(--cs-hairline-text); margin-top: 12px; text-align: center; }
 
+/* Camera variant of the fold preview: viewfinder photo left, prompter right,
+   one chassis, a soft ellipse of shadow under it. */
+.cs-cueduo .cs-camera { margin: 0; width: 100%; }
+.cs-cueduo .cs-camera-stage { position: relative; display: flex; justify-content: center; }
+.cs-cueduo .cs-camera-shadow { position: absolute; bottom: -5%; left: 50%; transform: translateX(-50%); width: 80%; height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(20, 23, 28, .24), transparent 72%); filter: blur(10px); }
+.cs-cueduo .cs-camera-body { position: relative; width: min(100%, 560px); aspect-ratio: 1 / 1.02; display: flex; gap: 6px; padding: 10px; border-radius: 44px; background: var(--cs-chassis); box-shadow: var(--cs-shadow-chassis); box-sizing: border-box; }
+.cs-cueduo .cs-camera-photo { flex: 1; min-width: 0; position: relative; border-radius: 34px 12px 12px 34px; overflow: hidden; background: var(--cs-graphite-surface); }
+.cs-cueduo .cs-camera-rec { position: absolute; left: 18px; top: 20px; display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: #fff; font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-camera-time { color: rgba(255, 255, 255, .6); font-weight: 500; letter-spacing: .04em; }
+.cs-cueduo .cs-camera-prompter { flex: 1; min-width: 0; border-radius: 12px 34px 34px 12px; background: var(--cs-prompter); padding: clamp(20px, 2.4vw, 30px) clamp(16px, 2vw, 24px); box-sizing: border-box; color: #fff; overflow: hidden; }
+.cs-cueduo .cs-camera-script { margin: 0; max-width: none; font-size: clamp(14px, 1.5vw, 18px); font-weight: 600; line-height: 1.32; letter-spacing: -.012em; }
+.cs-cueduo .cs-camera-script > span { display: block; }
+
 /* ---------- csPrompterBandBlock ------------------------------- */
 .cs-cueduo .cs-prompter-band { background: var(--cs-prompter); color: #fff; padding: clamp(64px, 10vw, 140px) 0; }
 .cs-cueduo .cs-prompter-band .cs-container { max-width: 1000px; }
@@ -345,40 +422,103 @@
 .cs-cueduo .cs-prompter-past, .cs-cueduo .cs-prompter-next { color: var(--cs-prompter-dim); }
 .cs-cueduo .cs-prompter-notes { margin-top: clamp(36px, 6vw, 64px); padding-top: 28px; border-top: 1px solid rgba(255, 255, 255, .1); display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 28px; }
 .cs-cueduo .cs-prompter-notes p { margin: 0; font-size: 14px; color: rgba(255, 255, 255, .5); line-height: 1.6; max-width: none; }
+
+/* With a photo: two columns (photo card | lens + the line), a soft accent
+   glow from the top-left corner, notes underneath. */
+.cs-cueduo .cs-prompter-band--media { position: relative; overflow: hidden; padding: clamp(80px, 11vw, 160px) 0; }
+.cs-cueduo .cs-prompter-band--media .cs-container { position: relative; max-width: var(--cs-container-max); }
+.cs-cueduo .cs-prompter-band--media .cs-eyebrow--ruled { margin-bottom: clamp(36px, 5vw, 56px); }
+.cs-cueduo .cs-prompter-glow { position: absolute; inset: 0; background: radial-gradient(40% 40% at 0% 0%, rgba(91, 130, 255, .16), transparent 70%); pointer-events: none; }
+.cs-cueduo .cs-prompter-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(40px, 6vw, 88px); align-items: center; }
+.cs-cueduo .cs-prompter-photo { position: relative; aspect-ratio: 4 / 4.8; border-radius: var(--cs-radius-card-lg); overflow: hidden; background: var(--cs-graphite-surface); box-shadow: var(--cs-shadow-device-dark); }
+.cs-cueduo .cs-prompter-photo-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; background: linear-gradient(transparent, rgba(5, 5, 5, .82)); }
+.cs-cueduo .cs-prompter-photo-caption { position: absolute; left: 24px; right: 24px; bottom: 22px; margin: 0; max-width: none; font-size: 14px; line-height: 1.5; color: rgba(255, 255, 255, .82); text-wrap: pretty; }
+.cs-cueduo .cs-prompter-side { display: flex; flex-direction: column; gap: clamp(28px, 3vw, 40px); min-width: 0; }
+.cs-cueduo .cs-prompter-lens { display: flex; align-items: center; gap: 16px; }
+.cs-cueduo .cs-lens-graphic { position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #1C2029 0 46%, #0D0F13 47% 62%, #14171C 63%); box-shadow: 0 0 0 1px rgba(255, 255, 255, .12); }
+.cs-cueduo .cs-lens-graphic::after { content: ""; position: absolute; left: 24px; top: 20px; width: 10px; height: 10px; border-radius: 50%; background: #7C93E8; filter: blur(1.5px); }
+.cs-cueduo .cs-prompter-lens-label { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-inverse-muted); }
+.cs-cueduo .cs-prompter-band--media .cs-prompter-line { font-size: clamp(24px, 3.2vw, 44px); line-height: 1.28; letter-spacing: -.026em; }
+.cs-cueduo .cs-prompter-band--media .cs-prompter-notes { margin-top: clamp(44px, 6vw, 72px); }
 .cs-cueduo .cs-rec-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-record); display: inline-block; flex: none; box-shadow: 0 0 10px rgba(255, 82, 87, .8); }
 
 /* ---------- csValuePropsBlock, the four brand features -------- */
 /* Hairline columns with a counter in the bottom corner, per the comp. The
    counter is CSS so the block stays shared with sites #1 and #2, where it is
    simply never styled in. */
-.cs-cueduo .cs-valueprops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); counter-reset: cs-vp; border-top: 1px solid var(--cs-hairline); border-bottom: 1px solid var(--cs-hairline); }
-.cs-cueduo .cs-valueprop { counter-increment: cs-vp; display: flex; flex-direction: column; gap: clamp(20px, 3vw, 36px); padding: clamp(24px, 3vw, 40px) clamp(20px, 2.4vw, 30px); border-left: 1px solid var(--cs-hairline); margin-left: -1px; }
-.cs-cueduo .cs-valueprop::after { content: "0" counter(cs-vp); margin-top: auto; font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; }
-.cs-cueduo .cs-valueprop-icon { width: 30px; height: 30px; color: var(--cs-ink); stroke-width: 1.4; }
+.cs-cueduo #features { padding: clamp(72px, 9vw, 128px) 0; }
+.cs-cueduo #features .cs-eyebrow--ruled { margin-bottom: clamp(36px, 5vw, 56px); }
+.cs-cueduo .cs-valueprops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); counter-reset: cs-vp; border-top: 1px solid var(--cs-hairline); border-bottom: 1px solid var(--cs-hairline); margin-top: clamp(36px, 5vw, 56px); }
+.cs-cueduo .cs-eyebrow--ruled + .cs-valueprops { margin-top: 0; }
+.cs-cueduo .cs-valueprop { counter-increment: cs-vp; display: flex; flex-direction: column; padding: clamp(28px, 3vw, 44px) clamp(24px, 2.4vw, 32px); border-left: 1px solid var(--cs-hairline); margin-left: -1px; }
+.cs-cueduo .cs-valueprop::after { content: "0" counter(cs-vp); margin-top: auto; padding-top: clamp(24px, 3vw, 40px); font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-valueprop-icon { width: 30px; height: 30px; color: var(--cs-ink); stroke-width: 1.4; margin-bottom: clamp(24px, 3vw, 40px); }
 .cs-cueduo .cs-valueprop h3 { font-size: 19px; letter-spacing: -.022em; margin-bottom: 10px; }
 .cs-cueduo .cs-valueprop p { font-size: var(--cs-fs-small); color: var(--cs-muted); line-height: 1.6; margin: 0; }
 
 /* ---------- csDeviceShowcaseBlock ----------------------------- */
-.cs-cueduo .cs-showcase-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(32px, 6vw, 88px); align-items: center; }
+.cs-cueduo .cs-showcase { padding: clamp(40px, 5vw, 72px) 0; }
+.cs-cueduo .cs-section--navy.cs-showcase { padding: clamp(72px, 9vw, 136px) 0; }
+.cs-cueduo .cs-showcase-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: clamp(40px, 6vw, 96px); align-items: center; }
 .cs-cueduo .cs-showcase-grid--solo { grid-template-columns: minmax(0, 1fr); }
 .cs-cueduo .cs-showcase-copy { max-width: 44ch; }
-.cs-cueduo .cs-showcase-copy h2 { font-size: clamp(26px, 2.9vw, 38px); letter-spacing: -.03em; margin: var(--cs-space-3) 0 var(--cs-space-3); text-wrap: balance; }
-.cs-cueduo .cs-showcase-copy p { color: var(--cs-muted); line-height: 1.65; margin-bottom: var(--cs-space-4); }
+.cs-cueduo .cs-showcase-copy .cs-eyebrow { display: block; margin: 0; }
+.cs-cueduo .cs-showcase-copy h2 { font-size: clamp(26px, 2.9vw, 38px); letter-spacing: -.03em; line-height: 1.1; margin: 20px 0; text-wrap: balance; }
+.cs-cueduo .cs-showcase-copy p { color: var(--cs-muted); line-height: 1.65; margin-bottom: 26px; text-wrap: pretty; }
 .cs-cueduo .cs-section--navy .cs-showcase-copy p { color: var(--cs-inverse-muted); }
 .cs-cueduo .cs-showcase-media { margin: 0; justify-self: center; width: min(100%, 440px); }
+.cs-cueduo .cs-showcase-media--takes, .cs-cueduo .cs-showcase-media--editor { width: min(100%, 480px); }
 .cs-cueduo .cs-showcase--left .cs-showcase-media { order: -1; }
 .cs-cueduo .cs-device { border-radius: var(--cs-radius-card-lg); background: var(--cs-chassis); padding: 9px; box-shadow: var(--cs-shadow-device); }
-.cs-cueduo .cs-section--navy .cs-device { box-shadow: 0 44px 100px -40px rgba(0, 0, 0, .9); }
+.cs-cueduo .cs-section--navy .cs-device { box-shadow: var(--cs-shadow-device-dark); }
 .cs-cueduo .cs-device-screen { border-radius: 24px; overflow: hidden; display: block; width: 100%; height: auto; }
+
+/* visual=takes: the library grid. Plain cards carry label and length; photo
+   cards swap the label for a flag pill. */
+.cs-cueduo .cs-takes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cs-cueduo .cs-take { position: relative; overflow: hidden; aspect-ratio: 9 / 13; border-radius: 22px; background: var(--cs-white); box-shadow: 0 10px 30px rgba(20, 23, 28, .08); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+.cs-cueduo .cs-take--photo { padding: 0; background: var(--cs-graphite-surface); box-shadow: 0 16px 36px rgba(20, 23, 28, .22); }
+.cs-cueduo .cs-take-label { font-size: 9px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); }
+.cs-cueduo .cs-take-duration { font-size: 15px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-take--photo .cs-take-duration { position: absolute; left: 14px; bottom: 14px; color: #fff; }
+.cs-cueduo .cs-take-fade { position: absolute; inset: 0; background: linear-gradient(transparent 50%, rgba(14, 17, 20, .85)); }
+.cs-cueduo .cs-take-flag { position: absolute; left: 10px; top: 10px; padding: 3px 8px; border-radius: var(--cs-radius-control); background: var(--cs-accent); color: var(--cs-on-accent); font-size: 9px; font-weight: 600; }
+
+/* visual=editor: the "Edit take" panel, drawn in the graphite family. */
+.cs-cueduo .cs-editor { border-radius: 36px; background: linear-gradient(150deg, #2A3037, #000 46%); padding: 9px; box-shadow: var(--cs-shadow-device-dark); }
+.cs-cueduo .cs-editor-panel { border-radius: 28px; background: var(--cs-graphite-surface); color: var(--cs-inverse-text); padding: 24px; display: flex; flex-direction: column; gap: 18px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.cs-cueduo .cs-editor-head { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; letter-spacing: -.015em; }
+.cs-cueduo .cs-editor-timecode { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--cs-inverse-muted); font-weight: 500; letter-spacing: .02em; }
+.cs-cueduo .cs-editor-preview { position: relative; height: 180px; border-radius: var(--cs-radius-inner); overflow: hidden; background: #1F242B; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05); }
+.cs-cueduo .cs-editor-range { position: absolute; left: 14px; bottom: 12px; font-size: 11px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-editor-timeline { display: flex; gap: 5px; align-items: stretch; }
+.cs-cueduo .cs-editor-clip { position: relative; flex: 3; height: 56px; border-radius: 12px; overflow: hidden; background: #1F242B; }
+.cs-cueduo .cs-editor-clip img { opacity: .6; }
+/* The ring is its own layer so the .6 photo cannot dim it. */
+.cs-cueduo .cs-editor-clip::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px var(--cs-accent-inverse); pointer-events: none; }
+.cs-cueduo .cs-editor-clip-label { position: absolute; left: 9px; bottom: 8px; z-index: 1; color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.cs-cueduo .cs-editor-track { flex: 1; height: 56px; border-radius: 12px; background: #262B33; color: var(--cs-inverse-muted); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: flex-end; padding: 9px; box-sizing: border-box; }
+.cs-cueduo .cs-editor-track:nth-child(3) { flex: 2; }
+.cs-cueduo .cs-editor-tools { display: flex; gap: 18px; padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, .07); font-size: 12px; letter-spacing: .01em; color: var(--cs-inverse-muted); }
+.cs-cueduo .cs-editor-done { margin-left: auto; color: var(--cs-inverse-text); font-weight: 600; }
 
 /* ---------- csJourneyBlock ------------------------------------ */
 /* CueDuo's stages do not have detail pages, so the rail is a row of bordered
-   columns rather than the scroll-snap card track sites #1/#2 use. */
-.cs-cueduo .cs-journey { background: transparent; }
+   columns rather than the scroll-snap card track sites #1/#2 use. The header
+   is the section container turned into a two-column grid (eyebrow + title
+   left, intro right) so the shared markup needs no wrapper. */
+.cs-cueduo .cs-journey { background: transparent; padding: clamp(72px, 9vw, 128px) 0; }
+.cs-cueduo .cs-journey > .cs-container { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(32px, 5vw, 80px); align-items: end; }
+.cs-cueduo .cs-journey .cs-eyebrow { grid-column: 1; display: flex; align-items: center; gap: 14px; margin: 0 0 28px; }
+.cs-cueduo .cs-journey .cs-eyebrow::before { content: ""; width: 28px; height: 1px; background: currentColor; flex: none; }
+.cs-cueduo .cs-journey h2 { grid-column: 1; max-width: 14ch; text-wrap: balance; }
+.cs-cueduo .cs-journey .cs-lead { grid-column: 2; grid-row: 1 / span 2; align-self: end; font-size: var(--cs-fs-body); line-height: 1.65; max-width: 42ch; margin: 0; }
 .cs-cueduo .cs-journey-progress { display: none; }
-.cs-cueduo .cs-journey-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); border-top: 1px solid var(--cs-hairline); margin-top: var(--cs-space-5); }
-.cs-cueduo .cs-journey-stage { display: block; padding: 26px 22px 30px; border-right: 1px solid var(--cs-hairline); color: inherit; }
-.cs-cueduo .cs-journey-stage:last-child { border-right: 0; }
+.cs-cueduo .cs-journey > .cs-container > .cs-journey-track, .cs-cueduo .cs-journey > .cs-container > p:not(.cs-lead) { grid-column: 1 / -1; }
+.cs-cueduo .cs-journey-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); border-top: 1px solid var(--cs-hairline); margin-top: clamp(40px, 5vw, 64px); }
+.cs-cueduo .cs-journey-stage { display: block; padding: 28px 24px 32px; border-right: 1px solid var(--cs-hairline); color: inherit; }
+.cs-cueduo .cs-journey-stage:first-child { padding-left: 0; }
+.cs-cueduo .cs-journey-stage:last-child { padding-right: 0; border-right: 0; }
 .cs-cueduo .cs-journey-num { display: block; font-size: 11px; font-weight: 600; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; letter-spacing: .14em; margin-bottom: 18px; }
 .cs-cueduo .cs-journey-stage h3 { font-size: 17px; letter-spacing: -.02em; }
 .cs-cueduo .cs-journey-stage p { margin: 8px 0 0; font-size: 14px; color: var(--cs-muted); line-height: 1.55; }
@@ -386,50 +526,84 @@
 .cs-cueduo a.cs-journey-stage:hover h3 { color: var(--cs-accent-ink); }
 
 /* ---------- csContrastBlock ----------------------------------- */
+.cs-cueduo .cs-contrast { padding: clamp(40px, 5vw, 72px) 0; }
 .cs-cueduo .cs-contrast .cs-container > * { border-color: var(--cs-hairline); }
-.cs-cueduo .cs-contrast-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: clamp(24px, 5vw, 64px); border-top: 1px solid var(--cs-hairline); padding-top: clamp(32px, 4vw, 52px); align-items: end; }
-.cs-cueduo .cs-contrast-head h2 { font-size: clamp(24px, 2.6vw, 32px); max-width: 16ch; margin-top: var(--cs-space-3); text-wrap: balance; }
+/* One 3-column grid in the head and in every row, with identical gaps, so the
+   label columns and the cells stay on the same lines. */
+.cs-cueduo .cs-contrast-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: clamp(32px, 5vw, 72px); border-top: 1px solid var(--cs-hairline); padding-top: clamp(36px, 4vw, 56px); align-items: end; }
+.cs-cueduo .cs-contrast-head .cs-eyebrow { display: block; margin: 0; }
+.cs-cueduo .cs-contrast-head h2 { font-size: clamp(24px, 2.6vw, 32px); line-height: 1.12; letter-spacing: -.03em; max-width: 16ch; margin-top: 20px; text-wrap: balance; }
 .cs-cueduo .cs-contrast-label { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; margin: 0; padding-bottom: 14px; }
 .cs-cueduo .cs-contrast-label--left { color: var(--cs-hairline-text); border-bottom: 1px solid var(--cs-hairline); }
 .cs-cueduo .cs-contrast-label--right { color: var(--cs-ink); border-bottom: 1px solid rgba(20, 23, 28, .18); }
 .cs-cueduo .cs-contrast-rows { list-style: none; margin: 0; padding: 0; }
-.cs-cueduo .cs-contrast-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: clamp(24px, 5vw, 64px); }
+.cs-cueduo .cs-contrast-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: clamp(32px, 5vw, 72px); }
 /* The heading column is empty from here down, so the two label columns and the
    row cells stay aligned: one spacer cell per row at desktop width. */
 .cs-cueduo .cs-contrast-row::before { content: ""; }
 .cs-cueduo .cs-contrast-cell { display: block; padding: 14px 0; border-bottom: 1px solid var(--cs-hairline-soft); font-size: var(--cs-fs-small); line-height: 1.5; }
+.cs-cueduo .cs-contrast-row:last-child .cs-contrast-cell { border-bottom: 0; }
 .cs-cueduo .cs-contrast-cell--left { color: var(--cs-hairline-text); }
 .cs-cueduo .cs-contrast-cell--right { color: var(--cs-ink); }
 /* Only shown once the columns stack, where a bare line loses its column head. */
 .cs-cueduo .cs-contrast-inline-label { display: none; font-size: 11px; font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-hairline-text); margin-bottom: 4px; }
 
+/* From 900px the head, the rows and the footnote share ONE three-column grid
+   (display: contents on the wrappers): the title column spans every row, and
+   each list sits under its own label, as in the comp. Below that the wrappers
+   keep their own boxes and the stacked layout in the 899px block applies. */
+@media (min-width: 900px) {
+  .cs-cueduo .cs-contrast .cs-container { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: clamp(32px, 5vw, 72px); align-items: start; }
+  .cs-cueduo .cs-contrast .cs-container::before { content: ""; grid-column: 1 / -1; border-top: 1px solid var(--cs-hairline); margin-bottom: clamp(36px, 4vw, 56px); }
+  .cs-cueduo .cs-contrast-head, .cs-cueduo .cs-contrast-rows, .cs-cueduo .cs-contrast-row { display: contents; }
+  .cs-cueduo .cs-contrast-head > div:first-child { grid-column: 1; grid-row: 2 / span 40; }
+  .cs-cueduo .cs-contrast-row::before { display: none; }
+  .cs-cueduo .cs-contrast .cs-footnote { grid-column: 1 / -1; }
+}
+
 /* ---------- csPlansBlock -------------------------------------- */
-.cs-cueduo .cs-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--cs-space-3); align-items: stretch; }
-.cs-cueduo .cs-plan { background: var(--cs-white); border-radius: 26px; padding: clamp(24px, 3vw, 34px); border: 1px solid var(--cs-hairline-soft); display: flex; flex-direction: column; gap: var(--cs-space-3); }
-.cs-cueduo .cs-plan--recommended { border-color: var(--cs-accent); box-shadow: 0 24px 60px -32px rgba(20, 23, 28, .3); }
+.cs-cueduo .cs-plans { padding: clamp(72px, 9vw, 128px) 0; }
+.cs-cueduo .cs-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: var(--cs-space-3); align-items: stretch; }
+.cs-cueduo .cs-plan { background: var(--cs-white); border-radius: 26px; padding: clamp(26px, 3vw, 36px); border: 1px solid var(--cs-hairline-soft); display: flex; flex-direction: column; gap: 22px; transition: transform .5s var(--cs-ease-out), box-shadow .5s ease, border-color .5s ease; }
+.cs-cueduo .cs-plan--recommended { box-shadow: var(--cs-shadow-plan); }
+/* No purchase to make (the free tier): an outline, not a card, and it does
+   not lift because there is nothing to press. */
+.cs-cueduo .cs-plan--static { background: transparent; border-color: var(--cs-hairline); }
+@media (prefers-reduced-motion: no-preference) {
+  .cs-cueduo .cs-plan:not(.cs-plan--static):hover { transform: translateY(-3px); }
+}
 .cs-cueduo .cs-plan-name { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: -.015em; margin: 0; }
 .cs-cueduo .cs-plan-flag { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 5px 10px; border-radius: var(--cs-radius-control); background: var(--cs-accent-soft); color: var(--cs-accent-ink); }
-.cs-cueduo .cs-plan-price { font-family: var(--cs-font-display); font-size: clamp(34px, 4vw, 46px); font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0; }
+.cs-cueduo .cs-plan-price { font-family: var(--cs-font-display); font-size: clamp(38px, 4vw, 48px); font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0; }
 .cs-cueduo .cs-plan-period { font-size: 14px; font-weight: 400; color: var(--cs-hairline-text); letter-spacing: 0; }
 .cs-cueduo .cs-plan-list { list-style: none; margin: 0; padding: 0; color: var(--cs-muted); font-size: 14px; line-height: 1.5; }
 .cs-cueduo .cs-plan-list li { padding: 11px 0; border-top: 1px solid var(--cs-hairline-soft); }
-.cs-cueduo .cs-plan-cta { margin-top: auto; }
+.cs-cueduo .cs-plan-cta { margin-top: auto; padding: 14px; font-size: 15px; line-height: 1.5; }
 .cs-cueduo .cs-plan-note { margin: auto 0 0; font-size: 13px; color: var(--cs-hairline-text); line-height: 1.5; }
 
 /* ---------- csRequirementsBlock -------------------------------- */
 .cs-cueduo .cs-requirements-heading { font-size: var(--cs-fs-heading); margin-bottom: var(--cs-space-3); }
-.cs-cueduo .cs-requirements { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--cs-space-4); border-top: 1px solid var(--cs-hairline); padding-top: var(--cs-space-4); margin: 0; }
+.cs-cueduo .cs-requirements { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 28px; border-top: 1px solid var(--cs-hairline); padding-top: var(--cs-space-4); margin: 0; }
 .cs-cueduo .cs-requirements dt { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); margin-bottom: 10px; }
 .cs-cueduo .cs-requirements dd { margin: 0; font-size: 14px; color: var(--cs-muted); }
 
 /* ---------- csAppCtaBlock ------------------------------------- */
-.cs-cueduo .cs-appcta { text-align: center; padding: clamp(64px, 10vw, 140px) 0; }
+.cs-cueduo .cs-appcta { text-align: center; padding: clamp(80px, 11vw, 160px) 0; }
+.cs-cueduo .cs-appcta .cs-container { max-width: 1120px; }
 .cs-cueduo .cs-appcta-mark { margin: 0 auto var(--cs-space-4); display: block; }
-.cs-cueduo .cs-appcta-heading { font-size: clamp(30px, 4.4vw, 56px); letter-spacing: -.035em; line-height: 1.04; text-wrap: balance; margin: 0 auto var(--cs-space-3); max-width: 18ch; }
-.cs-cueduo .cs-appcta-body { margin: 0 auto var(--cs-space-5); max-width: 44ch; font-size: var(--cs-fs-lead); line-height: 1.55; }
+.cs-cueduo .cs-appcta-heading { font-size: clamp(30px, 4.6vw, 60px); letter-spacing: -.035em; line-height: 1.04; text-wrap: balance; margin: 0 auto 20px; max-width: none; }
+.cs-cueduo .cs-appcta-body { margin: 0 auto 40px; max-width: 44ch; font-size: 18px; line-height: 1.55; }
 .cs-cueduo .cs-appcta-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; }
-.cs-cueduo .cs-appcta-note { margin: var(--cs-space-3) auto 0; font-size: 13px; color: var(--cs-inverse-quiet); }
+.cs-cueduo .cs-appcta .cs-appcta-note { margin: 24px auto 0; font-size: 13px; letter-spacing: .01em; color: var(--cs-inverse-quiet); }
 .cs-cueduo .cs-appcta:not(.cs-section--navy) .cs-appcta-note { color: var(--cs-hairline-text); }
+/* Prompter-black band: same text colours as graphite, a darker ground. */
+.cs-cueduo .cs-appcta--prompter { background: var(--cs-prompter); }
+/* Record-start motif: take label, giant digit, REC row. */
+.cs-cueduo .cs-appcta-eyebrow { display: block; font-size: 12px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: var(--cs-inverse-quiet); }
+.cs-cueduo .cs-appcta-digit { font-size: clamp(140px, 22vw, 280px); font-weight: 600; line-height: .9; letter-spacing: -.06em; margin: clamp(16px, 2vw, 28px) 0 clamp(20px, 2.4vw, 32px); font-variant-numeric: tabular-nums; color: var(--cs-inverse-text); }
+.cs-cueduo .cs-appcta-rec { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: clamp(48px, 6vw, 72px); font-size: 14px; font-weight: 600; letter-spacing: .04em; font-variant-numeric: tabular-nums; color: var(--cs-inverse-text); }
+.cs-cueduo .cs-appcta-rec .cs-rec-dot { width: 9px; height: 9px; box-shadow: 0 0 12px rgba(255, 82, 87, .8); }
+.cs-cueduo .cs-appcta-time { color: var(--cs-inverse-muted); font-weight: 500; }
 
 /* ---------- csDisclosureBlock (privacy, terms) ----------------- */
 /* The heading is left to PageHeader, so the slab opens on the date. The note
@@ -445,25 +619,47 @@
 /* Heading parked in the left column, the accordion in the right, matching the
    comp. The shared component emits a flat h2 + details list, so the split is
    done with an explicit two-column grid rather than by changing its DOM. */
-.cs-cueduo .info-page-faq { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); column-gap: clamp(32px, 5vw, 80px); align-items: start; }
-.cs-cueduo .info-page-faq-heading { grid-column: 1; grid-row: 1 / -1; font-family: var(--cs-font-display); font-size: clamp(26px, 2.9vw, 36px); font-weight: 600; letter-spacing: -.03em; line-height: 1.1; margin: 0; max-width: 14ch; text-wrap: balance; }
+.cs-cueduo .info-page-faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(32px, 5vw, 80px); align-items: start; }
+.cs-cueduo .info-page-faq-heading { grid-column: 1; grid-row: 1 / -1; font-family: var(--cs-font-display); font-size: clamp(26px, 2.9vw, 38px); font-weight: 600; letter-spacing: -.03em; line-height: 1.1; margin: 0; max-width: 14ch; text-wrap: balance; }
 .cs-cueduo .info-page-faq-item { grid-column: 2; }
 .cs-cueduo .info-page-faq-item:first-of-type { border-top: 1px solid var(--cs-hairline); }
 .cs-cueduo .info-page-faq-item { border-bottom: 1px solid var(--cs-hairline); padding: 20px 0; }
 .cs-cueduo .info-page-faq-q { cursor: pointer; font-weight: 600; font-size: 17px; letter-spacing: -.018em; list-style: none; display: flex; align-items: center; gap: 16px; }
 .cs-cueduo .info-page-faq-q::-webkit-details-marker { display: none; }
-.cs-cueduo .info-page-faq-q::after { content: "+"; margin-left: auto; font-weight: 400; color: var(--cs-hairline-text); font-size: 20px; line-height: 1; transition: transform .4s cubic-bezier(.2, .7, .3, 1); }
+.cs-cueduo .info-page-faq-q::after { content: "+"; margin-left: auto; font-weight: 400; color: var(--cs-hairline-text); font-size: 20px; line-height: 1; transition: transform .4s var(--cs-ease-out); }
 .cs-cueduo .info-page-faq-item[open] .info-page-faq-q::after { transform: rotate(45deg); }
 .cs-cueduo .info-page-faq-a { margin: 14px 0 0; color: var(--cs-muted); font-size: var(--cs-fs-small); line-height: 1.6; max-width: 56ch; }
+/* Closing line under the questions ("Still stuck? Write to us and ..."). */
+.cs-cueduo .cs-faq-outro { grid-column: 2; margin: 24px 0 0; max-width: none; font-size: var(--cs-fs-small); color: var(--cs-muted); }
+.cs-cueduo .cs-faq-outro a { color: var(--cs-accent-ink); font-weight: 600; }
+.cs-cueduo .cs-faq--split { padding: clamp(48px, 6vw, 88px) 0; }
+/* An explicit "stacked" layout puts the heading above a full-width list. */
+.cs-cueduo .cs-faq--stacked .info-page-faq { grid-template-columns: minmax(0, 1fr); row-gap: var(--cs-space-3); }
+.cs-cueduo .cs-faq--stacked .info-page-faq-heading { grid-column: 1; grid-row: auto; max-width: 20ch; }
+.cs-cueduo .cs-faq--stacked .info-page-faq-item, .cs-cueduo .cs-faq--stacked .cs-faq-outro { grid-column: 1; }
 
 /* ---------- responsive: 639 / 899 only ------------------------ */
 @media (max-width: 899px) {
-  .cs-cueduo { --cs-container-pad: 20px; --cs-section-pad: clamp(40px, 8vw, 64px); }
+  .cs-cueduo { --cs-container-pad: 24px; --cs-section-pad: clamp(40px, 8vw, 64px); }
+  .cs-cueduo .cs-header-inner { padding-top: 14px; padding-bottom: 14px; gap: 16px; }
   .cs-cueduo .cs-nav-desktop { display: none; }
-  .cs-cueduo .cs-nav-toggle { display: block; }
+  .cs-cueduo .cs-nav-toggle { display: block; margin-left: auto; }
+  /* The mobile bar carries the same button, so the header one steps aside. */
+  .cs-cueduo.cs-has-mobilebar .cs-header-cta { display: none; }
+  .cs-cueduo .cs-mobilebar {
+    position: sticky; bottom: 0; z-index: 30; display: flex; gap: 14px; align-items: center;
+    padding: 12px max(20px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    background: #F5F6F8; border-top: 1px solid var(--cs-hairline-soft);
+  }
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .cs-cueduo .cs-mobilebar { background: rgba(255, 255, 255, .62); backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); }
+  }
   .cs-cueduo .cs-valueprop { border-left: 0; margin-left: 0; border-top: 1px solid var(--cs-hairline); }
   .cs-cueduo .cs-valueprops { border-top: 0; }
-  .cs-cueduo .cs-journey-stage { border-right: 0; border-bottom: 1px solid var(--cs-hairline); }
+  .cs-cueduo .cs-journey > .cs-container { grid-template-columns: minmax(0, 1fr); }
+  .cs-cueduo .cs-journey .cs-lead { grid-column: 1; grid-row: auto; align-self: start; margin-top: 20px; }
+  .cs-cueduo .cs-journey-track { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+  .cs-cueduo .cs-journey-stage, .cs-cueduo .cs-journey-stage:first-child, .cs-cueduo .cs-journey-stage:last-child { padding: 22px 0 26px; border-right: 0; border-bottom: 1px solid var(--cs-hairline); }
   .cs-cueduo .cs-showcase--left .cs-showcase-media { order: 0; }
   .cs-cueduo .cs-contrast-row::before { display: none; }
   .cs-cueduo .cs-contrast-label { display: none; }
@@ -472,12 +668,19 @@
   .cs-cueduo .cs-contrast-cell { border-bottom: 0; }
   .cs-cueduo .info-page-faq { grid-template-columns: minmax(0, 1fr); row-gap: var(--cs-space-3); }
   .cs-cueduo .info-page-faq-heading { grid-column: 1; grid-row: auto; max-width: 20ch; }
-  .cs-cueduo .info-page-faq-item { grid-column: 1; }
+  .cs-cueduo .info-page-faq-item, .cs-cueduo .cs-faq-outro { grid-column: 1; }
 }
 @media (max-width: 639px) {
-  .cs-cueduo { --cs-container-pad: 16px; }
+  .cs-cueduo { --cs-container-pad: 20px; }
   .cs-cueduo .cs-topbar-inner { justify-content: center; }
-  .cs-cueduo .cs-apphero-heading { font-size: clamp(38px, 12vw, 52px); }
+  .cs-cueduo .cs-journey-track { grid-template-columns: minmax(0, 1fr); }
+  .cs-cueduo .cs-take { padding: 10px; }
+  .cs-cueduo .cs-take--photo .cs-take-duration { left: 10px; bottom: 10px; }
+  .cs-cueduo .cs-take-duration { font-size: 13px; }
+  .cs-cueduo .cs-editor-panel { padding: 18px; }
+  .cs-cueduo .cs-camera-body { border-radius: 36px; }
+  .cs-cueduo .cs-camera-photo { border-radius: 28px 10px 10px 28px; }
+  .cs-cueduo .cs-camera-prompter { border-radius: 10px 28px 28px 10px; }
   .cs-cueduo .cs-fold-body { flex-direction: column; }
   .cs-cueduo .cs-fold-pane--outer, .cs-cueduo .cs-fold-pane--inner { width: 100%; }
 }
@@ -491,7 +694,7 @@
 
 /* ---------- print --------------------------------------------- */
 @media print {
-  .cs-cueduo .cs-header, .cs-cueduo .cs-sticky-bar, .cs-cueduo .cs-topbar { display: none; }
+  .cs-cueduo .cs-header, .cs-cueduo .cs-sticky-bar, .cs-cueduo .cs-mobilebar, .cs-cueduo .cs-topbar { display: none; }
   .cs-cueduo { background: #fff; }
 }
 

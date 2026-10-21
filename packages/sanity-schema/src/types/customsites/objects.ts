@@ -252,10 +252,118 @@ export const csFoldPreview = defineType({
     }),
     defineField({ name: 'primaryLabel', title: 'Inner: Primary Button', type: 'string' }),
     defineField({ name: 'secondaryLabel', title: 'Inner: Secondary Button', type: 'string' }),
+    defineField({
+      name: 'viewfinder',
+      title: 'Viewfinder Photo',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description:
+        'When set, the preview renders the camera variant instead of the preflight one: a photo pane with the REC overlay and a prompter pane showing the past, current and next lines. The Inner fields are ignored in this variant.',
+    }),
+    defineField({
+      name: 'nextLine',
+      title: 'Prompter: Next Line',
+      type: 'text',
+      rows: 2,
+      description: 'Camera variant only. The line coming up, dimmed under the current line in the prompter pane.',
+    }),
   ],
   preview: {
-    select: { title: 'innerHeading', subtitle: 'currentLine' },
-    prepare: ({ title, subtitle }) => ({ title: title ?? 'Fold preview', subtitle }),
+    select: { title: 'innerHeading', subtitle: 'currentLine', media: 'viewfinder' },
+    prepare: ({ title, subtitle, media }) => ({ title: title ?? 'Fold preview', subtitle, media }),
+  },
+});
+
+/**
+ * One take card in csDeviceShowcaseBlock when its visual is "takes": a mock of
+ * the app's library grid. An uploaded image turns the card into a photo
+ * thumbnail; without one it is a plain tile.
+ */
+export const csShowcaseTake = defineType({
+  name: 'csShowcaseTake',
+  title: 'Showcase Take',
+  type: 'object',
+  fields: [
+    defineField({ name: 'label', title: 'Label', type: 'string', description: 'Take name, e.g. "Take 01" or "Intro".', validation: (r) => r.required() }),
+    defineField({ name: 'duration', title: 'Duration', type: 'string', description: 'Set as shown in the app, e.g. "01:14".', validation: (r) => r.required() }),
+    defineField({
+      name: 'image',
+      title: 'Thumbnail',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description: 'Optional. A frame from the take. Without it the card renders as a plain tile.',
+    }),
+    defineField({ name: 'flag', title: 'Flag', type: 'string', description: 'Optional small tag on the card, e.g. "Latest".' }),
+  ],
+  preview: {
+    select: { title: 'label', subtitle: 'duration', media: 'image' },
+  },
+});
+
+/**
+ * The editor mock used by csDeviceShowcaseBlock when its visual is "editor".
+ * Every string describes the real in-app editor.
+ */
+export const csShowcaseEditor = defineType({
+  name: 'csShowcaseEditor',
+  title: 'Showcase Editor',
+  type: 'object',
+  fields: [
+    defineField({ name: 'title', title: 'Title', type: 'string', description: 'The editor header, e.g. "Edit take".' }),
+    defineField({ name: 'timecode', title: 'Timecode', type: 'string', description: 'Set in tabular numerals, e.g. "00:42".' }),
+    defineField({
+      name: 'image',
+      title: 'Preview Frame',
+      type: 'image',
+      options: { hotspot: true },
+      fields: [defineField({ name: 'alt', title: 'Alt Text', type: 'string', validation: (r) => r.required() })],
+      description: 'A frame from the take, used for the preview and the first clip on the timeline.',
+    }),
+    defineField({ name: 'range', title: 'Trim Range', type: 'string', description: 'Shown over the preview, e.g. "00:14 → 00:52".' }),
+    defineField({ name: 'clipLabel', title: 'Clip Label', type: 'string', description: 'Name of the take clip on the timeline, e.g. "Take 3".' }),
+    defineField({
+      name: 'tracks',
+      title: 'Timeline Tracks',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Up to four other clips on the timeline after the take, e.g. "Title", "Photo".',
+      validation: (r) => r.max(4),
+    }),
+    defineField({
+      name: 'tools',
+      title: 'Toolbar',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Up to six toolbar buttons, e.g. "Trim", "Title", "Photo", "Transition".',
+      validation: (r) => r.max(6),
+    }),
+    defineField({ name: 'doneLabel', title: 'Done Label', type: 'string', description: 'The confirm button, e.g. "Done".' }),
+  ],
+  preview: {
+    select: { title: 'title', subtitle: 'range', media: 'image' },
+    prepare: ({ title, subtitle, media }) => ({ title: title ?? 'Editor', subtitle, media }),
+  },
+});
+
+/**
+ * The record-countdown mock in csAppCtaBlock: a take label, a big digit and a
+ * REC readout, set above the heading.
+ */
+export const csCountdown = defineType({
+  name: 'csCountdown',
+  title: 'Countdown',
+  type: 'object',
+  fields: [
+    defineField({ name: 'eyebrow', title: 'Eyebrow', type: 'string', description: 'Take label, e.g. "Take 03".' }),
+    defineField({ name: 'digit', title: 'Digit', type: 'string', description: 'The big countdown number, e.g. "1".' }),
+    defineField({ name: 'recLabel', title: 'Record Label', type: 'string', description: 'e.g. "REC".' }),
+    defineField({ name: 'timecode', title: 'Timecode', type: 'string', description: 'Set in tabular numerals, e.g. "00:00".' }),
+  ],
+  preview: {
+    select: { title: 'eyebrow', subtitle: 'digit' },
+    prepare: ({ title, subtitle }) => ({ title: title ?? 'Countdown', subtitle }),
   },
 });
 
@@ -270,4 +378,7 @@ export const customSitesObjectTypes = [
   csCredential,
   csBarAdmission,
   csFoldPreview,
+  csShowcaseTake,
+  csShowcaseEditor,
+  csCountdown,
 ];

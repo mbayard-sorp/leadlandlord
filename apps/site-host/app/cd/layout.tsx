@@ -8,6 +8,7 @@ import { csOgFallbackImage } from '@/lib/customsites-metadata';
 import { cueDuoFontVars } from '@/lib/customsites-fonts-cueduo';
 import { SiteHeader } from '@/components/customsites/SiteHeader';
 import { SiteFooter } from '@/components/customsites/SiteFooter';
+import { MobileBar } from '@/components/customsites/MobileBar';
 import { CustomSiteJsonLd } from '@/components/customsites/CustomSiteJsonLd';
 import { CustomSiteNavigationJsonLd } from '@/components/customsites/CustomSiteNavigationJsonLd';
 import { WebVitalsReporter } from '@/components/shared/WebVitalsReporter';
@@ -23,10 +24,10 @@ import '@/styles/customsites/cueduo.css';
  * Two differences from sites #1 and #2, both because this is a product site
  * rather than a phone-first service business:
  *  - no TopBar: there is no phone number and no office hours to put in one;
- *  - no StickyBar: it exists to keep a tel: link in reach on a phone, and the
- *    equivalent here (the App Store link) is not live yet. Both components are
- *    still styled in cueduo.css so either can be switched on without a
- *    stylesheet change.
+ *  - no StickyBar: it exists to keep a tel: link in reach on a phone. The
+ *    non-phone equivalent is MobileBar, driven by csSite.mobileBar. TopBar is
+ *    still styled in cueduo.css so it can be switched on without a stylesheet
+ *    change.
  */
 export default async function CueDuoLayout({ children }: { children: React.ReactNode }) {
   const site = await resolveCurrentCustomSite();
@@ -37,9 +38,10 @@ export default async function CueDuoLayout({ children }: { children: React.React
     fetchCustomSiteTestimonials(site.siteKey),
   ]);
   const baseUrl = await currentRequestBaseUrl();
+  const hasMobileBar = Boolean(site.mobileBar?.ctaLabel && site.mobileBar.ctaHref);
 
   return (
-    <div className={`cs-cueduo ${cueDuoFontVars}`}>
+    <div className={`cs-cueduo ${cueDuoFontVars}${hasMobileBar ? ' cs-has-mobilebar' : ''}`}>
       <a href="#main" className="cs-skip-link">
         Skip to main content
       </a>
@@ -47,11 +49,13 @@ export default async function CueDuoLayout({ children }: { children: React.React
       <CustomSiteJsonLd site={site} attorneys={attorneys} testimonials={testimonials} baseUrl={baseUrl} />
       <CustomSiteNavigationJsonLd site={site} baseUrl={baseUrl} />
 
-      <SiteHeader site={site} />
+      <SiteHeader site={site} showWordmark />
 
       <main id="main">{children}</main>
 
       <SiteFooter site={site} />
+
+      <MobileBar bar={site.mobileBar} />
 
       {process.env.NODE_ENV === 'production' && <WebVitalsReporter />}
 
