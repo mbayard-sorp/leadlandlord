@@ -136,6 +136,8 @@ export interface WebPageJsonLdInput {
   path: string;
   name: string;
   description?: string | null;
+  /** @id of the graph node this page is about, e.g. `${origin}/#app`. */
+  aboutId?: string;
 }
 
 /**
@@ -156,5 +158,6 @@ export function buildWebPageJsonLd(input: WebPageJsonLdInput): Record<string, un
     name: input.name,
     ...(input.description ? { description: input.description } : {}),
     isPartOf: { '@id': `${input.origin}/#website` },
+    ...(input.aboutId ? { about: { '@id': input.aboutId } } : {}),
   };
 }

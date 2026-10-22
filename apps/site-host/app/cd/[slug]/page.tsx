@@ -8,7 +8,7 @@ import {
 import { csSitePaths } from '@/lib/customsites-registry';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
 import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
-import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
+import { applyCsSeoOverrides, csDedupeBrandedTitle, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageBuilder } from '@/components/customsites/PageBuilder';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { ArticleLayout } from '@/components/customsites/ArticleLayout';
@@ -146,7 +146,7 @@ export async function generateMetadata({ params }: RouteParams) {
       siteName: site.name,
       mdPath: `/${slug}.md`,
     });
-    return applyCsSeoOverrides(meta, page.seo);
+    return applyCsSeoOverrides(csDedupeBrandedTitle(meta, site.name), page.seo);
   }
 
   if (pub) {
@@ -160,7 +160,7 @@ export async function generateMetadata({ params }: RouteParams) {
       siteName: site.name,
       mdPath: `/${slug}.md`,
     });
-    return applyCsSeoOverrides(meta, pub.seo);
+    return applyCsSeoOverrides(csDedupeBrandedTitle(meta, site.name), pub.seo);
   }
 
   return {};

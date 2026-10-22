@@ -1,6 +1,8 @@
 import type { CustomSite, CustomSiteAttorneySummary, CsTestimonialItem } from '@/lib/customsites-sanity';
 import { csOrigin, buildAreaServed, buildPersonJsonLd, buildReviewNodes } from '@/lib/customsites-jsonld';
 
+const APP_TYPES = new Set(['SoftwareApplication', 'MobileApplication', 'WebApplication']);
+
 interface Props {
   site: CustomSite;
   /** All attorneys on the site, oldest-first. Index 0 is the "primary" attorney
@@ -52,9 +54,17 @@ export function CustomSiteJsonLd({ site, attorneys, testimonials, baseUrl }: Pro
   const areaServed = buildAreaServed(site);
   const reviews = buildReviewNodes(testimonials);
 
+  // An app site's organizationType names the product, but this node is the
+  // company that publishes the site and the app, so it stays an Organization.
+  // The app itself is its own node (SoftwareAppJsonLd).
+  const organizationType =
+    site.organizationType && APP_TYPES.has(site.organizationType)
+      ? 'Organization'
+      : (site.organizationType ?? 'LegalService');
+
   const organization: Record<string, unknown> = {
     '@context': 'https://schema.org',
-    '@type': site.organizationType ?? 'LegalService',
+    '@type': organizationType,
     '@id': `${origin}/#organization`,
     name: site.name,
     url: `${origin}/`,

@@ -498,6 +498,10 @@ function practiceAreaToMarkdown(area: CustomSitePracticeAreaFull): string {
   if (area.excerpt) parts.push(area.excerpt);
   const body = portableTextToMarkdown(area.body);
   if (body) parts.push(body);
+  // Same heading the service/feature detail pages render above the list.
+  if (area.deliverables && area.deliverables.length > 0) {
+    parts.push(['## What’s included', area.deliverables.map((d) => `- ${d}`).join('\n')].join('\n\n'));
+  }
   if (area.faqs && area.faqs.length > 0) {
     const faqLines = area.faqs.flatMap((f) => [`**${f.question}**`, f.answer]);
     parts.push(['## Frequently Asked Questions', ...faqLines].join('\n\n'));
