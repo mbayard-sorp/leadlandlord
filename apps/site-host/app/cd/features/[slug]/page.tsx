@@ -129,11 +129,11 @@ export default async function ServiceDetailPage({ params }: RouteParams) {
       <section className="cs-section cs-appcta cs-section--navy" id="get">
         <div className="cs-container">
           <h2 className="cs-appcta-heading">Say it once, and get on with your day.</h2>
-          <p className="cs-appcta-body">Unfold the phone, read at the lens, trim it, send it.</p>
+          <p className="cs-appcta-body">Read at the lens, keep the good take, send it.</p>
           <div className="cs-appcta-actions">
             <span className="cs-storebadge--soon">Coming to the App Store</span>
           </div>
-          <p className="cs-appcta-note">Requires a folding phone running iOS 18 or later</p>
+          <p className="cs-appcta-note">Requires an iPhone running iOS 18 or later</p>
         </div>
       </section>
 
