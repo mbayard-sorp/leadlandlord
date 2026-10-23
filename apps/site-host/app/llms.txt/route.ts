@@ -94,12 +94,13 @@ export async function GET(): Promise<Response> {
         .join(' ');
     const paLinks = practiceAreas.map((p) => csLink(p.title, `${base}/${servicesPath}/${p.slug}.md`, p.excerpt));
     const pubLinks = publications.map((p) => csLink(p.title, `${base}/${p.slug}.md`, p.excerpt));
-    const aboutPage = pages.find((p) => p.slug === 'about');
-    const contactPage = pages.find((p) => p.slug === 'contact');
-    const moreLinks = [
-      aboutPage ? csLink(aboutPage.title, `${base}/about.md`, aboutPage.description) : null,
-      contactPage ? csLink(contactPage.title, `${base}/contact.md`, contactPage.description) : null,
-    ];
+    // Secondary pages an agent should know about, in this order, for
+    // whichever of them the site has: a practice has About and Contact, an
+    // app site has Pricing and Support.
+    const moreLinks = ['about', 'pricing', 'support', 'contact'].map((slug) => {
+      const page = pages.find((p) => p.slug === slug);
+      return page ? csLink(page.title, `${base}/${slug}.md`, page.description) : null;
+    });
 
     const csBody = [
       `# ${csSite.name}`,

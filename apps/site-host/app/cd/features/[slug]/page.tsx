@@ -7,7 +7,7 @@ import {
 } from '@/lib/customsites-sanity';
 import { buildPageMetadata, breadcrumbsJsonLd, currentRequestBaseUrl } from '@/lib/seo-meta';
 import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
-import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
+import { applyCsSeoOverrides, csDedupeBrandedTitle, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageHeader } from '@/components/customsites/PageHeader';
 import { Prose } from '@/components/customsites/Prose';
 import { RelatedServices } from '@/components/customsites/RelatedServices';
@@ -39,26 +39,20 @@ export default async function ServiceDetailPage({ params }: RouteParams) {
     { name: area.title, path: `/features/${slug}` },
   ]);
 
-  // A feature of an app, not a service sold in a territory. areaServed is
-  // deliberately dropped: the app is not delivered to a geography.
-  const serviceJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Service',
-    name: area.title,
-    ...(area.excerpt ? { description: area.excerpt } : {}),
-    provider: { '@id': `${origin}/#organization` },
-  };
+  // A feature of the app, not a Service sold by a provider: the page is
+  // about the layout's MobileApplication node (SoftwareAppJsonLd), whose
+  // featureList names every feature page.
   const webPage = buildWebPageJsonLd({
     origin,
     path: `/features/${slug}`,
     name: area.seo?.metaTitle ?? area.title,
     description: area.seo?.metaDescription ?? area.excerpt,
+    aboutId: `${origin}/#app`,
   });
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }} />
 
       <PageHeader
@@ -129,11 +123,11 @@ export default async function ServiceDetailPage({ params }: RouteParams) {
       <section className="cs-section cs-appcta cs-section--navy" id="get">
         <div className="cs-container">
           <h2 className="cs-appcta-heading">Say it once, and get on with your day.</h2>
-          <p className="cs-appcta-body">Unfold the phone, read at the lens, trim it, send it.</p>
+          <p className="cs-appcta-body">Read at the lens, keep the good take, send it.</p>
           <div className="cs-appcta-actions">
             <span className="cs-storebadge--soon">Coming to the App Store</span>
           </div>
-          <p className="cs-appcta-note">Requires a folding phone running iOS 18 or later</p>
+          <p className="cs-appcta-note">Requires an iPhone running iOS 18 or later</p>
         </div>
       </section>
 
@@ -158,5 +152,5 @@ export async function generateMetadata({ params }: RouteParams) {
     siteName: site.name,
     mdPath: `/features/${slug}.md`,
   });
-  return applyCsSeoOverrides(meta, area.seo);
+  return applyCsSeoOverrides(csDedupeBrandedTitle(meta, site.name), area.seo);
 }

@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { notFound } from 'next/navigation';
 import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
-import { fetchCustomSiteAttorneys, fetchCustomSiteTestimonials } from '@/lib/customsites-sanity';
+import {
+  fetchCustomSiteAttorneys,
+  fetchCustomSitePracticeAreaCards,
+  fetchCustomSiteTestimonials,
+} from '@/lib/customsites-sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
 import { csOgFallbackImage } from '@/lib/customsites-metadata';
 import { cueDuoFontVars } from '@/lib/customsites-fonts-cueduo';
@@ -11,6 +15,7 @@ import { SiteFooter } from '@/components/customsites/SiteFooter';
 import { MobileBar } from '@/components/customsites/MobileBar';
 import { CustomSiteJsonLd } from '@/components/customsites/CustomSiteJsonLd';
 import { CustomSiteNavigationJsonLd } from '@/components/customsites/CustomSiteNavigationJsonLd';
+import { SoftwareAppJsonLd } from '@/components/customsites/SoftwareAppJsonLd';
 import { WebVitalsReporter } from '@/components/shared/WebVitalsReporter';
 import '@/styles/customsites/cueduo.css';
 
@@ -33,9 +38,10 @@ export default async function CueDuoLayout({ children }: { children: React.React
   const site = await resolveCurrentCustomSite();
   if (!site) notFound();
 
-  const [attorneys, testimonials] = await Promise.all([
+  const [attorneys, testimonials, features] = await Promise.all([
     fetchCustomSiteAttorneys(site.siteKey),
     fetchCustomSiteTestimonials(site.siteKey),
+    fetchCustomSitePracticeAreaCards(site.siteKey),
   ]);
   const baseUrl = await currentRequestBaseUrl();
   const hasMobileBar = Boolean(site.mobileBar?.ctaLabel && site.mobileBar.ctaHref);
@@ -48,6 +54,13 @@ export default async function CueDuoLayout({ children }: { children: React.React
 
       <CustomSiteJsonLd site={site} attorneys={attorneys} testimonials={testimonials} baseUrl={baseUrl} />
       <CustomSiteNavigationJsonLd site={site} baseUrl={baseUrl} />
+      <SoftwareAppJsonLd
+        site={site}
+        features={features}
+        baseUrl={baseUrl}
+        operatingSystem="iOS 18.0 or later"
+        applicationCategory="MultimediaApplication"
+      />
 
       <SiteHeader site={site} showWordmark />
 

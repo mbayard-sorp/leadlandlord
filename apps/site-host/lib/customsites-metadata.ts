@@ -24,6 +24,18 @@ export function csOgFallbackImage(baseUrl: string, siteKey: string): PageMetaIma
 }
 
 /**
+ * Marks a title that already names the site as absolute, so the layout's
+ * `%s | {siteName}` template does not append the name a second time (a
+ * csSeo.metaTitle like "Keep every take | CueDuo" would otherwise render as
+ * "Keep every take | CueDuo | CueDuo"). Titles without the name are left for
+ * the template to brand.
+ */
+export function csDedupeBrandedTitle(meta: Metadata, siteName: string): Metadata {
+  if (typeof meta.title !== 'string' || !meta.title.includes(siteName)) return meta;
+  return { ...meta, title: { absolute: meta.title } };
+}
+
+/**
  * Layers csSeo.noindex / csSeo.canonicalOverride on top of a Metadata object
  * already built by buildPageMetadata (ADR 0033 Amendment 1 D10). Page-level
  * overrides sit on top of csSite.robotsDisallow (the site-wide default set in

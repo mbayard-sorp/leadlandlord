@@ -19,6 +19,7 @@ export default async function CueDuoHome() {
     path: '/',
     name: page.seo?.metaTitle ?? site.seo?.metaTitle ?? site.name,
     description: page.seo?.metaDescription ?? site.seo?.metaDescription ?? site.tagline,
+    aboutId: `${csOrigin(baseUrl)}/#app`,
   });
 
   return (
