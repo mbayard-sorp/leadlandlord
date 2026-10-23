@@ -1,4 +1,19 @@
-import type { CsStoreState } from '@/lib/customsites-sanity';
+import type { CsStoreState, CustomSite } from '@/lib/customsites-sanity';
+
+/**
+ * Where a store-facing button points. Once csSite.storeState is "live" every
+ * one of them (header, mobile bar, plan cards) goes to the App Store together;
+ * before that each keeps its authored in-page href, which on CueDuo is the
+ * closing CTA band (#get). A site with no storeState is not an app site and
+ * keeps its authored href unconditionally.
+ */
+export function csStoreAwareHref(
+  site: Pick<CustomSite, 'storeState' | 'storeHref'> | null | undefined,
+  authoredHref: string | null | undefined,
+): string | undefined {
+  if (site?.storeState === 'live' && site.storeHref) return site.storeHref;
+  return authoredHref ?? undefined;
+}
 
 interface Props {
   state?: CsStoreState | null;

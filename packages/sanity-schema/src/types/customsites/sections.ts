@@ -280,11 +280,12 @@ export const csContactCtaBlock = defineType({
         list: [
           { title: 'Standard (name / email / phone / message)', value: 'standard' },
           { title: 'Consultation (adds call-type choices)', value: 'consultation' },
+          { title: 'Support (name / email / which phone / message)', value: 'support' },
         ],
         layout: 'radio',
       },
       initialValue: 'standard',
-      description: '"Consultation" adds the call-type checkbox group (Goal / Tax / Practice Profitability / Other). "Standard" is the shared name/email/phone/message set.',
+      description: '"Consultation" adds the call-type checkbox group (Goal / Tax / Practice Profitability / Other). "Standard" is the shared name/email/phone/message set. "Support" is for app help: one Name field, which phone the user is on, and no phone number.',
     }),
     defineField({
       name: 'formFootnote',

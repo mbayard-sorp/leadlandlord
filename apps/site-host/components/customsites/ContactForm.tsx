@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 interface Props {
   siteKey: string;
   /** "standard" = name/email/phone/message (site #1's set). "consultation"
-   * adds the call-type checkbox group and makes the message optional
-   * (csContactCtaBlock.formVariant). */
-  variant?: 'standard' | 'consultation';
+   * adds the call-type checkbox group and makes the message optional.
+   * "support" is an app help form: one Name field, email, which phone the
+   * user is on, message, and no phone number (csContactCtaBlock.formVariant). */
+  variant?: 'standard' | 'consultation' | 'support';
   /** Fine print under the submit button (csContactCtaBlock.formFootnote). */
   footnote?: string | null;
   submitLabel?: string;
@@ -34,6 +35,7 @@ const CALL_TYPES = [
  */
 export function ContactForm({ siteKey, variant = 'standard', footnote, submitLabel }: Props) {
   const isConsultation = variant === 'consultation';
+  const isSupport = variant === 'support';
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +65,8 @@ export function ContactForm({ siteKey, variant = 'standard', footnote, submitLab
     const message = String(fd.get('message') ?? '').trim();
 
     const nextFieldErrors: Partial<Record<FieldName, string>> = {};
-    if (!firstName) nextFieldErrors.firstName = 'First name is required.';
-    if (!lastName) nextFieldErrors.lastName = 'Last name is required.';
+    if (!firstName) nextFieldErrors.firstName = isSupport ? 'Name is required.' : 'First name is required.';
+    if (!lastName && !isSupport) nextFieldErrors.lastName = 'Last name is required.';
     if (!email) nextFieldErrors.email = 'Email is required.';
     else if (!EMAIL_RE.test(email)) nextFieldErrors.email = 'Enter a valid email address.';
     if (!message && !isConsultation) nextFieldErrors.message = 'Message is required.';
@@ -84,9 +86,10 @@ export function ContactForm({ siteKey, variant = 'standard', footnote, submitLab
           kind: isConsultation ? 'consultation' : 'contact',
           siteKey,
           firstName,
-          lastName,
+          lastName: lastName || undefined,
           email,
           phone: String(fd.get('phone') ?? '').trim() || undefined,
+          device: String(fd.get('device') ?? '').trim() || undefined,
           ...(isConsultation
             ? { message: message || undefined, callTypes: fd.getAll('callTypes').map(String) }
             : { message }),
@@ -120,76 +123,139 @@ export function ContactForm({ siteKey, variant = 'standard', footnote, submitLab
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <div className="cs-form-row">
+      {isSupport ? (
+        <div className="cs-form-row">
+          <div className="cs-form-field">
+            <label className="cs-form-label" htmlFor="cs-firstName">
+              Name <span className="cs-form-required" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="cs-firstName"
+              name="firstName"
+              type="text"
+              required
+              className="cs-form-input"
+              autoComplete="name"
+              aria-invalid={fieldErrors.firstName ? true : undefined}
+              aria-describedby={fieldErrors.firstName ? 'cs-firstName-error' : undefined}
+            />
+            {fieldErrors.firstName ? (
+              <p id="cs-firstName-error" className="cs-form-field-error">
+                {fieldErrors.firstName}
+              </p>
+            ) : null}
+          </div>
+          <div className="cs-form-field">
+            <label className="cs-form-label" htmlFor="cs-email">
+              Email <span className="cs-form-required" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="cs-email"
+              name="email"
+              type="email"
+              required
+              className="cs-form-input"
+              autoComplete="email"
+              aria-invalid={fieldErrors.email ? true : undefined}
+              aria-describedby={fieldErrors.email ? 'cs-email-error' : undefined}
+            />
+            {fieldErrors.email ? (
+              <p id="cs-email-error" className="cs-form-field-error">
+                {fieldErrors.email}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {isSupport ? (
         <div className="cs-form-field">
-          <label className="cs-form-label" htmlFor="cs-firstName">
-            First name <span className="cs-form-required">*</span>
+          <label className="cs-form-label" htmlFor="cs-device">
+            Which phone?
           </label>
           <input
-            id="cs-firstName"
-            name="firstName"
+            id="cs-device"
+            name="device"
             type="text"
-            required
             className="cs-form-input"
-            autoComplete="given-name"
-            aria-invalid={fieldErrors.firstName ? true : undefined}
-            aria-describedby={fieldErrors.firstName ? 'cs-firstName-error' : undefined}
+            placeholder="e.g. iPhone 16 Pro, iOS 18.2"
+            autoComplete="off"
           />
-          {fieldErrors.firstName ? (
-            <p id="cs-firstName-error" className="cs-form-field-error">
-              {fieldErrors.firstName}
-            </p>
-          ) : null}
         </div>
-        <div className="cs-form-field">
-          <label className="cs-form-label" htmlFor="cs-lastName">
-            Last name <span className="cs-form-required">*</span>
-          </label>
-          <input
-            id="cs-lastName"
-            name="lastName"
-            type="text"
-            required
-            className="cs-form-input"
-            autoComplete="family-name"
-            aria-invalid={fieldErrors.lastName ? true : undefined}
-            aria-describedby={fieldErrors.lastName ? 'cs-lastName-error' : undefined}
-          />
-          {fieldErrors.lastName ? (
-            <p id="cs-lastName-error" className="cs-form-field-error">
-              {fieldErrors.lastName}
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <div className="cs-form-row">
-        <div className="cs-form-field">
-          <label className="cs-form-label" htmlFor="cs-email">
-            Email <span className="cs-form-required">*</span>
-          </label>
-          <input
-            id="cs-email"
-            name="email"
-            type="email"
-            required
-            className="cs-form-input"
-            autoComplete="email"
-            aria-invalid={fieldErrors.email ? true : undefined}
-            aria-describedby={fieldErrors.email ? 'cs-email-error' : undefined}
-          />
-          {fieldErrors.email ? (
-            <p id="cs-email-error" className="cs-form-field-error">
-              {fieldErrors.email}
-            </p>
-          ) : null}
-        </div>
-        <div className="cs-form-field">
-          <label className="cs-form-label" htmlFor="cs-phone">
-            Phone
-          </label>
-          <input id="cs-phone" name="phone" type="tel" className="cs-form-input" autoComplete="tel" />
-        </div>
-      </div>
+      ) : null}
+      {isSupport ? null : (
+        <>
+          <div className="cs-form-row">
+            <div className="cs-form-field">
+              <label className="cs-form-label" htmlFor="cs-firstName">
+                First name <span className="cs-form-required" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="cs-firstName"
+                name="firstName"
+                type="text"
+                required
+                className="cs-form-input"
+                autoComplete="given-name"
+                aria-invalid={fieldErrors.firstName ? true : undefined}
+                aria-describedby={fieldErrors.firstName ? 'cs-firstName-error' : undefined}
+              />
+              {fieldErrors.firstName ? (
+                <p id="cs-firstName-error" className="cs-form-field-error">
+                  {fieldErrors.firstName}
+                </p>
+              ) : null}
+            </div>
+            <div className="cs-form-field">
+              <label className="cs-form-label" htmlFor="cs-lastName">
+                Last name <span className="cs-form-required" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="cs-lastName"
+                name="lastName"
+                type="text"
+                required
+                className="cs-form-input"
+                autoComplete="family-name"
+                aria-invalid={fieldErrors.lastName ? true : undefined}
+                aria-describedby={fieldErrors.lastName ? 'cs-lastName-error' : undefined}
+              />
+              {fieldErrors.lastName ? (
+                <p id="cs-lastName-error" className="cs-form-field-error">
+                  {fieldErrors.lastName}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="cs-form-row">
+            <div className="cs-form-field">
+              <label className="cs-form-label" htmlFor="cs-email">
+                Email <span className="cs-form-required" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="cs-email"
+                name="email"
+                type="email"
+                required
+                className="cs-form-input"
+                autoComplete="email"
+                aria-invalid={fieldErrors.email ? true : undefined}
+                aria-describedby={fieldErrors.email ? 'cs-email-error' : undefined}
+              />
+              {fieldErrors.email ? (
+                <p id="cs-email-error" className="cs-form-field-error">
+                  {fieldErrors.email}
+                </p>
+              ) : null}
+            </div>
+            <div className="cs-form-field">
+              <label className="cs-form-label" htmlFor="cs-phone">
+                Phone
+              </label>
+              <input id="cs-phone" name="phone" type="tel" className="cs-form-input" autoComplete="tel" />
+            </div>
+          </div>
+        </>
+      )}
       {isConsultation ? (
         <fieldset className="cs-form-field" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="cs-form-label">How can we help?</legend>
@@ -206,7 +272,7 @@ export function ContactForm({ siteKey, variant = 'standard', footnote, submitLab
 
       <div className="cs-form-field">
         <label className="cs-form-label" htmlFor="cs-message">
-          Message {isConsultation ? null : <span className="cs-form-required">*</span>}
+          Message {isConsultation ? null : <span className="cs-form-required" aria-hidden="true">*</span>}
         </label>
         <textarea
           id="cs-message"
@@ -240,7 +306,9 @@ export function ContactForm({ siteKey, variant = 'standard', footnote, submitLab
       ) : null}
 
       <button type="submit" disabled={pending} className="cs-btn cs-btn-primary" style={{ marginTop: 8 }}>
-        {pending ? 'Sending…' : (submitLabel ?? (isConsultation ? 'Book My Free Consultation' : 'Send Message'))}
+        {pending
+          ? 'Sending…'
+          : (submitLabel ?? (isConsultation ? 'Book My Free Consultation' : isSupport ? 'Send message' : 'Send Message'))}
       </button>
       {footnote ? (
         <p className="cs-form-footnote" style={{ marginTop: 12 }}>

@@ -105,6 +105,10 @@ export interface CustomSite {
   footerDisclosure?: string | null;
   /** Optional header button (e.g. "Get CueDuo"), independent of the phone button. */
   headerCta?: CustomSiteCta | null;
+  /** App sites only: the one switch every store-facing button follows. Unset on sites with no app. */
+  storeState?: CsStoreState | null;
+  /** The App Store URL, used once storeState is "live". */
+  storeHref?: string | null;
   /** Titled footer link columns. When non-empty they replace the flat `footerNav` links; the flat list stays the fallback. */
   footerColumns?: CustomSiteFooterColumn[] | null;
   /** Heading of the footer app-download column, e.g. "Get the app". */
@@ -150,6 +154,7 @@ const CUSTOM_SITE_PROJECTION = `{
   seo{ metaTitle, metaDescription, "ogImageUrl": ogImage.asset->url, noindex, canonicalOverride },
   titleTemplate, areaServed, indexnowKey, footerDisclosure,
   headerCta{ label, href },
+  storeState, storeHref,
   footerColumns[]{ _key, title, links[]{ label, href, children[]{ label, href } } },
   footerAppLabel, footerLegal,
   mobileBar{ text, ctaLabel, ctaHref }
@@ -709,7 +714,7 @@ export interface CsPublicationsBlock { _type: 'csPublicationsBlock'; _key: strin
 export interface CsCalloutBlock { _type: 'csCalloutBlock'; _key: string; label?: string | null; quote?: string | null; linkLabel?: string | null; linkHref?: string | null }
 export interface CsRichTextBlock { _type: 'csRichTextBlock'; _key: string; content?: CsPortableTextBlock[] | null }
 export interface CsContactChecklistItem { _key: string; heading: string; body?: string | null }
-export interface CsContactCtaBlock { _type: 'csContactCtaBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: string | null; showForm?: boolean | null; formVariant?: 'standard' | 'consultation' | null; formFootnote?: string | null; checklist?: CsContactChecklistItem[] | null }
+export interface CsContactCtaBlock { _type: 'csContactCtaBlock'; _key: string; eyebrow?: string | null; heading?: string | null; body?: string | null; showForm?: boolean | null; formVariant?: 'standard' | 'consultation' | 'support' | null; formFootnote?: string | null; checklist?: CsContactChecklistItem[] | null }
 export interface CsCtaBannerBlock { _type: 'csCtaBannerBlock'; _key: string; heading?: string | null; ctaLabel?: string | null; ctaHref?: string | null }
 export interface CsFaqBlock { _type: 'csFaqBlock'; _key: string; heading?: string | null; items?: CsFaqItem[] | null; layout?: 'stacked' | 'split' | null; outroLead?: string | null; outroLinkLabel?: string | null; outroLinkHref?: string | null; outroTail?: string | null }
 

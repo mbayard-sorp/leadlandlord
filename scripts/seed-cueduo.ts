@@ -98,7 +98,7 @@ const SITE_NAME = 'CueDuo';
 const SITE_ID = csSiteDocId(SITE_KEY);
 const siteRef = { _type: 'reference' as const, _ref: SITE_ID };
 
-const QUALIFIER = 'Requires a folding phone running iOS 18 or later';
+const QUALIFIER = 'Requires an iPhone running iOS 18 or later';
 
 /** Shown as "Last updated" on /privacy and /terms. Bump it whenever either
  *  body changes — compliance reviewers look for this line. */
@@ -314,7 +314,7 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       _type: 'csPrompterBandBlock',
       _key: k('blk'),
       eyebrow: 'This is what you read from',
-      pastLine: 'Hi, I’m Maya. For the last year I’ve been building something for people who hate talking to camera.',
+      pastLine: 'For the last year I’ve been building something for people who hate talking to camera.',
       currentLine: 'It lets you read your script while looking straight at the person watching.',
       nextLine: 'No glance down.',
       image: imageValue(
@@ -429,7 +429,6 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
         { _type: 'csContrastRow', _key: k('row'), left: 'Files airdropped to a laptop to trim', right: 'Trim and title on the phone' },
         { _type: 'csContrastRow', _key: k('row'), left: 'Whole thing takes an afternoon', right: 'Posted before the coffee goes cold' },
       ],
-      footnote: 'Describes the workflow, not measured results. No timing claim is made.',
     },
     {
       _type: 'csPlansBlock',
@@ -471,13 +470,13 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
         },
       ],
       footnote:
-        'Prices are placeholders pending client sign-off. Billing happens in the App Store; the site never takes payment.',
+        'Billed through your Apple ID. Cancel any time in Settings.',
     },
     {
       _type: 'csRequirementsBlock',
       _key: k('blk'),
       items: [
-        { _type: 'csRequirement', _key: k('req'), label: 'Device', value: 'A folding phone with an outer display. Models TBC.' },
+        { _type: 'csRequirement', _key: k('req'), label: 'Device', value: 'Any iPhone that runs iOS 18 or later.' },
         { _type: 'csRequirement', _key: k('req'), label: 'System', value: 'iOS 18 or later.' },
         { _type: 'csRequirement', _key: k('req'), label: 'Storage', value: 'About 60 MB, plus room for your takes.' },
         { _type: 'csRequirement', _key: k('req'), label: 'Languages', value: 'English at launch. More as we go.' },
@@ -593,7 +592,6 @@ async function main() {
     footerNav: [
       { _type: 'csNavLink', _key: k('nav'), label: 'Features', href: '/features' },
       { _type: 'csNavLink', _key: k('nav'), label: 'Pricing', href: '/pricing' },
-      { _type: 'csNavLink', _key: k('nav'), label: 'Updates', href: '/updates' },
       { _type: 'csNavLink', _key: k('nav'), label: 'Support', href: '/support' },
       { _type: 'csNavLink', _key: k('nav'), label: 'Privacy', href: '/privacy' },
       { _type: 'csNavLink', _key: k('nav'), label: 'Terms', href: '/terms' },
@@ -601,6 +599,8 @@ async function main() {
     // Chrome for the v3 design. footerColumns supersede the flat footerNav
     // above, which stays seeded as the fallback.
     headerCta: { _type: 'headerCta', label: 'Get CueDuo', href: '/#get' },
+    // Every store-facing button follows this; flip to 'live' with storeHref at launch.
+    storeState: 'soon',
     footerColumns: [
       {
         _type: 'csFooterColumn',
@@ -609,7 +609,6 @@ async function main() {
         links: [
           { _type: 'csNavLink', _key: 'fp-features', label: 'Features', href: '/features' },
           { _type: 'csNavLink', _key: 'fp-pricing', label: 'Pricing', href: '/pricing' },
-          { _type: 'csNavLink', _key: 'fp-updates', label: 'Updates', href: '/updates' },
         ],
       },
       {
@@ -675,7 +674,7 @@ async function main() {
             ),
           ],
         },
-        { _type: 'csPracticeGridBlock', _key: k('blk'), mode: 'all', heading: 'Features' },
+        { _type: 'csPracticeGridBlock', _key: k('blk'), mode: 'all' },
         {
           _type: 'csAppCtaBlock',
           _key: k('blk'),
@@ -741,7 +740,7 @@ async function main() {
             },
           ],
           footnote:
-            'Prices are placeholders pending client sign-off. Billing happens in the App Store; the site never takes payment.',
+            'Billed through your Apple ID. Cancel any time in Settings.',
         },
         {
           _type: 'csFaqBlock',
@@ -821,6 +820,7 @@ async function main() {
           heading: 'Write to us',
           body: 'Tell us what happened and which phone you’re on. A person answers, usually the same day.',
           showForm: true,
+          formVariant: 'support',
           formFootnote: 'We only use your address to answer you.',
         },
       ],

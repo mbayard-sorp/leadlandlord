@@ -152,6 +152,12 @@
 /* The header is sticky, so anchored sections need to clear it. */
 .cs-cueduo [id] { scroll-margin-top: 84px; }
 .cs-cueduo .cs-section--tight { padding: 0 0 var(--cs-section-pad); }
+.cs-cueduo .cs-section--flush-top { padding-top: 0; }
+/* Two light sections in a row would stack both paddings (~2x the intended
+   gap, design audit CD-17). The second drops its top padding. Fog, graphite
+   and prompter grounds keep theirs: the colour change is the separator.
+   The journey carries --muted but paints no Fog, so it counts as light. */
+.cs-cueduo .cs-section:not(.cs-section--muted:not(.cs-journey), .cs-section--navy) + .cs-section:not(.cs-section--muted:not(.cs-journey), .cs-section--navy) { padding-top: 0; }
 .cs-cueduo .cs-section--muted { background: var(--cs-surface); }
 .cs-cueduo .cs-section--navy { background: var(--cs-graphite); color: var(--cs-inverse-text); }
 .cs-cueduo .cs-section--navy p { color: var(--cs-inverse-muted); }
@@ -165,29 +171,59 @@
 .cs-cueduo .cs-lead { font-size: var(--cs-fs-lead); line-height: 1.45; color: var(--cs-muted); }
 
 .cs-cueduo .cs-eyebrow { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-accent-ink); }
-.cs-cueduo .cs-eyebrow--inverse { color: var(--cs-inverse-quiet); }
-/* Section-level eyebrows that name a screen rather than carrying the accent.
-   The accent budget is one element per section (brand guide: 80/15/5). */
-.cs-cueduo .cs-eyebrow--quiet { color: var(--cs-hairline-text); }
+/* ONE label style site-wide (design audit CD-13): accent caps. A label that
+   opens a section also carries the 28px rule; a label inside a showcase is
+   the same without the rule. There is no grey variant: --quiet is kept as a
+   class for the blocks that emit it, but it renders as the accent. On dark
+   grounds --inverse is the bright accent (5.48:1 on graphite). */
+.cs-cueduo .cs-eyebrow--inverse { color: var(--cs-accent-inverse); }
+.cs-cueduo .cs-eyebrow--quiet { color: var(--cs-accent-ink); }
 .cs-cueduo .cs-eyebrow--ruled { display: flex; align-items: center; gap: 14px; margin: 0 0 var(--cs-space-4); }
 .cs-cueduo .cs-rule { width: 28px; height: 1px; background: currentColor; flex: none; }
 .cs-cueduo .cs-prompter-band .cs-rule { background: var(--cs-accent-inverse); }
+/* Section-opening labels rendered by shared markup with no .cs-rule span. */
+.cs-cueduo .cs-section-head .cs-eyebrow,
+.cs-cueduo .cs-contrast-head .cs-eyebrow,
+.cs-cueduo .cs-intro-media-copy .cs-eyebrow,
+.cs-cueduo .cs-page-header .cs-eyebrow { display: flex; align-items: center; gap: 14px; }
+.cs-cueduo .cs-section-head .cs-eyebrow::before,
+.cs-cueduo .cs-contrast-head .cs-eyebrow::before,
+.cs-cueduo .cs-intro-media-copy .cs-eyebrow::before,
+.cs-cueduo .cs-page-header .cs-eyebrow::before { content: ""; width: 28px; height: 1px; background: currentColor; flex: none; }
+/* Interior headers and the related rail sit on light grounds. */
+.cs-cueduo .cs-page-header .cs-eyebrow, .cs-cueduo .cs-services-rail .cs-eyebrow { color: var(--cs-accent-ink); }
 
 .cs-cueduo .cs-card { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: 26px; box-shadow: var(--cs-shadow-card); }
 .cs-cueduo .cs-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+/* The features index: three per row on a six-track grid, so a short last row
+   of two takes wider cards and a lone last card spans the row. auto-fit gave
+   4+1 at desktop width (CD-07). */
+@media (min-width: 900px) {
+  .cs-cueduo #practice-areas .cs-grid-3 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .cs-cueduo #practice-areas .cs-grid-3 > * { grid-column: span 2; }
+  .cs-cueduo #practice-areas .cs-grid-3 > :nth-child(3n + 1):nth-last-child(2),
+  .cs-cueduo #practice-areas .cs-grid-3 > :nth-child(3n + 2):last-child { grid-column: span 3; }
+  .cs-cueduo #practice-areas .cs-grid-3 > :nth-child(3n + 1):last-child { grid-column: 1 / -1; }
+}
+.cs-cueduo #practice-areas .cs-card { display: flex; flex-direction: column; gap: 10px; }
+.cs-cueduo #practice-areas .cs-card .cs-link { margin-top: auto; }
 
 .cs-cueduo .cs-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font: 600 16px/1 var(--cs-font-body); padding: 15px 22px; border-radius: var(--cs-radius-control); text-decoration: none; letter-spacing: -.01em; }
 .cs-cueduo .cs-btn-primary { background: var(--cs-accent); color: var(--cs-on-accent); }
 .cs-cueduo .cs-btn-primary:hover { background: #2751E3; }
 .cs-cueduo .cs-btn-primary:active { background: #2246C6; }
-.cs-cueduo .cs-btn-secondary { background: transparent; color: var(--cs-ink); box-shadow: inset 0 0 0 1px rgba(20, 23, 28, .18); }
+.cs-cueduo .cs-btn-secondary { background: var(--cs-white); color: var(--cs-ink); box-shadow: var(--cs-shadow-card); }
 .cs-cueduo .cs-btn-secondary:hover { background: var(--cs-surface); }
-.cs-cueduo .cs-btn[aria-disabled="true"] { background: var(--cs-surface); color: var(--cs-hairline-text); cursor: default; }
+/* Pre-launch store buttons ("Coming soon"). Readable, but plainly not a
+   control: Fog fill, no shadow, no hover. */
+.cs-cueduo .cs-btn[aria-disabled="true"], .cs-cueduo .cs-btn[aria-disabled="true"]:hover { background: var(--cs-surface); color: var(--cs-muted); box-shadow: none; cursor: default; }
 .cs-cueduo .cs-section--navy .cs-btn-primary { background: var(--cs-accent-inverse); color: var(--cs-on-accent-inverse); }
 
 .cs-cueduo .cs-link { color: var(--cs-accent-ink); font-weight: 600; }
 .cs-cueduo .cs-link:hover { color: var(--cs-ink); }
-.cs-cueduo .cs-link-arrow::after { content: " \2192"; }
+/* .cs-link-arrow is a typed "→" span in the shared markup, so it needs no
+   ::after; adding one doubled every arrow (design audit CD-05). */
+.cs-cueduo .cs-link-arrow { margin-left: .3em; }
 /* The design's text links are a rule under the label, not an underline —
    thinner, and it survives descenders. */
 .cs-cueduo .cs-underline-link { display: inline-flex; align-items: center; font-weight: 600; font-size: 16px; letter-spacing: -.01em; color: var(--cs-ink); padding-bottom: 3px; border-bottom: 1px solid rgba(20, 23, 28, .18); }
@@ -196,12 +232,12 @@
 .cs-cueduo .cs-section--navy .cs-underline-link { color: var(--cs-inverse-text); border-bottom-color: rgba(255, 255, 255, .22); }
 .cs-cueduo .cs-section--navy .cs-underline-link--accent { color: var(--cs-accent-inverse); border-bottom-color: rgba(91, 130, 255, .3); }
 
-.cs-cueduo .cs-footnote { font-size: 12px; color: var(--cs-hairline-text); margin: 24px 0 0; max-width: var(--cs-measure); }
+.cs-cueduo .cs-footnote { font-size: 12px; color: var(--cs-muted); margin: 24px 0 0; max-width: var(--cs-measure); }
 
 /* A heading on the left, a supporting paragraph aligned to its baseline on
    the right. Used by plans, the journey and the contrast block. */
 .cs-cueduo .cs-section-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(32px, 5vw, 80px); align-items: end; margin-bottom: clamp(36px, 5vw, 56px); }
-.cs-cueduo .cs-section-head .cs-eyebrow { display: block; margin: 0 0 20px; }
+.cs-cueduo .cs-section-head .cs-eyebrow { margin: 0 0 20px; }
 .cs-cueduo .cs-section-head h2 { max-width: 14ch; text-wrap: balance; }
 .cs-cueduo .cs-section-head-aside { color: var(--cs-muted); line-height: 1.65; max-width: 42ch; margin: 0; }
 
@@ -220,7 +256,9 @@
 
 .cs-cueduo .cs-header { position: sticky; top: 0; z-index: 40; background: linear-gradient(180deg, rgba(255,255,255,.55), transparent 38%), var(--cs-glass); border-bottom: 1px solid var(--cs-hairline-soft); }
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .cs-cueduo .cs-header { backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); }
+  /* 24px, not the comp's 44: a blur radius that large repaints expensively
+     on every scroll frame on mid-range Android and older Macs (CD-32). */
+  .cs-cueduo .cs-header { backdrop-filter: blur(24px) saturate(190%); -webkit-backdrop-filter: blur(24px) saturate(190%); }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .cs-cueduo .cs-header { background: #F5F6F8; }   /* opaque fallback */
@@ -244,13 +282,15 @@
 .cs-cueduo .cs-header-phone-text { font-weight: 600; font-size: 14px; color: var(--cs-accent-ink); }
 
 .cs-cueduo .cs-nav { margin-left: auto; }
-.cs-cueduo .cs-nav-links { display: flex; align-items: center; gap: 32px; list-style: none; margin: 0; padding: 0; }
-.cs-cueduo .cs-nav-link { font-size: 14px; font-weight: 500; color: var(--cs-muted); letter-spacing: -.005em; }
+.cs-cueduo .cs-nav-links { display: flex; align-items: center; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.cs-cueduo .cs-nav-link { display: block; padding: 8px 12px; border-radius: var(--cs-radius-control); font-size: 14px; font-weight: 500; color: var(--cs-muted); letter-spacing: -.005em; }
 .cs-cueduo .cs-nav-link:hover { color: var(--cs-accent-ink); }
-.cs-cueduo .cs-nav-link[aria-current="page"] { color: var(--cs-ink); }
-/* Header button (csSite.headerCta): outline pill after the nav. */
-.cs-cueduo .cs-header-cta { flex: none; padding: 10px 20px; border-radius: var(--cs-radius-control); border: 1px solid rgba(20, 23, 28, .14); font-size: 14px; font-weight: 600; letter-spacing: -.005em; color: var(--cs-ink); }
-.cs-cueduo .cs-header-cta:hover { color: var(--cs-accent-ink); }
+/* The active page gets the glass-hi pill, per the cueduo.css spec. */
+.cs-cueduo .cs-nav-link[aria-current="page"] { color: var(--cs-ink); background: var(--cs-glass-hi); box-shadow: 0 1px 2px rgba(20, 23, 28, .06); }
+/* Header button (csSite.headerCta): the secondary button, white with the
+   card shadow. cueduo.css defines no outline style. */
+.cs-cueduo .cs-header-cta { flex: none; padding: 10px 20px; border-radius: var(--cs-radius-control); background: var(--cs-white); box-shadow: var(--cs-shadow-card); font-size: 14px; font-weight: 600; letter-spacing: -.005em; color: var(--cs-ink); }
+.cs-cueduo .cs-header-cta:hover { background: var(--cs-surface); color: var(--cs-ink); }
 .cs-cueduo .cs-nav-caret { width: 10px; height: 10px; opacity: .6; }
 .cs-cueduo .cs-nav-dropdown { background: var(--cs-white); border-radius: var(--cs-radius-inner); box-shadow: var(--cs-shadow-card); padding: 8px; }
 .cs-cueduo .cs-nav-toggle { display: none; width: 44px; height: 44px; border: 0; background: transparent; }
@@ -269,8 +309,8 @@
 
 .cs-cueduo .cs-footer { background: var(--cs-paper); border-top: 1px solid var(--cs-hairline); }
 .cs-cueduo .cs-footer-grid { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-5) var(--cs-container-pad) var(--cs-space-4); display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--cs-space-4); }
-.cs-cueduo .cs-footer-tagline { color: var(--cs-hairline-text); font-size: 14px; max-width: 26ch; line-height: 1.55; }
-.cs-cueduo .cs-footer-legal { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-3) var(--cs-container-pad) var(--cs-space-5); display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--cs-hairline-text); border-top: 1px solid var(--cs-hairline); }
+.cs-cueduo .cs-footer-tagline { color: var(--cs-muted); font-size: 14px; max-width: 26ch; line-height: 1.55; }
+.cs-cueduo .cs-footer-legal { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-3) var(--cs-container-pad) var(--cs-space-5); display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--cs-muted); border-top: 1px solid var(--cs-hairline); }
 .cs-cueduo .cs-footer-legal-links { display: flex; gap: 16px; margin-left: auto; }
 
 /* Product footer (SiteFooter ColumnFooter, used when csSite.footerColumns is
@@ -284,12 +324,12 @@
 .cs-cueduo .cs-footer-col { display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
 .cs-cueduo .cs-footer-col a { color: var(--cs-muted); }
 .cs-cueduo .cs-footer-col a:hover { color: var(--cs-accent-ink); }
-.cs-cueduo .cs-footer-col-title { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); }
+.cs-cueduo .cs-footer-col-title { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-muted); }
 .cs-cueduo .cs-footer-app { gap: 14px; align-items: flex-start; }
 /* The "soon" pill at the design's 160x54 badge footprint, so the live Apple
    badge swaps in without moving the column. */
 .cs-cueduo .cs-footer-app .cs-storebadge--soon { box-sizing: border-box; justify-content: center; min-width: 160px; height: 54px; padding: 0 20px; white-space: nowrap; border-radius: 12px; box-shadow: none; font-size: 13px; line-height: 1.3; text-align: center; }
-.cs-cueduo .cs-footer-bar { padding: 20px var(--cs-container-pad) 40px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--cs-hairline-text); border-top: 1px solid rgba(20, 23, 28, .09); }
+.cs-cueduo .cs-footer-bar { padding: 20px var(--cs-container-pad) 40px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--cs-muted); border-top: 1px solid rgba(20, 23, 28, .09); }
 .cs-cueduo .cs-footer-bar-legal { margin-left: auto; }
 
 /* Sticky mobile bar (MobileBar, csSite.mobileBar). Below 899px only; sticky
@@ -303,7 +343,15 @@
 .cs-cueduo .cs-page-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: var(--cs-space-5) var(--cs-container-pad); }
 .cs-cueduo .cs-page-header-bg { display: none; }      /* no photographic banner on interior pages */
 .cs-cueduo .cs-page-header-skyline { display: none; } /* site #1/#2 city silhouette: suppressed */
-.cs-cueduo .cs-breadcrumb-bar { font-size: 13px; color: var(--cs-muted); }
+/* Breadcrumb inside the band, above the H1 (PageHeader breadcrumbsInHeader). */
+.cs-cueduo .cs-breadcrumb-inline { margin-bottom: var(--cs-space-3); font-size: 13px; color: var(--cs-muted); }
+.cs-cueduo .cs-breadcrumb-inline ol { display: flex; flex-wrap: wrap; align-items: center; list-style: none; margin: 0; padding: 0; }
+.cs-cueduo .cs-breadcrumb-inline li { display: inline-flex; align-items: center; }
+.cs-cueduo .cs-breadcrumb-inline a { color: var(--cs-muted); }
+.cs-cueduo .cs-breadcrumb-inline a:hover { color: var(--cs-accent-ink); }
+.cs-cueduo .cs-breadcrumb-inline .breadcrumbs-sep { white-space: pre; color: var(--cs-muted); }
+.cs-cueduo .cs-breadcrumb-inline [aria-current="page"] { color: var(--cs-ink); }
+.cs-cueduo .cs-page-header .cs-eyebrow { margin-bottom: var(--cs-space-2); }
 
 .cs-cueduo .cs-prose { max-width: var(--cs-measure); }
 .cs-cueduo .cs-prose h2 { margin: var(--cs-space-5) 0 var(--cs-space-2); }
@@ -325,7 +373,7 @@
 .cs-cueduo .cs-intro-media { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(40px, 6vw, 96px); align-items: center; border-top: 1px solid var(--cs-hairline); padding-top: clamp(36px, 4vw, 56px); }
 .cs-cueduo .cs-intro-media--solo { grid-template-columns: minmax(0, 1fr); }
 .cs-cueduo .cs-intro-media-copy { display: flex; flex-direction: column; align-items: flex-start; gap: clamp(24px, 3vw, 36px); }
-.cs-cueduo .cs-intro-media-copy .cs-eyebrow { display: block; margin: 0 0 -12px; }
+.cs-cueduo .cs-intro-media-copy .cs-eyebrow { margin: 0 0 -12px; }
 .cs-cueduo .cs-intro-media-copy h2 { max-width: 16ch; text-wrap: balance; }
 .cs-cueduo .cs-intro-media-copy .cs-prose { max-width: 52ch; display: flex; flex-direction: column; gap: 18px; }
 .cs-cueduo .cs-intro-media-copy .cs-prose p { margin: 0; max-width: none; color: var(--cs-muted); line-height: 1.65; text-wrap: pretty; }
@@ -341,7 +389,10 @@
 .cs-cueduo .cs-form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .cs-cueduo .cs-form-label { font-size: 14px; font-weight: 600; }
 .cs-cueduo .cs-form-required { color: var(--cs-muted); font-weight: 400; }
-.cs-cueduo .cs-form-input, .cs-cueduo .cs-form-textarea { border: 1px solid var(--cs-hairline); background: var(--cs-paper); border-radius: 14px; padding: 13px 14px; font: 400 16px/1.4 var(--cs-font-body); color: var(--cs-ink); }
+/* White field on the Fog section. The border is ink at 50%: ~3.3:1 against
+   Fog and ~3.5:1 against the white fill (WCAG 1.4.11, CD-22). The audit's
+   .28 suggestion measures under 2:1, so it is darker than that. */
+.cs-cueduo .cs-form-input, .cs-cueduo .cs-form-textarea { border: 1px solid rgba(20, 23, 28, .5); background: var(--cs-white); border-radius: 14px; padding: 13px 14px; font: 400 16px/1.4 var(--cs-font-body); color: var(--cs-ink); }
 .cs-cueduo .cs-form-input:focus-visible, .cs-cueduo .cs-form-textarea:focus-visible { border-color: var(--cs-accent); }
 .cs-cueduo .cs-form-textarea { resize: vertical; min-height: 120px; }
 .cs-cueduo .cs-form-field-error { font-size: 14px; font-weight: 600; color: var(--cs-record-light); }
@@ -349,14 +400,50 @@
 .cs-cueduo .cs-form-message--success { background: var(--cs-accent-soft); color: var(--cs-accent-ink); }
 .cs-cueduo .cs-form-message--error { background: var(--cs-surface); color: var(--cs-ink); }
 .cs-cueduo .cs-form-honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.cs-cueduo .cs-form-input::placeholder { color: var(--cs-muted); }
+.cs-cueduo .cs-form-footnote { font-size: 13px; color: var(--cs-muted); }
+
+/* csContactCtaBlock: copy and "Reach us" left, the form in a white card right. */
+.cs-cueduo .cs-contact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: clamp(32px, 5vw, 80px); align-items: start; }
+.cs-cueduo .cs-contact-grid h2 { margin-bottom: var(--cs-space-3); }
+.cs-cueduo .cs-reach-us { margin-top: var(--cs-space-4); display: flex; flex-direction: column; gap: 10px; }
+.cs-cueduo .cs-reach-us dl { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+/* One line per method: "Email" as a small label, the address as a link. */
+.cs-cueduo .cs-reach-us dl > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.cs-cueduo .cs-reach-us dt { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-muted); }
+.cs-cueduo .cs-reach-us dd { margin: 0; }
+.cs-cueduo .cs-reach-us dd a { color: var(--cs-accent-ink); font-weight: 600; }
+.cs-cueduo .cs-reach-us dd a:hover { color: var(--cs-ink); }
+.cs-cueduo .cs-reach-us-note { margin: 0; color: var(--cs-muted); font-size: var(--cs-fs-small); }
 
 /* ---------- cards / articles ---------------------------------- */
 .cs-cueduo .cs-card-media { border-radius: var(--cs-radius-inner); overflow: hidden; aspect-ratio: 4 / 3; background: var(--cs-surface); }
 .cs-cueduo .cs-card-excerpt { color: var(--cs-muted); font-size: var(--cs-fs-small); }
 .cs-cueduo .cs-article-meta { font-size: 13px; color: var(--cs-muted); font-variant-numeric: tabular-nums; }
-.cs-cueduo .cs-article-related, .cs-cueduo .cs-services-rail { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: 20px; box-shadow: var(--cs-shadow-card); }
+.cs-cueduo .cs-article-related, .cs-cueduo .cs-services-rail { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: clamp(24px, 3vw, 36px); box-shadow: var(--cs-shadow-card); }
 .cs-cueduo .cs-related-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.cs-cueduo .cs-services-rail-cta { font-weight: 600; color: var(--cs-accent-ink); }
+
+/* ---------- feature detail (/features/<slug>) ------------------ */
+/* One column: lead, body, specs, FAQ, then the related card. The wrap's
+   bottom padding is the gap above the closing CTA band (CD-12). */
+.cs-cueduo .cs-pa-wrap { padding: var(--cs-section-pad) 0; }
+.cs-cueduo .cs-pa-layout { display: flex; flex-direction: column; gap: var(--cs-space-6); }
+.cs-cueduo .cs-pa-main > .cs-lead { margin-bottom: var(--cs-space-4); }
+/* "What's included": a real list, styled like the plan-card lists (CD-09). */
+.cs-cueduo .cs-pa-specs { margin-top: var(--cs-space-5); max-width: var(--cs-measure); }
+.cs-cueduo .cs-pa-specs h2 { font-size: var(--cs-fs-heading); letter-spacing: var(--cs-track-heading); margin-bottom: var(--cs-space-2); }
+.cs-cueduo .cs-pa-specs .cs-plan-list { font-size: var(--cs-fs-small); border-bottom: 1px solid var(--cs-hairline-soft); }
+.cs-cueduo .cs-pa-specs .cs-plan-list li { padding: 13px 0; }
+.cs-cueduo .cs-pa-faq { margin-top: var(--cs-space-6); }
+/* The related card: other features as links; the current page stays in the
+   list as plain ink text marked aria-current. */
+.cs-cueduo .cs-services-rail h2 { font-size: var(--cs-fs-heading); letter-spacing: var(--cs-track-heading); margin-bottom: var(--cs-space-3); }
+.cs-cueduo .cs-services-rail ul { list-style: none; margin: 0 0 var(--cs-space-4); padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.cs-cueduo .cs-services-rail li a { display: inline-block; padding: 10px 16px; border-radius: var(--cs-radius-control); background: var(--cs-paper); color: var(--cs-accent-ink); font-weight: 600; font-size: var(--cs-fs-small); }
+.cs-cueduo .cs-services-rail li a:hover { background: var(--cs-accent-soft); color: var(--cs-accent-ink); }
+.cs-cueduo .cs-services-rail li a[aria-current="page"] { background: transparent; color: var(--cs-ink); box-shadow: inset 0 0 0 1px var(--cs-hairline); pointer-events: none; }
+.cs-cueduo .cs-services-rail-cta { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; border-top: 1px solid var(--cs-hairline); padding-top: var(--cs-space-3); }
+.cs-cueduo .cs-services-rail-cta p { margin: 0; color: var(--cs-muted); font-size: var(--cs-fs-small); }
 
 /* ---------- csAppHeroBlock ------------------------------------ */
 .cs-cueduo .cs-apphero { padding: clamp(72px, 10vw, 140px) 0 clamp(56px, 7vw, 96px); }
@@ -368,8 +455,12 @@
 .cs-cueduo .cs-apphero-heading { white-space: pre-line; font-size: clamp(46px, 7.4vw, 92px); line-height: .96; letter-spacing: -.04em; text-wrap: balance; margin: 0 0 clamp(24px, 3vw, 32px); }
 .cs-cueduo .cs-apphero-sub { font-size: clamp(18px, 1.55vw, 21px); line-height: 1.55; max-width: 33em; margin: 0 0 clamp(32px, 4vw, 44px); text-wrap: pretty; }
 .cs-cueduo .cs-apphero-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
-.cs-cueduo .cs-apphero-actions .cs-underline-link { padding: 17px 4px; }
-.cs-cueduo .cs-apphero-note { font-size: 13px; letter-spacing: .01em; color: var(--cs-hairline-text); margin: clamp(28px, 4vw, 40px) 0 0; }
+/* Matches the badge's height for alignment, so the rule under the label is a
+   text underline sitting on the baseline, not a border on the padded box
+   (which hung ~20px low and ran past the text, CD-19). */
+.cs-cueduo .cs-apphero-actions .cs-underline-link { padding: 17px 0; border-bottom: 0; text-decoration: underline 1px rgba(20, 23, 28, .18); text-underline-offset: 4px; }
+.cs-cueduo .cs-apphero-actions .cs-underline-link:hover { text-decoration-color: var(--cs-accent-ink); }
+.cs-cueduo .cs-apphero-note { font-size: 13px; letter-spacing: .01em; color: var(--cs-muted); margin: clamp(28px, 4vw, 40px) 0 0; }
 .cs-cueduo .cs-apphero-media { display: flex; justify-content: center; }
 .cs-cueduo .cs-apphero-device { margin: 0; }
 .cs-cueduo .cs-apphero-device img { width: 100%; height: auto; }
@@ -391,7 +482,7 @@
 .cs-cueduo .cs-fold-script { font-size: clamp(13px, 1.4vw, 15px); font-weight: 600; line-height: 1.32; letter-spacing: -.012em; margin: 0; max-width: none; }
 .cs-cueduo .cs-fold-lens { margin: auto 0 0; display: flex; align-items: center; gap: 7px; font-size: 9px; color: rgba(255, 255, 255, .3); letter-spacing: .14em; text-transform: uppercase; }
 .cs-cueduo .cs-fold-lens-ring { width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .4); flex: none; }
-.cs-cueduo .cs-fold-eyebrow { margin: 0; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); }
+.cs-cueduo .cs-fold-eyebrow { margin: 0; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-muted); }
 .cs-cueduo .cs-fold-heading { margin: 0; font-family: var(--cs-font-display); font-size: clamp(15px, 1.7vw, 18px); font-weight: 600; letter-spacing: -.025em; line-height: 1.12; }
 .cs-cueduo .cs-fold-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; font-size: 11px; color: var(--cs-muted); background: var(--cs-white); border-radius: 16px; overflow: hidden; }
 .cs-cueduo .cs-fold-list li { padding: 11px 13px; }
@@ -399,7 +490,7 @@
 .cs-cueduo .cs-fold-actions { margin: auto 0 0; display: flex; gap: 6px; max-width: none; }
 .cs-cueduo .cs-fold-primary { flex: 1; text-align: center; padding: 11px; border-radius: var(--cs-radius-control); background: var(--cs-accent); color: var(--cs-on-accent); font-size: 12px; font-weight: 600; }
 .cs-cueduo .cs-fold-secondary { padding: 11px 13px; border-radius: var(--cs-radius-control); background: var(--cs-surface); color: var(--cs-ink); font-size: 12px; font-weight: 600; }
-.cs-cueduo .cs-device-caption { font-size: 12px; color: var(--cs-hairline-text); margin-top: 12px; text-align: center; }
+.cs-cueduo .cs-device-caption { font-size: 12px; color: var(--cs-muted); margin-top: 12px; text-align: center; }
 
 /* Camera variant of the fold preview: viewfinder photo left, prompter right,
    one chassis, a soft ellipse of shadow under it. */
@@ -451,7 +542,7 @@
 .cs-cueduo .cs-valueprops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); counter-reset: cs-vp; border-top: 1px solid var(--cs-hairline); border-bottom: 1px solid var(--cs-hairline); margin-top: clamp(36px, 5vw, 56px); }
 .cs-cueduo .cs-eyebrow--ruled + .cs-valueprops { margin-top: 0; }
 .cs-cueduo .cs-valueprop { counter-increment: cs-vp; display: flex; flex-direction: column; padding: clamp(28px, 3vw, 44px) clamp(24px, 2.4vw, 32px); border-left: 1px solid var(--cs-hairline); margin-left: -1px; }
-.cs-cueduo .cs-valueprop::after { content: "0" counter(cs-vp); margin-top: auto; padding-top: clamp(24px, 3vw, 40px); font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; }
+.cs-cueduo .cs-valueprop::after { content: "0" counter(cs-vp); margin-top: auto; padding-top: clamp(24px, 3vw, 40px); font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--cs-muted); font-variant-numeric: tabular-nums; }
 .cs-cueduo .cs-valueprop-icon { width: 30px; height: 30px; color: var(--cs-ink); stroke-width: 1.4; margin-bottom: clamp(24px, 3vw, 40px); }
 .cs-cueduo .cs-valueprop h3 { font-size: 19px; letter-spacing: -.022em; margin-bottom: 10px; }
 .cs-cueduo .cs-valueprop p { font-size: var(--cs-fs-small); color: var(--cs-muted); line-height: 1.6; margin: 0; }
@@ -462,7 +553,9 @@
 .cs-cueduo .cs-showcase-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: clamp(40px, 6vw, 96px); align-items: center; }
 .cs-cueduo .cs-showcase-grid--solo { grid-template-columns: minmax(0, 1fr); }
 .cs-cueduo .cs-showcase-copy { max-width: 44ch; }
-.cs-cueduo .cs-showcase-copy .cs-eyebrow { display: block; margin: 0; }
+/* The eyebrow is a <p>, so the copy's paragraph colours would grey it out. */
+.cs-cueduo .cs-showcase-copy .cs-eyebrow { display: block; margin: 0; color: var(--cs-accent-ink); }
+.cs-cueduo .cs-section--navy .cs-showcase-copy .cs-eyebrow { color: var(--cs-accent-inverse); }
 .cs-cueduo .cs-showcase-copy h2 { font-size: clamp(26px, 2.9vw, 38px); letter-spacing: -.03em; line-height: 1.1; margin: 20px 0; text-wrap: balance; }
 .cs-cueduo .cs-showcase-copy p { color: var(--cs-muted); line-height: 1.65; margin-bottom: 26px; text-wrap: pretty; }
 .cs-cueduo .cs-section--navy .cs-showcase-copy p { color: var(--cs-inverse-muted); }
@@ -476,9 +569,12 @@
 /* visual=takes: the library grid. Plain cards carry label and length; photo
    cards swap the label for a flag pill. */
 .cs-cueduo .cs-takes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.cs-cueduo .cs-take { position: relative; overflow: hidden; aspect-ratio: 9 / 13; border-radius: 22px; background: var(--cs-white); box-shadow: 0 10px 30px rgba(20, 23, 28, .08); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+/* A tile with no poster frame is a Fog card with a soft inner gradient, so
+   it reads as a deliberate thumbnail-less take, not an image that failed to
+   load (CD-14). */
+.cs-cueduo .cs-take { position: relative; overflow: hidden; aspect-ratio: 9 / 13; border-radius: 22px; background: radial-gradient(120% 80% at 30% 18%, rgba(255, 255, 255, .7), transparent 60%), linear-gradient(180deg, var(--cs-surface), #D5D9E0); box-shadow: inset 0 0 0 1px rgba(20, 23, 28, .05); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
 .cs-cueduo .cs-take--photo { padding: 0; background: var(--cs-graphite-surface); box-shadow: 0 16px 36px rgba(20, 23, 28, .22); }
-.cs-cueduo .cs-take-label { font-size: 9px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); }
+.cs-cueduo .cs-take-label { font-size: 9px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-muted); }
 .cs-cueduo .cs-take-duration { font-size: 15px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .cs-cueduo .cs-take--photo .cs-take-duration { position: absolute; left: 14px; bottom: 14px; color: #fff; }
 .cs-cueduo .cs-take-fade { position: absolute; inset: 0; background: linear-gradient(transparent 50%, rgba(14, 17, 20, .85)); }
@@ -519,7 +615,7 @@
 .cs-cueduo .cs-journey-stage { display: block; padding: 28px 24px 32px; border-right: 1px solid var(--cs-hairline); color: inherit; }
 .cs-cueduo .cs-journey-stage:first-child { padding-left: 0; }
 .cs-cueduo .cs-journey-stage:last-child { padding-right: 0; border-right: 0; }
-.cs-cueduo .cs-journey-num { display: block; font-size: 11px; font-weight: 600; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; letter-spacing: .14em; margin-bottom: 18px; }
+.cs-cueduo .cs-journey-num { display: block; font-size: 11px; font-weight: 600; color: var(--cs-muted); font-variant-numeric: tabular-nums; letter-spacing: .14em; margin-bottom: 18px; }
 .cs-cueduo .cs-journey-stage h3 { font-size: 17px; letter-spacing: -.02em; }
 .cs-cueduo .cs-journey-stage p { margin: 8px 0 0; font-size: 14px; color: var(--cs-muted); line-height: 1.55; }
 .cs-cueduo .cs-journey-stage--static { cursor: default; }
@@ -531,10 +627,10 @@
 /* One 3-column grid in the head and in every row, with identical gaps, so the
    label columns and the cells stay on the same lines. */
 .cs-cueduo .cs-contrast-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: clamp(32px, 5vw, 72px); border-top: 1px solid var(--cs-hairline); padding-top: clamp(36px, 4vw, 56px); align-items: end; }
-.cs-cueduo .cs-contrast-head .cs-eyebrow { display: block; margin: 0; }
+.cs-cueduo .cs-contrast-head .cs-eyebrow { margin: 0; }
 .cs-cueduo .cs-contrast-head h2 { font-size: clamp(24px, 2.6vw, 32px); line-height: 1.12; letter-spacing: -.03em; max-width: 16ch; margin-top: 20px; text-wrap: balance; }
 .cs-cueduo .cs-contrast-label { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; margin: 0; padding-bottom: 14px; }
-.cs-cueduo .cs-contrast-label--left { color: var(--cs-hairline-text); border-bottom: 1px solid var(--cs-hairline); }
+.cs-cueduo .cs-contrast-label--left { color: var(--cs-muted); border-bottom: 1px solid var(--cs-hairline); }
 .cs-cueduo .cs-contrast-label--right { color: var(--cs-ink); border-bottom: 1px solid rgba(20, 23, 28, .18); }
 .cs-cueduo .cs-contrast-rows { list-style: none; margin: 0; padding: 0; }
 .cs-cueduo .cs-contrast-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: clamp(32px, 5vw, 72px); }
@@ -543,10 +639,12 @@
 .cs-cueduo .cs-contrast-row::before { content: ""; }
 .cs-cueduo .cs-contrast-cell { display: block; padding: 14px 0; border-bottom: 1px solid var(--cs-hairline-soft); font-size: var(--cs-fs-small); line-height: 1.5; }
 .cs-cueduo .cs-contrast-row:last-child .cs-contrast-cell { border-bottom: 0; }
-.cs-cueduo .cs-contrast-cell--left { color: var(--cs-hairline-text); }
-.cs-cueduo .cs-contrast-cell--right { color: var(--cs-ink); }
+/* "The usual way" stays readable (muted, 5.38:1); it is the secondary column
+   by weight, 400 against 500, not by a paler colour (CD-21). */
+.cs-cueduo .cs-contrast-cell--left { color: var(--cs-muted); font-weight: 400; }
+.cs-cueduo .cs-contrast-cell--right { color: var(--cs-ink); font-weight: 500; }
 /* Only shown once the columns stack, where a bare line loses its column head. */
-.cs-cueduo .cs-contrast-inline-label { display: none; font-size: 11px; font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-hairline-text); margin-bottom: 4px; }
+.cs-cueduo .cs-contrast-inline-label { display: none; font-size: 11px; font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-muted); margin-bottom: 4px; }
 
 /* From 900px the head, the rows and the footnote share ONE three-column grid
    (display: contents on the wrappers): the title column spans every row, and
@@ -572,19 +670,21 @@
 @media (prefers-reduced-motion: no-preference) {
   .cs-cueduo .cs-plan:not(.cs-plan--static):hover { transform: translateY(-3px); }
 }
-.cs-cueduo .cs-plan-name { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: -.015em; margin: 0; }
+/* Fixed to the flag pill's height so a card with "Recommended" and one
+   without keep their price, list and button on the same lines (CD-20). */
+.cs-cueduo .cs-plan-name { display: flex; align-items: center; gap: 10px; min-height: 24px; font-weight: 600; font-size: 16px; letter-spacing: -.015em; margin: 0; }
 .cs-cueduo .cs-plan-flag { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 5px 10px; border-radius: var(--cs-radius-control); background: var(--cs-accent-soft); color: var(--cs-accent-ink); }
 .cs-cueduo .cs-plan-price { font-family: var(--cs-font-display); font-size: clamp(38px, 4vw, 48px); font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0; }
-.cs-cueduo .cs-plan-period { font-size: 14px; font-weight: 400; color: var(--cs-hairline-text); letter-spacing: 0; }
+.cs-cueduo .cs-plan-period { font-size: 14px; font-weight: 400; color: var(--cs-muted); letter-spacing: 0; }
 .cs-cueduo .cs-plan-list { list-style: none; margin: 0; padding: 0; color: var(--cs-muted); font-size: 14px; line-height: 1.5; }
 .cs-cueduo .cs-plan-list li { padding: 11px 0; border-top: 1px solid var(--cs-hairline-soft); }
 .cs-cueduo .cs-plan-cta { margin-top: auto; padding: 14px; font-size: 15px; line-height: 1.5; }
-.cs-cueduo .cs-plan-note { margin: auto 0 0; font-size: 13px; color: var(--cs-hairline-text); line-height: 1.5; }
+.cs-cueduo .cs-plan-note { margin: auto 0 0; font-size: 13px; color: var(--cs-muted); line-height: 1.5; }
 
 /* ---------- csRequirementsBlock -------------------------------- */
 .cs-cueduo .cs-requirements-heading { font-size: var(--cs-fs-heading); margin-bottom: var(--cs-space-3); }
 .cs-cueduo .cs-requirements { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 28px; border-top: 1px solid var(--cs-hairline); padding-top: var(--cs-space-4); margin: 0; }
-.cs-cueduo .cs-requirements dt { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-hairline-text); margin-bottom: 10px; }
+.cs-cueduo .cs-requirements dt { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-muted); margin-bottom: 10px; }
 .cs-cueduo .cs-requirements dd { margin: 0; font-size: 14px; color: var(--cs-muted); }
 
 /* ---------- csAppCtaBlock ------------------------------------- */
@@ -595,7 +695,7 @@
 .cs-cueduo .cs-appcta-body { margin: 0 auto 40px; max-width: 44ch; font-size: 18px; line-height: 1.55; }
 .cs-cueduo .cs-appcta-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; }
 .cs-cueduo .cs-appcta .cs-appcta-note { margin: 24px auto 0; font-size: 13px; letter-spacing: .01em; color: var(--cs-inverse-quiet); }
-.cs-cueduo .cs-appcta:not(.cs-section--navy) .cs-appcta-note { color: var(--cs-hairline-text); }
+.cs-cueduo .cs-appcta:not(.cs-section--navy) .cs-appcta-note { color: var(--cs-muted); }
 /* Prompter-black band: same text colours as graphite, a darker ground. */
 .cs-cueduo .cs-appcta--prompter { background: var(--cs-prompter); }
 /* Record-start motif: take label, giant digit, REC row. */
@@ -611,7 +711,7 @@
    "counsel has not signed this off yet" line, so it has to read as separate
    from the policy rather than as part of it. */
 .cs-cueduo .cs-disclosure { max-width: 76ch; }
-.cs-cueduo .cs-disclosure-updated { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-hairline-text); font-variant-numeric: tabular-nums; margin-bottom: var(--cs-space-4); }
+.cs-cueduo .cs-disclosure-updated { font-size: var(--cs-fs-eyebrow); font-weight: 600; letter-spacing: var(--cs-track-eyebrow); text-transform: uppercase; color: var(--cs-muted); font-variant-numeric: tabular-nums; margin-bottom: var(--cs-space-4); }
 .cs-cueduo .cs-disclosure .cs-prose h3 { margin: var(--cs-space-4) 0 10px; }
 .cs-cueduo .cs-disclosure-note { margin-top: var(--cs-space-5); padding: var(--cs-space-3) var(--cs-space-4); background: var(--cs-surface); border-left: 2px solid var(--cs-accent); border-radius: var(--cs-radius-inner); font-size: var(--cs-fs-small); color: var(--cs-muted); max-width: 76ch; }
 
@@ -626,13 +726,22 @@
 .cs-cueduo .info-page-faq-item { border-bottom: 1px solid var(--cs-hairline); padding: 20px 0; }
 .cs-cueduo .info-page-faq-q { cursor: pointer; font-weight: 600; font-size: 17px; letter-spacing: -.018em; list-style: none; display: flex; align-items: center; gap: 16px; }
 .cs-cueduo .info-page-faq-q::-webkit-details-marker { display: none; }
-.cs-cueduo .info-page-faq-q::after { content: "+"; margin-left: auto; font-weight: 400; color: var(--cs-hairline-text); font-size: 20px; line-height: 1; transition: transform .4s var(--cs-ease-out); }
+/* The second content declaration gives the "+" empty alt text, so screen
+   readers do not announce "plus" after every question (CD-23). Engines that
+   don't know the "/ alt" syntax drop it and keep the first. */
+.cs-cueduo .info-page-faq-q { min-height: 44px; }
+.cs-cueduo .info-page-faq-q::after { content: "+"; content: "+" / ""; margin-left: auto; font-weight: 400; color: var(--cs-muted); font-size: 20px; line-height: 1; transition: transform .4s var(--cs-ease-out); }
 .cs-cueduo .info-page-faq-item[open] .info-page-faq-q::after { transform: rotate(45deg); }
 .cs-cueduo .info-page-faq-a { margin: 14px 0 0; color: var(--cs-muted); font-size: var(--cs-fs-small); line-height: 1.6; max-width: 56ch; }
 /* Closing line under the questions ("Still stuck? Write to us and ..."). */
 .cs-cueduo .cs-faq-outro { grid-column: 2; margin: 24px 0 0; max-width: none; font-size: var(--cs-fs-small); color: var(--cs-muted); }
 .cs-cueduo .cs-faq-outro a { color: var(--cs-accent-ink); font-weight: 600; }
 .cs-cueduo .cs-faq--split { padding: clamp(48px, 6vw, 88px) 0; }
+/* A long list holds its heading in view while it scrolls (CD-11). 84px is
+   the sticky header, as in the [id] scroll margin. */
+@media (min-width: 900px) {
+  .cs-cueduo .info-page-faq-heading { position: sticky; top: calc(84px + 24px); align-self: start; }
+}
 /* An explicit "stacked" layout puts the heading above a full-width list. */
 .cs-cueduo .cs-faq--stacked .info-page-faq { grid-template-columns: minmax(0, 1fr); row-gap: var(--cs-space-3); }
 .cs-cueduo .cs-faq--stacked .info-page-faq-heading { grid-column: 1; grid-row: auto; max-width: 20ch; }
@@ -652,13 +761,13 @@
     background: #F5F6F8; border-top: 1px solid var(--cs-hairline-soft);
   }
   @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .cs-cueduo .cs-mobilebar { background: rgba(255, 255, 255, .62); backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); }
+    .cs-cueduo .cs-mobilebar { background: rgba(255, 255, 255, .62); backdrop-filter: blur(24px) saturate(190%); -webkit-backdrop-filter: blur(24px) saturate(190%); }
   }
   .cs-cueduo .cs-valueprop { border-left: 0; margin-left: 0; border-top: 1px solid var(--cs-hairline); }
-  .cs-cueduo .cs-valueprops { border-top: 0; }
+  .cs-cueduo .cs-valueprops { border-top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
   .cs-cueduo .cs-journey > .cs-container { grid-template-columns: minmax(0, 1fr); }
   .cs-cueduo .cs-journey .cs-lead { grid-column: 1; grid-row: auto; align-self: start; margin-top: 20px; }
-  .cs-cueduo .cs-journey-track { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+  .cs-cueduo .cs-journey-track { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; }
   .cs-cueduo .cs-journey-stage, .cs-cueduo .cs-journey-stage:first-child, .cs-cueduo .cs-journey-stage:last-child { padding: 22px 0 26px; border-right: 0; border-bottom: 1px solid var(--cs-hairline); }
   .cs-cueduo .cs-showcase--left .cs-showcase-media { order: 0; }
   .cs-cueduo .cs-contrast-row::before { display: none; }
@@ -677,6 +786,12 @@
   .cs-cueduo .cs-take { padding: 10px; }
   .cs-cueduo .cs-take--photo .cs-take-duration { left: 10px; bottom: 10px; }
   .cs-cueduo .cs-take-duration { font-size: 13px; }
+  .cs-cueduo .cs-valueprops { grid-template-columns: minmax(0, 1fr); }
+  /* The 4x2 library becomes two columns of six tiles, each ~160px wide at
+     375px (CD-29). */
+  .cs-cueduo .cs-takes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cs-cueduo .cs-take { aspect-ratio: 4 / 5; }
+  .cs-cueduo .cs-take:nth-child(n + 7) { display: none; }
   .cs-cueduo .cs-editor-panel { padding: 18px; }
   .cs-cueduo .cs-camera-body { border-radius: 36px; }
   .cs-cueduo .cs-camera-photo { border-radius: 28px 10px 10px 28px; }

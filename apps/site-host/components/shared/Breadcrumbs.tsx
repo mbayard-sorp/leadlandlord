@@ -6,6 +6,8 @@ interface BreadcrumbItem {
 
 interface Props {
   items: BreadcrumbItem[];
+  /** Visible separator between items (decorative, aria-hidden). Default " / ". */
+  separator?: string;
 }
 
 /**
@@ -14,7 +16,7 @@ interface Props {
  * and the JSON-LD are always in sync. The last item is rendered as plain
  * text (current page — no link). All preceding items are linked.
  */
-export function Breadcrumbs({ items }: Props) {
+export function Breadcrumbs({ items, separator = ' / ' }: Props) {
   if (items.length < 2) return null;
 
   return (
@@ -29,7 +31,7 @@ export function Breadcrumbs({ items }: Props) {
               ) : (
                 <>
                   <a href={item.url}>{item.name}</a>
-                  <span aria-hidden className="breadcrumbs-sep"> / </span>
+                  <span aria-hidden className="breadcrumbs-sep">{separator}</span>
                 </>
               )}
             </li>

@@ -43,7 +43,7 @@ export async function ContactCtaBlock({ block, siteKey }: Props) {
                 read from the resolved site (never hardcoded). */}
             {hasReachUs ? (
               <div className="cs-reach-us">
-                <span className="cs-eyebrow">Reach Us</span>
+                <span className="cs-eyebrow">{block.formVariant === 'support' ? 'Reach us' : 'Reach Us'}</span>
                 <dl>
                   {hasAddress ? (
                     <div>
@@ -82,7 +82,10 @@ export async function ContactCtaBlock({ block, siteKey }: Props) {
                     </div>
                   ) : null}
                 </dl>
-                <p className="cs-reach-us-note">We respond to every inquiry personally.</p>
+                {/* The support variant's lead already says a person answers. */}
+                {block.formVariant === 'support' ? null : (
+                  <p className="cs-reach-us-note">We respond to every inquiry personally.</p>
+                )}
               </div>
             ) : null}
           </div>
@@ -90,7 +93,7 @@ export async function ContactCtaBlock({ block, siteKey }: Props) {
             <div className="cs-contact-form-panel">
               <ContactForm
                 siteKey={siteKey}
-                variant={block.formVariant === 'consultation' ? 'consultation' : 'standard'}
+                variant={block.formVariant === 'consultation' || block.formVariant === 'support' ? block.formVariant : 'standard'}
                 footnote={block.formFootnote}
               />
             </div>

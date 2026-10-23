@@ -17,6 +17,12 @@ interface RouteParams {
   params: Promise<{ slug: string }>;
 }
 
+/** "The Prompter" -> "the prompter", for use mid-sentence. The site's style is
+ * sentence case; feature titles are plain words, never proper nouns. */
+function csSentenceCaseTitle(title: string): string {
+  return title.toLowerCase();
+}
+
 /** Focus-area (service) detail page — AA's counterpart of
  * app/cadr/practice-areas/[slug]. Same csPracticeArea documents, /services
  * URL vocabulary, financial-services copy. */
@@ -64,6 +70,7 @@ export default async function ServiceDetailPage({ params }: RouteParams) {
           { name: 'Features', url: '/features' },
           { name: area.title, url: `/features/${slug}` },
         ]}
+        breadcrumbsInHeader
       />
 
       <div className="cs-pa-wrap">
@@ -86,21 +93,21 @@ export default async function ServiceDetailPage({ params }: RouteParams) {
             <Prose value={area.body} />
 
             {area.deliverables && area.deliverables.length > 0 ? (
-              <>
-                <h2>What&rsquo;s included</h2>
-                <ul className="cs-focus-deliverables">
+              <section className="cs-pa-specs" aria-labelledby="whats-included-heading">
+                <h2 id="whats-included-heading">What&rsquo;s included</h2>
+                <ul className="cs-plan-list cs-focus-deliverables">
                   {area.deliverables.map((d) => (
                     <li key={d}>{d}</li>
                   ))}
                 </ul>
-              </>
+              </section>
             ) : null}
 
             {area.faqs && area.faqs.length > 0 ? (
               <div className="cs-pa-faq">
                 <PageFaq
                   faqs={area.faqs.map((f) => ({ q: f.question, a: f.answer }))}
-                  heading={`Frequently Asked Questions About ${area.title}`}
+                  heading={`Questions about ${csSentenceCaseTitle(area.title)}`}
                   phone={site.phone ?? ''}
                 />
               </div>

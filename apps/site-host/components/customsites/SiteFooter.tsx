@@ -75,9 +75,7 @@ function ColumnFooter({ site }: Props) {
 
         <div className="cs-footer-col cs-footer-app">
           {site.footerAppLabel ? <span className="cs-footer-col-title">{site.footerAppLabel}</span> : null}
-          {/* No store state lives on the site doc yet, so the footer always
-              shows the "soon" pill; flip it when a site-level state exists. */}
-          <StoreBadge state="soon" label="Coming to the App Store" placement="footer" />
+          <StoreBadge state={site.storeState ?? 'soon'} href={site.storeHref} label="Coming to the App Store" placement="footer" />
           {site.email ? <a href={`mailto:${site.email}`}>{site.email}</a> : null}
         </div>
       </div>

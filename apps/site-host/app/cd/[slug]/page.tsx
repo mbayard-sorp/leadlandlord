@@ -46,6 +46,7 @@ export default async function CueDuoSlugPage({ params }: RouteParams) {
             bannerImageUrl={page.bannerImageUrl ?? site.bannerImageUrl}
             bannerImageAlt={page.bannerImageAlt}
             bannerReverse={Boolean(page.bannerImageUrl)}
+            breadcrumbsInHeader
           />
         ) : null}
         <PageBuilder
