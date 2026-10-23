@@ -265,7 +265,7 @@
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   /* 24px, not the comp's 44: a blur radius that large repaints expensively
      on every scroll frame on mid-range Android and older Macs (CD-32). */
-  .cs-cueduo .cs-header::before { backdrop-filter: blur(24px) saturate(190%); -webkit-backdrop-filter: blur(24px) saturate(190%); }
+  .cs-cueduo .cs-header::before { -webkit-backdrop-filter: blur(24px) saturate(190%); backdrop-filter: blur(24px) saturate(190%); }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .cs-cueduo .cs-header::before { background: #F5F6F8; }   /* opaque fallback */
@@ -312,7 +312,7 @@
 .cs-cueduo .cs-drawer-sublinks a { display: block; padding: 10px 8px 10px 20px; font-size: 16px; font-weight: 400; color: var(--cs-muted); }
 
 .cs-cueduo .cs-sticky-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 12px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; background: var(--cs-glass); border-top: 1px solid var(--cs-hairline-soft); }
-@supports (backdrop-filter: blur(1px)) { .cs-cueduo .cs-sticky-bar { backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); } }
+@supports (backdrop-filter: blur(1px)) { .cs-cueduo .cs-sticky-bar { -webkit-backdrop-filter: blur(44px) saturate(190%); backdrop-filter: blur(44px) saturate(190%); } }
 @supports not (backdrop-filter: blur(1px)) { .cs-cueduo .cs-sticky-bar { background: #F5F6F8; } }
 .cs-cueduo .cs-sticky-spacer { height: 72px; }
 
@@ -389,7 +389,7 @@
 .cs-cueduo .cs-intro-media-frame { justify-self: center; position: relative; width: min(100%, 520px); aspect-ratio: 4 / 4.6; border-radius: var(--cs-radius-card-lg); overflow: hidden; background: var(--cs-graphite-surface); box-shadow: var(--cs-shadow-device); }
 .cs-cueduo .cs-glass-badge { position: absolute; left: 20px; top: 20px; display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: var(--cs-radius-control); background: rgba(40, 44, 50, .82); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: -.005em; }
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .cs-cueduo .cs-glass-badge { background: rgba(40, 44, 50, .5); backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); }
+  .cs-cueduo .cs-glass-badge { background: rgba(40, 44, 50, .5); -webkit-backdrop-filter: blur(44px) saturate(190%); backdrop-filter: blur(44px) saturate(190%); }
 }
 .cs-cueduo .cs-glass-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-accent-inverse); box-shadow: 0 0 10px rgba(91, 130, 255, .9); flex: none; }
 
@@ -770,7 +770,7 @@
     background: #F5F6F8; border-top: 1px solid var(--cs-hairline-soft);
   }
   @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .cs-cueduo .cs-mobilebar { background: rgba(255, 255, 255, .62); backdrop-filter: blur(24px) saturate(190%); -webkit-backdrop-filter: blur(24px) saturate(190%); }
+    .cs-cueduo .cs-mobilebar { background: rgba(255, 255, 255, .62); -webkit-backdrop-filter: blur(24px) saturate(190%); backdrop-filter: blur(24px) saturate(190%); }
   }
   .cs-cueduo .cs-valueprop { border-left: 0; margin-left: 0; border-top: 1px solid var(--cs-hairline); }
   .cs-cueduo .cs-valueprops { border-top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
