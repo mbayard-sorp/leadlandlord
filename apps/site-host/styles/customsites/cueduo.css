@@ -254,14 +254,21 @@
 .cs-cueduo .cs-topbar-contact { display: flex; gap: 16px; }
 .cs-cueduo .cs-topbar-email { color: var(--cs-inverse-text); font-weight: 600; }
 
-.cs-cueduo .cs-header { position: sticky; top: 0; z-index: 40; background: linear-gradient(180deg, rgba(255,255,255,.55), transparent 38%), var(--cs-glass); border-bottom: 1px solid var(--cs-hairline-soft); }
+.cs-cueduo .cs-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--cs-hairline-soft); }
+/* The glass is painted by a pseudo-element, never the header itself: an
+   element with a backdrop-filter becomes the containing block for its
+   position: fixed descendants (iOS Safari and Chrome both apply this), which
+   trapped the mobile drawer and its overlay inside the header bar, with the
+   drawer links spilling out over the page. z-index -1 stays inside the
+   header's own stacking context, so it paints under the header content. */
+.cs-cueduo .cs-header::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,.55), transparent 38%), var(--cs-glass); }
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   /* 24px, not the comp's 44: a blur radius that large repaints expensively
      on every scroll frame on mid-range Android and older Macs (CD-32). */
-  .cs-cueduo .cs-header { backdrop-filter: blur(24px) saturate(190%); -webkit-backdrop-filter: blur(24px) saturate(190%); }
+  .cs-cueduo .cs-header::before { backdrop-filter: blur(24px) saturate(190%); -webkit-backdrop-filter: blur(24px) saturate(190%); }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .cs-cueduo .cs-header { background: #F5F6F8; }   /* opaque fallback */
+  .cs-cueduo .cs-header::before { background: #F5F6F8; }   /* opaque fallback */
 }
 .cs-cueduo .cs-header-inner { max-width: var(--cs-container-max); margin: 0 auto; padding: 18px var(--cs-container-pad); display: flex; align-items: center; gap: 40px; }
 /* SiteHeader renders an uploaded logo with next/image `fill`, which needs a
@@ -295,12 +302,14 @@
 .cs-cueduo .cs-nav-dropdown { background: var(--cs-white); border-radius: var(--cs-radius-inner); box-shadow: var(--cs-shadow-card); padding: 8px; }
 .cs-cueduo .cs-nav-toggle { display: none; width: 44px; height: 44px; border: 0; background: transparent; }
 .cs-cueduo .cs-nav-toggle-bar { display: block; width: 20px; height: 1.75px; border-radius: 2px; background: var(--cs-ink); margin: 4px auto; }
-.cs-cueduo .cs-drawer { position: fixed; inset: 0 0 0 auto; width: min(88vw, 360px); background: var(--cs-white); padding: 24px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+/* Full viewport height and its own scroll, so a short landscape phone can
+   still reach every link; the padding clears the notch and home indicator. */
+.cs-cueduo .cs-drawer { position: fixed; inset: 0 0 0 auto; width: min(88vw, 360px); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; background: var(--cs-white); box-shadow: var(--cs-shadow-card); padding: max(16px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) 24px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
 .cs-cueduo .cs-drawer-overlay { position: fixed; inset: 0; background: rgba(20,23,28,.4); z-index: 55; }
 .cs-cueduo .cs-drawer-close { align-self: flex-end; width: 44px; height: 44px; border: 0; background: var(--cs-surface); border-radius: var(--cs-radius-control); }
 .cs-cueduo .cs-drawer-links { display: flex; flex-direction: column; gap: 4px; list-style: none; margin: 0; padding: 0; }
-.cs-cueduo .cs-drawer-links a { padding: 14px 8px; font-size: 19px; font-weight: 600; color: var(--cs-ink); }
-.cs-cueduo .cs-drawer-sublinks a { padding: 10px 8px 10px 20px; font-size: 16px; font-weight: 400; color: var(--cs-muted); }
+.cs-cueduo .cs-drawer-links a { display: block; padding: 14px 8px; font-size: 19px; font-weight: 600; color: var(--cs-ink); }
+.cs-cueduo .cs-drawer-sublinks a { display: block; padding: 10px 8px 10px 20px; font-size: 16px; font-weight: 400; color: var(--cs-muted); }
 
 .cs-cueduo .cs-sticky-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 12px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; background: var(--cs-glass); border-top: 1px solid var(--cs-hairline-soft); }
 @supports (backdrop-filter: blur(1px)) { .cs-cueduo .cs-sticky-bar { backdrop-filter: blur(44px) saturate(190%); -webkit-backdrop-filter: blur(44px) saturate(190%); } }
