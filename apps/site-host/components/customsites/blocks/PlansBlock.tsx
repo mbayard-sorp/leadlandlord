@@ -1,4 +1,6 @@
 import type { CsPlansBlock } from '@/lib/customsites-sanity';
+import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
+import { csStoreAwareHref } from './StoreBadge';
 
 interface Props {
   block: CsPlansBlock;
@@ -12,10 +14,17 @@ interface Props {
  * The site never takes payment — every CTA is a link out, and a plan with
  * nothing to buy (the free tier) carries a `note` where the button would be
  * rather than a dead control.
+ *
+ * Until csSite.storeState is "live" there is nothing to start, so a plan's
+ * button renders as a disabled "Coming soon" label instead of a link that
+ * reads like checkout. All plan buttons flip with the header and mobile bar.
  */
-export function PlansBlock({ block }: Props) {
+export async function PlansBlock({ block }: Props) {
   const plans = block.plans ?? [];
   if (plans.length === 0) return null;
+  // React.cache-deduped: the layout has already resolved the site.
+  const site = await resolveCurrentCustomSite();
+  const preLaunch = Boolean(site?.storeState) && site?.storeState !== 'live';
 
   return (
     <section className="cs-section cs-plans" id="pricing">
@@ -30,8 +39,9 @@ export function PlansBlock({ block }: Props) {
 
         <div className="cs-plan-grid">
           {plans.map((plan) => {
-            const ctaHref = plan.ctaHref ?? undefined;
+            const ctaHref = csStoreAwareHref(site, plan.ctaHref);
             const hasCta = Boolean(plan.ctaLabel && ctaHref);
+            const ctaClass = `cs-btn ${plan.recommended ? 'cs-btn-primary' : 'cs-btn-secondary'} cs-plan-cta`;
             return (
               <div
                 key={plan._key}
@@ -52,11 +62,12 @@ export function PlansBlock({ block }: Props) {
                     ))}
                   </ul>
                 ) : null}
-                {hasCta ? (
-                  <a
-                    className={`cs-btn ${plan.recommended ? 'cs-btn-primary' : 'cs-btn-secondary'} cs-plan-cta`}
-                    href={ctaHref}
-                  >
+                {hasCta && preLaunch ? (
+                  <span className={ctaClass} aria-disabled="true">
+                    Coming soon
+                  </span>
+                ) : hasCta ? (
+                  <a className={ctaClass} href={ctaHref} data-cs-store-cta={site?.storeState ? 'plan' : undefined}>
                     {plan.ctaLabel}
                   </a>
                 ) : null}

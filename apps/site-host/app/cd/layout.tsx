@@ -68,7 +68,7 @@ export default async function CueDuoLayout({ children }: { children: React.React
 
       <SiteFooter site={site} />
 
-      <MobileBar bar={site.mobileBar} />
+      <MobileBar bar={site.mobileBar} store={site} />
 
       {process.env.NODE_ENV === 'production' && <WebVitalsReporter />}
 

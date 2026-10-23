@@ -51,7 +51,13 @@ export function DeviceShowcaseBlock({ block }: Props) {
             ) : null}
           </div>
           {visual === 'takes' && takes.length > 0 ? (
-            <div className="cs-showcase-media cs-showcase-media--takes">
+            // One labelled image to assistive tech, like the editor panel: the
+            // tile labels and lengths are app chrome, not content to read out.
+            <div
+              className="cs-showcase-media cs-showcase-media--takes"
+              role="img"
+              aria-label={block.caption ?? `A library of ${takes.length} recorded takes`}
+            >
               <ul className="cs-takes">
                 {takes.map((take) => (
                   <TakeCard key={take._key} take={take} />

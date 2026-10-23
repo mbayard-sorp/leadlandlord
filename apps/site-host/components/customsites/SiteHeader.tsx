@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import type { CustomSite, CustomSiteNavLink } from '@/lib/customsites-sanity';
 import { NavLink, MobileDrawer } from './NavClient';
+import { csStoreAwareHref } from './blocks/StoreBadge';
 
 interface Props {
   site: CustomSite;
@@ -77,7 +78,7 @@ export function SiteHeader({ site, showWordmark = false }: Props) {
         </nav>
 
         {site.headerCta?.label && site.headerCta.href ? (
-          <a href={site.headerCta.href} className="cs-header-cta">
+          <a href={csStoreAwareHref(site, site.headerCta.href)} className="cs-header-cta" data-cs-store-cta={site.storeState ? 'header' : undefined}>
             {site.headerCta.label}
           </a>
         ) : null}

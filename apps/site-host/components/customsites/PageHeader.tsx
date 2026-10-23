@@ -19,6 +19,9 @@ interface Props {
   /** Set when the banner's subject sits on the LEFT: anchors the photo left and
    *  flips the scrim so the dark side falls on the right. */
   bannerReverse?: boolean;
+  /** Render the trail inside the band, above the H1, with a "›" separator,
+   *  instead of in the light bar below it (CueDuo). */
+  breadcrumbsInHeader?: boolean;
 }
 
 /**
@@ -36,10 +39,16 @@ interface Props {
  * ever authored) still gets the original photo band with Phase 1's
  * directional scrim below, untouched.
  */
-export async function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, bannerImageAlt, bannerReverse }: Props) {
+export async function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, bannerImageAlt, bannerReverse, breadcrumbsInHeader }: Props) {
   const site = await resolveCurrentCustomSite();
   const isDistinctBanner = Boolean(bannerImageUrl) && bannerImageUrl !== site?.bannerImageUrl;
   const hasCrumbs = Boolean(breadcrumbs && breadcrumbs.length > 0);
+  const innerCrumbs =
+    hasCrumbs && breadcrumbsInHeader ? (
+      <div className="cs-breadcrumb-inline">
+        <Breadcrumbs items={breadcrumbs!} separator=" › " />
+      </div>
+    ) : null;
 
   return (
     <>
@@ -56,6 +65,7 @@ export async function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, 
             />
           </div>
           <div className="cs-container cs-page-header-inner">
+            {innerCrumbs}
             {eyebrow ? <span className="cs-eyebrow cs-eyebrow--inverse">{eyebrow}</span> : null}
             <h1>{title}</h1>
           </div>
@@ -74,14 +84,15 @@ export async function PageHeader({ eyebrow, title, breadcrumbs, bannerImageUrl, 
             </span>
           ) : null}
           <div className="cs-container cs-page-header-inner">
+            {innerCrumbs}
             {eyebrow ? <span className="cs-eyebrow cs-eyebrow--inverse">{eyebrow}</span> : null}
             <h1>{title}</h1>
           </div>
         </div>
       )}
-      {/* The trail always sits in a light bar directly below the header band,
-          whether or not the band carries a banner photo. */}
-      {hasCrumbs ? (
+      {/* Otherwise the trail sits in a light bar directly below the header
+          band, whether or not the band carries a banner photo. */}
+      {hasCrumbs && !breadcrumbsInHeader ? (
         <div className="cs-breadcrumb-bar">
           <div className="cs-container">
             <Breadcrumbs items={breadcrumbs!} />

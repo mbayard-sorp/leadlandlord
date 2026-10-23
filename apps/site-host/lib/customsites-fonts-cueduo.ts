@@ -12,12 +12,17 @@ import { Inter } from 'next/font/google';
  *
  * Two weights, matching the guide: 600 names or asks, 400 explains. No
  * italics, no 300, no 700.
+ *
+ * `preload: false`: with SF first in the stack, Apple devices never use
+ * Inter, so a preload hint made every iPhone and Mac download it for nothing.
+ * Without it the browser fetches Inter only where it actually falls back.
  */
 export const inter = Inter({
   subsets: ['latin'],
   weight: ['400', '600'],
   style: ['normal'],
   display: 'swap',
+  preload: false,
   variable: '--font-inter',
   adjustFontFallback: true,
 });

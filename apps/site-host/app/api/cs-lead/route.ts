@@ -18,6 +18,8 @@ export const dynamic = 'force-dynamic';
  *
  *   contact (default) — ContactForm.tsx standard variant.
  *     { siteKey, firstName, lastName, email, phone?, message, company }
+ *     The support variant sends one Name as firstName, no lastName, and
+ *     device? (which phone) in place of phone.
  *   consultation — ContactForm.tsx consultation variant: message optional,
  *     plus callTypes[] (goal | tax | profitability | other).
  *   magnet — LeadMagnetCard.tsx gated download: assetId (Sanity file asset,
@@ -104,9 +106,12 @@ function getClientIp(req: Request): string {
 const BaseFields = {
   siteKey: z.string().trim().min(1).max(120),
   firstName: z.string().trim().min(1).max(80),
-  lastName: z.string().trim().min(1).max(80),
+  /** Optional: the "support" form variant asks for one Name field, sent as firstName. */
+  lastName: z.string().trim().max(80).optional(),
   email: z.string().trim().email().max(160),
   phone: z.string().trim().max(40).optional(),
+  /** Which phone the user is on (support form variant), e.g. "iPhone 16 Pro, iOS 18.2". */
+  device: z.string().trim().max(120).optional(),
   /** Honeypot — non-empty means bot. */
   company: z.string().nullish(),
 };
@@ -228,14 +233,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'site_not_found' }, { status: 404 });
   }
 
-  const submitterName = `${payload.firstName} ${payload.lastName}`.trim();
+  const submitterName = `${payload.firstName} ${payload.lastName ?? ''}`.trim();
   const sourceHost = req.headers.get('x-site-host') ?? req.headers.get('host') ?? 'unknown';
   const fromAddress = process.env.RESEND_FROM_ADDRESS ?? '';
 
   const contactLines = [
     `Name: ${submitterName}`,
     `Email: ${payload.email}`,
-    `Phone: ${payload.phone ?? '—'}`,
+    // The support variant asks which phone the user is on and has no phone
+    // number field, so it reports the device in that line's place.
+    payload.device ? `Device: ${payload.device}` : `Phone: ${payload.phone ?? '—'}`,
   ];
   const footerLines = ['', `Source: ${sourceHost}`, `Submitted: ${new Date().toISOString()}`];
 

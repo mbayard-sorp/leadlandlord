@@ -1,7 +1,10 @@
-import type { CustomSiteMobileBar } from '@/lib/customsites-sanity';
+import type { CustomSite, CustomSiteMobileBar } from '@/lib/customsites-sanity';
+import { csStoreAwareHref } from './blocks/StoreBadge';
 
 interface Props {
   bar?: CustomSiteMobileBar | null;
+  /** The site's store switch: once "live" the button goes to the App Store. */
+  store?: Pick<CustomSite, 'storeState' | 'storeHref'> | null;
 }
 
 /**
@@ -16,12 +19,12 @@ interface Props {
  * Click tracking is left to the site's own GTM container (ADR 0033 D5);
  * `data-cs-store-cta="sticky"` is the trigger hook, same as StoreBadge.
  */
-export function MobileBar({ bar }: Props) {
+export function MobileBar({ bar, store }: Props) {
   if (!bar?.ctaLabel || !bar.ctaHref) return null;
   return (
     <div className="cs-mobilebar">
       {bar.text ? <span className="cs-mobilebar-text">{bar.text}</span> : null}
-      <a href={bar.ctaHref} className="cs-mobilebar-cta" data-cs-store-cta="sticky">
+      <a href={csStoreAwareHref(store, bar.ctaHref)} className="cs-mobilebar-cta" data-cs-store-cta="sticky">
         {bar.ctaLabel}
       </a>
     </div>

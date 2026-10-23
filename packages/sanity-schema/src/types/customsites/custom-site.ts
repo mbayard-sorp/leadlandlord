@@ -71,6 +71,26 @@ export const csSite = defineType({
       ],
     }),
     defineField({
+      name: 'storeState',
+      title: 'App Store State',
+      type: 'string',
+      group: 'content',
+      description: 'App sites only. While "soon", the header, mobile bar, plan buttons and footer badge stay pre-launch; flip to "live" (with the App Store URL below) and they all switch together. Leave empty on sites with no app.',
+      options: { list: [{ title: 'Coming soon', value: 'soon' }, { title: 'Live on the App Store', value: 'live' }], layout: 'radio' },
+    }),
+    defineField({
+      name: 'storeHref',
+      title: 'App Store URL',
+      type: 'url',
+      group: 'content',
+      description: 'The apps.apple.com URL. Required once App Store State is "live".',
+      validation: (r) =>
+        r.custom((value, context) => {
+          const state = (context.parent as { storeState?: unknown } | undefined)?.storeState;
+          return state === 'live' && !value ? 'Required when App Store State is "live".' : true;
+        }),
+    }),
+    defineField({
       name: 'footerColumns',
       title: 'Footer Columns',
       type: 'array',
