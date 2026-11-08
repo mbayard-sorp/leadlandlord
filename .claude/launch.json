@@ -93,6 +93,25 @@
       ],
       "port": 3002,
       "autoPort": true
+    },
+    {
+      "name": "site-host-webpack-dev-dataset",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@leadlandlord/site-host",
+        "exec",
+        "next",
+        "dev",
+        "--webpack",
+        "-p",
+        "3001"
+      ],
+      "port": 3001,
+      "env": {
+        "SANITY_DATASET": "development",
+        "NEXT_PUBLIC_SANITY_DATASET": "development"
+      }
     }
   ]
 }

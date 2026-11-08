@@ -1,8 +1,8 @@
-# CueDuo public assets
+# Cuelit public assets
 
 ## `app-store-badge.svg` (required before the store CTA goes live)
 
-`components/customsites/blocks/StoreBadge.tsx` renders `/cueduo/app-store-badge.svg`
+`components/customsites/blocks/StoreBadge.tsx` renders `/cuelit/app-store-badge.svg`
 whenever a `csAppHeroBlock` or `csAppCtaBlock` has `storeState: 'live'`.
 
 The file is **not** committed, and must not be redrawn or recoloured. Download

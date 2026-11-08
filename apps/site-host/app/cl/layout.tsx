@@ -9,7 +9,7 @@ import {
 } from '@/lib/customsites-sanity';
 import { currentRequestBaseUrl } from '@/lib/seo-meta';
 import { csOgFallbackImage } from '@/lib/customsites-metadata';
-import { cueDuoFontVars } from '@/lib/customsites-fonts-cueduo';
+import { cuelitFontVars } from '@/lib/customsites-fonts-cuelit';
 import { SiteHeader } from '@/components/customsites/SiteHeader';
 import { SiteFooter } from '@/components/customsites/SiteFooter';
 import { MobileBar } from '@/components/customsites/MobileBar';
@@ -17,13 +17,13 @@ import { CustomSiteJsonLd } from '@/components/customsites/CustomSiteJsonLd';
 import { CustomSiteNavigationJsonLd } from '@/components/customsites/CustomSiteNavigationJsonLd';
 import { SoftwareAppJsonLd } from '@/components/customsites/SoftwareAppJsonLd';
 import { WebVitalsReporter } from '@/components/shared/WebVitalsReporter';
-import '@/styles/customsites/cueduo.css';
+import '@/styles/customsites/cuelit.css';
 
 /**
- * Layout for cueduo.com (Custom Sites site #3). Routes under /cd/* are an
- * internal namespace — proxy.ts rewrites the custom host's `/*` into `/cd/*`
+ * Layout for cuelit.app (Custom Sites site #3). Routes under /cl/* are an
+ * internal namespace — proxy.ts rewrites the custom host's `/*` into `/cl/*`
  * so browser URLs stay clean. Mirrors app/aa/layout.tsx (own CSS import, own
- * font registry, per-site GTM per ADR 0033 D5) with the .cs-cueduo design
+ * font registry, per-site GTM per ADR 0033 D5) with the .cs-cuelit design
  * system.
  *
  * Two differences from sites #1 and #2, both because this is a product site
@@ -31,10 +31,10 @@ import '@/styles/customsites/cueduo.css';
  *  - no TopBar: there is no phone number and no office hours to put in one;
  *  - no StickyBar: it exists to keep a tel: link in reach on a phone. The
  *    non-phone equivalent is MobileBar, driven by csSite.mobileBar. TopBar is
- *    still styled in cueduo.css so it can be switched on without a stylesheet
+ *    still styled in cuelit.css so it can be switched on without a stylesheet
  *    change.
  */
-export default async function CueDuoLayout({ children }: { children: React.ReactNode }) {
+export default async function CuelitLayout({ children }: { children: React.ReactNode }) {
   const site = await resolveCurrentCustomSite();
   if (!site) notFound();
 
@@ -47,7 +47,7 @@ export default async function CueDuoLayout({ children }: { children: React.React
   const hasMobileBar = Boolean(site.mobileBar?.ctaLabel && site.mobileBar.ctaHref);
 
   return (
-    <div className={`cs-cueduo ${cueDuoFontVars}${hasMobileBar ? ' cs-has-mobilebar' : ''}`}>
+    <div className={`cs-cuelit ${cuelitFontVars}${hasMobileBar ? ' cs-has-mobilebar' : ''}`}>
       <a href="#main" className="cs-skip-link">
         Skip to main content
       </a>
@@ -62,7 +62,8 @@ export default async function CueDuoLayout({ children }: { children: React.React
         applicationCategory="MultimediaApplication"
       />
 
-      <SiteHeader site={site} showWordmark />
+      {/* csSite.logo is the full Cuelit wordmark: it stands alone, never beside a retyped name. */}
+      <SiteHeader site={site} />
 
       <main id="main">{children}</main>
 

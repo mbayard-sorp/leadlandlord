@@ -460,10 +460,9 @@ export const csValuePropsBlock = defineType({
                   'shield',
                   'chart',
                   'clock',
-                  'cueduo/fold',
-                  'cueduo/eyeline',
-                  'cueduo/cut',
-                  'cueduo/pace',
+                  'cuelit/eyeline',
+                  'cuelit/cut',
+                  'cuelit/pace',
                 ],
               },
               description: 'Chooses one of the site’s built-in inline SVG icons. Not an upload — icons ship with the code so they inherit color and stay crisp.',
@@ -981,7 +980,7 @@ export const csDisclosureBlock = defineType({
 
 
 /* ---------------------------------------------------------------------------
- * The CueDuo set (site #3). Line-generic like every other block: these exist
+ * The Cuelit set (site #3). Line-generic like every other block: these exist
  * because an app marketing site needs a device, a store badge, a price and a
  * script surface, and none of the professional-services blocks carry those.
  * Any custom site may use them.

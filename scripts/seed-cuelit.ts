@@ -1,9 +1,9 @@
 #!/usr/bin/env -S tsx
 /**
- * Seed CueDuo (Custom Sites site #3, siteKey `cueduo`) into Sanity.
+ * Seed Cuelit (Custom Sites site #3, siteKey `cuelit`) into Sanity.
  *
  * Every string here comes from the approved design in Claude Design
- * (`CueDuo Web - Home v3.dc.html`) and the CueDuo brand guide v1.1. Nothing is
+ * (`Cuelit Web - Home v3.dc.html`) and the Cuelit brand guide v1.1. Nothing is
  * paraphrased and nothing is invented: the brand's register has no hype
  * setting, and the guide already supplies the positioning paragraph, the four
  * feature titles and bodies, and the App Store headlines.
@@ -15,7 +15,7 @@
  * createOrReplace transaction chunks (idempotent re-runs).
  *
  * Content decisions:
- *  - Images come from scripts/assets/cueduo/ and are uploaded through the
+ *  - Images come from scripts/assets/cuelit/ and are uploaded through the
  *    Sanity assets API (content-hash deduped, so re-runs reuse the same asset).
  *    --dry-run skips the upload and writes placeholder asset refs so the JSON
  *    shows the field shapes. The real half-open device render and the app
@@ -31,7 +31,7 @@
  *  - robotsDisallow stays true (ADR 0033 D6) — noindexed until DNS cutover.
  *
  * Usage:
- *   pnpm seed-cueduo --dataset development [--dry-run] [--out <dir>]
+ *   pnpm seed-cuelit --dataset development [--dry-run] [--out <dir>]
  */
 import { config as loadEnv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
@@ -83,18 +83,18 @@ const { values: args } = parseArgs({
 
 const dataset = args.dataset;
 if (dataset !== 'development' && dataset !== 'production') {
-  console.error('Usage: seed-cueduo.ts --dataset development|production [--dry-run] [--out <dir>]');
+  console.error('Usage: seed-cuelit.ts --dataset development|production [--dry-run] [--out <dir>]');
   process.exit(1);
 }
 const dryRun = Boolean(args['dry-run']);
-const outDir = (args.out as string | undefined) ?? join(tmpdir(), 'seed-cueduo-dry-run');
+const outDir = (args.out as string | undefined) ?? join(tmpdir(), 'seed-cuelit-dry-run');
 
 // ---------------------------------------------------------------------------
 // Site constants
 // ---------------------------------------------------------------------------
 
-const SITE_KEY = 'cueduo';
-const SITE_NAME = 'CueDuo';
+const SITE_KEY = 'cuelit';
+const SITE_NAME = 'Cuelit';
 const SITE_ID = csSiteDocId(SITE_KEY);
 const siteRef = { _type: 'reference' as const, _ref: SITE_ID };
 
@@ -133,13 +133,15 @@ function ptBlock(text: string, style = 'normal'): PTBlock {
 // skip the network and use placeholder refs so the output shows the shape.
 // ---------------------------------------------------------------------------
 
-const ASSET_DIR = resolve(__dirname, 'assets', 'cueduo');
+const ASSET_DIR = resolve(__dirname, 'assets', 'cuelit');
 
 const IMAGE_FILES = {
   viewfinder: 'presenter-viewfinder.jpg',
   tripod: 'presenter-tripod.jpg',
   duo: 'presenter-duo-halfopen.jpg',
-  mark: 'cueduo-mark.svg',
+  mark: 'cuelit-mark.svg',
+  wordmark: 'cuelit-wordmark-on-light.png',
+  icon: 'cuelit-icon-light.svg',
 } as const;
 type ImageKey = keyof typeof IMAGE_FILES;
 type AssetIds = Record<ImageKey, string>;
@@ -306,7 +308,7 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
           'Every other prompter puts your script on the same screen you’re filming with. You read, your eyes drift down, and everyone watching can tell.',
         ),
         ptBlock(
-          'A folding phone has a second screen next to the camera. CueDuo uses it. You read at the lens, the take lands on the first try, and you get your morning back.',
+          'A folding phone has a second screen next to the camera. Cuelit uses it. You read at the lens, the take lands on the first try, and you get your morning back.',
         ),
       ],
     },
@@ -332,33 +334,26 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
     {
       _type: 'csValuePropsBlock',
       _key: k('blk'),
-      eyebrow: 'Four things it does well',
+      eyebrow: 'Three things it does well',
       items: [
         {
           _type: 'csValuePropItem',
           _key: k('vp'),
-          icon: 'cueduo/fold',
-          heading: 'Two screens, one take',
-          body: 'Script on the outer display, controls on the inner. Nothing to hold, nothing to hide.',
-        },
-        {
-          _type: 'csValuePropItem',
-          _key: k('vp'),
-          icon: 'cueduo/eyeline',
+          icon: 'cuelit/eyeline',
           heading: 'Eyes on the lens',
           body: 'The prompter sits beside the camera, so you look at your audience, not below it.',
         },
         {
           _type: 'csValuePropItem',
           _key: k('vp'),
-          icon: 'cueduo/cut',
+          icon: 'cuelit/cut',
           heading: 'Cut where you stand',
           body: 'Trim takes, add a title, drop in a photo. Export without leaving the app.',
         },
         {
           _type: 'csValuePropItem',
           _key: k('vp'),
-          icon: 'cueduo/pace',
+          icon: 'cuelit/pace',
           heading: 'Your pace, not ours',
           body: 'Scrolling follows your voice. Pause and it waits with you.',
         },
@@ -422,7 +417,7 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       eyebrow: 'Before and after',
       heading: 'A phone on a stack of books, or this',
       leftLabel: 'The usual way',
-      rightLabel: 'With CueDuo',
+      rightLabel: 'With Cuelit',
       rows: [
         { _type: 'csContrastRow', _key: k('row'), left: 'Script taped below the lens, eyeline low', right: 'Script beside the lens, eyeline correct' },
         { _type: 'csContrastRow', _key: k('row'), left: 'Eleven takes, each one slightly worse', right: 'One or two takes, both kept' },
@@ -489,7 +484,7 @@ function homePageBuilder(stageRefs: Array<{ _type: 'reference'; _ref: string; _k
       layout: 'split',
       outroLead: 'Still stuck?',
       outroLinkLabel: 'Write to us',
-      outroLinkHref: 'mailto:hello@cueduo.com',
+      outroLinkHref: 'mailto:hello@cuelit.app',
       outroTail: 'and a person answers.',
       items: [
         {
@@ -576,13 +571,13 @@ async function main() {
     _type: 'csSite',
     siteKey: SITE_KEY,
     name: SITE_NAME,
-    customDomain: 'cueduo.com',
+    customDomain: 'cuelit.app',
     tagline: 'A teleprompter and recorder built for folding phones.',
     // No phone: this is a product, not a phone-first service business. The
     // header phone slot and the sticky call bar stay unmounted.
-    email: 'hello@cueduo.com',
-    logo: imageValue(assets.mark),
-    favicon: imageValue(assets.mark),
+    email: 'hello@cuelit.app',
+    logo: imageValue(assets.wordmark, 'Cuelit'),
+    favicon: imageValue(assets.icon),
     navigation: [
       { _type: 'csNavLink', _key: k('nav'), label: 'Features', href: '/features' },
       { _type: 'csNavLink', _key: k('nav'), label: 'How it works', href: '/#how-it-works' },
@@ -598,7 +593,7 @@ async function main() {
     ],
     // Chrome for the v3 design. footerColumns supersede the flat footerNav
     // above, which stays seeded as the fallback.
-    headerCta: { _type: 'headerCta', label: 'Get CueDuo', href: '/#get' },
+    headerCta: { _type: 'headerCta', label: 'Get Cuelit', href: '/#get' },
     // Every store-facing button follows this; flip to 'live' with storeHref at launch.
     storeState: 'soon',
     footerColumns: [
@@ -624,17 +619,17 @@ async function main() {
     ],
     footerAppLabel: 'Get the app',
     footerLegal: 'Apple and the App Store are trademarks of Apple Inc. Device renders are illustrative.',
-    mobileBar: { _type: 'mobileBar', text: 'Look up. Say it once.', ctaLabel: 'Get CueDuo', ctaHref: '/#get' },
+    mobileBar: { _type: 'mobileBar', text: 'Look up. Say it once.', ctaLabel: 'Get Cuelit', ctaHref: '/#get' },
     // ⚠ Confirm with the client before go-live.
-    leadRecipients: ['hello@cueduo.com'],
+    leadRecipients: ['hello@cuelit.app'],
     // Not LegalService/FinancialService: this site describes an app. The
     // shared JSON-LD components branch on this value and need a third branch.
     organizationType: 'SoftwareApplication',
-    titleTemplate: '%s | CueDuo',
+    titleTemplate: '%s | Cuelit',
     robotsDisallow: true,
     seo: {
       _type: 'csSeo',
-      metaTitle: 'CueDuo | Look up. Say it once.',
+      metaTitle: 'Cuelit | Look up. Say it once.',
       metaDescription:
         'A teleprompter and recorder built for folding phones. Your script on one screen, the lens on the other.',
     },
@@ -650,7 +645,7 @@ async function main() {
       pageBuilder: homePageBuilder(stageRefs, assets),
       seo: {
         _type: 'csSeo',
-        metaTitle: 'CueDuo | Look up. Say it once.',
+        metaTitle: 'Cuelit | Look up. Say it once.',
         metaDescription:
           'A teleprompter and recorder built for folding phones. Your script on one screen, the lens on the other, so you talk to people.',
       },
@@ -690,7 +685,7 @@ async function main() {
         _type: 'csSeo',
         metaTitle: 'Features',
         metaDescription:
-          'The prompter, recording, editing, the library and export. What CueDuo does on a folding phone.',
+          'The prompter, recording, editing, the library and export. What Cuelit does on a folding phone.',
       },
       publishedAt: '2026-09-21T00:00:00Z',
     },
@@ -827,7 +822,7 @@ async function main() {
       seo: {
         _type: 'csSeo',
         metaTitle: 'Support',
-        metaDescription: 'Help with CueDuo, and a way to reach a person.',
+        metaDescription: 'Help with Cuelit, and a way to reach a person.',
       },
       publishedAt: '2026-09-21T00:00:00Z',
     },
@@ -850,7 +845,7 @@ async function main() {
             ),
             ptBlock('What the app asks for', 'h3'),
             ptBlock(
-              'CueDuo asks for the camera and the microphone. The camera records your take. The microphone records your audio and paces the prompter to what you’ve already said. You can refuse either one in Settings, and the parts that need them stop working rather than working differently.',
+              'Cuelit asks for the camera and the microphone. The camera records your take. The microphone records your audio and paces the prompter to what you’ve already said. You can refuse either one in Settings, and the parts that need them stop working rather than working differently.',
             ),
             ptBlock('What leaves the device', 'h3'),
             ptBlock(
@@ -871,7 +866,7 @@ async function main() {
       seo: {
         _type: 'csSeo',
         metaTitle: 'Privacy',
-        metaDescription: 'What CueDuo does and does not do with your scripts, your takes and your data.',
+        metaDescription: 'What Cuelit does and does not do with your scripts, your takes and your data.',
       },
       publishedAt: '2026-09-21T00:00:00Z',
     },
@@ -895,7 +890,7 @@ async function main() {
             // ours to invent. What follows is only the operational detail
             // already stated on /pricing and in the app.
             ptBlock(
-              'The full terms of service are being prepared. What follows is a plain summary of how buying and using CueDuo works. It is not the agreement itself.',
+              'The full terms of service are being prepared. What follows is a plain summary of how buying and using Cuelit works. It is not the agreement itself.',
             ),
             ptBlock('Paying for it', 'h3'),
             ptBlock(
@@ -916,7 +911,7 @@ async function main() {
       seo: {
         _type: 'csSeo',
         metaTitle: 'Terms',
-        metaDescription: 'How paying for CueDuo works, and what happens to your takes if you stop.',
+        metaDescription: 'How paying for Cuelit works, and what happens to your takes if you stop.',
       },
       publishedAt: '2026-09-21T00:00:00Z',
     },
@@ -944,12 +939,12 @@ async function main() {
 
   console.log(`\nDone. ${chunks.flat().length} documents seeded to "${dataset}".`);
   console.log('Reminders:');
-  console.log('  - Presenter photos and the logo mark were uploaded from scripts/assets/cueduo/. The Take 3 thumbnail and');
+  console.log('  - Presenter photos and the logo mark were uploaded from scripts/assets/cuelit/. The Take 3 thumbnail and');
   console.log('    editor frame reuse the viewfinder photo until real app frames are exported.');
   console.log('  - Prices are the design placeholders; the block footnote says so on the page.');
   console.log('  - storeState is "soon" everywhere. Flip to "live" once the App Store URL exists,');
-  console.log('    and drop Apple’s badge at apps/site-host/public/cueduo/app-store-badge.svg first.');
-  console.log('  - leadRecipients seeded as hello@cueduo.com — confirm with the client.');
+  console.log('    and drop Apple’s badge at apps/site-host/public/cuelit/app-store-badge.svg first.');
+  console.log('  - leadRecipients seeded as hello@cuelit.app — confirm with the client.');
   console.log('  - robotsDisallow is TRUE (noindexed) until DNS cutover per the go-live runbook.');
 }
 

@@ -20,7 +20,7 @@ interface Props {
    *  flips the scrim so the dark side falls on the right. */
   bannerReverse?: boolean;
   /** Render the trail inside the band, above the H1, with a "›" separator,
-   *  instead of in the light bar below it (CueDuo). */
+   *  instead of in the light bar below it (Cuelit). */
   breadcrumbsInHeader?: boolean;
 }
 

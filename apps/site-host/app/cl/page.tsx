@@ -6,7 +6,7 @@ import { buildWebPageJsonLd, csOrigin } from '@/lib/customsites-jsonld';
 import { applyCsSeoOverrides, csOgFallbackImage } from '@/lib/customsites-metadata';
 import { PageBuilder } from '@/components/customsites/PageBuilder';
 
-export default async function CueDuoHome() {
+export default async function CuelitHome() {
   const site = await resolveCurrentCustomSite();
   if (!site) notFound();
 
@@ -30,7 +30,8 @@ export default async function CueDuoHome() {
         siteKey={site.siteKey}
         phone={site.phone}
         siteName={site.name}
-        logoUrl={site.logoUrl}
+        // csSite.logo is the wide wordmark; the closing band shows the square app icon.
+        logoUrl={site.faviconUrl ?? site.logoUrl}
         currentPath="/"
       />
     </>

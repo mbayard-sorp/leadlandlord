@@ -186,22 +186,12 @@ export function CheckCircleIcon(props: IconProps) {
   );
 }
 
-/* --- CueDuo feature glyphs (site #3) -------------------------------------
- * Lifted verbatim from the CueDuo brand guide's icon family: 24x24 grid,
+/* --- Cuelit feature glyphs (site #3) -------------------------------------
+ * Lifted verbatim from the Cuelit brand guide's icon family: 24x24 grid,
  * outline, round caps and joins. They keep the shared 1.5 stroke of this set
  * rather than the guide's 1.75, because here they render at 30px+ where 1.5
  * matches the guide's own 40px feature weight.
  * ----------------------------------------------------------------------- */
-
-/** Two panes at a hinge, aperture on the left pane — the product itself. */
-export function FoldIcon(props: IconProps) {
-  return (
-    <svg {...base(props)}>
-      <path d="M4 6.5l7-1.5v14l-7-1.5zM20 6.5l-7-1.5v14l7-1.5z" />
-      <circle cx="6.8" cy="8.6" r="1.1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
 
 /** A lens with the eyeline running through it. */
 export function EyelineIcon(props: IconProps) {
@@ -243,16 +233,18 @@ const VALUE_PROP_ICONS: Record<CsValuePropIcon, (props: IconProps) => React.JSX.
   shield: ShieldIcon,
   chart: ChartIcon,
   clock: ClockIcon,
-  'cueduo/fold': FoldIcon,
-  'cueduo/eyeline': EyelineIcon,
-  'cueduo/cut': CutIcon,
-  'cueduo/pace': PaceIcon,
+  'cuelit/eyeline': EyelineIcon,
+  'cuelit/cut': CutIcon,
+  'cuelit/pace': PaceIcon,
 };
 
 /** Icon component for a csValuePropsBlock icon name, or null for unknown/empty. */
 export function ValuePropIcon({ name, className }: { name?: string | null; className?: string }) {
   if (!name) return null;
-  const Icon = VALUE_PROP_ICONS[name as CsValuePropIcon];
+  // Content authored before the Cuelit rename stores `cueduo/*` keys. Read them
+  // as `cuelit/*` until scripts/patch-cuelit-rebrand.ts has migrated the data.
+  const key = name.startsWith('cueduo/') ? `cuelit/${name.slice('cueduo/'.length)}` : name;
+  const Icon = VALUE_PROP_ICONS[key as CsValuePropIcon];
   return Icon ? <Icon className={className} /> : null;
 }
 

@@ -26,8 +26,8 @@ export function csOgFallbackImage(baseUrl: string, siteKey: string): PageMetaIma
 /**
  * Marks a title that already names the site as absolute, so the layout's
  * `%s | {siteName}` template does not append the name a second time (a
- * csSeo.metaTitle like "Keep every take | CueDuo" would otherwise render as
- * "Keep every take | CueDuo | CueDuo"). Titles without the name are left for
+ * csSeo.metaTitle like "Keep every take | Cuelit" would otherwise render as
+ * "Keep every take | Cuelit | Cuelit"). Titles without the name are left for
  * the template to brand.
  */
 export function csDedupeBrandedTitle(meta: Metadata, siteName: string): Metadata {

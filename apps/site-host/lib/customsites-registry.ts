@@ -37,8 +37,8 @@ export const CUSTOM_SITE_REGISTRY: Record<string, CustomSiteRegistryEntry> = {
     journeyPages: true,
     teamPages: true,
   },
-  cueduo: {
-    namespace: 'cd',
+  cuelit: {
+    namespace: 'cl',
     servicesPath: 'features',
     insightsPath: 'updates',
     // The six "how a take happens" stages are a home-page section only. Six
@@ -54,8 +54,8 @@ export const CUSTOM_HOSTS = new Map<string, string>([
   ['www.constructionadrservices.com', 'constructionadr'],
   ['alignedadvisors.com', 'alignedadvisors'],
   ['www.alignedadvisors.com', 'alignedadvisors'],
-  ['cueduo.com', 'cueduo'],
-  ['www.cueduo.com', 'cueduo'],
+  ['cuelit.app', 'cuelit'],
+  ['www.cuelit.app', 'cuelit'],
 ]);
 
 /** Namespace for a siteKey, or undefined for an unknown key (proxy skips). */

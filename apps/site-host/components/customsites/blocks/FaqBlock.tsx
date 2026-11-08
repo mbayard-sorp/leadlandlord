@@ -15,7 +15,7 @@ interface Props {
  * `layout: 'split'` (heading left, questions right) and the optional outro
  * line ("Still stuck? Write to us and a person answers.") are opt-in; a block
  * with neither renders exactly as before. The split section also claims the
- * #support anchor the CueDuo nav points at.
+ * #support anchor the Cuelit nav points at.
  */
 export function FaqBlock({ block, phone }: Props) {
   const items = block.items ?? [];
