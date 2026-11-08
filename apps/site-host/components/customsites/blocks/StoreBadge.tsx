@@ -3,7 +3,7 @@ import type { CsStoreState, CustomSite } from '@/lib/customsites-sanity';
 /**
  * Where a store-facing button points. Once csSite.storeState is "live" every
  * one of them (header, mobile bar, plan cards) goes to the App Store together;
- * before that each keeps its authored in-page href, which on CueDuo is the
+ * before that each keeps its authored in-page href, which on Cuelit is the
  * closing CTA band (#get). A site with no storeState is not an app site and
  * keeps its authored href unconditionally.
  */
@@ -31,7 +31,7 @@ interface Props {
  * button — there is nowhere to go yet, and a dead control that looks clickable
  * is worse than a plain statement.
  *
- * `live` is Apple's own badge asset, served from /cueduo/app-store-badge.svg.
+ * `live` is Apple's own badge asset, served from /cuelit/app-store-badge.svg.
  * Apple's marketing guidelines forbid recolouring, redrawing, animating or
  * shrinking it below 40px tall, so it is an <img> of the unmodified file at a
  * fixed 180x60 and nothing in the stylesheet restyles it. The file is
@@ -48,7 +48,7 @@ export function StoreBadge({ state, label, href, placement }: Props) {
     return (
       <a className="cs-storebadge" href={href} data-cs-store-cta={placement}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/cueduo/app-store-badge.svg" alt="Download on the App Store" width={180} height={60} />
+        <img src="/cuelit/app-store-badge.svg" alt="Download on the App Store" width={180} height={60} />
       </a>
     );
   }

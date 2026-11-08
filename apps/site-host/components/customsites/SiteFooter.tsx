@@ -54,7 +54,7 @@ function ColumnFooter({ site }: Props) {
           <div className="cs-footer-brand-lockup">
             {mark ? (
               <span className="cs-footer-mark">
-                <Image src={mark} alt="" fill sizes="24px" style={{ objectFit: 'contain' }} />
+                <Image src={mark} alt="" fill sizes="96px" style={{ objectFit: 'contain' }} />
               </span>
             ) : null}
             <span className="cs-footer-brand-name">{site.name}</span>

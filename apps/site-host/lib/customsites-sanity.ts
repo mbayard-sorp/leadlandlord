@@ -103,7 +103,7 @@ export interface CustomSite {
   indexnowKey?: string | null;
   /** Plain-text compliance line shown above the footer legal row on every page. */
   footerDisclosure?: string | null;
-  /** Optional header button (e.g. "Get CueDuo"), independent of the phone button. */
+  /** Optional header button (e.g. "Get Cuelit"), independent of the phone button. */
   headerCta?: CustomSiteCta | null;
   /** App sites only: the one switch every store-facing button follows. Unset on sites with no app. */
   storeState?: CsStoreState | null;
@@ -728,10 +728,9 @@ export type CsValuePropIcon =
   | 'shield'
   | 'chart'
   | 'clock'
-  | 'cueduo/fold'
-  | 'cueduo/eyeline'
-  | 'cueduo/cut'
-  | 'cueduo/pace';
+  | 'cuelit/eyeline'
+  | 'cuelit/cut'
+  | 'cuelit/pace';
 export interface CsValuePropItem { _key: string; icon?: CsValuePropIcon | null; heading: string; body: string }
 export interface CsValuePropsBlock { _type: 'csValuePropsBlock'; _key: string; eyebrow?: string | null; heading?: string | null; items?: CsValuePropItem[] | null; backgroundImageUrl?: string | null; backgroundImageAlt?: string | null }
 
@@ -762,7 +761,7 @@ export interface CsAssessmentBlock { _type: 'csAssessmentBlock'; _key: string; i
 
 export interface CsDisclosureBlock { _type: 'csDisclosureBlock'; _key: string; heading?: string | null; lastUpdated?: string | null; content?: CsPortableTextBlock[] | null; note?: string | null }
 
-/* --- the CueDuo set (site #3) ------------------------------------------- */
+/* --- the Cuelit set (site #3) ------------------------------------------- */
 
 /** Sanity image hotspot centre, 0 to 1 from the top-left of the image. Feed it to object-position as `${x*100}% ${y*100}%`. */
 export interface CsImageHotspot { x: number; y: number }

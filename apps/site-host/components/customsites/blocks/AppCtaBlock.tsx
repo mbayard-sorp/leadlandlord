@@ -12,7 +12,7 @@ interface Props {
 /**
  * The closing band: mark, one line, the store call to action, the qualifier.
  * Graphite by default, which is where the accent flips to Cobalt Bright with
- * graphite ink on top (the contrast decision in cueduo.css).
+ * graphite ink on top (the contrast decision in cuelit.css).
  *
  * `band: 'prompter'` is the same band on prompter black. With a `countdown` it
  * opens on a record-start motif (take label, one giant digit, REC row) in

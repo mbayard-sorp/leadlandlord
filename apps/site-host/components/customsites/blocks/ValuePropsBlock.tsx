@@ -20,9 +20,9 @@ export function ValuePropsBlock({ block }: Props) {
   if (items.length === 0) return null;
 
   const bg = block.backgroundImageUrl;
-  // The CueDuo nav links to #features. Only a block that uses the CueDuo
+  // The Cuelit nav links to #features. Only a block that uses the Cuelit
   // glyphs claims the anchor, so sites #1 and #2 keep an id-free section.
-  const anchor = items.some((item) => item.icon?.startsWith('cueduo/')) ? 'features' : undefined;
+  const anchor = items.some((item) => item.icon?.startsWith('cuelit/')) ? 'features' : undefined;
 
   return (
     <section

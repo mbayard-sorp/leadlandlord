@@ -64,7 +64,7 @@ export const csSite = defineType({
       title: 'Header CTA',
       type: 'object',
       group: 'content',
-      description: 'Optional button at the right of the header, e.g. "Get CueDuo". Independent of the phone button.',
+      description: 'Optional button at the right of the header, e.g. "Get Cuelit". Independent of the phone button.',
       fields: [
         defineField({ name: 'label', title: 'Label', type: 'string' }),
         defineField({ name: 'href', title: 'Href', type: 'string' }),

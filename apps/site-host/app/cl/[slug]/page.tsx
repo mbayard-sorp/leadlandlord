@@ -18,8 +18,8 @@ interface RouteParams {
 }
 
 /** Generic csPage / csPublication / redirect resolver — mirrors
- * app/cadr/[slug]/page.tsx with CueDuo's updates path vocabulary. */
-export default async function CueDuoSlugPage({ params }: RouteParams) {
+ * app/cadr/[slug]/page.tsx with Cuelit's updates path vocabulary. */
+export default async function CuelitSlugPage({ params }: RouteParams) {
   const { slug } = await params;
   const site = await resolveCurrentCustomSite();
   if (!site) notFound();
@@ -54,7 +54,8 @@ export default async function CueDuoSlugPage({ params }: RouteParams) {
           siteKey={site.siteKey}
           phone={site.phone}
           siteName={site.name}
-          logoUrl={site.logoUrl}
+          // csSite.logo is the wide wordmark; the closing band shows the square app icon.
+          logoUrl={site.faviconUrl ?? site.logoUrl}
           currentPath={`/${slug}`}
         />
       </>

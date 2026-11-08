@@ -10,7 +10,7 @@ interface Props {
 /**
  * Sticky mobile bar for sites with no phone number: a short line plus one
  * button (e.g. the app download). The non-phone sibling of StickyBar, shown
- * below ~899px only (see .cs-mobilebar in cueduo.css). It is `position:
+ * below ~899px only (see .cs-mobilebar in cuelit.css). It is `position:
  * sticky` and the last child of the page root, so it pins to the viewport
  * bottom while scrolling and rests below the footer at the end, which is why
  * it needs no spacer. No-op unless the button has both a label and a

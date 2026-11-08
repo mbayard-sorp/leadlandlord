@@ -2,7 +2,7 @@ import { resolveCurrentCustomSite } from '@/lib/custom-site-context';
 import { csSitePaths } from '@/lib/customsites-registry';
 
 /** 404 in the brand's register: short, no blame, no exclamation mark. */
-export default async function CueDuoNotFound() {
+export default async function CuelitNotFound() {
   const site = await resolveCurrentCustomSite();
   const { servicesPath } = csSitePaths(site?.siteKey);
 
