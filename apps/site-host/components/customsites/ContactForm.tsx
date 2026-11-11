@@ -170,14 +170,14 @@ export function ContactForm({ siteKey, variant = 'standard', footnote, submitLab
       {isSupport ? (
         <div className="cs-form-field">
           <label className="cs-form-label" htmlFor="cs-device">
-            Which phone?
+            Which iPhone or iPad?
           </label>
           <input
             id="cs-device"
             name="device"
             type="text"
             className="cs-form-input"
-            placeholder="e.g. iPhone 16 Pro, iOS 18.2"
+            placeholder="e.g. iPhone 16 Pro, iOS 27.1"
             autoComplete="off"
           />
         </div>

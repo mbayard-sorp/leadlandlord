@@ -6,7 +6,7 @@ interface Props {
   /** The site's feature pages (csPracticeArea), feeding featureList. */
   features: CustomSitePracticeAreaCard[];
   baseUrl: string;
-  /** schema.org MobileApplication operatingSystem, e.g. "iOS 18.0 or later". */
+  /** schema.org MobileApplication operatingSystem, e.g. "iOS 27.0 or later, iPadOS 27.0 or later". */
   operatingSystem: string;
   /** schema.org applicationCategory, e.g. "MultimediaApplication". */
   applicationCategory: string;

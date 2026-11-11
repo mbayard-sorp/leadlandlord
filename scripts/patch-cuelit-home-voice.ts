@@ -1,10 +1,10 @@
 /**
  * Cuelit homepage voice pass (Nov 2026): new tagline "Your lines, lit" and a
  * looser, funnier rewrite of every homepage section. Copy only; no block is
- * added, removed or reordered, and every product fact (iOS 18+, 100 to 200
+ * added, removed or reordered, and every other product fact (100 to 200
  * words a minute, portrait only, $59 / $8.99, seven-day trial) is unchanged.
- * It also states the app runs on iPhone and iPad, and drops the folding-phone
- * FAQ.
+ * It also states the app runs on iPhone and iPad on iOS 27 or later, drops the
+ * folding-phone FAQ, and points "Write to us" at support@cuelit.app.
  *
  *   pnpm tsx scripts/patch-cuelit-home-voice.ts --dataset production --dry-run
  *   pnpm tsx scripts/patch-cuelit-home-voice.ts --dataset production
@@ -87,7 +87,7 @@ const SITE_EDITS: Edit[] = [
 ];
 
 /** Shown wherever the page says what the app runs on. */
-const QUALIFIER = 'For iPhone and iPad on iOS 18 or later';
+const QUALIFIER = 'For iPhone and iPad on iOS 27 or later';
 
 /** Edits on the home csPage outside the page builder. */
 const PAGE_EDITS: Edit[] = [
@@ -299,9 +299,9 @@ const BLOCK_EDITS: Array<{ type: string; nth: number; edits: Edit[] }> = [
       [
         ['items', 0, 'value'],
         'Any iPhone that runs iOS 18 or later.',
-        'Any iPhone or iPad that runs iOS 18 or iPadOS 18 or later.',
+        'Any iPhone or iPad that runs iOS 27 or iPadOS 27 or later.',
       ],
-      [['items', 1, 'value'], 'iOS 18 or later.', 'iOS 18 or iPadOS 18, or later.'],
+      [['items', 1, 'value'], 'iOS 18 or later.', 'iOS 27 or iPadOS 27, or later.'],
       [['items', 2, 'value'], 'About 60 MB, plus room for your takes.', 'About 60 MB, plus room for all your takes.'],
       [['items', 3, 'value'], 'English at launch. More as we go.', 'English for now. More languages on the way.'],
     ],
@@ -316,7 +316,7 @@ const BLOCK_EDITS: Array<{ type: string; nth: number; edits: Edit[] }> = [
       [
         ['items', 0, 'answer'],
         'No. Cuelit runs on any iPhone with iOS 18 or later, and the script always sits right under the front camera.',
-        'An iPhone or iPad running iOS 18 or iPadOS 18 or later. That’s the whole list.',
+        'An iPhone or iPad running iOS 27 or iPadOS 27 or later. That’s the whole list.',
       ],
       [
         ['items', 1, 'answer'],
@@ -334,6 +334,7 @@ const BLOCK_EDITS: Array<{ type: string; nth: number; edits: Edit[] }> = [
         'Not yet. Recording is portrait only, which keeps your script right under the camera where it belongs.',
       ],
       [['outroTail'], 'and a person answers.', 'and a real human writes back.'],
+      [['outroLinkHref'], 'mailto:hello@cuelit.app', 'mailto:support@cuelit.app'],
     ],
   },
   {
