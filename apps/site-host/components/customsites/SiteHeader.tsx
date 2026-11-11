@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import type { ReactNode } from 'react';
 import type { CustomSite, CustomSiteNavLink } from '@/lib/customsites-sanity';
 import { NavLink, MobileDrawer } from './NavClient';
 import { csStoreAwareHref } from './blocks/StoreBadge';
@@ -9,6 +10,9 @@ interface Props {
    * self-contained lockup). Off by default so sites whose logo already carries
    * the name render exactly as before. */
   showWordmark?: boolean;
+  /** A site-supplied logo element (an inline, animated SVG) in place of the
+   * uploaded logo image. It must carry its own accessible name. */
+  logo?: ReactNode;
 }
 
 /** Structural default used only until `csSite.navigation` is authored in
@@ -23,14 +27,16 @@ const DEFAULT_NAV: CustomSiteNavLink[] = [
   { label: 'Contact', href: '/contact' },
 ];
 
-export function SiteHeader({ site, showWordmark = false }: Props) {
+export function SiteHeader({ site, showWordmark = false, logo }: Props) {
   const links = site.navigation && site.navigation.length > 0 ? site.navigation : DEFAULT_NAV;
 
   return (
     <header className="cs-header">
       <div className="cs-container cs-header-inner">
         <a href="/" className="cs-brand">
-          {site.logoUrl && showWordmark ? (
+          {logo ? (
+            <span className="cs-header-logo">{logo}</span>
+          ) : site.logoUrl && showWordmark ? (
             <>
               <span className="cs-header-mark">
                 <Image src={site.logoUrl} alt="" fill sizes="26px" priority style={{ objectFit: 'contain' }} />

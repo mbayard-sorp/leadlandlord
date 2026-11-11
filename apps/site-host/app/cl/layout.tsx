@@ -12,6 +12,7 @@ import { csOgFallbackImage } from '@/lib/customsites-metadata';
 import { cuelitFontVars } from '@/lib/customsites-fonts-cuelit';
 import { SiteHeader } from '@/components/customsites/SiteHeader';
 import { SiteFooter } from '@/components/customsites/SiteFooter';
+import { CuelitWordmark } from '@/components/customsites/CuelitWordmark';
 import { MobileBar } from '@/components/customsites/MobileBar';
 import { CustomSiteJsonLd } from '@/components/customsites/CustomSiteJsonLd';
 import { CustomSiteNavigationJsonLd } from '@/components/customsites/CustomSiteNavigationJsonLd';
@@ -58,16 +59,17 @@ export default async function CuelitLayout({ children }: { children: React.React
         site={site}
         features={features}
         baseUrl={baseUrl}
-        operatingSystem="iOS 18.0 or later"
+        operatingSystem="iOS 27.0 or later, iPadOS 27.0 or later"
         applicationCategory="MultimediaApplication"
       />
 
-      {/* csSite.logo is the full Cuelit wordmark: it stands alone, never beside a retyped name. */}
-      <SiteHeader site={site} />
+      {/* The wordmark stands alone, never beside a retyped name. It is inline so
+          the lens over the i can blink as it does in the app. */}
+      <SiteHeader site={site} logo={<CuelitWordmark />} />
 
       <main id="main">{children}</main>
 
-      <SiteFooter site={site} />
+      <SiteFooter site={site} logo={<CuelitWordmark decorative />} />
 
       <MobileBar bar={site.mobileBar} store={site} />
 

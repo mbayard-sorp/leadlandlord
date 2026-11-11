@@ -1007,6 +1007,14 @@ export const csAppHeroBlock = defineType({
       validation: (r) => r.required().max(60),
     }),
     defineField({
+      name: 'headingAccent',
+      title: 'Heading Accent',
+      type: 'string',
+      description:
+        'Optional. A word or phrase from the heading to set in the brand accent color, e.g. "lit". Must match the heading exactly; the last match is colored. Leave empty for a plain heading.',
+      validation: (r) => r.max(30),
+    }),
+    defineField({
       name: 'subheading',
       title: 'Subheading',
       type: 'text',

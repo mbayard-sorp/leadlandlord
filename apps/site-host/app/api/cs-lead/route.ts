@@ -110,7 +110,7 @@ const BaseFields = {
   lastName: z.string().trim().max(80).optional(),
   email: z.string().trim().email().max(160),
   phone: z.string().trim().max(40).optional(),
-  /** Which phone the user is on (support form variant), e.g. "iPhone 16 Pro, iOS 18.2". */
+  /** Which phone the user is on (support form variant), e.g. "iPhone 16 Pro, iOS 27.1". */
   device: z.string().trim().max(120).optional(),
   /** Honeypot — non-empty means bot. */
   company: z.string().nullish(),
