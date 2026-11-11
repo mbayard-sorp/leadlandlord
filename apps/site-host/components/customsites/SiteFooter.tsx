@@ -1,9 +1,13 @@
 import Image from 'next/image';
+import type { ReactNode } from 'react';
 import type { CustomSite, CustomSiteNavLink } from '@/lib/customsites-sanity';
 import { StoreBadge } from './blocks/StoreBadge';
 
 interface Props {
   site: CustomSite;
+  /** A site-supplied logo element in place of the uploaded mark image (the
+   * column footer only). Decorative: the site name beside it is the label. */
+  logo?: ReactNode;
 }
 
 /** Structural default, same rationale as SiteHeader's DEFAULT_NAV — labels
@@ -44,7 +48,7 @@ function legalLinksFor(site: CustomSite): CustomSiteNavLink[] {
  * entry, and an app column. Only used when `footerColumns` is non-empty; the
  * flat three-column footer below stays the fallback for every other site.
  */
-function ColumnFooter({ site }: Props) {
+function ColumnFooter({ site, logo }: Props) {
   const columns = site.footerColumns ?? [];
   const mark = site.footerLogoUrl ?? site.logoUrl;
   return (
@@ -52,7 +56,9 @@ function ColumnFooter({ site }: Props) {
       <div className="cs-container cs-footer-cols">
         <div className="cs-footer-brand">
           <div className="cs-footer-brand-lockup">
-            {mark ? (
+            {logo ? (
+              <span className="cs-footer-mark">{logo}</span>
+            ) : mark ? (
               <span className="cs-footer-mark">
                 <Image src={mark} alt="" fill sizes="96px" style={{ objectFit: 'contain' }} />
               </span>
@@ -88,8 +94,8 @@ function ColumnFooter({ site }: Props) {
   );
 }
 
-export function SiteFooter({ site }: Props) {
-  if (site.footerColumns && site.footerColumns.length > 0) return <ColumnFooter site={site} />;
+export function SiteFooter({ site, logo }: Props) {
+  if (site.footerColumns && site.footerColumns.length > 0) return <ColumnFooter site={site} logo={logo} />;
 
   // `navigation` is the header's own source and is what's actually correct
   // and current on the live site; `footerNav` is a separate editorial field
