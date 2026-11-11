@@ -58,7 +58,7 @@ export default async function CuelitLayout({ children }: { children: React.React
         site={site}
         features={features}
         baseUrl={baseUrl}
-        operatingSystem="iOS 18.0 or later"
+        operatingSystem="iOS 18.0 or later, iPadOS 18.0 or later"
         applicationCategory="MultimediaApplication"
       />
 

@@ -2,9 +2,22 @@ import Image from 'next/image';
 import { csImageUrl, type CsAppHeroBlock, type CsFoldPreview } from '@/lib/customsites-sanity';
 import { StoreBadge } from './StoreBadge';
 import { hotspotPosition } from './hotspot';
+import { splitHeadingAccent } from './heading-accent';
 
 interface Props {
   block: CsAppHeroBlock;
+}
+
+function HeroHeading({ heading, accent }: { heading: string; accent?: string | null }) {
+  const parts = splitHeadingAccent(heading, accent);
+  if (!parts) return <h1 className="cs-apphero-heading">{heading}</h1>;
+  return (
+    <h1 className="cs-apphero-heading">
+      {parts.before}
+      <span className="cs-apphero-accent">{parts.accent}</span>
+      {parts.after}
+    </h1>
+  );
 }
 
 /** True when the fold preview carries enough copy to be worth drawing. */
@@ -62,7 +75,7 @@ export function AppHeroBlock({ block }: Props) {
                 {block.eyebrow}
               </p>
             ) : null}
-            <h1 className="cs-apphero-heading">{block.heading}</h1>
+            <HeroHeading heading={block.heading} accent={block.headingAccent} />
             {block.subheading ? <p className="cs-lead cs-apphero-sub">{block.subheading}</p> : null}
             <div className="cs-apphero-actions">
               <StoreBadge

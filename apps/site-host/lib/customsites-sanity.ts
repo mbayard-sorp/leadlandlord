@@ -642,7 +642,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     note
   },
   _type == "csAppHeroBlock" => {
-    eyebrow, heading, subheading, deviceCaption,
+    eyebrow, heading, headingAccent, subheading, deviceCaption,
     "deviceUrl": device.asset->url,
     "deviceAlt": device.alt,
     foldPreview{
@@ -787,7 +787,7 @@ export interface CsFoldPreview {
   secondaryLabel?: string | null;
 }
 export type CsStoreState = 'soon' | 'live';
-export interface CsAppHeroBlock { _type: 'csAppHeroBlock'; _key: string; eyebrow?: string | null; heading: string; subheading?: string | null; deviceUrl?: string | null; deviceAlt?: string | null; deviceCaption?: string | null; foldPreview?: CsFoldPreview | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; secondaryLabel?: string | null; secondaryHref?: string | null }
+export interface CsAppHeroBlock { _type: 'csAppHeroBlock'; _key: string; eyebrow?: string | null; heading: string; headingAccent?: string | null; subheading?: string | null; deviceUrl?: string | null; deviceAlt?: string | null; deviceCaption?: string | null; foldPreview?: CsFoldPreview | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; secondaryLabel?: string | null; secondaryHref?: string | null }
 
 export interface CsDeviceShowcaseBlock { _type: 'csDeviceShowcaseBlock'; _key: string; eyebrow?: string | null; heading: string; body?: string | null; screenUrl?: string | null; screenAlt?: string | null; side?: 'left' | 'right' | null; band?: 'porcelain' | 'graphite' | null; caption?: string | null; ctaLabel?: string | null; ctaHref?: string | null; visual?: 'screen' | 'takes' | 'editor' | null; takes?: CsShowcaseTake[] | null; editor?: CsShowcaseEditor | null }
 

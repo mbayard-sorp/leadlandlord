@@ -456,6 +456,9 @@
 /* A line break typed in Studio is kept — "Look up." and "Say it once." each
    get their own line without the author needing markup. */
 .cs-cuelit .cs-apphero-heading { white-space: pre-line; font-size: clamp(46px, 7.4vw, 92px); line-height: .96; letter-spacing: -.04em; text-wrap: balance; margin: 0 0 clamp(24px, 3vw, 32px); }
+/* Guide: orange carries the single word "lit" at display size, as in the
+   wordmark. 3.0:1 on cream passes only because the heading is 46px and up. */
+.cs-cuelit .cs-apphero-accent { color: var(--cs-accent); }
 .cs-cuelit .cs-apphero-sub { font-size: clamp(18px, 1.55vw, 21px); line-height: 1.55; max-width: 33em; margin: 0 0 clamp(32px, 4vw, 44px); text-wrap: pretty; }
 .cs-cuelit .cs-apphero-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 /* Matches the badge's height for alignment, so the rule under the label is a
