@@ -658,6 +658,7 @@ const CS_PAGE_BUILDER_PROJECTION = `pageBuilder[]{
     eyebrow, heading, body, side, band, caption, ctaLabel, ctaHref, visual,
     "screenUrl": screen.asset->url,
     "screenAlt": screen.alt,
+    "screenAspect": screen.asset->metadata.dimensions.aspectRatio,
     takes[]{
       _key, label, duration, flag,
       "imageUrl": image.asset->url,
@@ -789,7 +790,7 @@ export interface CsFoldPreview {
 export type CsStoreState = 'soon' | 'live';
 export interface CsAppHeroBlock { _type: 'csAppHeroBlock'; _key: string; eyebrow?: string | null; heading: string; headingAccent?: string | null; subheading?: string | null; deviceUrl?: string | null; deviceAlt?: string | null; deviceCaption?: string | null; foldPreview?: CsFoldPreview | null; storeState?: CsStoreState | null; storeLabel?: string | null; storeHref?: string | null; qualifier?: string | null; secondaryLabel?: string | null; secondaryHref?: string | null }
 
-export interface CsDeviceShowcaseBlock { _type: 'csDeviceShowcaseBlock'; _key: string; eyebrow?: string | null; heading: string; body?: string | null; screenUrl?: string | null; screenAlt?: string | null; side?: 'left' | 'right' | null; band?: 'porcelain' | 'graphite' | null; caption?: string | null; ctaLabel?: string | null; ctaHref?: string | null; visual?: 'screen' | 'takes' | 'editor' | null; takes?: CsShowcaseTake[] | null; editor?: CsShowcaseEditor | null }
+export interface CsDeviceShowcaseBlock { _type: 'csDeviceShowcaseBlock'; _key: string; eyebrow?: string | null; heading: string; body?: string | null; screenUrl?: string | null; screenAlt?: string | null; screenAspect?: number | null; side?: 'left' | 'right' | null; band?: 'porcelain' | 'graphite' | null; caption?: string | null; ctaLabel?: string | null; ctaHref?: string | null; visual?: 'screen' | 'takes' | 'editor' | null; takes?: CsShowcaseTake[] | null; editor?: CsShowcaseEditor | null }
 
 export interface CsShowcaseTake { _key: string; label: string; duration: string; flag?: string | null; imageUrl?: string | null; imageAlt?: string | null; imageHotspot?: CsImageHotspot | null }
 export interface CsShowcaseEditor { title?: string | null; timecode?: string | null; range?: string | null; clipLabel?: string | null; tracks?: string[] | null; tools?: string[] | null; doneLabel?: string | null; imageUrl?: string | null; imageAlt?: string | null; imageHotspot?: CsImageHotspot | null }
