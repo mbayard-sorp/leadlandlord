@@ -446,7 +446,7 @@
 .cs-cuelit .cs-reach-us-note { margin: 0; color: var(--cs-muted); font-size: var(--cs-fs-small); }
 
 /* ---------- cards / articles ---------------------------------- */
-.cs-cuelit .cs-card-media { border-radius: var(--cs-radius-inner); overflow: hidden; aspect-ratio: 4 / 3; background: var(--cs-surface); }
+.cs-cuelit .cs-card-media { position: relative; border-radius: var(--cs-radius-inner); overflow: hidden; aspect-ratio: 4 / 3; background: var(--cs-surface); }
 .cs-cuelit .cs-card-excerpt { color: var(--cs-muted); font-size: var(--cs-fs-small); }
 .cs-cuelit .cs-article-meta { font-size: 13px; color: var(--cs-muted); font-variant-numeric: tabular-nums; }
 .cs-cuelit .cs-article-related, .cs-cuelit .cs-services-rail { background: var(--cs-white); border-radius: var(--cs-radius-card); padding: clamp(24px, 3vw, 36px); box-shadow: var(--cs-shadow-card); }
@@ -457,6 +457,8 @@
    bottom padding is the gap above the closing CTA band (CD-12). */
 .cs-cuelit .cs-pa-wrap { padding: var(--cs-section-pad) 0; }
 .cs-cuelit .cs-pa-layout { display: flex; flex-direction: column; gap: var(--cs-space-6); }
+/* Feature hero: one tablet capture in the same chassis the showcase uses. */
+.cs-cuelit .cs-pa-hero { position: relative; width: min(100%, 860px); aspect-ratio: 2516 / 1856; margin-bottom: var(--cs-space-5); border: 9px solid var(--cs-chassis); border-radius: 26px; overflow: hidden; background: var(--cs-chassis); box-shadow: var(--cs-shadow-device); }
 .cs-cuelit .cs-pa-main > .cs-lead { margin-bottom: var(--cs-space-4); }
 /* "What's included": a real list, styled like the plan-card lists (CD-09). */
 .cs-cuelit .cs-pa-specs { margin-top: var(--cs-space-5); max-width: var(--cs-measure); }
@@ -496,6 +498,9 @@
 .cs-cuelit .cs-apphero-media { display: flex; justify-content: center; }
 .cs-cuelit .cs-apphero-device { margin: 0; }
 .cs-cuelit .cs-apphero-device img { width: 100%; height: auto; }
+/* The render is two devices on a transparent ground with no shadow baked in:
+   a filter follows their outline, where a box-shadow would frame the image. */
+.cs-cuelit .cs-apphero-device img { filter: drop-shadow(0 24px 40px rgba(30, 27, 26, 0.24)) drop-shadow(0 4px 10px rgba(30, 27, 26, 0.14)); }
 
 .cs-cuelit .cs-storebadge { display: inline-block; line-height: 0; }
 .cs-cuelit .cs-storebadge img { width: 180px; height: 60px; }        /* Apple minimum respected */
@@ -597,6 +602,11 @@
 .cs-cuelit .cs-device { border-radius: var(--cs-radius-card-lg); background: var(--cs-chassis); padding: 9px; box-shadow: var(--cs-shadow-device); }
 .cs-cuelit .cs-section--navy .cs-device { box-shadow: var(--cs-shadow-device-dark); }
 .cs-cuelit .cs-device-screen { border-radius: 24px; overflow: hidden; display: block; width: 100%; height: auto; }
+/* Phone capture: a narrower frame with the handset's corner radii, so a
+   1026 x 2334 screen lands near the height of the tablet frame beside it. */
+.cs-cuelit .cs-showcase-media--phone { width: min(100%, 300px); }
+.cs-cuelit .cs-showcase-media--phone .cs-device { border-radius: 50px; padding: 9px; }
+.cs-cuelit .cs-showcase-media--phone .cs-device-screen { border-radius: 41px; }
 
 /* visual=takes: the library grid. Plain cards carry label and length; photo
    cards swap the label for a flag pill. */

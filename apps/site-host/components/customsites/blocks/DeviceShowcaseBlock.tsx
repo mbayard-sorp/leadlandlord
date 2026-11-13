@@ -31,6 +31,10 @@ export function DeviceShowcaseBlock({ block }: Props) {
   const takes = block.takes ?? [];
   const editor = block.editor ?? null;
   const hasScreen = Boolean(block.screenUrl);
+  // A phone capture is about twice as tall as it is wide; at the tablet frame's
+  // width it would run past a thousand pixels, so it gets a narrower frame.
+  const screenAspect = block.screenAspect && block.screenAspect > 0 ? block.screenAspect : 480 / 678;
+  const phoneScreen = screenAspect < 0.6;
   const hasMedia =
     visual === 'takes' ? takes.length > 0 : visual === 'editor' ? hasEditor(editor) : hasScreen;
 
@@ -69,15 +73,15 @@ export function DeviceShowcaseBlock({ block }: Props) {
             <EditorPanel editor={editor} caption={block.caption} />
           ) : null}
           {visual === 'screen' && hasScreen && block.screenUrl ? (
-            <figure className="cs-showcase-media">
+            <figure className={`cs-showcase-media${phoneScreen ? ' cs-showcase-media--phone' : ''}`}>
               <div className="cs-device">
                 <Image
                   className="cs-device-screen"
                   src={csImageUrl(block.screenUrl, { w: 960 })}
                   alt={block.screenAlt ?? ''}
                   width={480}
-                  height={678}
-                  sizes="(max-width: 899px) 100vw, 480px"
+                  height={Math.round(480 / screenAspect)}
+                  sizes={phoneScreen ? '300px' : '(max-width: 899px) 100vw, 480px'}
                 />
               </div>
               {block.caption ? <figcaption className="cs-device-caption">{block.caption}</figcaption> : null}
