@@ -106,6 +106,11 @@ const FEATURE_SCREENS: Record<string, { file: FileKey; alt: string }> = {
     file: 'ipadEdit',
     alt: 'The Cuelit editor on iPad, with three takes on a timeline under the preview',
   },
+  // Production publishes this feature as "takes"; development still has "editing".
+  takes: {
+    file: 'ipadEdit',
+    alt: 'The Cuelit editor on iPad, with three takes on a timeline under the preview',
+  },
   library: {
     file: 'ipadLibrary',
     alt: 'The Cuelit script library on iPad, with six scripts listed beside the one that is open',
@@ -151,7 +156,10 @@ async function main() {
     `*[_type=="csPracticeArea" && site._ref==$id && slug.current in $slugs && !(_id in path("drafts.**"))]`,
     { id: site._id, slugs: Object.keys(FEATURE_SCREENS) },
   );
-  const missing = Object.keys(FEATURE_SCREENS).filter((slug) => !features.some((f) => f.slug?.current === slug));
+  const has = (slug: string) => features.some((f) => f.slug?.current === slug);
+  const missing = Object.keys(FEATURE_SCREENS).filter((slug) =>
+    slug === 'editing' || slug === 'takes' ? !has('editing') && !has('takes') : !has(slug),
+  );
   if (missing.length) throw new Error(`Feature pages not found: ${missing.join(', ')}`);
 
   const targets: Doc[] = [site, home, ...features];
