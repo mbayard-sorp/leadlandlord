@@ -19,7 +19,12 @@
  *  - Mailbox: csSite.email and leadRecipients become support@cuelit.app.
  *  - Device and OS: iPhone and iPad on iOS 27 or later, on the Features and
  *    Pricing CTAs and in the feature pages' "on your iPhone" lines.
- * The homepage is patched separately by patch-cuelit-home-voice.ts.
+ * The homepage voice pass is patched separately by patch-cuelit-home-voice.ts.
+ *
+ * Re-run on 2026-11-15 for the resubmission (see APP_SYNC_EDITS below): both
+ * pages are rebuilt from the refreshed source docs, and the home, pricing and
+ * feature pages drop Keep, "no watermark" and the old prices. Everything the
+ * 2026-11-10 run already applied is a no-op.
  *
  * Field edits name the value they expect to replace (read from production on
  * 2026-11-10) and are skipped and reported when the live value differs. The
@@ -299,6 +304,203 @@ const DOC_EDITS: Record<string, Edit[]> = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// App sync, 2026-11-15: the site said things the resubmitted app no longer
+// does. Keep is gone from Review (2026-11-14), saves carry a small Cuelit mark
+// in free mode and during the trial, there is a free mode, the real prices are
+// $59.99 a year and $8.99 a month, the editor trims, Cuelit Pro can share, and
+// iPad records in landscape. Expected values were read from production on
+// 2026-11-15. New wording uses only facts from the two source docs.
+// Left alone on purpose, for the owner: the home heading "Every take, kept.
+// Even the weird ones." and the Takes page title "Keep every take, lose none".
+// ---------------------------------------------------------------------------
+
+const MARK_NOTE = 'Saves carry a small Cuelit mark in free mode and during the trial. A paid plan can turn it off.';
+const MARK_ANSWER =
+  'Saved videos carry a small Cuelit mark in free mode and during the trial. Once your plan is paid, you can turn it off in the Save menu.';
+const PAID_MARK = 'A paid Cuelit Pro plan can save without the Cuelit mark.';
+const TRIAL = '7-day free trial for new subscribers';
+const OLD_YEARLY = ['Unlimited scripts and takes', 'Full-quality export, no watermark', 'Save to Photos at full quality'];
+const NEW_YEARLY = [TRIAL, 'Unlimited scripts and takes', PAID_MARK, 'Save to Photos at full quality'];
+const OLD_MONTHLY = ['Everything in Yearly', 'Cancel any month, in Settings'];
+const NEW_MONTHLY = [TRIAL, 'Everything in Yearly', 'Cancel any month, in Settings'];
+
+/** The plans block is the same shape on the home page and on /pricing. */
+function planEdits(block: number): Edit[] {
+  return [
+    [['pageBuilder', block, 'plans', 0, 'price'], '$59', '$59.99'],
+    [['pageBuilder', block, 'plans', 0, 'features'], OLD_YEARLY, NEW_YEARLY],
+    [['pageBuilder', block, 'plans', 1, 'features'], OLD_MONTHLY, NEW_MONTHLY],
+  ];
+}
+
+const APP_SYNC_EDITS: Record<string, Edit[]> = {
+  'cs-page-cueduo-home': [
+    [['pageBuilder', 3, 'items', 1, 'heading'], 'Keep the good one', 'Pick the good one'],
+    [
+      ['pageBuilder', 3, 'items', 1, 'body'],
+      'Do as many takes as it takes. Keep the winner and save it to Photos at full quality.',
+      'Do as many takes as it takes. Review each one, delete the rest, and save the good one to Photos.',
+    ],
+    [
+      ['pageBuilder', 5, 'body'],
+      'Tap Stop and your take is already waiting in Review. Watch it, keep it, or go again with the same settings, as many times as your pride requires.',
+      'Tap Stop and your take is already waiting in Review. Watch it, delete it, or go again with the same settings, as many times as your pride requires.',
+    ],
+    [['pageBuilder', 5, 'editor', 'tools'], ['Keep', 'Delete', 'Another take'], ['Delete', 'Another take']],
+    [
+      ['pageBuilder', 5, 'screen', 'alt'],
+      'The Cuelit review screen on iPhone: a kept take ready to play, three takes below it and a Save to Photos button',
+      'The Cuelit review screen on iPhone: a take ready to play, three takes below it and a Save to Photos button',
+    ],
+    [['pageBuilder', 7, 'rows', 1, 'right'], 'One or two takes, and you keep both', 'One or two takes, and you like both'],
+    [
+      ['pageBuilder', 8, 'intro'],
+      'Seven days free with everything unlocked, full-quality export included. Take it for a spin before you spend a cent.',
+      `Seven days free on either plan. Take it for a spin before you spend a cent. ${MARK_NOTE}`,
+    ],
+    ...planEdits(8),
+    [
+      ['pageBuilder', 10, 'items', 3, 'answer'],
+      'Not yet. Recording is portrait only, which keeps your script right under the camera where it belongs.',
+      'On iPad, yes. Record in landscape and the script sits at the top of the screen, under the front camera.',
+    ],
+    [
+      ['pageBuilder', 11, 'body'],
+      'Ready when you are. Hit record, keep the take you like, and send it off.',
+      'Ready when you are. Hit record, pick the take you like, and send it off.',
+    ],
+  ],
+  'cs-stage-cueduo-cut': [
+    [
+      ['summary'],
+      'Watch it back. Keep it, or go again with the same settings.',
+      'Watch it back. Go again with the same settings if you want another.',
+    ],
+  ],
+  'cs-page-cueduo-pricing': [
+    [
+      ['pageBuilder', 0, 'intro'],
+      'Seven days free. Everything is unlocked during the trial, including export at full quality.',
+      `Free mode records and edits the eight sample scripts, with Follow my voice. Cuelit Pro adds your own scripts (write, import, the Share sheet), Freestyle, Share and editing any take. Both plans start with seven days free. ${MARK_NOTE}`,
+    ],
+    ...planEdits(0),
+    [
+      ['pageBuilder', 1, 'items', 1, 'answer'],
+      'Restore your purchase in Settings. It uses the Apple ID that bought it.',
+      'Tap Restore purchase at the bottom of the subscription screen, signed in with the same Apple Account you used to subscribe.',
+    ],
+    [
+      ['seo', 'metaDescription'],
+      'Seven days free with everything unlocked, then a yearly or monthly plan. Cancel any time in Settings.',
+      'Free with eight sample scripts. Cuelit Pro is $59.99 a year or $8.99 a month, each with a 7-day free trial. Cancel any time in Settings.',
+    ],
+  ],
+  'cs-page-cueduo-features': [
+    [
+      ['pageBuilder', 0, 'body', 0, 'children', 0, 'text'],
+      'Five things, and they all happen on the phone in your hand. Read your script at the lens, record the take, keep the good one, find it again next week, and save it at full quality.',
+      'Five things, and they all happen on the phone in your hand. Read your script at the lens, record the take, pick the good one, find it again next week, and save it at full quality.',
+    ],
+  ],
+  'cs-pa-cueduo-takes': [
+    [
+      ['excerpt'],
+      'Record as many takes as you need, play them back one after another, and keep the one that worked. If something stops a take, what you recorded is kept.',
+      'Record as many takes as you need, play them back one after another, then review each one and delete the rest. If something stops a take, what you recorded is kept.',
+    ],
+    [
+      ['body', 0, 'children', 0, 'text'],
+      'Every take lands in Review the moment you tap Stop, numbered and timed. Play it back, scrub through it, then tap Keep on the good one and delete the rest. Another take sends you straight back to the camera with the same settings.',
+      'Every take lands in Review the moment you tap Stop, numbered and timed. Play it back, scrub through it, then review each one and delete the rest. Another take sends you straight back to the camera with the same settings.',
+    ],
+    [
+      ['body', 1, 'children', 0, 'text'],
+      'Your takes sit in a row under the player, each with its length and size, so going from Take 2 to Take 5 is one tap. Kept takes carry a check, so you can see at a glance which one you meant to use.',
+      'Your takes sit in a row under the player, each with its length and size, so going from Take 2 to Take 5 is one tap.',
+    ],
+    [['deliverables', 1], 'Keep, delete, or record another', 'Delete, or record another'],
+    [['faqs', 2, 'question'], 'What does Keep do?', 'How do I keep a take safe?'],
+    [
+      ['faqs', 2, 'answer'],
+      'It marks the take you mean to use, with a check in the list. It doesn’t move or export anything, and another tap lets go of it.',
+      'Tap Save to Photos in Review or in the editor. Once it’s in Photos, it’s backed up the way your other photos are.',
+    ],
+    [['faqs', 3, 'answer'], 'No. A take stays until you delete it, kept or not.', 'No. A take stays until you delete it.'],
+    [
+      ['faqs', 7, 'answer'],
+      'Not in Cuelit. Save it to Photos and trim it there.',
+      'Yes. Open the take in the editor and trim it there. Your original take is never changed.',
+    ],
+    [
+      ['seo', 'metaDescription'],
+      'Record as many takes as you like, compare them in one row, and keep the good one. If something stops a take, what you recorded is still there.',
+      'Record as many takes as you like, compare them in one row, then review each one and delete the rest. If something stops a take, what you recorded is still there.',
+    ],
+  ],
+  'cs-pa-cueduo-library': [
+    [
+      ['faqs', 7, 'answer'],
+      'Yes. Each script’s Review screen shows how many takes it has, how many you’ve kept, and the space they use.',
+      'Yes. Each script’s Review screen shows how many takes it has and the space they use.',
+    ],
+  ],
+  'cs-pa-cueduo-export': [
+    [
+      ['excerpt'],
+      'Save any take to Photos at the quality you shot it. No watermark, no re-encoding, and nothing uploaded on the way.',
+      `Save any take to Photos at the resolution you shot it, with nothing uploaded on the way. ${PAID_MARK}`,
+    ],
+    [
+      ['body', 0, 'children', 0, 'text'],
+      'Pick a take in Review and tap Save to Photos. It lands in your library as the same file the camera wrote, at the resolution you recorded and with nothing added. What you saw in Review is what you get.',
+      'Pick a take in Review and tap Save to Photos. It lands in your library at the resolution you recorded. In free mode and during the trial, saved videos carry a small Cuelit mark.',
+    ],
+    [
+      ['body', 2, 'children', 0, 'text'],
+      'Cuelit asks for add-only access the first time you save, so it can put takes into Photos without ever seeing the rest of your library. If you said no, Review shows you the way back to Settings.',
+      'Cuelit asks for add-only access the first time you save. That permission only lets Cuelit add the video you save, and it does not let Cuelit read your library. Reading your photos is a separate, optional permission that Cuelit asks for only in the editor’s media drawer. If you said no, Review shows you the way back to Settings.',
+    ],
+    [
+      ['body', 3, 'children', 0, 'text'],
+      'A subscription unlocks the whole of Cuelit after a 7-day free trial, and export is part of it. Every take you save is the full-quality file, with no watermark and no smaller free version.',
+      `You can try Cuelit free with its eight sample scripts and save those takes to Photos. ${MARK_ANSWER}`,
+    ],
+    [
+      ['deliverables'],
+      ['Save to Photos, one tap per take', 'Same file the camera wrote, no re-encode', 'Full resolution, HEVC', 'No watermark', 'Add-only Photos access', 'Nothing uploaded'],
+      ['Save to Photos, one tap per take', 'Full resolution, HEVC', 'Cuelit mark off on a paid plan', 'Add-only access to save', 'Nothing uploaded'],
+    ],
+    [['faqs', 0, 'answer'], 'No. Every take you save is the clean file.', MARK_ANSWER],
+    [
+      ['faqs', 2, 'answer'],
+      'Not from Cuelit itself. Save the take to Photos, then share it from there to any app you use.',
+      'With Cuelit Pro, yes. Share an edited video from the editor through Apple’s share sheet. In free mode, save the take to Photos and share it from there.',
+    ],
+    [
+      ['faqs', 5, 'answer'],
+      'To add your take. It asks for add-only access the first time you save, and never sees the rest of your library.',
+      'To add your take. It asks for add-only access the first time you save, and that permission does not let Cuelit read your library. The editor’s media drawer asks separately, and only if you open its Images or Video tab.',
+    ],
+    [
+      ['faqs', 7, 'answer'],
+      'You need one to use Cuelit, and it starts with a 7-day free trial. Every plan includes everything, export too.',
+      'No. In free mode you can record the eight sample scripts and save those takes to Photos. Cuelit Pro adds your own scripts, and both plans start with a 7-day free trial for new subscribers.',
+    ],
+    [
+      ['seo', 'metaDescription'],
+      'Save any take to Photos as the same file the camera wrote. No watermark, no re-encoding, and nothing uploaded along the way.',
+      `Save any take to Photos at the resolution you shot it, with nothing uploaded along the way. ${PAID_MARK}`,
+    ],
+  ],
+};
+
+/** Both tables, one list per document, older edits first. */
+const ALL_EDITS: Record<string, Edit[]> = {};
+for (const table of [DOC_EDITS, APP_SYNC_EDITS]) {
+  for (const [id, edits] of Object.entries(table)) (ALL_EDITS[id] ??= []).push(...edits);
+}
+
 /** Footer Terms links move to Apple's standard EULA, matched by href. */
 function retargetTerms(links: unknown): unknown {
   if (!Array.isArray(links)) return links;
@@ -405,7 +607,7 @@ async function main() {
   siteAfter.footerNav = retargetTerms(site.footerNav);
 
   // Field edits
-  for (const [id, edits] of Object.entries(DOC_EDITS)) {
+  for (const [id, edits] of Object.entries(ALL_EDITS)) {
     const doc = id === site._id ? undefined : docs.find((d) => d._id === id);
     if (id !== site._id && !doc) {
       skipped.push(`${id}: document missing`);
