@@ -130,7 +130,7 @@ export default async function ServiceDetailPage({ params }: RouteParams) {
       <section className="cs-section cs-appcta cs-section--navy" id="get">
         <div className="cs-container">
           <h2 className="cs-appcta-heading">Your lines, lit. Your afternoon, free.</h2>
-          <p className="cs-appcta-body">Ready when you are. Hit record, keep the take you like, and send it off.</p>
+          <p className="cs-appcta-body">Ready when you are. Hit record, pick the take you like, and send it off.</p>
           <div className="cs-appcta-actions">
             <span className="cs-storebadge--soon">Coming to the App Store</span>
           </div>

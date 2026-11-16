@@ -1,4 +1,3 @@
-
 # Cuelit Privacy Policy
 
 **Effective:** {{EFFECTIVE_DATE}}
@@ -9,7 +8,7 @@ Cuelit is a teleprompter and video recording app made by Smart Orange Consulting
 
 - **Videos you record** are stored only on your device. We never upload them, and we cannot see them. They are also excluded from iCloud and device backups because of their size.
 - **Scripts and settings** are stored only on your device. We never receive them. Like other app data, they may be included in your iCloud or device backup, depending on your backup settings.
-- **Edits** stay on your device too. When you edit a take, Cuelit keeps the edit, any voiceover you record, music you add and your logo on your device, next to your takes. Your original take is never changed. Like takes, edits are excluded from iCloud and device backups.
+- **Edits** stay on your device too. When you edit a take, Cuelit keeps the edit, any photos and videos you add, any voiceover you record, music you add and your logo on your device, next to your takes. Your original take is never changed. Like takes, edits are excluded from iCloud and device backups.
 - **Face detection** happens on your device. While you record, Cuelit uses Apple's camera framework to notice where a face is in the picture. It uses this only for the Frame cue, which tells you when you drift out of frame, and for the self-view. It finds only a face's position, not who you are. Nothing about your face is stored or sent.
 - **Follow my voice** happens on your device. When it is on, Cuelit listens through the microphone during a take so the script keeps pace with you. Apple's speech framework does the listening on your device. The first time, iOS may download Apple's speech model for your language once; that download is Apple's, and Cuelit sends nothing with it. No audio or transcript leaves your device, and Cuelit does not save what it hears.
 - **Saving to Photos** only happens when you tap Save to Photos, in Review or in the editor. After that, the video is managed by the Photos app and your Photos settings.
@@ -25,11 +24,12 @@ Cuelit has no accounts and no login, and does not contain advertising, analytics
 Cuelit asks for:
 
 - **Camera and microphone**, to record your takes. Recordings stay on your device. With Follow my voice on, the microphone lets the script keep pace with you, on your device. It is also used when you record a voiceover in the editor; if you did not allow it when you first recorded, Cuelit asks the first time you record a voiceover.
-- **Add to Photos**, only to save a take or an edited video when you ask. Cuelit cannot read your photo library.
+- **Add to Photos**, the first time you save a take or an edited video. This permission only lets Cuelit add the video you save to your Photos library. It does not let Cuelit read your library.
+- **Your Photos library**, which is optional. Cuelit asks the first time you open the Images or Video tab of the editor's media drawer. If you allow it, Cuelit lists your recent photos and videos there, so you can add them to an edit. When you pick one, Cuelit copies it into the edit on your device. If the item is stored in iCloud Photos, iOS downloads it from your iCloud account first. Cuelit does not upload your photos or videos, and it never changes or deletes anything in your Photos library. If you choose limited access, Cuelit sees only the items you select. If you choose Don't Allow, you can still add a photo or video with Import, which opens Apple's photo picker and gives Cuelit only the item you pick.
 
 Cuelit needs no permission for these, and gets only what you choose:
 
-- **A photo or a logo you add to an edit.** You choose it in Apple's photo picker, which gives Cuelit only the picture you pick. Your logo is kept on your device for later edits until you remove it.
+- **Your logo.** You choose it in Apple's photo picker, which gives Cuelit only the picture you pick. Your logo is kept on your device for later edits until you remove it.
 - **Music you add to an edit.** You choose an audio file in the Files app, and Cuelit copies only that file into the edit, on your device. Cuelit has no access to your Music library or Apple Music.
 
 You can change these at any time in the Settings app.
