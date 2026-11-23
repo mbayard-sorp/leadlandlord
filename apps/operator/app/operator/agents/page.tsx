@@ -39,7 +39,7 @@ function humanizeCron(expr: string): string {
  * registry agent that runs on a schedule.
  */
 const cadenceByAgent: Record<string, string> = Object.fromEntries(
-  (vercelConfig.crons ?? [])
+  ((vercelConfig.crons ?? []) as Array<{ path: string; schedule: string }>)
     .filter((c) => c.path.startsWith(SCHEDULE_PATH_PREFIX))
     .map((c) => [c.path.slice(SCHEDULE_PATH_PREFIX.length), humanizeCron(c.schedule)]),
 );

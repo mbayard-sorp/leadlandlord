@@ -1,0 +1,22 @@
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/static/chunks/
+
+User-Agent: GPTBot
+Allow: /
+
+User-Agent: ClaudeBot
+Allow: /
+
+User-Agent: Claude-SearchBot
+Allow: /
+
+User-Agent: PerplexityBot
+Allow: /
+
+User-Agent: Google-Extended
+Allow: /
+
+Host: https://karkens.com
+Sitemap: https://karkens.com/sitemap.xml
